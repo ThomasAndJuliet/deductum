@@ -30,3 +30,14 @@ The **Passwords and sudo** setup installs its PAM module in
 writable on Atomic; setup works with SELinux enforcing and does not require
 unlocking `/usr`. If an approval is unavailable or denied, sudo still uses the
 system's password authentication.
+
+## Flatpak builds and publication
+
+Run `scripts/build-flatpak.sh` for a complete local build and installation.
+The Flatpak module explicitly composes the Store catalog after installing its
+MetaInfo, desktop entry, and icons, so module-only rebuilds include the catalog
+as well. Do not publish a cached build after running only its Rust commands.
+On neo, `neo-infrastructure/scripts/check-flatpak-catalog BUILD_DIR` checks the
+finished build; the publisher also runs this check before signing or exporting.
+A missing or invalid catalog stops publication instead of removing the app
+from COSMIC Store.
