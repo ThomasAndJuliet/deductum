@@ -12,7 +12,7 @@ use iced_core::Element;
 use slotmap::{SlotMap, new_key_type};
 use widget::Toaster;
 
-use super::{button, column, icon, row, text};
+use super::{button, column, icon, progress_bar, row, text};
 
 mod widget;
 
@@ -48,7 +48,14 @@ pub fn toaster<'a, Message: Clone + 'static>(
             .align_y(iced::Alignment::Center)
             .spacing(space_s);
 
-        container(row)
+        let content = column::with_capacity(2)
+            .push(row)
+            .push_maybe(toast.progress.map(|value| {
+                progress_bar::determinate_linear(value).width(iced::Length::Fixed(320.0))
+            }))
+            .spacing(space_xxs);
+
+        container(content)
             .padding([space_xxs, space_s, space_xxs, space_m])
             .class(crate::style::Container::Tooltip)
     };
@@ -115,6 +122,7 @@ pub struct Toast<Message> {
     message: String,
     action: Option<Action<Message>>,
     duration: Duration,
+    progress: Option<f32>,
 }
 
 impl<Message> Toast<Message> {
@@ -124,6 +132,7 @@ impl<Message> Toast<Message> {
             message: message.into(),
             action: None,
             duration: Duration::default(),
+            progress: None,
         }
     }
 
@@ -145,6 +154,17 @@ impl<Message> Toast<Message> {
     #[must_use]
     pub fn duration(mut self, duration: impl Into<Duration>) -> Self {
         self.duration = duration.into();
+        self
+    }
+
+    /// Show progress below the message, clamped to the range zero to one.
+    #[must_use]
+    pub fn progress(mut self, value: f32) -> Self {
+        self.progress = Some(if value.is_finite() {
+            value.clamp(0.0, 1.0)
+        } else {
+            0.0
+        });
         self
     }
 }
@@ -172,19 +192,10 @@ impl<Message: Clone + Send + 'static> Toasts<Message> {
 
     /// Add a new [`Toast`]
     pub fn push(&mut self, toast: Toast<Message>) -> Task<Message> {
-        while self.toasts.len() >= self.limit {
-            self.toasts.remove(
-                self.queue
-                    .pop_front()
-                    .expect("Queue must contain all toast ids"),
-            );
-        }
-
         #[cfg(feature = "tokio")]
         let duration = toast.duration.duration();
 
-        let id = self.toasts.insert(toast);
-        self.queue.push_back(id);
+        let id = self.push_persistent(toast);
 
         #[cfg(feature = "tokio")]
         {
@@ -196,7 +207,35 @@ impl<Message: Clone + Send + 'static> Toasts<Message> {
         }
         #[cfg(not(feature = "tokio"))]
         {
+            let _ = id;
             Task::none()
+        }
+    }
+
+    /// Add an operation's toast without an expiry timer. Remove it when the
+    /// operation finishes; the user can also dismiss it normally.
+    pub fn push_persistent(&mut self, toast: Toast<Message>) -> ToastId {
+        while self.toasts.len() >= self.limit {
+            self.toasts.remove(
+                self.queue
+                    .pop_front()
+                    .expect("Queue must contain all toast ids"),
+            );
+        }
+
+        let id = self.toasts.insert(toast);
+        self.queue.push_back(id);
+        id
+    }
+
+    /// Update an existing toast in place. A dismissed or evicted toast stays
+    /// dismissed; updating it does not add another notification.
+    pub fn update(&mut self, id: ToastId, toast: Toast<Message>) -> bool {
+        if let Some(current) = self.toasts.get_mut(id) {
+            *current = toast;
+            true
+        } else {
+            false
         }
     }
 
@@ -206,5 +245,35 @@ impl<Message: Clone + Send + 'static> Toasts<Message> {
         if let Some(pos) = self.queue.iter().position(|key| *key == id) {
             self.queue.remove(pos);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn operation_updates_do_not_duplicate_or_revive_dismissed_toasts() {
+        let mut toasts = Toasts::<ToastId>::new(|id| id);
+        let operation = toasts.push_persistent(Toast::new("Starting").progress(0.0));
+        let other = toasts.push_persistent(Toast::new("Another operation"));
+        assert!(toasts.update(operation, Toast::new("Halfway").progress(0.5)));
+        assert_eq!(
+            toasts.queue.iter().copied().collect::<Vec<_>>(),
+            [operation, other]
+        );
+        assert_eq!(toasts.toasts[operation].message, "Halfway");
+        assert_eq!(toasts.toasts[operation].progress, Some(0.5));
+
+        toasts.remove(operation);
+        assert!(!toasts.update(operation, Toast::new("Still working")));
+        let next = toasts.push_persistent(Toast::new("Next operation"));
+        toasts.remove(operation); // Late completion of the dismissed operation.
+        assert_eq!(
+            toasts.queue.iter().copied().collect::<Vec<_>>(),
+            [other, next]
+        );
+        assert!(toasts.toasts.contains_key(other));
+        assert!(toasts.toasts.contains_key(next));
     }
 }

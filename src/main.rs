@@ -1098,7 +1098,8 @@ pub struct App {
     /// real setup step begins.
     host_setup: BTreeMap<String, Option<agent::Helper>>,
     host_setup_stalled: BTreeSet<String>,
-    pending_commands: BTreeMap<&'static str, String>,
+    pending_commands: BTreeMap<&'static str, widget::ToastId>,
+    host_toasts: BTreeMap<String, widget::ToastId>,
     window_focused: bool,
     /// When each machine's sudo forward was last renewed
     sudo_forwarded: HashMap<String, Instant>,
@@ -2128,6 +2129,52 @@ impl App {
         sections.push(add_profile.into());
 
         widget::settings::view_column(sections).into()
+    }
+
+    /// One bottom toast per pending command, removed when it finishes.
+    fn start_progress(&mut self, key: &'static str, message: String) {
+        let toast = widget::toaster::Toast::new(message);
+        if let Some(&id) = self.pending_commands.get(key) {
+            self.toasts.update(id, toast);
+        } else {
+            let id = self.toasts.push_persistent(toast);
+            self.pending_commands.insert(key, id);
+        }
+    }
+
+    fn finish_progress(&mut self, key: &'static str) {
+        if let Some(id) = self.pending_commands.remove(key) {
+            self.toasts.remove(id);
+        }
+    }
+
+    /// Update setup progress in place; a user-dismissed toast stays dismissed.
+    fn host_progress(&mut self, host: &str) {
+        let Some(step) = self.host_setup.get(host) else { return; };
+        let machine = if host.is_empty() {
+            fl!("this-computer")
+        } else {
+            self.config.machine_for_host(host).map_or_else(|| host.to_string(), |m| m.name.clone())
+        };
+        let (detail, progress) = match step {
+            None => (fl!("host-setup-tools"), 0.0),
+            Some(agent::Helper::Supervise) => (fl!("host-setup-supervisor"), 0.2),
+            Some(agent::Helper::Transfer) => (fl!("host-setup-transfer"), 0.4),
+            Some(agent::Helper::PamModule | agent::Helper::SudoAgent) => (fl!("host-setup-sudo"), 0.6),
+            Some(agent::Helper::Zellij) => (fl!("host-setup-zellij"), 0.8),
+        };
+        let mut message = fl!("host-setup", host = machine, step = detail);
+        if self.host_setup_stalled.contains(host) {
+            message.push('\n');
+            message.push_str(&fl!("host-setup-waiting"));
+        }
+        let toast = widget::toaster::Toast::new(message).progress(progress);
+        if let Some(&id) = self.host_toasts.get(host) {
+            self.toasts.update(id, toast);
+        } else {
+            let id = self.toasts.push_persistent(toast);
+            self.host_toasts.insert(host.to_string(), id);
+        }
     }
 
     fn mount_connection_result(&mut self, host: String, result: Result<(), String>) -> Task<Message> {
@@ -4357,6 +4404,7 @@ impl Application for App {
             host_setup: BTreeMap::new(),
             host_setup_stalled: BTreeSet::new(),
             pending_commands: BTreeMap::new(),
+            host_toasts: BTreeMap::new(),
             window_focused: true,
             sudo_forwarded: HashMap::new(),
             rename: None,
@@ -4401,6 +4449,7 @@ impl Application for App {
         // transfers the transfer helper
         let setup_hosts = app.session_hosts();
         app.host_setup = setup_hosts.iter().map(|host| (host.clone(), None)).collect();
+        for host in &setup_hosts { app.host_progress(host); }
         let supervisors = setup_hosts.into_iter().map(setup_host_task);
         let local = cosmic::task::future(async {
             Message::LocalProbed(agent::local_probe().await)
@@ -5049,8 +5098,9 @@ impl Application for App {
                         terminal.context_menu = None;
                         terminal.active_regex_match = None;
                         terminal.needs_update = true;
+                        drop(terminal);
                         if let (Some(session), Some(target)) = (session, target) {
-                            self.pending_commands.insert("open-locally", fl!("opening-locally"));
+                            self.start_progress("open-locally", fl!("opening-locally"));
                             return cosmic::task::future(async move {
                                 Message::OpenLocallyResult(
                                     agent::open_locally(session, target).await,
@@ -5061,7 +5111,7 @@ impl Application for App {
                 }
             }
             Message::OpenLocallyResult(result) => {
-                self.pending_commands.remove("open-locally");
+                self.finish_progress("open-locally");
                 if let Err(err) = result {
                     log::warn!("failed to open locally: {}", err);
                     return self.file_open_error(fl!("open-locally-failed", error = err.as_str()), err);
@@ -5365,7 +5415,7 @@ impl Application for App {
                     return self.update_focus();
                 };
                 self.sidebar.set_title(&session, &name);
-                self.pending_commands.insert("rename", fl!("renaming-conversation"));
+                self.start_progress("rename", fl!("renaming-conversation"));
                 // The agent retitles its tab too, a moment later
                 let retitle = match self.session_tab(&session) {
                     Some((pane, entity)) => {
@@ -5389,7 +5439,7 @@ impl Application for App {
                 return self.update_focus();
             }
             Message::Renamed(result) => {
-                self.pending_commands.remove("rename");
+                self.finish_progress("rename");
                 if let Err(err) = result {
                     return self
                         .toasts
@@ -5856,7 +5906,7 @@ impl Application for App {
                         let Some(kind) = session.agent() else {
                             return Task::none();
                         };
-                        self.pending_commands.insert("rename", fl!("renaming-conversation"));
+                        self.start_progress("rename", fl!("renaming-conversation"));
                         return cosmic::task::future(async move {
                             Message::Renamed(agent::rename_conversation(session, kind, None).await)
                         });
@@ -5874,7 +5924,7 @@ impl Application for App {
                         if let Some((_, entity)) = tab {
                             return self.update(Message::RemoteEnd(Some(entity)));
                         }
-                        self.pending_commands.insert("end-session", fl!("ending-session"));
+                        self.start_progress("end-session", fl!("ending-session"));
                         return cosmic::task::future(async move {
                             Message::RemoteEnded(None, agent::kill_session(session).await)
                         });
@@ -5979,7 +6029,7 @@ impl Application for App {
                     tab_model.data::<agent::Session>(entity).cloned()
                 });
                 if let Some(session) = session {
-                    self.pending_commands.insert("end-session", fl!("ending-session"));
+                    self.start_progress("end-session", fl!("ending-session"));
                     let entity = entity_opt.or_else(|| self.pane_model.active().map(|tab_model| tab_model.active()));
                     return cosmic::task::future(async move {
                         Message::RemoteEnded(entity, agent::kill_session(session).await)
@@ -6543,6 +6593,7 @@ impl Application for App {
             Message::SupervisorProgress(host, step) => {
                 self.host_setup.insert(host.clone(), step);
                 self.host_setup_stalled.remove(&host);
+                self.host_progress(&host);
                 return cosmic::task::future(async move {
                     tokio::time::sleep(Duration::from_secs(15)).await;
                     Message::SupervisorSlow(host, step)
@@ -6550,12 +6601,14 @@ impl Application for App {
             }
             Message::SupervisorSlow(host, step) => {
                 if self.host_setup.get(&host) == Some(&step) {
-                    self.host_setup_stalled.insert(host);
+                    self.host_setup_stalled.insert(host.clone());
+                    self.host_progress(&host);
                 }
             }
             Message::SupervisorInstalled(host, result) => {
                 self.host_setup.remove(&host);
                 self.host_setup_stalled.remove(&host);
+                if let Some(id) = self.host_toasts.remove(&host) { self.toasts.remove(id); }
                 match result {
                 Err(err) => log::warn!("failed to install the helpers on {:?}: {}", host, err),
                 // Said once per machine and run, rather than failing quietly
@@ -6706,14 +6759,14 @@ impl Application for App {
                     return Task::none();
                 }
                 if let Some(process) = self.active_process() {
-                    self.pending_commands.insert("open-files", fl!("opening-files"));
+                    self.start_progress("open-files", fl!("opening-files"));
                     return cosmic::task::future(async move {
                         Message::OpenInFilesResult(agent::open_in_files(process).await)
                     });
                 }
             }
             Message::OpenInFilesResult(result) => {
-                self.pending_commands.remove("open-files");
+                self.finish_progress("open-files");
                 if let Err(err) = result {
                     log::warn!("failed to open in the file manager: {}", err);
                     return self.file_open_error(fl!("open-in-files-failed", error = err.as_str()), err);
@@ -6724,21 +6777,21 @@ impl Application for App {
                     return Task::none();
                 }
                 if let Some(process) = self.active_process() {
-                    self.pending_commands.insert("open-zed", fl!("opening-zed"));
+                    self.start_progress("open-zed", fl!("opening-zed"));
                     return cosmic::task::future(async move {
                         Message::OpenInZedResult(agent::open_in_zed(process).await)
                     });
                 }
             }
             Message::OpenInZedResult(result) => {
-                self.pending_commands.remove("open-zed");
+                self.finish_progress("open-zed");
                 if let Err(err) = result {
                     log::warn!("failed to open in Zed: {}", err);
                     return self.file_open_error(fl!("open-in-zed-failed", error = err.as_str()), err);
                 }
             }
             Message::RemoteEnded(entity, result) => {
-                self.pending_commands.remove("end-session");
+                self.finish_progress("end-session");
                 match result {
                     Ok(()) => {
                         if let Some(entity) = entity {
@@ -6947,6 +7000,7 @@ impl Application for App {
                 }
                 let host = machine.destination();
                 self.host_setup.insert(host.clone(), None);
+                self.host_progress(&host);
                 return Task::batch([
                     self.save_profiles(),
                     setup_host_task(host),
@@ -8198,35 +8252,6 @@ impl Application for App {
             pane_grid.spacing(space_xxxs).into()
         } else {
             pane_grid.into()
-        };
-        let content: Element<_> = if self.host_setup.is_empty() && self.pending_commands.is_empty() {
-            content
-        } else {
-            let mut column = widget::column::with_capacity(self.host_setup.len() * 3 + self.pending_commands.len() + 1);
-            for status in self.pending_commands.values() {
-                column = column.push(widget::text::caption(status.clone()));
-            }
-            for (host, step) in &self.host_setup {
-                let machine = if host.is_empty() {
-                    fl!("this-computer")
-                } else {
-                    self.config.machine_for_host(host).map_or_else(|| host.clone(), |m| m.name.clone())
-                };
-                let (detail, progress) = match step {
-                    None => (fl!("host-setup-tools"), 0.0),
-                    Some(agent::Helper::Supervise) => (fl!("host-setup-supervisor"), 0.2),
-                    Some(agent::Helper::Transfer) => (fl!("host-setup-transfer"), 0.4),
-                    Some(agent::Helper::PamModule) => (fl!("host-setup-sudo"), 0.6),
-                    Some(agent::Helper::Zellij) => (fl!("host-setup-zellij"), 0.8),
-                    Some(agent::Helper::SudoAgent) => (fl!("host-setup-sudo"), 0.6),
-                };
-                column = column.push(widget::text::caption(fl!("host-setup", host = machine, step = detail)));
-                column = column.push(widget::progress_bar::determinate_linear(progress).width(Length::Fill));
-                if self.host_setup_stalled.contains(host) {
-                    column = column.push(widget::text::caption(fl!("host-setup-waiting")));
-                }
-            }
-            column.push(content).height(Length::Fill).into()
         };
         let open = self.open_sessions();
         // What other windows are told this one shows
