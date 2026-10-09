@@ -188,6 +188,16 @@ where
     pub(super) drag_id: Option<DragId>,
     #[setters(skip)]
     pub(super) tab_drag: Option<TabDragSource<Message>>,
+    /// Builds the bytes a dragged tab carries, instead of a placeholder
+    #[setters(skip)]
+    pub(super) tab_drag_data: Option<Box<dyn Fn(Entity) -> Vec<u8> + 'static>>,
+    /// Emits the tab whose drag has started
+    #[setters(skip)]
+    pub(super) on_tab_drag_start: Option<Box<dyn Fn(Entity) -> Message + 'static>>,
+    /// Emits the tab the pointer is over, or `None`, when that changes
+    #[setters(skip)]
+    /// Told the tab under the pointer, and its centre from the left edge
+    pub(super) on_tab_hover: Option<Box<dyn Fn(Option<(Entity, f32)>) -> Message + 'static>>,
     #[setters(skip)]
     pub(super) on_drop_hint: Option<Box<dyn Fn(Option<(Entity, bool)>) -> Message + 'static>>,
 
@@ -251,6 +261,9 @@ where
             variant: PhantomData,
             drag_id: None,
             tab_drag: None,
+            tab_drag_data: None,
+            on_tab_drag_start: None,
+            on_tab_hover: None,
             on_drop_hint: None,
             on_reorder: None,
             window_id: window::Id::RESERVED,
@@ -368,6 +381,27 @@ where
     /// Enable drag-and-drop support for tabs using the provided payload builder.
     pub fn enable_tab_drag(mut self, mime: String) -> Self {
         self.tab_drag = Some(TabDragSource::new(mime));
+        self
+    }
+
+    /// Set the data a dragged tab offers under the tab drag mime type, so
+    /// that another application or process can tell which tab it received.
+    pub fn tab_drag_data(mut self, data: impl Fn(Entity) -> Vec<u8> + 'static) -> Self {
+        self.tab_drag_data = Some(Box::new(data));
+        self
+    }
+
+    /// Emit a message when a tab starts being dragged, so the application
+    /// knows which tab a later drag-and-drop source event refers to.
+    pub fn on_tab_drag_start(mut self, on_start: impl Fn(Entity) -> Message + 'static) -> Self {
+        self.on_tab_drag_start = Some(Box::new(on_start));
+        self
+    }
+
+    /// Emit a message when the pointer moves onto a tab or off the tabs, as
+    /// for showing a preview of the hovered tab
+    pub fn on_tab_hover(mut self, on_hover: impl Fn(Option<(Entity, f32)>) -> Message + 'static) -> Self {
+        self.on_tab_hover = Some(Box::new(on_hover));
         self
     }
 
@@ -832,14 +866,18 @@ where
             tab_drag.threshold
         );
 
-        let data_len = 0;
+        let data = self
+            .tab_drag_data
+            .as_ref()
+            .map_or_else(|| vec![1], |data| data(entity));
+        let data_len = data.len();
 
         iced_core::clipboard::start_dnd::<crate::Theme, crate::Renderer>(
             clipboard,
             false,
             Some(iced_core::clipboard::DndSource::Widget(self.id.0.clone())),
             None,
-            Box::new(SimpleDragData::new(tab_drag.mime.clone(), vec![1])),
+            Box::new(SimpleDragData::new(tab_drag.mime.clone(), data)),
             DndAction::Move,
         );
         log::trace!(
@@ -1123,110 +1161,15 @@ where
     }
 }
 
-impl<Variant, SelectionMode, Message> Widget<Message, crate::Theme, Renderer>
-    for SegmentedButton<'_, Variant, SelectionMode, Message>
+impl<Variant, SelectionMode, Message> SegmentedButton<'_, Variant, SelectionMode, Message>
 where
     Self: SegmentedVariant,
     Model<SelectionMode>: Selectable,
     SelectionMode: Default,
     Message: 'static + Clone,
 {
-    fn id(&self) -> Option<widget::Id> {
-        Some(self.id.0.clone())
-    }
-
-    fn set_id(&mut self, id: widget::Id) {
-        self.id = Id(id);
-    }
-
-    fn children(&self) -> Vec<Tree> {
-        let mut children = Vec::new();
-
-        // Assign the context menu's elements as this widget's children.
-        if let Some(ref context_menu) = self.context_menu {
-            let mut tree = Tree::empty();
-            tree.state = tree::State::new(MenuBarState::default());
-            tree.children = menu_roots_children(context_menu);
-            children.push(tree);
-        }
-
-        children
-    }
-
-    fn tag(&self) -> tree::Tag {
-        tree::Tag::of::<LocalState>()
-    }
-
-    fn state(&self) -> tree::State {
-        #[allow(clippy::default_trait_access)]
-        tree::State::new(LocalState {
-            menu_state: Default::default(),
-            paragraphs: SecondaryMap::new(),
-            text_hashes: SecondaryMap::new(),
-            buttons_visible: Default::default(),
-            buttons_offset: Default::default(),
-            collapsed: Default::default(),
-            focused: Default::default(),
-            focused_item: Default::default(),
-            focused_visible: false,
-            hovered: Default::default(),
-            known_length: Default::default(),
-            middle_clicked: Default::default(),
-            internal_layout: Default::default(),
-            context_cursor: Point::default(),
-            show_context: Default::default(),
-            wheel_timestamp: Default::default(),
-            dnd_state: Default::default(),
-            fingers_pressed: Default::default(),
-            pressed_item: None,
-            tab_drag_candidate: None,
-            dragging_tab: None,
-            drop_hint: None,
-            offer_mimes: Vec::new(),
-        })
-    }
-
-    fn diff(&mut self, tree: &mut Tree) {
-        let state = tree.state.downcast_mut::<LocalState>();
-        for key in self.model.order.iter().copied() {
-            self.update_entity_paragraph(state, key);
-        }
-
-        // Diff the context menu
-        if let Some(context_menu) = &mut self.context_menu {
-            state.menu_state.inner.with_data_mut(|inner| {
-                menu_roots_diff(context_menu, &mut inner.tree);
-            });
-        }
-
-        // Unfocus if another segmented control was focused.
-        if let Some(f) = state.focused.as_ref()
-            && f.updated_at != LAST_FOCUS_UPDATE.with(|f| f.get())
-        {
-            state.unfocus();
-        }
-    }
-
-    fn size(&self) -> Size<Length> {
-        Size::new(self.width, self.height)
-    }
-
-    fn layout(
-        &mut self,
-        tree: &mut Tree,
-        renderer: &Renderer,
-        limits: &layout::Limits,
-    ) -> layout::Node {
-        let state = tree.state.downcast_mut::<LocalState>();
-        let limits = limits.shrink(self.padding);
-        let size = self
-            .variant_layout(state, renderer, &limits)
-            .expand(self.padding);
-        layout::Node::new(size)
-    }
-
-    #[allow(clippy::too_many_lines)]
-    fn update(
+    #[allow(clippy::too_many_arguments)]
+    fn handle_event(
         &mut self,
         tree: &mut Tree,
         mut event: &Event,
@@ -1692,6 +1635,10 @@ where
                                 state.set_focused();
                                 state.focused_item = Item::Tab(key);
                                 state.pressed_item = None;
+                                // A click, not a drag. Returning skips the clear
+                                // on release below, and a stale candidate would
+                                // start a drag on the next distant pointer motion
+                                state.tab_drag_candidate = None;
                                 shell.capture_event();
                                 return;
                             }
@@ -1844,6 +1791,9 @@ where
                 position,
                 clipboard,
             ) {
+                if let Some(on_start) = self.on_tab_drag_start.as_ref() {
+                    shell.publish(on_start(candidate.entity));
+                }
                 shell.capture_event();
                 return;
             }
@@ -1941,6 +1891,159 @@ where
 
         if hovered_before != state.hovered {
             shell.request_redraw();
+        }
+    }
+
+}
+
+impl<Variant, SelectionMode, Message> Widget<Message, crate::Theme, Renderer>
+    for SegmentedButton<'_, Variant, SelectionMode, Message>
+where
+    Self: SegmentedVariant,
+    Model<SelectionMode>: Selectable,
+    SelectionMode: Default,
+    Message: 'static + Clone,
+{
+    fn id(&self) -> Option<widget::Id> {
+        Some(self.id.0.clone())
+    }
+
+    fn set_id(&mut self, id: widget::Id) {
+        self.id = Id(id);
+    }
+
+    fn children(&self) -> Vec<Tree> {
+        let mut children = Vec::new();
+
+        // Assign the context menu's elements as this widget's children.
+        if let Some(ref context_menu) = self.context_menu {
+            let mut tree = Tree::empty();
+            tree.state = tree::State::new(MenuBarState::default());
+            tree.children = menu_roots_children(context_menu);
+            children.push(tree);
+        }
+
+        children
+    }
+
+    fn tag(&self) -> tree::Tag {
+        tree::Tag::of::<LocalState>()
+    }
+
+    fn state(&self) -> tree::State {
+        #[allow(clippy::default_trait_access)]
+        tree::State::new(LocalState {
+            menu_state: Default::default(),
+            paragraphs: SecondaryMap::new(),
+            text_hashes: SecondaryMap::new(),
+            buttons_visible: Default::default(),
+            buttons_offset: Default::default(),
+            collapsed: Default::default(),
+            focused: Default::default(),
+            focused_item: Default::default(),
+            focused_visible: false,
+            hovered: Default::default(),
+            hover_reported: None,
+            known_length: Default::default(),
+            middle_clicked: Default::default(),
+            internal_layout: Default::default(),
+            context_cursor: Point::default(),
+            show_context: Default::default(),
+            wheel_timestamp: Default::default(),
+            dnd_state: Default::default(),
+            fingers_pressed: Default::default(),
+            pressed_item: None,
+            tab_drag_candidate: None,
+            dragging_tab: None,
+            drop_hint: None,
+            offer_mimes: Vec::new(),
+        })
+    }
+
+    fn diff(&mut self, tree: &mut Tree) {
+        let state = tree.state.downcast_mut::<LocalState>();
+        for key in self.model.order.iter().copied() {
+            self.update_entity_paragraph(state, key);
+        }
+
+        // Diff the context menu
+        if let Some(context_menu) = &mut self.context_menu {
+            state.menu_state.inner.with_data_mut(|inner| {
+                menu_roots_diff(context_menu, &mut inner.tree);
+            });
+        }
+
+        // Unfocus if another segmented control was focused.
+        if let Some(f) = state.focused.as_ref()
+            && f.updated_at != LAST_FOCUS_UPDATE.with(|f| f.get())
+        {
+            state.unfocus();
+        }
+    }
+
+    fn size(&self) -> Size<Length> {
+        Size::new(self.width, self.height)
+    }
+
+    fn layout(
+        &mut self,
+        tree: &mut Tree,
+        renderer: &Renderer,
+        limits: &layout::Limits,
+    ) -> layout::Node {
+        let state = tree.state.downcast_mut::<LocalState>();
+        let limits = limits.shrink(self.padding);
+        let size = self
+            .variant_layout(state, renderer, &limits)
+            .expand(self.padding);
+        layout::Node::new(size)
+    }
+
+    #[allow(clippy::too_many_lines)]
+    fn update(
+        &mut self,
+        tree: &mut Tree,
+        event: &Event,
+        layout: Layout<'_>,
+        cursor_position: mouse::Cursor,
+        renderer: &Renderer,
+        clipboard: &mut dyn Clipboard,
+        shell: &mut Shell<'_, Message>,
+        viewport: &iced::Rectangle,
+    ) {
+        self.handle_event(
+            tree,
+            event,
+            layout,
+            cursor_position,
+            renderer,
+            clipboard,
+            shell,
+            viewport,
+        );
+        // Tell the application which tab the pointer is over, whichever way
+        // the event was handled
+        let state = tree.state.downcast_mut::<LocalState>();
+        let hovered = match state.hovered {
+            Item::Tab(entity) => Some(entity),
+            _ => None,
+        };
+        if hovered != state.hover_reported {
+            state.hover_reported = hovered;
+            if let Some(on_tab_hover) = self.on_tab_hover.as_ref() {
+                let bounds = layout.bounds();
+                let at = hovered.map(|entity| {
+                    let centre = self
+                        .variant_bounds(state, bounds)
+                        .find_map(|item| match item {
+                            ItemBounds::Button(e, b) if e == entity => Some(b.center_x() - bounds.x),
+                            _ => None,
+                        })
+                        .unwrap_or(bounds.width / 2.0);
+                    (entity, centre)
+                });
+                shell.publish(on_tab_hover(at));
+            }
         }
     }
 
@@ -2753,6 +2856,8 @@ pub struct LocalState {
     focused_item: Item,
     /// The ID of the button that is being hovered. Defaults to null.
     hovered: Item,
+    /// The hovered tab as last told to the application
+    hover_reported: Option<Entity>,
     /// The ID of the button that was middle-clicked, but not yet released.
     middle_clicked: Option<Item>,
     /// Last known length of the model.

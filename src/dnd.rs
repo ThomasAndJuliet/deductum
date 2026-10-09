@@ -2,14 +2,22 @@ use cosmic::iced::clipboard::mime::AllowedMimeTypes;
 use std::{borrow::Cow, error::Error, path::PathBuf, str};
 use url::Url;
 
+use crate::agent::Session;
+
+/// The type of a dragged tab, whose data is its session's descriptor
+pub const TAB_MIME: &str = "x-cosmic-term/tab";
+
+/// Files, or a tab from this or another window
 #[derive(Clone, Debug)]
 pub struct DndDrop {
     pub paths: Vec<PathBuf>,
+    pub session: Option<Session>,
 }
 
 impl AllowedMimeTypes for DndDrop {
     fn allowed() -> Cow<'static, [String]> {
         Cow::from(vec![
+            TAB_MIME.to_string(),
             "x-special/gnome-copied-files".to_string(),
             "text/uri-list".to_string(),
         ])
@@ -22,6 +30,14 @@ impl TryFrom<(Vec<u8>, String)> for DndDrop {
         let (data, mime) = value;
         let mut paths = Vec::new();
         match mime.as_str() {
+            TAB_MIME => {
+                let session = Session::from_descriptor(str::from_utf8(&data)?)
+                    .ok_or("the tab has no session")?;
+                return Ok(Self {
+                    paths,
+                    session: Some(session),
+                });
+            }
             "text/uri-list" => {
                 let text = str::from_utf8(&data)?;
                 for line in text.lines() {
@@ -46,6 +62,9 @@ impl TryFrom<(Vec<u8>, String)> for DndDrop {
             }
             _ => Err(format!("unsupported mime type {:?}", mime))?,
         }
-        Ok(Self { paths })
+        Ok(Self {
+            paths,
+            session: None,
+        })
     }
 }

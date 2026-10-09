@@ -163,7 +163,7 @@ impl TerminalPaneGrid {
     pub fn new(model: TabModel) -> Self {
         let (panes, pane) = pane_grid::State::new(model);
         let mut terminal_ids = HashMap::new();
-        terminal_ids.insert(pane, cosmic::widget::Id::unique());
+        terminal_ids.insert(pane, crate::field_id("terminal"));
 
         Self {
             panes,
@@ -276,6 +276,7 @@ impl Terminal {
         colors: Colors,
         profile_id_opt: Option<ProfileId>,
         tab_title_override: Option<String>,
+        initial_pixels: Option<(u32, u32)>,
     ) -> Result<Self, io::Error> {
         let font_stretch = app_config.typed_font_stretch();
         let font_weight = app_config.font_weight;
@@ -315,9 +316,15 @@ impl Terminal {
             (w, metrics.line_height)
         };
 
+        // The size it will be drawn at when known, as for a new tab beside another, so
+        // that its program does not start at 80x24 and get resized straight after
+        let (width, height) = initial_pixels.unwrap_or((
+            (80.0 * cell_width).ceil() as u32,
+            (24.0 * cell_height).ceil() as u32,
+        ));
         let size = Size {
-            width: (80.0 * cell_width).ceil() as u32,
-            height: (24.0 * cell_height).ceil() as u32,
+            width,
+            height,
             cell_width,
             cell_height,
         };
@@ -446,6 +453,11 @@ impl Terminal {
     pub fn working_directory(&self) -> Option<PathBuf> {
         #[cfg(target_os = "linux")]
         {
+            // In a Flatpak the child is a local relay to the host process,
+            // whose working directory the sandbox cannot see
+            if crate::host::is_sandboxed() {
+                return None;
+            }
             let shell_pid = self.shell_pid?;
             fs::read_link(format!("/proc/{shell_pid}/cwd")).ok()
         }
@@ -1275,5 +1287,51 @@ impl Drop for Terminal {
         if let Err(err) = self.notifier.0.send(Msg::Shutdown) {
             log::warn!("Failed to send shutdown message on dropped terminal: {err}");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use alacritty_terminal::{
+        event::{Event, EventListener, WindowSize},
+        term::{Config, Term, test::TermSize},
+        vte::ansi::Processor,
+    };
+    use std::sync::{Arc, Mutex};
+
+    #[derive(Clone, Default)]
+    struct Events(Arc<Mutex<Vec<Event>>>);
+
+    impl EventListener for Events {
+        fn send_event(&self, event: Event) {
+            self.0.lock().unwrap().push(event);
+        }
+    }
+
+    /// Zellij asks for both when it starts; with only the text area answered, it took the
+    /// next replies for typing, and `11;rgb:…` appeared at the prompt of every new tab
+    #[test]
+    fn answers_text_area_and_cell_size_in_pixels() {
+        let events = Events::default();
+        let mut term = Term::new(Config::default(), &TermSize::new(80, 24), events.clone());
+        let mut parser: Processor = Processor::new();
+        parser.advance(&mut term, b"\x1b[14t\x1b[16t");
+        let size = WindowSize {
+            num_lines: 24,
+            num_cols: 80,
+            cell_width: 9,
+            cell_height: 18,
+        };
+        let replies: Vec<String> = events
+            .0
+            .lock()
+            .unwrap()
+            .iter()
+            .filter_map(|event| match event {
+                Event::TextAreaSizeRequest(reply) => Some(reply(size)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(replies, ["\x1b[4;432;720t", "\x1b[6;18;9t"]);
     }
 }

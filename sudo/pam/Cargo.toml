@@ -1,0 +1,13 @@
+[package]
+name = "pam_cosmic_term_sudo"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-only"
+description = "PAM module letting sudo accept an approval signed by COSMIC Terminal's sudo agent"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+ct-sudo-protocol = { path = "../protocol", default-features = false, features = ["verify"] }
+libc = "0.2"

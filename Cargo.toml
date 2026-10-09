@@ -10,14 +10,28 @@ rust-version = "1.93"
 alacritty_terminal = "0.25.1"
 hex_color = { version = "3", features = ["serde"] }
 indexmap = "2"
+libc = "0.2"
 log = "0.4"
 open = "5.3.2"
 paste = "1.0"
 regex = "1"
 ron = "0.11"
+serde_json = "1"
 serde = { version = "1", features = ["serde_derive"] }
 shlex = "1"
-tokio = { version = "1", features = ["sync"] }
+# Windows are separate processes; they find and ask each other over D-Bus
+zbus = { version = "5", default-features = false, features = ["tokio"] }
+tokio = { version = "1", features = ["sync", "process", "io-util", "rt", "time", "macros", "net"] }
+# The sudo agent's protocol and keys; see AGENTS-PLAN.md, "Sudo from agents"
+ct-sudo-protocol = { path = "sudo/protocol", features = ["sign"] }
+futures-util = "0.3"
+# The secrets store: an Argon2id key from the store password seals it with
+# XChaCha20-Poly1305
+argon2 = { version = "0.5", default-features = false, features = ["alloc"] }
+chacha20poly1305 = { version = "0.10", default-features = false, features = ["alloc", "getrandom"] }
+zeroize = { version = "1", features = ["derive"] }
+# The sudo agent's pow, as its static build has no libm
+libm = "0.2"
 # CLI arguments
 clap_lex = "0.7"
 # Internationalization
@@ -84,3 +98,25 @@ debug = true
 # cosmic-theme = { git = "https://github.com/pop-os/libcosmic//", branch = "theme-v2" }
 # iced_futures = { git = "https://github.com/pop-os/libcosmic//", branch = "theme-v2" }
 # iced_winit = { git = "https://github.com/pop-os/libcosmic//", branch = "theme-v2" }
+
+# libcosmic is vendored as a git subtree, carrying local changes; see
+# libcosmic/ and `git log -- libcosmic`
+# The sudo agent's protocol, and the PAM module that uses it; see AGENTS-PLAN.md
+[workspace]
+members = [".", "sudo/protocol", "sudo/pam"]
+exclude = ["libcosmic", "vendor"]
+
+[patch."https://github.com/pop-os/libcosmic.git"]
+libcosmic = { path = "libcosmic" }
+
+# XTWINOPS 16 (cell size in pixels) answered; see vendor/README.md
+[patch.crates-io]
+alacritty_terminal = { path = "vendor/alacritty_terminal" }
+vte = { path = "vendor/vte" }
+
+# The store's key derivation is slow on purpose; unoptimized, it is far slower
+[profile.dev.package.argon2]
+opt-level = 3
+
+[profile.dev.package.blake2]
+opt-level = 3

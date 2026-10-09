@@ -121,6 +121,7 @@ pub struct TerminalBox<'a, Message> {
     on_open_hyperlink: Option<Box<dyn Fn(String) -> Message + 'a>>,
     on_window_focused: Option<Box<dyn Fn() -> Message + 'a>>,
     on_window_unfocused: Option<Box<dyn Fn() -> Message + 'a>>,
+    on_click_focus: Option<Box<dyn Fn() -> Message + 'a>>,
     key_binds: &'a HashMap<KeyBind, Action>,
     sharp_corners: bool,
     disabled: bool,
@@ -149,6 +150,7 @@ where
             on_open_hyperlink: None,
             on_window_focused: None,
             on_window_unfocused: None,
+            on_click_focus: None,
             sharp_corners: false,
             disabled: false,
         }
@@ -227,6 +229,12 @@ where
 
     pub fn on_window_focused(mut self, on_window_focused: impl Fn() -> Message + 'a) -> Self {
         self.on_window_focused = Some(Box::new(on_window_focused));
+        self
+    }
+
+    /// Told when a click gives the terminal the keys
+    pub fn on_click_focus(mut self, on_click_focus: impl Fn() -> Message + 'a) -> Self {
+        self.on_click_focus = Some(Box::new(on_click_focus));
         self
     }
 
@@ -1244,6 +1252,14 @@ where
                     let col = x / terminal.size().cell_width;
                     let row = y / terminal.size().cell_height;
 
+                    // A click takes the keys, in mouse mode too, where the
+                    // program running gets the click itself
+                    if !state.is_focused {
+                        state.is_focused = true;
+                        if let Some(on_click_focus) = &self.on_click_focus {
+                            shell.publish(on_click_focus());
+                        }
+                    }
                     if is_mouse_mode {
                         state.autoscroll.stop();
                         terminal.report_mouse(
@@ -1375,7 +1391,14 @@ where
                                             None,
                                         );
                                         let link = get_hyperlink(&terminal, location);
-                                        shell.publish(on_context_menu(Some(MenuState { link })));
+                                        let word = link
+                                            .is_none()
+                                            .then(|| word_at(&terminal, location))
+                                            .flatten();
+                                        shell.publish(on_context_menu(Some(MenuState {
+                                            link,
+                                            word,
+                                        })));
                                     }
                                 }
                             }
@@ -1631,6 +1654,36 @@ fn get_hyperlink(
     } else {
         None
     }
+}
+
+/// The whitespace-delimited word at `location`, such as a path printed
+/// without a hyperlink
+fn word_at(terminal: &std::sync::MutexGuard<'_, Terminal>, location: TermPoint) -> Option<String> {
+    let term = terminal.term.lock();
+    if location.column.0 >= term.columns() {
+        return None;
+    }
+    let row = &term.grid()[location.line];
+    let cells: Vec<(usize, char)> = (0..term.columns())
+        .filter(|&column| !row[TermColumn(column)].flags.contains(Flags::WIDE_CHAR_SPACER))
+        .map(|column| (column, row[TermColumn(column)].c))
+        .collect();
+    let at = cells
+        .iter()
+        .rposition(|&(column, _)| column <= location.column.0)?;
+    let is_word = |c: char| !c.is_whitespace() && c != '\0';
+    if !is_word(cells[at].1) {
+        return None;
+    }
+    let start = cells[..at]
+        .iter()
+        .rposition(|&(_, c)| !is_word(c))
+        .map_or(0, |i| i + 1);
+    let end = cells[at..]
+        .iter()
+        .position(|&(_, c)| !is_word(c))
+        .map_or(cells.len(), |i| at + i);
+    Some(cells[start..end].iter().map(|&(_, c)| c).collect())
 }
 
 fn get_hyperlink_id(

@@ -9,4 +9,8 @@
 /.direnv/
 /.idea/
 nohup.out
+/build-flatpak/
+/.flatpak-builder/
 /.local-design/
+__pycache__/
+*.pyc

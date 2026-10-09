@@ -41,6 +41,7 @@ struct InputState {
 
 pub struct PasswordManager {
     input_state: Option<PasswordInputState>,
+    pending: bool,
     pub password_list: Vec<String>,
     //Which pane we should paste to, ie. which pane had focus when the
     //password manager was opened. Just to be sure it doesn't change under
@@ -53,6 +54,7 @@ impl PasswordManager {
     pub fn new() -> Self {
         Self {
             input_state: None,
+            pending: false,
             password_list: Default::default(),
             pane: None,
             expanded_entry: None,
@@ -62,6 +64,7 @@ impl PasswordManager {
     pub fn update(&mut self, msg: PasswordManagerMessage) -> Task<cosmic::Action<Message>> {
         match msg {
             PasswordManagerMessage::Error(err) => {
+                self.pending = false;
                 log::error!("{err}");
             }
             PasswordManagerMessage::FetchAndPastePassword(identifier) => {
@@ -77,6 +80,7 @@ impl PasswordManager {
                 return self.refresh_password_list();
             }
             PasswordManagerMessage::ListRefreshed(list) => {
+                self.pending = false;
                 self.password_list = list;
             }
             PasswordManagerMessage::Collapse => {
@@ -85,6 +89,7 @@ impl PasswordManager {
                 self.expanded_entry = None;
             }
             PasswordManagerMessage::Expand(identifier, password) => {
+                self.pending = false;
                 self.input_state = Some(PasswordInputState {
                     original: Some(InputState {
                         identifier: identifier.clone(),
@@ -131,20 +136,22 @@ impl PasswordManager {
             PasswordManagerMessage::New => {
                 self.new_password();
             }
-            PasswordManagerMessage::None => {}
+            PasswordManagerMessage::None => self.pending = false,
         }
         Task::none()
     }
 
     pub fn clear(&mut self) {
+        self.pending = false;
         self.input_state = None;
         self.password_list.clear();
         self.pane = None;
         self.expanded_entry = None;
     }
 
-    pub fn fetch_and_paste(&self, identifier: String) -> Task<cosmic::Action<Message>> {
+    pub fn fetch_and_paste(&mut self, identifier: String) -> Task<cosmic::Action<Message>> {
         if let Some(pane) = self.pane {
+            self.pending = true;
             cosmic::task::future(async move {
                 match store::get_password(identifier.clone()).await {
                     Ok(password) => Message::PasswordPaste(password, pane),
@@ -160,6 +167,7 @@ impl PasswordManager {
     }
 
     pub fn fetch_and_expand(&mut self, identifier: String) -> Task<cosmic::Action<Message>> {
+        self.pending = true;
         cosmic::task::future(async move {
             match store::get_password(identifier.clone()).await {
                 Ok(password) => {
@@ -172,7 +180,8 @@ impl PasswordManager {
         })
     }
 
-    pub fn refresh_password_list(&self) -> Task<cosmic::Action<Message>> {
+    pub fn refresh_password_list(&mut self) -> Task<cosmic::Action<Message>> {
+        self.pending = true;
         cosmic::task::future(async {
             match store::fetch_password_list().await {
                 Ok(list) => Message::PasswordManager(PasswordManagerMessage::ListRefreshed(list)),
@@ -184,6 +193,7 @@ impl PasswordManager {
     }
 
     pub fn delete_password(&mut self, identifier: String) -> Task<cosmic::Action<Message>> {
+        self.pending = true;
         if self.expanded_entry.as_ref() == Some(&identifier) {
             self.expanded_entry = None;
         }
@@ -240,6 +250,7 @@ impl PasswordManager {
                 return Task::none();
             }
 
+            self.pending = true;
             cosmic::task::future(async move {
                 if let Err(err) = store::add_password(identifier.clone(), password.clone()).await {
                     Message::PasswordManager(PasswordManagerMessage::Error(format!(
@@ -273,6 +284,9 @@ impl PasswordManager {
         } = theme.cosmic().spacing;
 
         let mut sections = Vec::with_capacity(2);
+        if self.pending {
+            sections.push(widget::text::caption(fl!("password-store-waiting")).into());
+        }
 
         let mut passwords_section = widget::settings::section();
 
@@ -409,8 +423,9 @@ impl Default for PasswordManager {
     }
 }
 
-mod store {
+pub(crate) mod store {
     use std::string::FromUtf8Error;
+    use std::time::Duration;
 
     use thiserror::Error;
 
@@ -422,9 +437,24 @@ mod store {
         FromUtf8(#[from] FromUtf8Error),
         #[error("No password found for identifier `{0}`")]
         NoPasswordForIdentifier(String),
+        #[error("password store did not respond within 30 seconds")]
+        TimedOut,
+    }
+
+    const DEADLINE: Duration = Duration::from_secs(30);
+
+    /// Every entry, with its password, for moving into the secrets store
+    pub async fn export_all() -> Result<Vec<(String, String)>, Error> {
+        let mut found = Vec::new();
+        for identifier in fetch_password_list().await? {
+            let password = get_password(identifier.clone()).await?;
+            found.push((identifier, password.into_unsecure()));
+        }
+        Ok(found)
     }
 
     pub async fn fetch_password_list() -> Result<Vec<String>, Error> {
+        tokio::time::timeout(DEADLINE, async {
         let mut list = Vec::new();
         let ss = secret_service::SecretService::connect(secret_service::EncryptionType::Dh).await?;
         let collection = ss.get_default_collection().await?;
@@ -445,10 +475,12 @@ mod store {
             }
         }
         list.sort();
-        Ok(list)
+        Ok::<_, Error>(list)
+        }).await.map_err(|_| Error::TimedOut)?
     }
 
     pub async fn add_password(identifier: String, password: String) -> Result<(), Error> {
+        tokio::time::timeout(DEADLINE, async {
         let ss = secret_service::SecretService::connect(secret_service::EncryptionType::Dh).await?;
         let collection = ss.get_default_collection().await?;
 
@@ -461,10 +493,12 @@ mod store {
         collection
             .create_item(&label, attributes, password.as_bytes(), true, "text/plain")
             .await?;
-        Ok(())
+        Ok::<_, Error>(())
+        }).await.map_err(|_| Error::TimedOut)?
     }
 
     pub async fn get_password(identifier: String) -> Result<secstr::SecUtf8, Error> {
+        tokio::time::timeout(DEADLINE, async {
         let ss = secret_service::SecretService::connect(secret_service::EncryptionType::Dh).await?;
         let collection = ss.get_default_collection().await?;
 
@@ -475,13 +509,15 @@ mod store {
         let search_items = collection.search_items(attributes).await?;
         if let Some(item) = search_items.first() {
             let secret = item.get_secret().await?;
-            Ok(String::from_utf8(secret)?.into())
+            Ok::<_, Error>(String::from_utf8(secret)?.into())
         } else {
             Err(Error::NoPasswordForIdentifier(identifier))
         }
+        }).await.map_err(|_| Error::TimedOut)?
     }
 
     pub async fn delete_password(identifier: String) -> Result<(), Error> {
+        tokio::time::timeout(DEADLINE, async {
         let ss = secret_service::SecretService::connect(secret_service::EncryptionType::Dh).await?;
         let collection = ss.get_default_collection().await?;
 
@@ -492,9 +528,10 @@ mod store {
         let search_items = collection.search_items(attributes).await?;
 
         if let Some(item) = search_items.first() {
-            Ok(item.delete().await?)
+            Ok::<_, Error>(item.delete().await?)
         } else {
             Err(Error::NoPasswordForIdentifier(identifier))
         }
+        }).await.map_err(|_| Error::TimedOut)?
     }
 }

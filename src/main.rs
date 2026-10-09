@@ -42,13 +42,24 @@ use std::{
     process,
     rc::Rc,
     sync::{LazyLock, Mutex, atomic::Ordering},
+    time::{Duration, Instant},
 };
 use tokio::sync::mpsc;
 
 use config::{
-    AppTheme, CONFIG_VERSION, ColorScheme, ColorSchemeId, ColorSchemeKind, Config, Profile,
-    ProfileId,
+    AppTheme, CONFIG_VERSION, ColorScheme, ColorSchemeId, ColorSchemeKind, Config, MachineId,
+    Profile, ProfileId, TabColor,
 };
+mod agent;
+mod host;
+mod launcher_forms;
+mod machines;
+mod peers;
+mod sidebar;
+mod secrets;
+mod mount_setup_view;
+use cosmic_term::transfer;
+use launcher_forms::{LauncherForm, TransferForm, WorktreeField, WorktreeForm, blocking};
 mod config;
 mod mouse_reporter;
 
@@ -71,6 +82,7 @@ mod terminal;
 use terminal_box::terminal_box;
 
 use crate::dnd::DndDrop;
+use cosmic::iced::clipboard::dnd::{DndEvent, OfferEvent, SourceEvent};
 use crate::menu::MenuState;
 mod terminal_box;
 
@@ -89,9 +101,245 @@ pub fn icon_cache_get(name: &'static str, size: u16) -> widget::icon::Icon {
     icon_cache.get(name, size)
 }
 
+/// A tab whose agent has not started yet. It offers where to start: the home
+/// directory, a recent project or a new worktree of one, a folder chosen in
+/// a picker, a past conversation of either agent on either computer to
+/// resume, continue or move here, or a running session to attach to
+pub struct Launcher {
+    id: String,
+    profile_id: ProfileId,
+    filter: String,
+    filter_id: widget::Id,
+    /// Each host's projects and conversations, by ssh destination, with
+    /// this computer as ""
+    listings: BTreeMap<String, Listing>,
+    /// The agent's sessions on the profile's host
+    running: Vec<agent::Session>,
+    /// A form shown instead of the list
+    form: Option<LauncherForm>,
+    /// A user-triggered launch step that has not returned yet.
+    pending_action: Option<(String, String)>,
+    /// Transfers that stopped part way, to resume or roll back
+    unfinished: Vec<transfer::Record>,
+}
+
+/// What a launcher knows of one host's projects and conversations
+pub enum Listing {
+    Loading,
+    Ready(agent::HostListing),
+    /// The host could not be reached; its last listing, if there was one,
+    /// is shown but cannot be launched from
+    Offline(Option<agent::HostListing>, String),
+}
+
+impl Listing {
+    fn listing(&self) -> Option<&agent::HostListing> {
+        match self {
+            Self::Ready(listing) | Self::Offline(Some(listing), _) => Some(listing),
+            _ => None,
+        }
+    }
+}
+
+/// Where an agent tab's agent is working, as last found. Agents seldom stay
+/// where they started: new tabs and Open in Zed follow this instead
+#[derive(Default)]
+pub struct TabFocus {
+    pub dir: Option<String>,
+    pub checked: Option<Instant>,
+    pub pending: bool,
+}
+
+/// How often an agent tab's directory is looked up, at most
+const FOCUS_INTERVAL: Duration = Duration::from_secs(10);
+
+/// A field of a machine in the settings
+#[derive(Clone, Copy, Debug)]
+pub enum MachineField {
+    Name,
+    Host,
+    User,
+}
+
+/// A machine's check in the settings
+pub enum MachineCheck {
+    Running,
+    Done(Result<machines::Probe, String>),
+}
+
+/// Where a launcher starts its agent
+#[derive(Clone, Debug)]
+pub enum LaunchChoice {
+    Dir(String),
+    Resume { id: String, cwd: String },
+    Attach(agent::Session),
+    Browse,
+    /// A new worktree of the project in this directory
+    NewWorktree(String),
+    /// Another agent's conversation on this computer, continued from its
+    /// transcript
+    Continue { conversation: transfer::ConversationRef, cwd: String },
+    /// A conversation on the other computer, brought here
+    Transfer {
+        conversation: transfer::ConversationRef,
+        cwd: String,
+        title: String,
+        mode: transfer::Mode,
+    },
+}
+
+/// A row of a launcher
+struct LauncherRow {
+    label: String,
+    detail: String,
+    when: String,
+    /// What pressing the row does; nothing for an offline host's rows
+    choice: Option<LaunchChoice>,
+    /// Buttons at the end of the row
+    actions: Vec<(String, LaunchChoice)>,
+}
+
+use cosmic_term::provider::Kind as ConversationKind;
+
+/// The kind of conversation an agent keeps
+fn agent_kind(agent: config::Agent) -> Option<ConversationKind> {
+    match agent {
+        config::Agent::Claude => Some(ConversationKind::Claude),
+        config::Agent::Codex => Some(ConversationKind::Codex),
+        config::Agent::Shell => None,
+    }
+}
+
+/// Where launchers keep each host's last listing, for when it is offline
+fn listing_cache(host: &str) -> PathBuf {
+    let name = if host.is_empty() { "local".to_string() } else { cosmic_term::project::slug(host) };
+    cosmic_term::Env::from_process()
+        .state_dir
+        .join("launcher")
+        .join(format!("{name}.json"))
+}
+
+/// Shorten `text` to at most `max` characters by replacing its middle, which
+/// keeps both ends of a path readable
+fn ellipsize_middle(text: &str, max: usize) -> String {
+    let len = text.chars().count();
+    if len <= max {
+        return text.to_string();
+    }
+    let keep = max.saturating_sub(1);
+    let head: String = text.chars().take(keep / 2).collect();
+    let tail: String = text.chars().skip(len - (keep - keep / 2)).collect();
+    format!("{head}…{tail}")
+}
+
+/// How long ago `epoch_secs` was, briefly
+fn time_ago(epoch_secs: f64) -> String {
+    if epoch_secs <= 0.0 {
+        return String::new();
+    }
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0.0, |now| now.as_secs_f64());
+    let minutes = ((now - epoch_secs).max(0.0) / 60.0) as i64;
+    let (hours, days) = (minutes / 60, minutes / 1440);
+    match minutes {
+        0 => fl!("time-just-now"),
+        1..60 => fl!("time-minutes-ago", n = minutes),
+        60..1440 => fl!("time-hours-ago", n = hours),
+        _ => fl!("time-days-ago", n = days),
+    }
+}
+
+/// Before a tab's title while its session waits for sudo approval
+/// A field's id, named and numbered: a field that may take the place of
+/// another in the widget tree, as a tab's launcher does another tab's, needs
+/// one, as the tree gives an unnamed field the id of the one it replaces,
+/// and the focus would then be asked of a field no longer there
+pub(crate) fn field_id(kind: &str) -> widget::Id {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    widget::Id::new(format!("{kind}-{n}"))
+}
+
+/// What goes without a program a machine lacks
+fn tool_needed(tool: &str) -> String {
+    match tool {
+        "python3" => fl!("tool-python3"),
+        "git" => fl!("tool-git"),
+        _ => fl!("tool-mounts"),
+    }
+}
+
+/// How long the pointer rests on a tab before its preview shows
+const TAB_PREVIEW_DELAY: Duration = Duration::from_millis(400);
+
+const SUDO_LOCK: &str = "🔒 ";
+
+/// A tab whose session is open in another window too, whose bus name this is
+pub struct TabShared {
+    peer: String,
+}
+
+/// The value of [`host::TAB_VAR`] in a tab's processes
+pub struct TabToken(String);
+
+/// How a tab is marked: its colour, and whether it runs on a remote host
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct TabMark {
+    color: Option<TabColor>,
+    remote: bool,
+    /// Lost its connection to the remote host, and drawn in grey
+    disconnected: bool,
+}
+
+/// Grey, for tabs whose remote host is out of reach
+const DISCONNECTED_GREY: TabColor = TabColor([0x80, 0x80, 0x80]);
+/// The accent of tabs without a colour: grey, which [`App::theme`] brings to
+/// the lightness of the theme's own accent, so light on a dark theme and dark
+/// on a light one
+const NEUTRAL_ACCENT: TabColor = TabColor([0x80, 0x80, 0x80]);
+
+/// How a remote tab was started, to reconnect it after its connection drops
+pub struct TabConnection {
+    launch: host::HostCommand,
+    started: Instant,
+    /// When the connection dropped, if it has
+    lost: Option<Instant>,
+}
+
+impl TabMark {
+    /// A computer or server in the tab's colour. Unmarked local tabs have no
+    /// icon, as in upstream
+    fn icon(self, size: u16) -> Option<widget::icon::Icon> {
+        let name = if self.remote {
+            "network-server-symbolic"
+        } else {
+            "computer-symbolic"
+        };
+        match self.strip_color() {
+            Some(color) => Some(ICON_CACHE.lock().unwrap().get_colored(name, color.0, size)),
+            None => self.remote.then(|| icon_cache_get(name, size)),
+        }
+    }
+
+    /// The colour of the tab's icon, and of its session's strip in the sidebar
+    fn strip_color(self) -> Option<TabColor> {
+        if self.disconnected {
+            Some(DISCONNECTED_GREY)
+        } else {
+            self.color
+        }
+    }
+}
+
 /// Runs application with these settings
 #[rustfmt::skip]
 fn main() -> Result<(), Box<dyn Error>> {
+    let mut args = std::env::args_os().skip(1);
+    if args.next().as_deref() == Some(std::ffi::OsStr::new(host::HOST_EXEC_ARG)) {
+        return Err(host::host_exec(args.collect()).into());
+    }
+
     let raw_args = RawArgs::from_args();
     let mut cursor = raw_args.cursor();
 
@@ -99,6 +347,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut shell_args = Vec::new();
     let mut daemonize = true;
     let mut working_directory = None;
+    let mut startup_attach = None;
     // Parse the arguments using clap_lex
     while let Some(arg) = raw_args.next_os(&mut cursor) {
         match arg.to_str() {
@@ -119,6 +368,18 @@ fn main() -> Result<(), Box<dyn Error>> {
                 } else {
                     eprintln!("Missing argument for {arg_str}");
                     process::exit(1);
+                }
+            }
+            Some(arg_str @ "--attach") => {
+                match raw_args
+                    .next_os(&mut cursor)
+                    .and_then(|arg| agent::Session::from_descriptor(arg.to_str()?))
+                {
+                    Some(session) => startup_attach = Some(session),
+                    None => {
+                        eprintln!("Missing or invalid session for {arg_str}");
+                        process::exit(1);
+                    }
                 }
             }
             Some("--no-daemon") => {
@@ -145,8 +406,10 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // Platform-specific daemonization logic
 
+    // In a Flatpak the sandbox ends with the process it started, taking a
+    // forked daemon with it
     #[cfg(all(unix, not(target_os = "redox")))]
-    if daemonize {
+    if daemonize && !host::is_sandboxed() {
         match fork::daemon(true, true) {
             Ok(fork::Fork::Child) => (),
             Ok(fork::Fork::Parent(_child_pid)) => process::exit(0),
@@ -176,11 +439,39 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     };
 
+    let mut config = config;
+    if agent::seed_profiles(&mut config)
+        && let Some(config_handler) = &config_handler
+    {
+        for result in [
+            config_handler.set("profiles", &config.profiles),
+            config_handler.set("agent_profiles_seeded", true),
+            config_handler.set("profile_seed_version", config.profile_seed_version),
+        ] {
+            if let Err(err) = result {
+                log::error!("failed to save agent profiles: {}", err);
+            }
+        }
+    }
+    // Profiles' hosts become machines, once
+    if config.adopt_machines()
+        && let Some(config_handler) = &config_handler
+    {
+        for result in [
+            config_handler.set("machines", &config.machines),
+            config_handler.set("profiles", &config.profiles),
+        ] {
+            if let Err(err) = result {
+                log::error!("failed to save machines: {}", err);
+            }
+        }
+    }
+
     let shortcuts_config = shortcuts::ShortcutsConfig::new(config.shortcuts_custom.clone());
 
-    let shell = shell_program_opt.map(|shell_program| tty::Shell::new(shell_program, shell_args));
+    let startup_command =
+        shell_program_opt.map(|shell_program| host::HostCommand::new(shell_program, shell_args));
     let startup_options = Some(tty::Options {
-        shell,
         working_directory,
         ..tty::Options::default()
     });
@@ -208,6 +499,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         config,
         shortcuts_config,
         startup_options,
+        startup_command,
+        startup_attach,
         term_config,
     };
 
@@ -226,7 +519,8 @@ Project home page: https://github.com/pop-os/cosmic-term
 Options:
   --help                          Show this message
   --version                       Show the version of cosmic-term
-  -w, --working-directory <dir>   Set the working directory for the terminal"#
+  -w, --working-directory <dir>   Set the working directory for the terminal
+  --attach <session>[@<host>]     Open a tab attached to a Zellij session"#
     );
 }
 
@@ -236,6 +530,8 @@ pub struct Flags {
     config: Config,
     shortcuts_config: shortcuts::ShortcutsConfig,
     startup_options: Option<tty::Options>,
+    startup_command: Option<host::HostCommand>,
+    startup_attach: Option<agent::Session>,
     term_config: term::Config,
 }
 
@@ -278,7 +574,23 @@ pub enum Action {
     TabActivate8,
     TabClose,
     TabNew,
+    NewTabMenu,
     TabNewNoProfile,
+    RemoteEnd,
+    TabPopOut,
+    /// Move or fork an agent tab's conversation to this profile's computer
+    TabMoveTo(ProfileId),
+    TabForkTo(ProfileId),
+    OpenLocallyByMenu,
+    OpenInZed,
+    OpenInFiles,
+    /// Rename the conversation of the tab in front
+    SessionRename,
+    SidebarToggle,
+    SecretsToggle,
+    RemoteFiles,
+    /// Paste a saved password from the secrets store
+    PastePassword(u64),
     TabNext,
     TabPrev,
     ToggleFullscreen,
@@ -312,10 +624,12 @@ impl Action {
             Self::PaneSplitVertical => Message::PaneSplit(pane_grid::Axis::Vertical),
             Self::PaneToggleMaximized => Message::PaneToggleMaximized,
             #[cfg(feature = "password_manager")]
-            Self::PasswordManager => Message::ToggleContextPage(ContextPage::PasswordManager),
+            // The Secrets pane took the password manager's place
+            Self::PasswordManager => Message::SecretsToggle,
             Self::Paste => Message::Paste(entity_opt),
             Self::PastePrimary => Message::PastePrimary(entity_opt),
             Self::ProfileOpen(profile_id) => Message::ProfileOpen(*profile_id),
+            Self::RemoteFiles => Message::RemoteFilesOpen(String::new()),
             Self::Profiles => Message::ToggleContextPage(ContextPage::Profiles),
             Self::SelectAll => Message::SelectAll(entity_opt),
             Self::Settings => Message::ToggleContextPage(ContextPage::Settings),
@@ -331,7 +645,19 @@ impl Action {
             Self::TabActivate8 => Message::TabActivateJump(8),
             Self::TabClose => Message::TabClose(entity_opt),
             Self::TabNew => Message::TabNew,
+            Self::NewTabMenu => Message::NewTabMenuToggle,
             Self::TabNewNoProfile => Message::TabNewNoProfile,
+            Self::RemoteEnd => Message::RemoteEnd(entity_opt),
+            Self::TabPopOut => Message::TabPopOut(entity_opt),
+            Self::OpenInZed => Message::OpenInZed,
+            Self::OpenInFiles => Message::OpenInFiles,
+            Self::SessionRename => Message::SessionRename(entity_opt),
+            Self::SidebarToggle => Message::SidebarToggle,
+            Self::SecretsToggle => Message::SecretsToggle,
+            Self::PastePassword(id) => Message::SecretsPaste(*id),
+            Self::TabMoveTo(profile_id) => Message::TabTransfer(entity_opt, *profile_id, transfer::Mode::Move),
+            Self::TabForkTo(profile_id) => Message::TabTransfer(entity_opt, *profile_id, transfer::Mode::Fork),
+            Self::OpenLocallyByMenu => Message::OpenLocallyByMenu,
             Self::TabNext => Message::TabNext,
             Self::TabPrev => Message::TabPrev,
             Self::ToggleFullscreen => Message::ToggleFullscreen,
@@ -362,8 +688,11 @@ pub enum Message {
     ColorSchemeExpand(ColorSchemeKind, Option<ColorSchemeId>),
     ColorSchemeExport(ColorSchemeKind, Option<ColorSchemeId>),
     ColorSchemeExportResult(ColorSchemeKind, Option<ColorSchemeId>, DialogResult),
+    ColorSchemeExported(Result<(), String>),
     ColorSchemeImport(ColorSchemeKind),
     ColorSchemeImportResult(ColorSchemeKind, DialogResult),
+    ColorSchemeImported(ColorSchemeKind, Vec<Result<ColorScheme, String>>),
+    ColorSchemeIoSlow(u64),
     ColorSchemeRename(ColorSchemeKind, ColorSchemeId, String),
     ColorSchemeRenameSubmit,
     ColorSchemeTabActivate(widget::segmented_button::Entity),
@@ -399,6 +728,158 @@ pub enum Message {
     ShortcutReset(shortcuts::KeyBindAction),
     ShortcutSearch(String),
     MouseEnter(pane_grid::Pane),
+    CloseToast(widget::ToastId),
+    LauncherBrowse(segmented_button::Entity, Option<PathBuf>, DialogResult),
+    LauncherChoose(segmented_button::Entity, LaunchChoice),
+    LauncherData(segmented_button::Entity, String, Result<agent::HostListing, String>),
+    LauncherFormCancel(segmented_button::Entity),
+    /// A field of a tab's launcher took the focus
+    LauncherFocus(segmented_button::Entity, widget::Id),
+    LauncherRecover(segmented_button::Entity, String, bool),
+    LauncherRecovered(segmented_button::Entity, String, String, Result<Option<transfer::Launch>, String>),
+    LauncherStart(segmented_button::Entity, String, String, Result<transfer::Start, String>),
+    LauncherTransferChoose(segmented_button::Entity, transfer::RepoChoice),
+    LauncherTransferDone(segmented_button::Entity, String, String, Result<transfer::Launch, String>),
+    // Boxed, as they are large
+    LauncherTransferDraft(segmented_button::Entity, String, Box<Result<transfer::Draft, String>>),
+    LauncherTransferPath(segmented_button::Entity, String),
+    LauncherTransferProgress(segmented_button::Entity, String, transfer::Step),
+    LauncherTransferSlow(segmented_button::Entity, String, transfer::Step),
+    LauncherTransferPlace(
+        segmented_button::Entity,
+        String,
+        u64,
+        Box<Result<cosmic_term::helper::PlaceInfo, String>>,
+    ),
+    LauncherTransferStart(segmented_button::Entity),
+    LauncherWorktreeBase(segmented_button::Entity, usize),
+    LauncherWorktreeCreate(segmented_button::Entity),
+    LauncherWorktreeCreated(segmented_button::Entity, String, Result<PathBuf, String>),
+    LauncherWorktreeEdit(segmented_button::Entity, WorktreeField, String),
+    LauncherWorktreeOptions(
+        segmented_button::Entity,
+        String,
+        Result<cosmic_term::helper::WorktreeOptions, String>,
+    ),
+    LauncherFilter(segmented_button::Entity, String),
+    LauncherMounted(segmented_button::Entity, String, Result<PathBuf, String>),
+    LauncherSessions(segmented_button::Entity, Result<Vec<agent::ListedSession>, String>),
+    LauncherSubmit(segmented_button::Entity),
+    LauncherToggleSection(config::LauncherSection),
+    HostProbed(String, u64, bool),
+    OpenInZed,
+    OpenInFiles,
+    OpenInFilesResult(Result<(), String>),
+    /// Show or hide the sidebar of sessions
+    SidebarToggle,
+    /// Scan a host's sessions again, unless the sidebar was hidden or
+    /// shown again since this was asked for
+    SidebarRefresh(String, u64),
+    SidebarSummaries(String, u64, Result<Vec<agent::SessionSummary>, String>),
+    /// Bring a session's tab to the front, or open one for it
+    SidebarOpen(agent::Session),
+    /// Rename the conversation of a tab, or of the one in front
+    SessionRename(Option<segmented_button::Entity>),
+    /// The tab under the pointer, and its centre from the tab bar's left
+    TabHover(pane_grid::Pane, Option<(segmented_button::Entity, f32)>),
+    /// Time to show a hovered tab's preview
+    TabPreviewDue,
+    /// Open or close the new tab menu from the sidebar's New button
+    SidebarNewMenu,
+    /// Another window has the session, under this bus name, if any
+    SidebarPeerFound(agent::Session, Result<Option<String>, String>),
+    /// For a tab also open in another window: go to that window instead,
+    /// move the session here, or keep both and hide the bar saying so
+    SharedGoThere(segmented_button::Entity),
+    SharedMoveHere(segmented_button::Entity),
+    SharedDismiss(segmented_button::Entity),
+    RenameInput(String),
+    RenameSubmit,
+    RenameCancel,
+    Renamed(Result<(), String>),
+    /// An activation token for raising another window
+    PeerFocusToken(String, String, Option<String>),
+    PeerAsked(Result<bool, String>),
+    /// Another window asks something of this one
+    PeerRequest(peers::Request),
+    SudoConnected(tokio::sync::mpsc::UnboundedSender<cosmic_term::sudo_control::ToAgent>),
+    SudoDisconnected,
+    SudoEvent(cosmic_term::sudo_control::FromAgent),
+    SudoPassword(u64, String),
+    SudoApprove(u64),
+    SudoDeny(u64),
+    /// Redraw, as when a click-approval becomes armed
+    SudoRedraw,
+    /// Set a machine up: its ssh destination (empty for this computer) and
+    /// host name
+    SudoSetup(String, String),
+    SudoPrepared(String, Result<String, String>),
+    SecretsToggle,
+    /// A field of the Secrets pane or a sudo prompt lost the focus
+    SecretsUnfocus(widget::Id),
+    /// A click gave a pane's terminal the keys
+    TerminalClickFocus(pane_grid::Pane),
+    /// A field of the Secrets pane took the focus: the terminal gives it up
+    SecretsFocus(widget::Id),
+    SecretsPassword(String),
+    SecretsAgain(String),
+    SecretsCreate,
+    SecretsUnlock,
+    SecretsLock,
+    SecretsPaste(u64),
+    SecretsAskPassword(String),
+    SecretsAskSubmit,
+    /// Add a secret, for a machine by host name or for Other
+    SecretsAdd(Option<String>),
+    /// Edit a secret, or stop editing
+    SecretsEdit(Option<u64>),
+    SecretsFormLabel(String),
+    SecretsFormSecret(String),
+    SecretsFormNote(String),
+    SecretsFormAlwaysAsk(bool),
+    SecretsSave,
+    SecretsDelete(u64),
+    SecretsPolicy(cosmic_term::sudo_control::Policy),
+    SecretsImport,
+    SecretsImported(Result<Vec<(String, String)>, String>),
+    SudoFinger(usize),
+    SudoEnrol,
+    SudoResult(String, Result<(), String>),
+    /// This computer and a machine can now mount each other
+    MountsConnected(String, Result<(), String>),
+    RemoteFilesOpen(String),
+    RemoteFilesCheck(String),
+    RemoteFilesChecked(String, String, Result<cosmic_term::mount_setup::Status, String>),
+    RemoteFilesConnectionChecked(String, String, Result<(), String>),
+    RemoteFilesInstall(String),
+    RemoteFilesCopy(String),
+    /// A row's context menu, on the session with this key
+    SidebarAction(u64, sidebar::Action),
+    SidebarFilter(String),
+    SidebarCompact(bool),
+    /// Open the first session the filter matches
+    SidebarFilterSubmit,
+    /// The filter gained or lost focus
+    SidebarSearching(bool),
+    /// Start a session in a project's main worktree on a host, or a new
+    /// worktree of it, with the agent of a profile for that host
+    SidebarNew {
+        host: String,
+        repository: String,
+        agent: Option<config::Agent>,
+        worktree: bool,
+    },
+    ReconnectNow(String),
+    ReconnectSessions(String, Result<Vec<agent::ListedSession>, String>),
+    /// The helpers are on a host, and these programs are still missing
+    SupervisorInstalled(String, Result<Vec<String>, String>),
+    SupervisorProgress(String, Option<agent::Helper>),
+    SupervisorSlow(String, Option<agent::Helper>),
+    OpenLocallyByMenu,
+    OpenLocallyResult(Result<(), String>),
+    OpenInZedResult(Result<(), String>),
+    NewTabMenuClose,
+    NewTabMenuToggle,
     Opacity(u8),
     PaneClicked(pane_grid::Pane),
     PaneDragged(pane_grid::DragEvent),
@@ -413,23 +894,44 @@ pub enum Message {
     Paste(Option<segmented_button::Entity>),
     PastePrimary(Option<segmented_button::Entity>),
     PasteValue(Option<segmented_button::Entity>, String),
+    ProfileAgent(ProfileId, usize),
+    ProfileArgs(ProfileId, String),
     ProfileCollapse(ProfileId),
+    ProfileColor(ProfileId, usize),
     ProfileCommand(ProfileId, String),
     ProfileDirectory(ProfileId, String),
     ProfileExpand(ProfileId),
     ProfileHold(ProfileId, bool),
+    ProfileMachine(ProfileId, usize),
+    MachineAdd,
+    MachineAddBlank,
+    MachineAddCandidate(usize),
+    MachineAddProfiles(MachineId),
+    MachineCheck(MachineId),
+    MachineChecked(MachineId, String, Result<machines::Probe, String>),
+    MachineCollapse(MachineId),
+    MachineDiscovered(Result<(String, String), String>),
+    MachineDiscoveryClose,
+    MachineEdit(MachineId, MachineField, String),
+    MachineExpand(MachineId),
+    MachineRemove(MachineId),
+    LocalProbed(Result<machines::Probe, String>),
     ProfileName(ProfileId, String),
     ProfileNew,
     ProfileOpen(ProfileId),
     ProfileRemove(ProfileId),
     ProfileSyntaxTheme(ProfileId, ColorSchemeKind, usize),
     ProfileTabTitle(ProfileId, String),
+    RemoteAttach(agent::Session),
+    RemoteEnd(Option<segmented_button::Entity>),
+    RemoteEnded(Option<segmented_button::Entity>, Result<(), String>),
     ReorderTab(Pane, ReorderEvent),
     Surface(surface::Action<Message>),
     SelectAll(Option<segmented_button::Entity>),
     ShowAdvancedFontSettings(bool),
     ShowHeaderBar(bool),
     ShowPaneBorders(bool),
+    AccentFollowsTab(bool),
     SyntaxTheme(ColorSchemeKind, usize),
     SystemThemeChange,
     TabNewInheritWorkingDirectory(bool),
@@ -437,9 +939,28 @@ pub enum Message {
     TabActivateJump(usize),
     TabClose(Option<segmented_button::Entity>),
     TabContextAction(segmented_button::Entity, Action),
+    /// Where an agent tab's agent is working, found
+    TabFocusFound(segmented_button::Entity, Result<agent::TabAgents, String>),
+    /// Move or fork an agent tab's conversation to a profile's computer
+    TabTransfer(Option<segmented_button::Entity>, ProfileId, transfer::Mode),
+    TabTransferFound(
+        pane_grid::Pane,
+        segmented_button::Entity,
+        String,
+        ProfileId,
+        transfer::Mode,
+        String,
+        Result<agent::TabAgents, String>,
+    ),
     TabContextMenu(pane_grid::Pane, Option<MenuState>),
     TabNew,
     TabNewNoProfile,
+    TabBarContext(pane_grid::Pane, segmented_button::Entity),
+    TabDragEnded(bool),
+    TabDragOverWindow(bool),
+    TabDragStart(pane_grid::Pane, segmented_button::Entity),
+    TabDropped(pane_grid::Pane, Option<DndDrop>),
+    TabPopOut(Option<segmented_button::Entity>),
     TabNext,
     TabPrev,
     TermEvent(pane_grid::Pane, segmented_button::Entity, TermEvent),
@@ -458,6 +979,34 @@ pub enum Message {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum NewTabEntryKind {
+    Header,
+    Item,
+}
+
+/// A row of the new tab menu
+pub struct NewTabEntry {
+    kind: NewTabEntryKind,
+    label: String,
+    mark: TabMark,
+    is_default: bool,
+    /// Set for items only
+    message: Option<Message>,
+}
+
+impl NewTabEntry {
+    fn header(label: String) -> Self {
+        Self {
+            kind: NewTabEntryKind::Header,
+            label,
+            mark: TabMark::default(),
+            is_default: false,
+            message: None,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ContextPage {
     About,
     ColorSchemes(ColorSchemeKind),
@@ -466,6 +1015,8 @@ pub enum ContextPage {
     Settings,
     #[cfg(feature = "password_manager")]
     PasswordManager,
+    Secrets,
+    RemoteFiles,
 }
 
 #[derive(Clone, Debug)]
@@ -502,6 +1053,60 @@ pub struct App {
     themes: HashMap<(String, ColorSchemeKind), TermColors>,
     context_page: ContextPage,
     dialog_opt: Option<Dialog<Message>>,
+    agent_names: Vec<String>,
+    /// What a profile's machine dropdown offers: this computer, then each
+    /// machine, in `Config::machines` order
+    host_names: Vec<String>,
+    machine_expanded: Option<MachineId>,
+    /// This computer, as a machine check would see it, to recognise it
+    /// among the machines
+    local: Option<machines::Probe>,
+    /// Machines being checked, or what the last check found
+    machine_checks: HashMap<MachineId, MachineCheck>,
+    /// The add-machine list: `None` when closed, `Some(None)` while looking
+    discovery: Option<Option<Result<Vec<machines::Candidate>, String>>>,
+    color_names: Vec<String>,
+    new_tab_menu_open: bool,
+    /// The new tab menu hangs from the sidebar's New button, not the header's
+    new_tab_menu_in_sidebar: bool,
+    toasts: widget::toaster::Toasts<Message>,
+    sidebar: sidebar::Sidebar,
+    /// Transfer records owned by work still running in this window. This
+    /// also prevents two launchers from recovering the same journal at once.
+    active_transfers: BTreeSet<String>,
+    transfer_lookups: HashMap<(pane_grid::Pane, segmented_button::Entity), String>,
+    /// A session open in another window, whose bus name is given, and what
+    /// to do about it
+    /// The tab the pointer is over, for its preview
+    /// The tab under the pointer, its centre, and since when
+    hovered_tab: Option<(pane_grid::Pane, segmented_button::Entity, f32, Instant)>,
+    /// Sudo requests from agents, and the connection to the agent
+    secrets: secrets::Secrets,
+    /// The pane a secret being fetched is pasted into
+    secrets_paste_pane: Option<pane_grid::Pane>,
+    /// A field of the Secrets pane has the focus, so it keeps it
+    /// The field of the Secrets pane or a sudo prompt that has the keys
+    secrets_focus: Option<widget::Id>,
+    /// Whether this window shows the sidebar; the config holds the last
+    /// choice, for new windows, so that other windows do not follow it
+    show_sidebar: bool,
+    /// Machines whose missing programs have been told
+    tools_reported: BTreeSet<String>,
+    mount_setup: BTreeMap<String, mount_setup_view::Check>,
+    mount_errors: BTreeMap<String, String>,
+    /// Installation currently running on each host, updated only when a
+    /// real setup step begins.
+    host_setup: BTreeMap<String, Option<agent::Helper>>,
+    host_setup_stalled: BTreeSet<String>,
+    pending_commands: BTreeMap<&'static str, String>,
+    window_focused: bool,
+    /// When each machine's sudo forward was last renewed
+    sudo_forwarded: HashMap<String, Instant>,
+    /// A conversation being renamed, and the name typed so far
+    rename: Option<(agent::Session, String)>,
+    rename_id: widget::Id,
+    /// The tab colour the theme's accent is set to, if any
+    accent: Option<TabColor>,
     terminal_ids: HashMap<pane_grid::Pane, widget::Id>,
     find: bool,
     find_search_id: widget::Id,
@@ -509,8 +1114,24 @@ pub struct App {
     term_event_tx_opt:
         Option<mpsc::UnboundedSender<(pane_grid::Pane, segmented_button::Entity, TermEvent)>>,
     startup_options: Option<tty::Options>,
+    /// The command given on the command line, for the first tab
+    startup_command: Option<host::HostCommand>,
+    /// A session given on the command line, for the first tab
+    startup_attach: Option<agent::Session>,
+    /// Remote hosts being reconnected to, with the generation of the pending
+    /// probe and the number of attempts so far
+    reconnecting: BTreeMap<String, (u64, u32)>,
+    /// The tab being dragged from this window, if any, and when the drag
+    /// started
+    tab_drag: Option<(pane_grid::Pane, segmented_button::Entity, Instant)>,
+    /// Whether the dragged tab has left this window, as the pointer must
+    /// before a cancelled drag pops the tab out
+    tab_drag_left_window: bool,
     term_config: term::Config,
     color_scheme_errors: Vec<String>,
+    color_scheme_io: Option<String>,
+    color_scheme_io_generation: u64,
+    color_scheme_io_slow: bool,
     color_scheme_expanded: Option<(ColorSchemeKind, Option<ColorSchemeId>)>,
     color_scheme_renaming: Option<(ColorSchemeKind, ColorSchemeId, String)>,
     color_scheme_rename_id: widget::Id,
@@ -527,6 +1148,30 @@ pub struct App {
     modifiers: Modifiers,
     #[cfg(feature = "password_manager")]
     password_mgr: password_manager::PasswordManager,
+}
+
+fn setup_host_task(host: String) -> Task<Message> {
+    cosmic::task::stream(stream::channel(16, move |mut output: iced::futures::channel::mpsc::Sender<Message>| async move {
+        let (send, mut received) = tokio::sync::mpsc::unbounded_channel();
+        let progress_host = host.clone();
+        let setup = agent::ensure_helpers_progress(host.clone(), move |step| {
+            let _ = send.send(step);
+        });
+        tokio::pin!(setup);
+        loop {
+            tokio::select! {
+                Some(step) = received.recv() => {
+                    if output.send(Message::SupervisorProgress(progress_host.clone(), step)).await.is_err() {
+                        break;
+                    }
+                }
+                result = &mut setup => {
+                    let _ = output.send(Message::SupervisorInstalled(host, result)).await;
+                    break;
+                }
+            }
+        }
+    }))
 }
 
 impl App {
@@ -663,7 +1308,9 @@ impl App {
     }
 
     fn update_config(&mut self) -> Task<Message> {
-        let theme = self.config.app_theme.theme();
+        self.refresh_host_names();
+        self.accent = self.tab_accent();
+        let theme = self.theme();
 
         // Update color schemes
         self.update_color_schemes();
@@ -695,6 +1342,50 @@ impl App {
 
         // Update application theme
         cosmic::command::set_theme(theme)
+    }
+
+    /// The colour of the tab in front of the focused pane, for the accent.
+    /// A tab without one, such as a plain terminal's, gets a neutral accent
+    /// rather than the desktop's, which may look like another tab's colour
+    fn tab_accent(&self) -> Option<TabColor> {
+        if !self.config.accent_follows_tab {
+            return None;
+        }
+        let tab_model = self.pane_model.active()?;
+        Some(
+            tab_model
+                .data::<TabMark>(tab_model.active())
+                .and_then(|mark| mark.color)
+                .unwrap_or(NEUTRAL_ACCENT),
+        )
+    }
+
+    /// The configured theme, with the accent of [`Self::accent`]. It is a
+    /// custom theme then, since a system one would take the desktop's accent
+    fn theme(&self) -> cosmic::theme::Theme {
+        let theme = self.config.app_theme.theme();
+        match self.accent {
+            Some(TabColor([r, g, b])) => {
+                let accent = cosmic::cosmic_theme::palette::Srgba::new(
+                    f32::from(r) / 255.0,
+                    f32::from(g) / 255.0,
+                    f32::from(b) / 255.0,
+                    1.0,
+                );
+                cosmic::theme::Theme::custom(std::sync::Arc::new(theme.cosmic().with_accent(accent)))
+            }
+            None => theme,
+        }
+    }
+
+    /// Set the accent to the tab in front's colour, if that changed
+    fn apply_theme(&mut self) -> Task<Message> {
+        let accent = self.tab_accent();
+        if accent == self.accent {
+            return Task::none();
+        }
+        self.accent = accent;
+        cosmic::command::set_theme(self.theme())
     }
 
     fn update_render_active_pane_zoom(&mut self, zoom_message: Message) -> Task<Message> {
@@ -742,6 +1433,25 @@ impl App {
         Task::none()
     }
 
+    /// Save the machines, and the profiles, whose hosts follow them
+    fn save_machines(&mut self) -> Task<Message> {
+        self.config.adopt_machines();
+        self.refresh_host_names();
+        if let Some(ref config_handler) = self.config_handler
+            && let Err(err) = config_handler.set("machines", &self.config.machines)
+        {
+            log::error!("failed to save machines: {}", err);
+        }
+        self.save_profiles()
+    }
+
+    /// What profiles' machine dropdowns offer
+    fn refresh_host_names(&mut self) {
+        self.host_names = std::iter::once(fl!("this-computer"))
+            .chain(self.config.machines.values().map(|m| m.name.clone()))
+            .collect();
+    }
+
     fn save_profiles(&mut self) -> Task<Message> {
         // Optimized for just saving profiles
         if let Some(ref config_handler) = self.config_handler {
@@ -756,7 +1466,31 @@ impl App {
     }
 
     fn update_focus(&self) -> Task<Message> {
-        if self.find {
+        // Typing in the sidebar's filter, the Secrets pane or a dialog keeps
+        // the focus there
+        if self.rename.is_some()
+            || self.secrets_focus.is_some()
+            || (self.sidebar.searching && !self.new_tab_menu_open)
+        {
+            return Task::none();
+        }
+        let launcher = self
+            .pane_model
+            .active()
+            .and_then(|tab_model| tab_model.data::<Launcher>(tab_model.active()));
+        if self.new_tab_menu_open {
+            Task::none()
+        } else if let Some(launcher) = launcher
+            && !self.core.window.show_context
+            && self.dialog_opt.is_none()
+        {
+            // A form's fields keep the focus they have
+            if launcher.form.is_some() {
+                Task::none()
+            } else {
+                widget::text_input::focus(launcher.filter_id.clone())
+            }
+        } else if self.find {
             widget::text_input::focus(self.find_search_id.clone())
         } else if self.core.window.show_context {
             // Right now we only care about the KeyboardShortcuts context page, so we use a simple if.
@@ -797,6 +1531,7 @@ impl App {
                     Task::none()
                 },
                 self.update_focus(),
+                self.apply_theme(),
             ])
         } else {
             log::error!("Failed to get the specific pane");
@@ -965,11 +1700,17 @@ impl App {
             widget::row::with_children(vec![
                 widget::space::horizontal().into(),
                 widget::button::standard(fl!("import"))
-                    .on_press(Message::ColorSchemeImport(color_scheme_kind))
+                    .on_press_maybe(self.color_scheme_io.is_none().then_some(Message::ColorSchemeImport(color_scheme_kind)))
                     .into(),
             ])
             .into(),
         );
+        if let Some(status) = &self.color_scheme_io {
+            sections.push(widget::text::caption(status.clone()).into());
+            if self.color_scheme_io_slow {
+                sections.push(widget::text::caption(fl!("color-scheme-waiting")).into());
+            }
+        }
 
         for error in &self.color_scheme_errors {
             sections.push(
@@ -1130,10 +1871,11 @@ impl App {
             ..
         } = self.core().system_theme().cosmic().spacing;
 
-        let mut sections = Vec::with_capacity(2);
+        let mut sections = Vec::with_capacity(4);
+        sections.push(self.machines_view());
 
         if !self.config.profiles.is_empty() {
-            let mut profiles_section = widget::settings::section();
+            let mut profiles_section = widget::settings::section().title(fl!("profiles"));
             for (profile_name, profile_id) in self.config.profile_names() {
                 let Some(profile) = self.config.profiles.get(&profile_id) else {
                     continue;
@@ -1190,18 +1932,89 @@ impl App {
                                 .spacing(space_xxxs)
                                 .into(),
                                 widget::column::with_children(vec![
-                                    widget::text(fl!("command-line")).into(),
-                                    widget::text_input("", &profile.command)
-                                        .on_input(move |text| {
-                                            Message::ProfileCommand(profile_id, text)
-                                        })
-                                        .on_paste(move |text| {
-                                            Message::ProfileCommand(profile_id, text)
-                                        })
-                                        .into(),
+                                    widget::text(fl!("agent")).into(),
+                                    widget::dropdown(
+                                        &self.agent_names,
+                                        config::Agent::ALL
+                                            .iter()
+                                            .position(|agent| *agent == profile.agent),
+                                        move |agent_i| Message::ProfileAgent(profile_id, agent_i),
+                                    )
+                                    .into(),
                                 ])
                                 .spacing(space_xxxs)
                                 .into(),
+                                widget::column::with_children(vec![
+                                    widget::text(fl!("machine")).into(),
+                                    widget::dropdown(
+                                        &self.host_names,
+                                        match profile.machine {
+                                            None => Some(0),
+                                            Some(machine) => self
+                                                .config
+                                                .machines
+                                                .keys()
+                                                .position(|id| *id == machine)
+                                                .map(|i| i + 1),
+                                        },
+                                        move |i| Message::ProfileMachine(profile_id, i),
+                                    )
+                                    .into(),
+                                    widget::text::caption(fl!("machine-description")).into(),
+                                ])
+                                .spacing(space_xxxs)
+                                .into(),
+                                widget::column::with_children(vec![
+                                    widget::text(fl!("tab-color")).into(),
+                                    widget::dropdown(
+                                        &self.color_names,
+                                        if profile.color.is_empty() {
+                                            Some(0)
+                                        } else {
+                                            TabColor::parse(&profile.color).and_then(|color| {
+                                                TabColor::PALETTE
+                                                    .iter()
+                                                    .position(|(_, hex)| {
+                                                        TabColor::parse(hex) == Some(color)
+                                                    })
+                                                    .map(|i| i + 1)
+                                            })
+                                        },
+                                        move |color_i| Message::ProfileColor(profile_id, color_i),
+                                    )
+                                    .into(),
+                                ])
+                                .spacing(space_xxxs)
+                                .into(),
+                                if profile.agent == config::Agent::Shell {
+                                    widget::column::with_children(vec![
+                                        widget::text(fl!("command-line")).into(),
+                                        widget::text_input("", &profile.command)
+                                            .on_input(move |text| {
+                                                Message::ProfileCommand(profile_id, text)
+                                            })
+                                            .on_paste(move |text| {
+                                                Message::ProfileCommand(profile_id, text)
+                                            })
+                                            .into(),
+                                    ])
+                                    .spacing(space_xxxs)
+                                    .into()
+                                } else {
+                                    widget::column::with_children(vec![
+                                        widget::text(fl!("agent-arguments")).into(),
+                                        widget::text_input("", &profile.args)
+                                            .on_input(move |text| {
+                                                Message::ProfileArgs(profile_id, text)
+                                            })
+                                            .on_paste(move |text| {
+                                                Message::ProfileArgs(profile_id, text)
+                                            })
+                                            .into(),
+                                    ])
+                                    .spacing(space_xxxs)
+                                    .into()
+                                },
                                 widget::column::with_children(vec![
                                     widget::text(fl!("working-directory")).into(),
                                     widget::text_input("", &profile.working_directory)
@@ -1317,6 +2130,221 @@ impl App {
         widget::settings::view_column(sections).into()
     }
 
+    fn mount_connection_result(&mut self, host: String, result: Result<(), String>) -> Task<Message> {
+        match result {
+            Ok(()) => { self.mount_errors.remove(&host); Task::none() }
+            Err(err) => {
+                log::warn!("{host} and this computer cannot mount each other: {err}");
+                self.mount_errors.insert(host.clone(), err);
+                let machine = self.config.machine_for_host(&host).map_or_else(|| host.clone(), |m| m.name.clone());
+                self.toasts.push(widget::toaster::Toast::new(fl!("remote-files-connect-failed", machine = machine.as_str()))
+                    .action(fl!("remote-files-help"), move |_| Message::RemoteFilesOpen(host.clone())))
+                    .map(cosmic::Action::App)
+            }
+        }
+    }
+
+    fn file_open_error(&mut self, title: String, error: String) -> Task<Message> {
+        let mut toast = widget::toaster::Toast::new(title);
+        if error.contains("ct-mount:") || error.contains("sshfs") {
+            self.mount_errors.insert(String::new(), error);
+            self.mount_setup.remove("");
+            toast = toast.action(fl!("remote-files-help"), |_| Message::RemoteFilesOpen(String::new()));
+        }
+        self.toasts.push(toast).map(cosmic::Action::App)
+    }
+
+    fn mount_setup_machines(&self) -> Vec<(String, String)> {
+        let mut names = BTreeMap::new();
+        names.insert(String::new(), self.local.as_ref().map_or_else(
+            || fl!("this-computer"),
+            |local| fl!("this-computer-named", name = local.hostname.as_str()),
+        ));
+        for host in self.session_hosts().into_iter().filter(|host| !host.is_empty()) {
+            names.insert(host.clone(), host);
+        }
+        for machine in self.config.machines.values() {
+            names.insert(machine.destination(), machine.name.clone());
+        }
+        for host in self.mount_errors.keys().chain(self.mount_setup.keys()) {
+            names.entry(host.clone()).or_insert_with(|| host.clone());
+        }
+        names.into_iter().collect()
+    }
+
+    /// The machines part of the profiles page
+    fn machines_view(&self) -> Element<'_, Message> {
+        let cosmic_theme::Spacing {
+            space_s,
+            space_xs,
+            space_xxs,
+            space_xxxs,
+            ..
+        } = self.core().system_theme().cosmic().spacing;
+        let mut section = widget::settings::section().title(fl!("machines"));
+        for (&id, machine) in &self.config.machines {
+            let expanded = self.machine_expanded == Some(id);
+            let mut detail = machine.destination();
+            if !machine.hostname.is_empty() && machine.hostname != machine.name {
+                detail = fl!("machine-detail", destination = detail, hostname = machine.hostname.as_str());
+            }
+            section = section.add(
+                widget::settings::item::builder(machine.name.clone())
+                    .description(detail)
+                    .control(
+                        widget::row::with_children(vec![
+                            widget::button::custom(icon_cache_get("edit-delete-symbolic", 16))
+                                .on_press(Message::MachineRemove(id))
+                                .class(style::Button::Icon)
+                                .into(),
+                            if expanded {
+                                widget::button::custom(icon_cache_get("go-up-symbolic", 16))
+                                    .on_press(Message::MachineCollapse(id))
+                            } else {
+                                widget::button::custom(icon_cache_get("go-down-symbolic", 16))
+                                    .on_press(Message::MachineExpand(id))
+                            }
+                            .class(style::Button::Icon)
+                            .into(),
+                        ])
+                        .align_y(Alignment::Center)
+                        .spacing(space_xxs),
+                    ),
+            );
+            if !expanded {
+                continue;
+            }
+            let field = |label: String, value: &str, which: MachineField, help: Option<String>| -> Element<'_, Message> {
+                let mut column = widget::column::with_capacity(3)
+                    .spacing(space_xxxs)
+                    .push(widget::text(label))
+                    .push(
+                        widget::text_input("", value.to_string())
+                            .on_input(move |text| Message::MachineEdit(id, which, text))
+                            .on_paste(move |text| Message::MachineEdit(id, which, text)),
+                    );
+                if let Some(help) = help {
+                    column = column.push(widget::text::caption(help));
+                }
+                column.into()
+            };
+            let status = match self.machine_checks.get(&id) {
+                None => None,
+                Some(MachineCheck::Running) => Some(fl!("machine-checking")),
+                Some(MachineCheck::Done(Ok(probe))) => Some(self.probe_summary(id, probe)),
+                Some(MachineCheck::Done(Err(error))) => Some(error.clone()),
+            };
+            let checking = matches!(self.machine_checks.get(&id), Some(MachineCheck::Running));
+            let mut buttons = vec![
+                widget::button::standard(fl!("machine-check"))
+                    .on_press_maybe((!checking).then_some(Message::MachineCheck(id)))
+                    .into(),
+            ];
+            if !self.config.profiles.values().any(|p| p.machine == Some(id)) {
+                buttons.push(
+                    widget::button::standard(fl!("machine-add-profiles", name = machine.name.as_str()))
+                        .on_press(Message::MachineAddProfiles(id))
+                        .into(),
+                );
+            }
+            let mut column = widget::column::with_capacity(6)
+                .spacing(space_xs)
+                .padding([0, space_s])
+                .push(field(fl!("name"), &machine.name, MachineField::Name, None))
+                .push(field(fl!("machine-host"), &machine.host, MachineField::Host, Some(fl!("machine-host-description"))))
+                .push(field(fl!("machine-user"), &machine.user, MachineField::User, Some(fl!("machine-user-description"))));
+            if let Some(status) = status {
+                column = column.push(widget::text::caption(status));
+            }
+            column = column.push(widget::row::with_children(buttons).spacing(space_xs));
+            section = section.add(column);
+        }
+
+        let mut column = widget::column::with_capacity(5).spacing(space_xs).push(section)
+            .push(widget::button::standard(fl!("remote-files-title"))
+                .on_press(Message::RemoteFilesOpen(String::new())));
+        match &self.discovery {
+            None => {
+                column = column.push(widget::row::with_children(vec![
+                    widget::space::horizontal().into(),
+                    widget::button::standard(fl!("machine-add")).on_press(Message::MachineAdd).into(),
+                ]));
+            }
+            Some(found) => {
+                let mut list = widget::settings::section().title(fl!("machine-found"));
+                match found {
+                    None => list = list.add(widget::text::caption(fl!("machine-looking"))),
+                    Some(Err(error)) => list = list.add(widget::text::caption(error.clone())),
+                    Some(Ok(candidates)) if candidates.is_empty() => {
+                        list = list.add(widget::text::caption(fl!("machine-none-found")));
+                    }
+                    Some(Ok(candidates)) => {
+                        for (i, candidate) in candidates.iter().enumerate() {
+                            list = list.add(
+                                widget::settings::item::builder(candidate.name.clone())
+                                    .description(self.candidate_detail(candidate))
+                                    .control(
+                                        widget::button::standard(fl!("machine-add-this"))
+                                            .on_press(Message::MachineAddCandidate(i)),
+                                    ),
+                            );
+                        }
+                    }
+                }
+                column = column.push(list).push(widget::row::with_children(vec![
+                    widget::space::horizontal().into(),
+                    widget::button::standard(fl!("cancel")).on_press(Message::MachineDiscoveryClose).into(),
+                    widget::button::standard(fl!("machine-add-blank")).on_press(Message::MachineAddBlank).into(),
+                ]).spacing(space_xs));
+            }
+        }
+        column.into()
+    }
+
+    /// One line on what a machine's check found
+    fn probe_summary(&self, id: MachineId, probe: &machines::Probe) -> String {
+        let this = self.local.as_ref().is_some_and(|local| {
+            (!probe.host_id.is_empty() && probe.host_id == local.host_id)
+                || (probe.hostname == local.hostname && probe.home == local.home)
+        });
+        let mut text = fl!(
+            "machine-checked",
+            user = probe.user.as_str(),
+            hostname = probe.hostname.as_str(),
+            home = probe.home.as_str()
+        );
+        if this {
+            text.push(' ');
+            text.push_str(&fl!("machine-is-this-computer"));
+        } else if let Some((_, other)) = self
+            .config
+            .machines
+            .iter()
+            .find(|(other, m)| **other != id && !probe.host_id.is_empty() && m.host_id == probe.host_id)
+        {
+            text.push(' ');
+            text.push_str(&fl!("machine-same-as", name = other.name.as_str()));
+        }
+        text
+    }
+
+    fn candidate_detail(&self, candidate: &machines::Candidate) -> String {
+        let mut parts = vec![candidate.host.clone()];
+        if !candidate.user.is_empty() {
+            parts[0] = format!("{}@{}", candidate.user, candidate.host);
+        }
+        for source in &candidate.sources {
+            parts.push(match source {
+                machines::Source::Tailscale => fl!("machine-from-tailscale"),
+                machines::Source::SshConfig => fl!("machine-from-ssh-config"),
+            });
+        }
+        if candidate.online == Some(false) {
+            parts.push(fl!("machine-offline"));
+        }
+        parts.join(" · ")
+    }
+
     fn settings(&self) -> Element<'_, Message> {
         let t = self.core().system_theme();
         let app_theme_selected = match self.config.app_theme {
@@ -1378,6 +2406,11 @@ impl App {
                         })
                     },
                 )),
+            )
+            .add(
+                widget::settings::item::builder(fl!("accent-follows-tab"))
+                    .description(fl!("accent-follows-tab-description"))
+                    .toggler(self.config.accent_follows_tab, Message::AccentFollowsTab),
             )
             .add(
                 //TODO: rename to color-scheme-dark?
@@ -1529,6 +2562,1306 @@ impl App {
         ])
         .into()
     }
+    /// The popover listing profiles and remote sessions
+    fn new_tab_menu(&self) -> Element<'_, Message> {
+        let cosmic_theme::Spacing {
+            space_xxxs,
+            space_xxs,
+            space_xs,
+            ..
+        } = self.core().system_theme().cosmic().spacing;
+
+        let entries = self.new_tab_entries();
+        let mut rows = widget::column::with_capacity(entries.len() + 2).spacing(space_xxxs);
+        if !entries
+            .iter()
+            .any(|entry| entry.kind == NewTabEntryKind::Item)
+        {
+            rows = rows.push(
+                widget::container(widget::text::body(fl!("no-matching-results")))
+                    .padding(space_xs)
+                    .center_x(Length::Fill),
+            );
+        }
+        for entry in entries {
+            match entry.kind {
+                NewTabEntryKind::Header => {
+                    rows = rows.push(
+                        widget::container(widget::text::caption_heading(entry.label))
+                            .padding([space_xxs, space_xs, space_xxxs, space_xs]),
+                    );
+                }
+                NewTabEntryKind::Item => {
+                    let mut content = Vec::with_capacity(4);
+                    let icon = entry
+                        .mark
+                        .icon(16)
+                        .unwrap_or_else(|| icon_cache_get("computer-symbolic", 16));
+                    content.push(widget::container(icon).padding([0, space_xs, 0, 0]).into());
+                    content.push(
+                        widget::text::body(entry.label)
+                            .width(Length::Fill)
+                            .wrapping(cosmic::iced::widget::text::Wrapping::None)
+                            .into(),
+                    );
+                    if entry.is_default {
+                        content.push(widget::text::caption(fl!("default-profile-marker")).into());
+                    }
+                    let mut button = widget::menu::menu_button(content);
+                    if let Some(message) = entry.message {
+                        button = button.on_press(message);
+                    }
+                    rows = rows.push(button);
+                }
+            }
+        }
+        rows = rows.push(widget::divider::horizontal::light());
+        rows = rows.push(
+            widget::menu::menu_button(vec![
+                widget::text::body(fl!("menu-profiles"))
+                    .width(Length::Fill)
+                    .into(),
+            ])
+            .on_press(Message::ToggleContextPage(ContextPage::Profiles)),
+        );
+
+        // Running sessions, and searching them, are in the sidebar
+        widget::container(widget::scrollable(rows).height(Length::Shrink))
+        .padding(space_xxxs)
+        .max_height(520.0)
+        .class(style::Container::Dropdown)
+        .width(Length::Fixed(320.0))
+        .into()
+    }
+
+    /// The remote hosts named by profiles, without duplicates
+    /// The hosts whose sessions the new tab menu lists: this computer (as an
+    /// empty string), then the remote hosts named by profiles
+    fn session_hosts(&self) -> Vec<String> {
+        let mut hosts: Vec<String> = self
+            .config
+            .profiles
+            .values()
+            .filter(|profile| profile.is_remote())
+            .map(|profile| profile.host.trim().to_string())
+            .chain(self.config.machines.values().map(config::Machine::destination))
+            .filter(|host| !host.is_empty())
+            .collect();
+        hosts.sort();
+        hosts.dedup();
+        hosts.insert(0, String::new());
+        hosts
+    }
+
+    /// Whether a profile opens a launcher rather than starting straight away:
+    /// an agent without a working directory, unless one was given on the
+    /// command line
+    fn wants_launcher(&self, profile_id: Option<ProfileId>) -> bool {
+        let given_dir = self
+            .startup_options
+            .as_ref()
+            .is_some_and(|options| options.working_directory.is_some());
+        profile_id
+            .and_then(|profile_id| self.config.profiles.get(&profile_id))
+            .is_some_and(|profile| {
+                profile.agent != config::Agent::Shell
+                    && profile.working_directory.trim().is_empty()
+                    && !given_dir
+                    && self.startup_command.is_none()
+            })
+    }
+
+    /// Open a launcher tab for an agent profile, and look up what it offers
+    fn open_launcher(&mut self, pane: pane_grid::Pane, profile_id: ProfileId) -> Task<Message> {
+        let Some(profile) = self.config.profiles.get(&profile_id) else {
+            return Task::none();
+        };
+        let mark = TabMark {
+            color: profile.tab_color(),
+            remote: profile.is_remote(),
+            disconnected: false,
+        };
+        let (name, host) = (profile.name.clone(), profile.host.trim().to_string());
+        self.pane_model.set_focus(pane);
+        let Some(tab_model) = self.pane_model.active_mut() else {
+            return Task::none();
+        };
+        let mut builder = tab_model.insert().text(name);
+        if let Some(icon) = mark.icon(16) {
+            builder = builder.icon(icon);
+        }
+        let entity = builder.closable().activate().id();
+        tab_model.data_set::<TabMark>(entity, mark);
+        let hosts = self.session_hosts();
+        let unfinished = transfer::Journal::new(&cosmic_term::Env::from_process().state_dir).unfinished();
+        let Some(tab_model) = self.pane_model.active_mut() else {
+            return Task::none();
+        };
+        tab_model.data_set::<Launcher>(
+            entity,
+            Launcher {
+                id: cosmic_term::random_hex(16),
+                profile_id,
+                filter: String::new(),
+                filter_id: field_id("launcher-filter"),
+                listings: hosts.iter().map(|host| (host.clone(), Listing::Loading)).collect(),
+                running: Vec::new(),
+                form: None,
+                pending_action: None,
+                unfinished,
+            },
+        );
+        let sessions_host = host.clone();
+        let listings = hosts.into_iter().map(|host| {
+            cosmic::task::future(async move {
+                let result = agent::launcher_data(host.clone()).await;
+                Message::LauncherData(entity, host, result)
+            })
+        });
+        Task::batch(
+            [
+                cosmic::task::future(async move {
+                    Message::LauncherSessions(entity, agent::list_sessions(sessions_host).await)
+                }),
+                self.update_title(Some(pane)),
+            ]
+            .into_iter()
+            .chain(listings),
+        )
+    }
+
+    /// The pane holding a tab
+    fn tab_pane(&self, entity: segmented_button::Entity) -> Option<pane_grid::Pane> {
+        self.pane_model
+            .panes
+            .iter()
+            .find(|(_pane, tab_model)| tab_model.contains_item(entity))
+            .map(|(pane, _)| *pane)
+    }
+
+    fn launcher(&self, entity: segmented_button::Entity) -> Option<&Launcher> {
+        let pane = self.tab_pane(entity)?;
+        self.pane_model.panes.get(pane)?.data::<Launcher>(entity)
+    }
+
+    fn launcher_mut(&mut self, entity: segmented_button::Entity) -> Option<&mut Launcher> {
+        let pane = self.tab_pane(entity)?;
+        self.pane_model.panes.get_mut(pane)?.data_mut::<Launcher>(entity)
+    }
+
+    fn launcher_locked(&self, entity: segmented_button::Entity) -> bool {
+        self.launcher(entity).is_some_and(|launcher| {
+            launcher.pending_action.is_some()
+                || matches!(&launcher.form, Some(LauncherForm::Worktree(form)) if form.busy)
+                || matches!(&launcher.form, Some(LauncherForm::Transfer(form)) if form.busy)
+        })
+    }
+
+    /// A launcher's rows, filtered: running sessions, then projects, then
+    /// conversations
+    fn launcher_rows(
+        &self,
+        launcher: &Launcher,
+    ) -> Vec<(config::LauncherSection, String, Vec<LauncherRow>)> {
+        let filter = launcher.filter.trim().to_lowercase();
+        let matches = |text: &str| filter.is_empty() || text.to_lowercase().contains(&filter);
+        let agent = self
+            .config
+            .profiles
+            .get(&launcher.profile_id)
+            .map(|profile| profile.agent);
+        let open = self.open_sessions();
+        let mut sections = Vec::new();
+
+        let running: Vec<LauncherRow> = launcher
+            .running
+            .iter()
+            .filter(|session| session.agent() == agent && !open.contains(session))
+            .filter(|session| matches(&session.label()))
+            .map(|session| LauncherRow {
+                label: session.label(),
+                detail: session.name.clone(),
+                when: String::new(),
+                choice: Some(LaunchChoice::Attach(session.clone())),
+                actions: Vec::new(),
+            })
+            .collect();
+        sections.push((
+            config::LauncherSection::Running,
+            fl!("launcher-running"),
+            running,
+        ));
+
+        let target = self
+            .config
+            .profiles
+            .get(&launcher.profile_id)
+            .map(|profile| profile.host.trim().to_string())
+            .unwrap_or_default();
+        let target_kind = agent.and_then(agent_kind);
+        let target_identity = launcher
+            .listings
+            .get(&target)
+            .and_then(Listing::listing)
+            .map(|listing| listing.identity().to_string());
+        let shortener = |home: &str, path: &str| match path.strip_prefix(home) {
+            Some(rest) if rest.starts_with('/') => format!("~{rest}"),
+            _ => path.to_string(),
+        };
+
+        // The target computer's projects, from both agents
+        if let Some(state) = launcher.listings.get(&target)
+            && let Some(listing) = state.listing()
+        {
+            let offline = !matches!(state, Listing::Ready(_));
+            let mut used: BTreeMap<&str, f64> = BTreeMap::new();
+            for project in listing.agents.values().flat_map(|a| &a.projects) {
+                let entry = used.entry(project.path.as_str()).or_default();
+                *entry = entry.max(project.last_used);
+            }
+            let mut found: Vec<(&str, f64)> = used.into_iter().collect();
+            found.sort_by(|a, b| b.1.total_cmp(&a.1).then(a.0.cmp(b.0)));
+            let projects = found
+                .into_iter()
+                .filter(|(path, _)| matches(path))
+                .map(|(path, last_used)| LauncherRow {
+                    label: path.rsplit('/').next().unwrap_or(path).to_string(),
+                    detail: shortener(&listing.home, path),
+                    when: time_ago(last_used),
+                    choice: (!offline).then(|| LaunchChoice::Dir(path.to_string())),
+                    actions: if offline {
+                        Vec::new()
+                    } else {
+                        vec![(fl!("launcher-new-worktree"), LaunchChoice::NewWorktree(path.to_string()))]
+                    },
+                })
+                .collect();
+            sections.push((
+                config::LauncherSection::Projects,
+                fl!("launcher-projects"),
+                projects,
+            ));
+        }
+
+        // Every computer's conversations, from both agents, newest first
+        let mut conversations: Vec<(f64, LauncherRow)> = Vec::new();
+        for (host, state) in &launcher.listings {
+            let Some(listing) = state.listing() else {
+                continue;
+            };
+            let offline = !matches!(state, Listing::Ready(_));
+            let same_computer = host == &target || target_identity.as_deref() == Some(listing.identity());
+            // The target computer reached under another name
+            if host != &target && same_computer {
+                continue;
+            }
+            let host_label = match self.config.machine_for_host(host) {
+                Some(machine) => machine.name.clone(),
+                None if listing.hostname.is_empty() => host.clone(),
+                None => listing.hostname.clone(),
+            };
+            for (kind, config_agent) in [
+                (ConversationKind::Claude, config::Agent::Claude),
+                (ConversationKind::Codex, config::Agent::Codex),
+            ] {
+                let Some(found) = listing.agent(config_agent) else {
+                    continue;
+                };
+                for conversation in &found.conversations {
+                    if !(matches(&conversation.title) || matches(&conversation.cwd) || (!same_computer && matches(&host_label))) {
+                        continue;
+                    }
+                    let mut detail = shortener(&listing.home, &conversation.cwd);
+                    if !same_computer {
+                        detail = fl!("launcher-on-host", detail = detail, agent = config_agent.label(), host = host_label.as_str());
+                    } else if Some(config_agent) != agent {
+                        detail = fl!("launcher-other-agent", detail = detail, agent = config_agent.label());
+                    }
+                    let reference = transfer::ConversationRef {
+                        host: host.clone(),
+                        kind,
+                        id: conversation.id.clone(),
+                    };
+                    let (choice, actions) = if offline {
+                        (None, Vec::new())
+                    } else if same_computer && Some(config_agent) == agent {
+                        let choice = LaunchChoice::Resume {
+                            id: conversation.id.clone(),
+                            cwd: conversation.cwd.clone(),
+                        };
+                        (Some(choice), Vec::new())
+                    } else if target_kind.is_none() {
+                        (None, Vec::new())
+                    } else if same_computer {
+                        let choice = LaunchChoice::Continue {
+                            conversation: reference,
+                            cwd: conversation.cwd.clone(),
+                        };
+                        (Some(choice), Vec::new())
+                    } else {
+                        let transfer = |mode| LaunchChoice::Transfer {
+                            conversation: reference.clone(),
+                            cwd: conversation.cwd.clone(),
+                            title: conversation.title.clone(),
+                            mode,
+                        };
+                        let actions = vec![
+                            (fl!("launcher-move-here"), transfer(transfer::Mode::Move)),
+                            (fl!("launcher-fork-here"), transfer(transfer::Mode::Fork)),
+                        ];
+                        (None, actions)
+                    };
+                    let mut when = time_ago(conversation.last_used);
+                    if offline {
+                        when = fl!("launcher-offline", when = when);
+                    }
+                    conversations.push((
+                        conversation.last_used,
+                        LauncherRow {
+                            label: conversation.title.clone(),
+                            detail,
+                            when,
+                            choice,
+                            actions,
+                        },
+                    ));
+                }
+            }
+        }
+        conversations.sort_by(|a, b| b.0.total_cmp(&a.0));
+        sections.push((
+            config::LauncherSection::Conversations,
+            fl!("launcher-conversations"),
+            conversations.into_iter().map(|(_, row)| row).collect(),
+        ));
+        sections.retain(|(_, _, rows)| !rows.is_empty());
+        sections
+    }
+
+    /// Whether a launcher section's rows are shown: when expanded, or when
+    /// filtering, so that matches are never hidden
+    fn launcher_section_open(&self, launcher: &Launcher, section: config::LauncherSection) -> bool {
+        !self.config.launcher_collapsed.contains(&section) || !launcher.filter.trim().is_empty()
+    }
+
+    /// The contents of a launcher tab
+    fn launcher_view<'a>(
+        &'a self,
+        entity: segmented_button::Entity,
+        launcher: &'a Launcher,
+    ) -> Element<'a, Message> {
+        let cosmic_theme::Spacing {
+            space_xxs,
+            space_xs,
+            space_s,
+            ..
+        } = self.core().system_theme().cosmic().spacing;
+        let name = self
+            .config
+            .profiles
+            .get(&launcher.profile_id)
+            .map(|profile| profile.name.clone())
+            .unwrap_or_default();
+        let locked = self.launcher_locked(entity);
+
+        let mut column = widget::column::with_capacity(8)
+            .spacing(space_s)
+            .push(widget::text::title3(name))
+            .push(
+                widget::row::with_children(vec![
+                    widget::button::suggested(fl!("launcher-home"))
+                        .on_press_maybe((!locked).then(|| Message::LauncherChoose(entity, LaunchChoice::Dir(String::new()))))
+                        .into(),
+                    widget::button::standard(fl!("launcher-browse"))
+                        .on_press_maybe((!locked).then_some(Message::LauncherChoose(entity, LaunchChoice::Browse)))
+                        .into(),
+                ])
+                .spacing(space_xs),
+            )
+            // A form replaces the list the filter narrows
+            .push_maybe(launcher.form.is_none().then(|| {
+                widget::text_input::search_input(fl!("launcher-filter"), &launcher.filter)
+                    .id(launcher.filter_id.clone())
+                    .on_focus(Message::LauncherFocus(entity, launcher.filter_id.clone()))
+                    .on_input(move |text| Message::LauncherFilter(entity, text))
+                    .on_paste(move |text| Message::LauncherFilter(entity, text))
+                    .on_submit(move |_| Message::LauncherSubmit(entity))
+            }));
+        if let Some((_, status)) = &launcher.pending_action {
+            column = column.push(widget::text::caption(status.clone()));
+        }
+
+        for record in &launcher.unfinished {
+            let id = record.plan.draft.id.clone();
+            let active = self.active_transfers.contains(&id);
+            column = column.push(
+                widget::row::with_children(vec![
+                    widget::text::body(launcher_forms::describe(record))
+                        .width(Length::Fill)
+                        .into(),
+                    widget::button::standard(fl!("transfer-resume"))
+                        .on_press_maybe((!active).then(|| Message::LauncherRecover(entity, id.clone(), true)))
+                        .into(),
+                    widget::button::standard(fl!("transfer-roll-back"))
+                        .on_press_maybe((!active).then(|| Message::LauncherRecover(entity, id, false)))
+                        .into(),
+                ])
+                .spacing(space_xs)
+                .align_y(Alignment::Center),
+            );
+            if active {
+                column = column.push(widget::text::caption(fl!("transfer-recovering")));
+            }
+        }
+        match &launcher.form {
+            Some(LauncherForm::Worktree(form)) => {
+                column = column.push(form.view(entity, space_s));
+                return self.launcher_frame(column.into());
+            }
+            Some(LauncherForm::Transfer(form)) => {
+                column = column.push(widget::scrollable(form.view(entity, space_s)).height(Length::Fill));
+                return self.launcher_frame(column.into());
+            }
+            None => {}
+        }
+
+        let mut list = widget::column::with_capacity(32).spacing(space_xxs);
+        let target = self
+            .config
+            .profiles
+            .get(&launcher.profile_id)
+            .map(|profile| profile.host.trim().to_string())
+            .unwrap_or_default();
+        for (host, state) in &launcher.listings {
+            let message = match state {
+                Listing::Loading if host == &target => fl!("launcher-loading"),
+                Listing::Offline(_, error) if host == &target => {
+                    fl!("launcher-failed", error = error.as_str())
+                }
+                // A host never reached has nothing to show, as when a
+                // profile names this computer by an ssh name it refuses
+                Listing::Offline(Some(_), error) => fl!(
+                    "launcher-host-offline",
+                    host = host.as_str(),
+                    error = error.as_str()
+                ),
+                _ => continue,
+            };
+            list = list.push(widget::text::caption(message));
+        }
+        for (section, title, rows) in self.launcher_rows(launcher) {
+            let open = self.launcher_section_open(launcher, section);
+            let collapsed = self.config.launcher_collapsed.contains(&section);
+            let header = widget::row::with_children(vec![
+                widget::text::heading(format!("{title} ({})", rows.len()))
+                    .width(Length::Fill)
+                    .into(),
+                icon_cache_get(if collapsed { "go-down-symbolic" } else { "go-up-symbolic" }, 16)
+                    .into(),
+            ])
+            .align_y(Alignment::Center);
+            list = list.push(
+                widget::container(
+                    widget::button::custom(header)
+                        .class(style::Button::MenuItem)
+                        .width(Length::Fill)
+                        .padding([space_xxs, space_s])
+                        .on_press(Message::LauncherToggleSection(section)),
+                )
+                .padding([space_xs, 0, 0, 0]),
+            );
+            if !open {
+                continue;
+            }
+            for row in rows {
+                let content = widget::row::with_children(vec![
+                    widget::column::with_children(vec![
+                        widget::text::body(ellipsize_middle(&row.label, 90))
+                            .wrapping(cosmic::iced::widget::text::Wrapping::None)
+                            .into(),
+                        widget::text::caption(ellipsize_middle(&row.detail, 90))
+                            .wrapping(cosmic::iced::widget::text::Wrapping::None)
+                            .into(),
+                    ])
+                    .width(Length::Fill)
+                    .into(),
+                    widget::text::caption(row.when).into(),
+                ])
+                .align_y(Alignment::Center)
+                .spacing(space_s);
+                let pressable = widget::button::custom(content)
+                    .class(style::Button::MenuItem)
+                    .width(Length::Fill)
+                    .padding([space_xxs, space_s])
+                    .on_press_maybe((!locked).then(|| row.choice).flatten().map(|choice| Message::LauncherChoose(entity, choice)));
+                if row.actions.is_empty() {
+                    list = list.push(pressable);
+                } else {
+                    let mut line = widget::row::with_capacity(1 + row.actions.len())
+                        .spacing(space_xxs)
+                        .align_y(Alignment::Center)
+                        .push(pressable);
+                    for (label, choice) in row.actions {
+                        line = line.push(
+                            widget::button::text(label)
+                                .on_press_maybe((!locked).then_some(Message::LauncherChoose(entity, choice))),
+                        );
+                    }
+                    list = list.push(line);
+                }
+            }
+        }
+        column = column.push(widget::scrollable(list).height(Length::Fill));
+        self.launcher_frame(column.into())
+    }
+
+    /// A launcher's contents, centred and painted like a terminal
+    fn launcher_frame<'a>(&'a self, column: Element<'a, Message>) -> Element<'a, Message> {
+        let cosmic_theme::Spacing { space_m, .. } = self.core().system_theme().cosmic().spacing;
+
+        // Painted like a terminal, which draws its own background
+        let t = self.core().system_theme();
+        let alpha = if t.transparent {
+            t.cosmic().alpha_map.blurred_alpha(t.cosmic().frosted)
+        } else {
+            self.config.opacity_ratio()
+        };
+        widget::container(
+            widget::container(column)
+                .max_width(760.0)
+                .padding(space_m)
+                .height(Length::Fill),
+        )
+        .center_x(Length::Fill)
+        .height(Length::Fill)
+        .class(style::Container::Custom(Box::new(move |theme| {
+            let cosmic = theme.cosmic();
+            let mut background: Color = cosmic.background(theme.transparent).base.into();
+            background.a *= alpha;
+            cosmic::iced::widget::container::Style {
+                background: Some(iced::Background::Color(background)),
+                text_color: Some(cosmic.background(theme.transparent).on.into()),
+                ..Default::default()
+            }
+        })))
+        .into()
+    }
+
+    /// Look up where an agent tab's agent is working, unless that was done
+    /// in the last few seconds
+    fn refresh_focus(&mut self, entity: segmented_button::Entity) -> Task<Message> {
+        let Some(pane) = self.tab_pane(entity) else {
+            return Task::none();
+        };
+        let Some(tab_model) = self.pane_model.panes.get_mut(pane) else {
+            return Task::none();
+        };
+        let Some(session) = tab_model
+            .data::<agent::Session>(entity)
+            .filter(|s| s.agent().is_some_and(|a| a != config::Agent::Shell))
+            .cloned()
+        else {
+            return Task::none();
+        };
+        if tab_model.data::<TabFocus>(entity).is_none() {
+            tab_model.data_set::<TabFocus>(entity, TabFocus::default());
+        }
+        let Some(focus) = tab_model.data_mut::<TabFocus>(entity) else {
+            return Task::none();
+        };
+        if focus.pending || focus.checked.is_some_and(|t| t.elapsed() < FOCUS_INTERVAL) {
+            return Task::none();
+        }
+        focus.pending = true;
+        cosmic::task::future(async move {
+            Message::TabFocusFound(entity, agent::tab_agents(agent::TabProcess::Session(session)).await)
+        })
+    }
+
+    /// Whether two ssh destinations ("" for this computer) are one computer
+    fn same_computer(&self, a: &str, b: &str) -> bool {
+        let identity = |host: &str| -> Option<String> {
+            if host.trim().is_empty() {
+                self.local.as_ref().map(|l| if l.host_id.is_empty() { l.hostname.clone() } else { l.host_id.clone() })
+            } else {
+                self.config
+                    .machine_for_host(host)
+                    .map(|m| if m.host_id.is_empty() { m.hostname.clone() } else { m.host_id.clone() })
+                    .filter(|id| !id.is_empty())
+            }
+        };
+        a.trim() == b.trim() || matches!((identity(a), identity(b)), (Some(x), Some(y)) if x == y)
+    }
+
+    /// For each agent tab, the agent profiles on other computers it can be
+    /// moved or forked to
+    fn transfer_destinations(
+        &self,
+        tab_model: &segmented_button::Model<segmented_button::SingleSelect>,
+    ) -> HashMap<segmented_button::Entity, Vec<(String, ProfileId)>> {
+        let mut destinations = HashMap::new();
+        for entity in tab_model.iter() {
+            let Some(session) = tab_model.data::<agent::Session>(entity) else {
+                continue;
+            };
+            if !session.agent().is_some_and(|a| a != config::Agent::Shell) {
+                continue;
+            }
+            destinations.insert(entity, self.session_destinations(session));
+        }
+        destinations
+    }
+
+    /// The agent profiles on other computers, which a session's
+    /// conversation could move or fork to
+    fn session_destinations(&self, session: &agent::Session) -> Vec<(String, ProfileId)> {
+        if !session.agent().is_some_and(|a| a != config::Agent::Shell) {
+            return Vec::new();
+        }
+        let mut found: Vec<(String, ProfileId)> = self
+            .config
+            .profiles
+            .iter()
+            .filter(|(_, p)| agent_kind(p.agent).is_some() && !self.same_computer(&p.host, &session.host))
+            .map(|(id, p)| (p.name.clone(), *id))
+            .collect();
+        found.sort();
+        found
+    }
+
+    /// A tab also open in another window: its pane, that window's bus name,
+    /// and its session
+    fn shared_tab(
+        &self,
+        entity: segmented_button::Entity,
+    ) -> Option<(pane_grid::Pane, String, agent::Session)> {
+        let pane = self.tab_pane(entity)?;
+        let tab_model = self.pane_model.panes.get(pane)?;
+        let shared = tab_model.data::<TabShared>(entity)?;
+        let session = tab_model.data::<agent::Session>(entity)?;
+        Some((pane, shared.peer.clone(), session.clone()))
+    }
+
+    /// Name agents' tabs after their conversations, as the sidebar does,
+    /// unless the user named the tab
+    fn retitle_agent_tabs(&mut self) -> Task<Message> {
+        let mut changed = false;
+        for (_pane, tab_model) in self.pane_model.panes.iter_mut() {
+            let entities: Vec<_> = tab_model.iter().collect();
+            for entity in entities {
+                let overridden = tab_model
+                    .data::<Mutex<Terminal>>(entity)
+                    .is_some_and(|t| t.lock().unwrap().tab_title_override.is_some());
+                let Some(session) = tab_model.data::<agent::Session>(entity) else {
+                    continue;
+                };
+                let current = tab_model.text(entity).unwrap_or_default();
+                let base = current.strip_prefix(SUDO_LOCK).unwrap_or(current);
+                let mut title = self
+                    .sidebar
+                    .title(session)
+                    .map_or_else(|| base.to_string(), str::to_string);
+                // A lock while the session waits for sudo approval
+                if self.secrets.for_session(&session.name).next().is_some() {
+                    title = format!("{SUDO_LOCK}{title}");
+                }
+                if !overridden && tab_model.text(entity) != Some(title.as_str()) {
+                    tab_model.text_set(entity, title);
+                    changed = true;
+                }
+            }
+        }
+        if changed { self.update_title(None) } else { Task::none() }
+    }
+
+    /// The pane and tab showing a session in this window
+    fn session_tab(&self, session: &agent::Session) -> Option<(pane_grid::Pane, segmented_button::Entity)> {
+        self.pane_model.panes.iter().find_map(|(pane, tab_model)| {
+            tab_model
+                .iter()
+                .find(|&entity| tab_model.data::<agent::Session>(entity) == Some(session))
+                .map(|entity| (*pane, entity))
+        })
+    }
+
+    /// The ssh destination of a launcher's profile, or "" for this computer
+    fn launcher_host(&self, entity: segmented_button::Entity) -> String {
+        self.launcher(entity)
+            .and_then(|launcher| self.config.profiles.get(&launcher.profile_id))
+            .map(|profile| profile.host.trim().to_string())
+            .unwrap_or_default()
+    }
+
+    /// A profile for the agent and computer a transfer was for
+    fn profile_for(&self, launch: &transfer::Launch) -> Option<ProfileId> {
+        self.config
+            .profiles
+            .iter()
+            .find(|(_, profile)| {
+                profile.host.trim() == launch.host && agent_kind(profile.agent) == Some(launch.kind)
+            })
+            .map(|(id, _)| *id)
+    }
+
+    fn launcher_error(&mut self, err: String) -> Task<Message> {
+        self.toasts
+            .push(widget::toaster::Toast::new(fl!("launcher-failed", error = err.as_str())))
+            .map(cosmic::Action::App)
+    }
+
+    /// Replace a launcher with its agent in `dir`, started as a transfer or
+    /// handoff says, with the launcher's profile unless another is given
+    fn launch_started(
+        &mut self,
+        entity: segmented_button::Entity,
+        profile_id: Option<ProfileId>,
+        dir: &str,
+        start: &transfer::Start,
+    ) -> Task<Message> {
+        let Some(pane) = self.tab_pane(entity) else {
+            return Task::none();
+        };
+        let Some(profile_id) = profile_id.or_else(|| self.launcher(entity).map(|l| l.profile_id)) else {
+            return Task::none();
+        };
+        let Some(profile) = self.config.profiles.get(&profile_id).cloned() else {
+            return Task::none();
+        };
+        let prepared = agent::launch_start(&profile, dir, start);
+        self.replace_tab(pane, entity, Some(profile_id), prepared)
+    }
+
+    /// Replace a launcher with its agent, started as `choice` says
+    fn launch_from(
+        &mut self,
+        entity: segmented_button::Entity,
+        choice: LaunchChoice,
+    ) -> Task<Message> {
+        let Some(pane) = self.tab_pane(entity) else {
+            return Task::none();
+        };
+        let Some(launcher) = self.launcher(entity) else {
+            return Task::none();
+        };
+        let profile_id = launcher.profile_id;
+        let Some(profile) = self.config.profiles.get(&profile_id).cloned() else {
+            return Task::none();
+        };
+        let prepared = match choice {
+            LaunchChoice::Dir(dir) => {
+                agent::launch(&profile, Some(dir.as_str()).filter(|dir| !dir.is_empty()))
+            }
+            LaunchChoice::Resume { id, cwd } => {
+                agent::launch_resuming(&profile, Some(&cwd), Some(&id))
+            }
+            LaunchChoice::Attach(session) => (agent::attach(&session), session),
+            LaunchChoice::NewWorktree(dir) => {
+                let host = profile.host.trim().to_string();
+                let form = WorktreeForm::new();
+                let request_id = form.request_id.clone();
+                if let Some(launcher) = self.launcher_mut(entity) {
+                    launcher.form = Some(LauncherForm::Worktree(Box::new(form)));
+                }
+                return cosmic::task::future(async move {
+                    let result = async {
+                        agent::ensure_helper(host.clone(), agent::Helper::Transfer).await?;
+                        blocking(move || {
+                            let request = cosmic_term::helper::Request::WorktreeOptions { dir: dir.into(), fetch: true };
+                            match transfer::Machine::call(&agent::HostMachine { host }, request)? {
+                                cosmic_term::helper::Reply::WorktreeOptions(options) => Ok(options),
+                                cosmic_term::helper::Reply::Error { message } => Err(message),
+                                other => Err(format!("unexpected reply: {other:?}")),
+                            }
+                        })
+                        .await
+                    }
+                    .await;
+                    Message::LauncherWorktreeOptions(entity, request_id, result)
+                });
+            }
+            LaunchChoice::Continue { conversation, cwd } => {
+                let request_id = cosmic_term::random_hex(16);
+                if let Some(launcher) = self.launcher_mut(entity) {
+                    launcher.pending_action = Some((request_id.clone(), fl!("launcher-continuing")));
+                }
+                return cosmic::task::future(async move {
+                    let result = async {
+                        agent::ensure_helper(conversation.host.clone(), agent::Helper::Transfer).await?;
+                        let machine = agent::HostMachine { host: conversation.host.clone() };
+                        blocking(move || transfer::continue_with(&machine, &conversation)).await
+                    }
+                    .await;
+                    Message::LauncherStart(entity, request_id, cwd, result)
+                });
+            }
+            LaunchChoice::Transfer { ref conversation, ref cwd, ref title, mode } => {
+                let retry = choice.clone();
+                let (conversation, cwd, title) = (conversation.clone(), cwd.clone(), title.clone());
+                let destination = profile.host.trim().to_string();
+                let Some(target) = agent_kind(profile.agent) else {
+                    return Task::none();
+                };
+                let form = TransferForm::new(mode, title, Some(retry));
+                let request_id = form.request_id.clone();
+                if let Some(launcher) = self.launcher_mut(entity) {
+                    launcher.form = Some(LauncherForm::Transfer(Box::new(form)));
+                }
+                return cosmic::task::future(async move {
+                    let result = async {
+                        agent::ensure_helper(conversation.host.clone(), agent::Helper::Transfer).await?;
+                        agent::ensure_helper(destination.clone(), agent::Helper::Transfer).await?;
+                        blocking(move || {
+                            let source = agent::HostMachine { host: conversation.host.clone() };
+                            let dest = agent::HostMachine { host: destination.clone() };
+                            transfer::plan(&source, &dest, conversation, &cwd, &destination, target, mode)
+                        })
+                        .await
+                    }
+                    .await;
+                    Message::LauncherTransferDraft(entity, request_id, Box::new(result))
+                });
+            }
+            LaunchChoice::Browse => {
+                let request_id = cosmic_term::random_hex(16);
+                if let Some(launcher) = self.launcher_mut(entity) {
+                    launcher.pending_action = Some((request_id.clone(), fl!("launcher-mounting")));
+                }
+                if !profile.is_remote() {
+                    return self.update(Message::LauncherMounted(entity, request_id, Ok(PathBuf::new())));
+                }
+                let host = profile.host.trim().to_string();
+                return cosmic::task::future(async move {
+                    Message::LauncherMounted(entity, request_id, agent::ensure_mount(host).await)
+                });
+            }
+        };
+        // The agent takes the launcher's place in the tab bar
+        self.replace_tab(pane, entity, Some(profile_id), prepared)
+    }
+
+    /// Replace a tab with a new terminal running `prepared`, in the same
+    /// place in the tab bar
+    fn replace_tab(
+        &mut self,
+        pane: pane_grid::Pane,
+        entity: segmented_button::Entity,
+        profile_id: Option<ProfileId>,
+        prepared: (host::HostCommand, agent::Session),
+    ) -> Task<Message> {
+        let Some(tab_model) = self.pane_model.panes.get_mut(pane) else {
+            return Task::none();
+        };
+        let position = tab_model.position(entity);
+        let was_active = tab_model.active() == entity;
+        let active = tab_model.active();
+        tab_model.remove(entity);
+        let task = self.create_and_focus_new_terminal_with(pane, profile_id, false, Some(prepared));
+        if let Some(tab_model) = self.pane_model.panes.get_mut(pane) {
+            let started = tab_model.active();
+            if let Some(position) = position {
+                tab_model.position_set(started, position);
+            }
+            // A tab reconnecting in the background stays in the background
+            if !was_active && tab_model.contains_item(active) {
+                tab_model.activate(active);
+            }
+        }
+        task
+    }
+
+    /// Mark a remote tab whose connection dropped, and start reconnecting
+    /// to its host
+    fn tab_disconnected(
+        &mut self,
+        pane: pane_grid::Pane,
+        entity: segmented_button::Entity,
+    ) -> Task<Message> {
+        let Some(tab_model) = self.pane_model.panes.get_mut(pane) else {
+            return Task::none();
+        };
+        let Some(host) = tab_model
+            .data::<agent::Session>(entity)
+            .filter(|session| !session.is_local())
+            .map(|session| session.host.clone())
+        else {
+            return Task::none();
+        };
+        let Some(connection) = tab_model.data_mut::<TabConnection>(entity) else {
+            return Task::none();
+        };
+        connection.lost = Some(Instant::now());
+        if let Some(mark) = tab_model.data_mut::<TabMark>(entity) {
+            mark.disconnected = true;
+            let mark = *mark;
+            if let Some(icon) = mark.icon(16) {
+                tab_model.icon_set(entity, icon);
+            }
+        }
+        if let Some(title) = tab_model.text(entity).map(str::to_string) {
+            tab_model.text_set(entity, fl!("tab-disconnected", title = title.as_str()));
+        }
+        if self.reconnecting.contains_key(&host) {
+            return Task::none();
+        }
+        self.probe_host(host, 0, 5)
+    }
+
+    /// Probe a host after `delay_secs`, replacing any probe already pending
+    fn probe_host(&mut self, host: String, attempt: u32, delay_secs: u64) -> Task<Message> {
+        let generation = self.reconnecting.get(&host).map_or(0, |(g, _)| g + 1);
+        self.reconnecting.insert(host.clone(), (generation, attempt));
+        cosmic::task::future(async move {
+            tokio::time::sleep(Duration::from_secs(delay_secs)).await;
+            let reachable = agent::probe_host(host.clone()).await;
+            Message::HostProbed(host, generation, reachable)
+        })
+    }
+
+    /// The disconnected tabs on a host
+    fn disconnected_tabs(&self, host: &str) -> Vec<(pane_grid::Pane, segmented_button::Entity)> {
+        self.pane_model
+            .panes
+            .iter()
+            .flat_map(|(pane, tab_model)| {
+                tab_model
+                    .iter()
+                    .filter(move |entity| {
+                        tab_model
+                            .data::<TabConnection>(*entity)
+                            .is_some_and(|connection| connection.lost.is_some())
+                            && tab_model
+                                .data::<agent::Session>(*entity)
+                                .is_some_and(|session| session.host == host)
+                    })
+                    .map(move |entity| (*pane, entity))
+            })
+            .collect()
+    }
+
+    /// Open a tab dropped on `pane`, from this window or another
+    fn receive_tab(&mut self, pane: pane_grid::Pane, session: agent::Session) -> Task<Message> {
+        if let Some((drag_pane, drag_entity, _)) = self.tab_drag {
+            let dragged = self
+                .pane_model
+                .panes
+                .get(drag_pane)
+                .and_then(|tab_model| tab_model.data::<agent::Session>(drag_entity));
+            // Dropped back where it came from. Dropped on another pane, the
+            // original closes when the drag ends
+            if dragged == Some(&session) && drag_pane == pane {
+                self.tab_drag = None;
+                return Task::none();
+            }
+        }
+        self.pane_model.set_focus(pane);
+        self.create_and_focus_new_terminal_with(
+            pane,
+            None,
+            false,
+            Some((agent::attach(&session), session)),
+        )
+    }
+
+    /// The hosts the sidebar scans, with their labels: this computer, then
+    /// the other machines, leaving out any that is this computer by another
+    /// name
+    fn sidebar_hosts(&self) -> Vec<(String, String)> {
+        let local = self.local.as_ref();
+        let this_computer = |machine: &config::Machine| {
+            local.is_some_and(|local| {
+                (!machine.host_id.is_empty() && machine.host_id == local.host_id)
+                    || (!machine.hostname.is_empty() && machine.hostname == local.hostname)
+            })
+        };
+        self.session_hosts()
+            .into_iter()
+            .filter_map(|host| {
+                if host.is_empty() {
+                    let label = local
+                        .map(|l| l.hostname.clone())
+                        .filter(|name| !name.is_empty())
+                        .unwrap_or_else(|| fl!("this-computer"));
+                    return Some((host, label));
+                }
+                let machine = self.config.machines.values().find(|m| m.destination() == host);
+                if machine.is_some_and(this_computer) {
+                    return None;
+                }
+                let label = machine.map_or_else(|| host.clone(), |m| m.name.clone());
+                Some((host, label))
+            })
+            .collect()
+    }
+
+    /// Start scanning every host for the sidebar and the tabs' previews,
+    /// which are wanted with the sidebar hidden too
+    fn sidebar_start(&mut self) -> Task<Message> {
+        self.sidebar.generation += 1;
+        let generation = self.sidebar.generation;
+        let hosts = self.sidebar_hosts();
+        self.sidebar.hosts.retain(|host, _| hosts.iter().any(|(h, _)| h == host));
+        let mut tasks = Vec::new();
+        for (host, label) in hosts {
+            let state = self.sidebar.hosts.entry(host.clone()).or_default();
+            state.label = label;
+            state.scanning = false;
+            tasks.push(self.update(Message::SidebarRefresh(host, generation)));
+        }
+        Task::batch(tasks)
+    }
+
+    /// A profile running `agent` on `host`, else the default profile if it
+    /// runs there, else any profile that does
+    fn profile_on_host(&self, host: &str, agent: Option<config::Agent>) -> Option<ProfileId> {
+        let on_host = |p: &&Profile| p.host.trim() == host;
+        let profiles = &self.config.profiles;
+        agent
+            .and_then(|agent| {
+                profiles
+                    .iter()
+                    .find(|(_, p)| on_host(p) && p.agent == agent)
+                    .map(|(id, _)| *id)
+            })
+            .or_else(|| {
+                self.get_default_profile()
+                    .filter(|id| profiles.get(id).is_some_and(|p| on_host(&p)))
+            })
+            .or_else(|| profiles.iter().find(|(_, p)| on_host(p)).map(|(id, _)| *id))
+    }
+
+    /// Where the processes of the tab in front of the focused pane run
+    fn active_process(&self) -> Option<agent::TabProcess> {
+        let tab_model = self.pane_model.active()?;
+        let entity = tab_model.active();
+        if let Some(session) = tab_model.data::<agent::Session>(entity) {
+            return Some(agent::TabProcess::Session(session.clone()));
+        }
+        let TabToken(token) = tab_model.data::<TabToken>(entity)?;
+        Some(agent::TabProcess::Local(token.clone()))
+    }
+
+    /// The remote hosts of this window's launchers
+    fn launcher_hosts(&self) -> Vec<&str> {
+        self.pane_model
+            .panes
+            .iter()
+            .flat_map(|(_, tab_model)| {
+                tab_model
+                    .iter()
+                    .filter_map(|entity| tab_model.data::<Launcher>(entity))
+                    .filter_map(|launcher| self.config.profiles.get(&launcher.profile_id))
+                    .map(|profile| profile.host.trim())
+                    .collect::<Vec<_>>()
+            })
+            .collect()
+    }
+
+    /// Whether a sudo request is in front of the user: its tab is in front
+    /// of the focused pane of a focused window, or, when no tab here shows
+    /// its session, the window is focused
+    fn sudo_in_front(&self, request: &cosmic_term::sudo_control::Request) -> bool {
+        if !self.window_focused {
+            return false;
+        }
+        let Some(session) = request.session.as_deref() else {
+            return true;
+        };
+        let shown_here = self.pane_model.panes.iter().any(|(_, tab_model)| {
+            tab_model
+                .iter()
+                .any(|e| tab_model.data::<agent::Session>(e).is_some_and(|s| s.name == session))
+        });
+        !shown_here || self.active_session().is_some_and(|s| s.name == session)
+    }
+
+    /// Each machine for the Secrets pane: its name, ssh destination (empty
+    /// for this computer) and host name, which its sudo knows itself by
+    fn secret_machines(&self) -> Vec<(String, String, String)> {
+        let here = agent::mounts::local_name();
+        let mut machines = vec![(fl!("this-computer-named", name = here.as_str()), String::new(), here.clone())];
+        for machine in self.config.machines.values() {
+            let dest = machine.destination();
+            let name = agent::mounts::name_for(&dest);
+            if name != here {
+                machines.push((machine.name.clone(), dest, name));
+            }
+        }
+        machines
+    }
+
+    /// The saved passwords the right-click menu offers to paste, by name and
+    /// machine; none while the store is locked, to offer unlocking instead
+    fn paste_passwords(&self) -> Option<Vec<(u64, String)>> {
+        let state = &self.secrets.state;
+        if self.secrets.agent.is_none() || !state.exists {
+            return Some(Vec::new());
+        }
+        if !state.unlocked {
+            return None;
+        }
+        Some(
+            state
+                .entries
+                .iter()
+                .map(|entry| {
+                    let label = match &entry.host {
+                        Some(host) => fl!("paste-password-on", account = entry.label.as_str(), machine = host.as_str()),
+                        None => entry.label.clone(),
+                    };
+                    (entry.id, label)
+                })
+                .collect(),
+        )
+    }
+
+    /// Start a fingerprint check for each request now in front that is
+    /// approved by fingerprint
+    fn sudo_arm(&mut self) -> Task<Message> {
+        let ids: Vec<u64> = self
+            .secrets
+            .pending
+            .values()
+            .filter(|p| p.request.approval == cosmic_term::sudo_control::Approval::Fingerprint && !p.armed)
+            .filter(|p| self.sudo_in_front(&p.request))
+            .map(|p| p.request.id)
+            .collect();
+        for id in ids {
+            if self.secrets.send(cosmic_term::sudo_control::ToAgent::Arm { id })
+                && let Some(p) = self.secrets.pending.get_mut(&id)
+            {
+                p.armed = true;
+            }
+        }
+        Task::none()
+    }
+
+    /// A desktop notification for a request out of view
+    fn sudo_notify(&self, id: u64) -> Task<Message> {
+        let Some(pending) = self.secrets.pending.get(&id) else {
+            return Task::none();
+        };
+        if self.sudo_in_front(&pending.request) {
+            return Task::none();
+        }
+        let request = &pending.request;
+        let title = fl!("sudo-notify-title", host = request.host.as_str());
+        let body = request.command.join(" ");
+        cosmic::task::future(async move {
+            let mut command = host::command("notify-send");
+            command.args(["-a", "COSMIC Agent Terminal", "-i", "dialog-password", &title, &body]);
+            let result = command
+                .status()
+                .await
+                .map(|_| ())
+                .map_err(|err| err.to_string());
+            Message::SudoResult("notification".to_string(), result)
+        })
+    }
+
+    fn sudo_toast(&mut self, error: String) -> Task<Message> {
+        self.toasts
+            .push(widget::toaster::Toast::new(fl!("sudo-failed", error = error.as_str())))
+            .map(cosmic::Action::App)
+    }
+
+    /// What the Session menu offers for the tab in front
+    fn session_menu(&self) -> menu::SessionMenu {
+        let session = self.active_session();
+        menu::SessionMenu {
+            session: session.is_some(),
+            agent: session.is_some_and(|s| s.agent().is_some_and(|a| a != config::Agent::Shell)),
+            destinations: session.map(|s| self.session_destinations(s)).unwrap_or_default(),
+        }
+    }
+
+    /// The session of the tab in front of the focused pane
+    fn active_session(&self) -> Option<&agent::Session> {
+        let tab_model = self.pane_model.active()?;
+        tab_model.data::<agent::Session>(tab_model.active())
+    }
+
+    /// Sessions open in a tab of this window
+    fn open_sessions(&self) -> Vec<agent::Session> {
+        self.pane_model
+            .panes
+            .iter()
+            .flat_map(|(_pane, tab_model)| {
+                tab_model
+                    .iter()
+                    .filter_map(|entity| tab_model.data::<agent::Session>(entity).cloned())
+            })
+            .collect()
+    }
+
+    /// The rows of the new tab menu: the profiles, by computer
+    fn new_tab_entries(&self) -> Vec<NewTabEntry> {
+        let default_profile = self.get_default_profile();
+        let profile_names = self.config.profile_names();
+
+        let mut entries = Vec::new();
+        let section = |entries: &mut Vec<NewTabEntry>, title: String, items: Vec<NewTabEntry>| {
+            if !items.is_empty() {
+                entries.push(NewTabEntry::header(title));
+                entries.extend(items);
+            }
+        };
+        let profile_item = |name: &str, profile_id: ProfileId| NewTabEntry {
+            kind: NewTabEntryKind::Item,
+            label: name.to_string(),
+            mark: self
+                .config
+                .profiles
+                .get(&profile_id)
+                .map(|profile| TabMark {
+                    color: profile.tab_color(),
+                    remote: profile.is_remote(),
+                    disconnected: false,
+                })
+                .unwrap_or_default(),
+            is_default: default_profile == Some(profile_id),
+            message: Some(Message::ProfileOpen(profile_id)),
+        };
+
+        let local = profile_names
+            .iter()
+            .filter(|(_, id)| self.config.profiles.get(id).is_some_and(|p| !p.is_remote()))
+            .map(|(name, id)| profile_item(name, *id))
+            .collect();
+        section(&mut entries, fl!("this-computer"), local);
+
+        // Running sessions are in the sidebar; the menu offers profiles
+        for host in self.session_hosts() {
+            let profiles = profile_names
+                .iter()
+                .filter(|(_, id)| {
+                    self.config
+                        .profiles
+                        .get(id)
+                        .is_some_and(|p| p.host.trim() == host)
+                })
+                .map(|(name, id)| profile_item(name, *id))
+                .collect();
+            // Local profiles are listed first, under "This computer"
+            if !host.is_empty() {
+                section(&mut entries, fl!("on-host", host = host.as_str()), profiles);
+            }
+        }
+        entries
+    }
+
+    /// The colour for a remote session: that of a profile for the same host
+    /// and agent, or the agent's default. The user's own sessions are
+    /// unmarked
+    fn session_color(&self, session: &agent::Session) -> Option<TabColor> {
+        let agent = session.agent().filter(|_| session.is_managed())?;
+        self.config
+            .profiles
+            .values()
+            .find(|p| p.agent == agent && p.host.trim() == session.host)
+            .and_then(|p| p.tab_color())
+            .or_else(|| agent.default_color())
+    }
+
     fn get_default_profile(&self) -> Option<ProfileId> {
         self.config.default_profile
     }
@@ -1536,6 +3869,14 @@ impl App {
     fn active_terminal_working_directory(&self) -> Option<PathBuf> {
         let tab_model = self.pane_model.active()?;
         let entity = tab_model.active();
+        // An agent works where it has moved to, not where its tab started
+        if tab_model
+            .data::<agent::Session>(entity)
+            .is_some_and(agent::Session::is_local)
+            && let Some(dir) = tab_model.data::<TabFocus>(entity).and_then(|f| f.dir.clone())
+        {
+            return Some(PathBuf::from(dir));
+        }
         let terminal = tab_model.data::<Mutex<Terminal>>(entity)?;
         let terminal = terminal.lock().unwrap();
         terminal.working_directory()
@@ -1547,9 +3888,66 @@ impl App {
         profile_id_opt: Option<ProfileId>,
         inherit_working_directory: bool,
     ) -> Task<Message> {
+        self.create_and_focus_new_terminal_with(
+            pane,
+            profile_id_opt,
+            inherit_working_directory,
+            None,
+        )
+    }
+
+    /// Create a terminal, running `prepared`, a session's command, if given
+    /// instead of starting the profile
+    fn create_and_focus_new_terminal_with(
+        &mut self,
+        pane: pane_grid::Pane,
+        profile_id_opt: Option<ProfileId>,
+        inherit_working_directory: bool,
+        prepared: Option<(host::HostCommand, agent::Session)>,
+    ) -> Task<Message> {
         let inherited_working_directory = inherit_working_directory
             .then(|| self.active_terminal_working_directory())
             .flatten();
+        // Every tab runs in a session, so it can be reattached or moved to
+        // another window, except a command given on the command line
+        let (launch_command, session) = match prepared {
+            Some((command, session)) => (Some(command), Some(session)),
+            None if self.startup_command.is_some() => (None, None),
+            None => {
+                let profile = profile_id_opt
+                    .and_then(|profile_id| self.config.profiles.get(&profile_id))
+                    .cloned()
+                    .unwrap_or_else(|| config::Profile::agent("", config::Agent::Shell, ""));
+                // A local tab starts where asked on the command line, or
+                // where the active tab is
+                let dir = (!profile.is_remote())
+                    .then(|| {
+                        self.startup_options
+                            .as_ref()
+                            .and_then(|options| options.working_directory.clone())
+                            .or_else(|| inherited_working_directory.clone())
+                    })
+                    .flatten();
+                let (command, session) =
+                    agent::launch(&profile, dir.as_deref().and_then(|dir| dir.to_str()));
+                (Some(command), Some(session))
+            }
+        };
+        let remote_session = session;
+        let mark = TabMark {
+            color: match (
+                profile_id_opt.and_then(|id| self.config.profiles.get(&id)),
+                &remote_session,
+            ) {
+                (Some(profile), _) => profile.tab_color(),
+                (None, Some(session)) => self.session_color(session),
+                (None, None) => None,
+            },
+            remote: remote_session
+                .as_ref()
+                .is_some_and(|session| !session.is_local()),
+            disconnected: false,
+        };
         self.pane_model.set_focus(pane);
         match &self.term_event_tx_opt {
             Some(term_event_tx) => {
@@ -1570,6 +3968,7 @@ impl App {
                     Some(colors) => {
                         let current_pane = self.pane_model.focused();
                         if let Some(tab_model) = self.pane_model.active_mut() {
+                            let command;
                             let (options, tab_title_override) = if let Some(profile) =
                                 profile_id_opt
                                     .and_then(|profile_id| self.config.profiles.get(&profile_id))
@@ -1577,23 +3976,33 @@ impl App {
                                 // Merge profile and startup options, preferring startup options
                                 let startup_options =
                                     self.startup_options.take().unwrap_or_default();
+                                let is_remote = remote_session.is_some();
+                                command = self
+                                    .startup_command
+                                    .take()
+                                    .or(launch_command)
+                                    .or_else(|| host::HostCommand::parse(&profile.command));
                                 let options = tty::Options {
-                                    shell: startup_options.shell.or_else(|| {
-                                        if let Some(mut args) = shlex::split(&profile.command)
-                                            && !args.is_empty()
-                                        {
-                                            let command = args.remove(0);
-                                            return Some(tty::Shell::new(command, args));
-                                        }
-                                        None
-                                    }),
-                                    working_directory: startup_options
-                                        .working_directory
-                                        .or_else(|| inherited_working_directory.clone())
-                                        .or_else(|| {
-                                            (!profile.working_directory.is_empty())
-                                                .then(|| profile.working_directory.clone().into())
-                                        }),
+                                    // A remote profile's directory is on the remote host
+                                    working_directory: startup_options.working_directory.or_else(
+                                        || {
+                                            (!is_remote)
+                                                .then(|| {
+                                                    inherited_working_directory.clone().or_else(
+                                                        || {
+                                                            (!profile.working_directory.is_empty())
+                                                                .then(|| {
+                                                                    profile
+                                                                        .working_directory
+                                                                        .clone()
+                                                                        .into()
+                                                                })
+                                                        },
+                                                    )
+                                                })
+                                                .flatten()
+                                        },
+                                    ),
                                     drain_on_exit: startup_options.drain_on_exit
                                         || profile.drain_on_exit,
                                     ..startup_options
@@ -1606,22 +4015,69 @@ impl App {
                                 (options, tab_title_override)
                             } else {
                                 let mut options = self.startup_options.take().unwrap_or_default();
-                                if options.working_directory.is_none() {
+                                command = self.startup_command.take().or(launch_command);
+                                if remote_session.is_some() {
+                                    options.working_directory = None;
+                                } else if options.working_directory.is_none() {
                                     options.working_directory = inherited_working_directory.clone();
                                 }
                                 (options, None)
                             };
+                            // Until the agent sets a title, name the tab after
+                            // what it runs
+                            let initial_title =
+                                tab_title_override.clone().unwrap_or_else(|| {
+                                    match (&remote_session, profile_id_opt) {
+                                        (Some(session), _) if session.is_managed() => {
+                                            session.label()
+                                        }
+                                        (Some(session), None) => session.label(),
+                                        (_, Some(profile_id)) => self
+                                            .config
+                                            .profiles
+                                            .get(&profile_id)
+                                            .filter(|p| {
+                                                p.agent != config::Agent::Shell || p.is_remote()
+                                            })
+                                            .map(|p| p.name.clone())
+                                            .unwrap_or_else(|| fl!("new-terminal")),
+                                        _ => fl!("new-terminal"),
+                                    }
+                                });
 
-                            let entity = tab_model
-                                .insert()
-                                .text(
-                                    tab_title_override
-                                        .clone()
-                                        .unwrap_or_else(|| fl!("new-terminal")),
-                                )
-                                .closable()
-                                .activate()
-                                .id();
+                            // A tab beside others will be drawn at their size
+                            let initial_pixels = tab_model
+                                .iter()
+                                .find_map(|e| tab_model.data::<Mutex<Terminal>>(e))
+                                .map(|terminal| {
+                                    let size = terminal.lock().unwrap().size();
+                                    (size.width, size.height)
+                                })
+                                .filter(|(width, height)| *width > 0 && *height > 0);
+                            let mut builder = tab_model.insert().text(initial_title);
+                            if let Some(icon) = mark.icon(16) {
+                                builder = builder.icon(icon);
+                            }
+                            let entity = builder.closable().activate().id();
+                            tab_model.data_set::<TabMark>(entity, mark);
+                            let token = host::tab_token();
+                            if let (Some(session), Some(launch)) = (&remote_session, &command)
+                                && !session.is_local()
+                            {
+                                tab_model.data_set::<TabConnection>(
+                                    entity,
+                                    TabConnection {
+                                        launch: launch.clone(),
+                                        started: Instant::now(),
+                                        lost: None,
+                                    },
+                                );
+                            }
+                            let options = host::tab_options(options, command, &token);
+                            tab_model.data_set::<TabToken>(entity, TabToken(token));
+                            if let Some(session) = remote_session.clone() {
+                                tab_model.data_set::<agent::Session>(entity, session);
+                            }
                             match Terminal::new(
                                 current_pane,
                                 entity,
@@ -1632,6 +4088,7 @@ impl App {
                                 *colors,
                                 profile_id_opt,
                                 tab_title_override,
+                                initial_pixels,
                             ) {
                                 Ok(mut terminal) => {
                                     terminal.set_config(
@@ -1703,7 +4160,9 @@ impl Application for App {
     type Message = Message;
 
     /// The unique application ID to supply to the window manager.
-    const APP_ID: &'static str = "com.system76.CosmicTerm";
+    /// Distinct from upstream so this fork keeps its own config and can be
+    /// installed alongside COSMIC Terminal
+    const APP_ID: &'static str = "dev.twright.CosmicTermAgents";
 
     fn core(&self) -> &Core {
         &self.core
@@ -1826,7 +4285,7 @@ impl Application for App {
 
         let pane_model = TerminalPaneGrid::new(segmented_button::ModelBuilder::default().build());
         let mut terminal_ids = HashMap::new();
-        terminal_ids.insert(pane_model.focused(), widget::Id::unique());
+        terminal_ids.insert(pane_model.focused(), field_id("terminal"));
 
         let about = About::default()
             .name(fl!("cosmic-terminal"))
@@ -1851,7 +4310,7 @@ impl Application for App {
             about,
             pane_model,
             config_handler: flags.config_handler,
-            config: flags.config,
+            config: flags.config.clone(),
             shortcuts_config: flags.shortcuts_config,
             key_binds,
             app_themes,
@@ -1872,17 +4331,56 @@ impl Application for App {
             themes: HashMap::new(),
             context_page: ContextPage::Settings,
             dialog_opt: None,
+            agent_names: config::Agent::ALL.iter().map(|a| a.label()).collect(),
+            host_names: Vec::new(),
+            machine_expanded: None,
+            local: None,
+            machine_checks: HashMap::new(),
+            discovery: None,
+            color_names: std::iter::once(fl!("tab-color-default"))
+                .chain(TabColor::PALETTE.iter().map(|(name, _)| name.to_string()))
+                .collect(),
+            new_tab_menu_open: false,
+            new_tab_menu_in_sidebar: false,
+            toasts: widget::toaster::Toasts::new(Message::CloseToast),
+            sidebar: sidebar::Sidebar::default(),
+            active_transfers: BTreeSet::new(),
+            transfer_lookups: HashMap::new(),
+            hovered_tab: None,
+            secrets: secrets::Secrets::default(),
+            secrets_paste_pane: None,
+            secrets_focus: None,
+            show_sidebar: flags.config.show_sidebar,
+            tools_reported: BTreeSet::new(),
+            mount_setup: BTreeMap::new(),
+            mount_errors: BTreeMap::new(),
+            host_setup: BTreeMap::new(),
+            host_setup_stalled: BTreeSet::new(),
+            pending_commands: BTreeMap::new(),
+            window_focused: true,
+            sudo_forwarded: HashMap::new(),
+            rename: None,
+            rename_id: field_id("rename"),
+            accent: None,
             terminal_ids,
             find: false,
-            find_search_id: widget::Id::unique(),
+            find_search_id: field_id("find"),
             find_search_value: String::new(),
             startup_options: flags.startup_options,
+            startup_command: flags.startup_command,
+            startup_attach: flags.startup_attach,
+            tab_drag: None,
+            reconnecting: BTreeMap::new(),
+            tab_drag_left_window: false,
             term_config: flags.term_config,
             term_event_tx_opt: None,
             color_scheme_errors: Vec::new(),
+            color_scheme_io: None,
+            color_scheme_io_generation: 0,
+            color_scheme_io_slow: false,
             color_scheme_expanded: None,
             color_scheme_renaming: None,
-            color_scheme_rename_id: widget::Id::unique(),
+            color_scheme_rename_id: field_id("color-scheme-rename"),
             color_scheme_tab_model: widget::segmented_button::Model::default(),
             profile_expanded: None,
             show_advanced_font_settings: false,
@@ -1890,7 +4388,7 @@ impl Application for App {
             shortcut_conflict: None,
             shortcut_conflict_overlay_restore: None,
             shortcut_search_focus: Cell::new(true),
-            shortcut_search_id: widget::Id::unique(),
+            shortcut_search_id: field_id("shortcut-search"),
             shortcut_search_regex: None,
             shortcut_search_value: String::new(),
             modifiers: Modifiers::empty(),
@@ -1899,13 +4397,51 @@ impl Application for App {
         };
 
         app.set_curr_font_weights_and_stretches();
-        let command = Task::batch([app.update_config(), app.update_title(None)]);
+        // Sessions need the supervisor on their host for Ctrl+Z to work, and
+        // transfers the transfer helper
+        let setup_hosts = app.session_hosts();
+        app.host_setup = setup_hosts.iter().map(|host| (host.clone(), None)).collect();
+        let supervisors = setup_hosts.into_iter().map(setup_host_task);
+        let local = cosmic::task::future(async {
+            Message::LocalProbed(agent::local_probe().await)
+        });
+        let sidebar = app.sidebar_start();
+        // The sudo agent and its units, which systemd starts when needed
+        let sudo_agent = cosmic::task::future(async {
+            Message::SudoResult("installing the sudo agent".to_string(), agent::sudo::install_agent().await)
+        });
+        // Each machine and this computer learn how to mount each other, in
+        // the background; mounts are made when something needs them
+        let mounts = app.session_hosts().into_iter().filter(|host| !host.is_empty()).map(|host| {
+            cosmic::task::future(async move {
+                let result = agent::mounts::connect(host.clone()).await;
+                Message::MountsConnected(host, result)
+            })
+        });
+        let command = Task::batch(
+            [app.update_config(), app.update_title(None), local, sidebar]
+                .into_iter()
+                .chain(supervisors)
+                .chain(mounts)
+                .chain([sudo_agent]),
+        );
 
         (app, command)
     }
 
     //TODO: currently the first escape unfocuses, and the second calls this function
     fn on_escape(&mut self) -> Task<Message> {
+        if self.rename.take().is_some() {
+            return self.update_focus();
+        }
+        if self.new_tab_menu_open {
+            return self.update(Message::NewTabMenuClose);
+        }
+        if self.sidebar.searching {
+            self.sidebar.searching = false;
+            self.sidebar.filter.clear();
+            return self.update_focus();
+        }
         if self.core.window.show_context {
             // Handle keyboard shortcut page escape
             if let ContextPage::KeyboardShortcuts = self.context_page {
@@ -1935,6 +4471,7 @@ impl Application for App {
         if self.core.window.show_context {
             Task::none()
         } else {
+            self.secrets_focus = None;
             #[cfg(feature = "password_manager")]
             if self.context_page == ContextPage::PasswordManager {
                 self.password_mgr.clear();
@@ -1992,6 +4529,9 @@ impl Application for App {
                 return self.save_color_schemes(color_scheme_kind);
             }
             Message::ColorSchemeExport(color_scheme_kind, color_scheme_id_opt) => {
+                if self.color_scheme_io.is_some() {
+                    return Task::none();
+                }
                 self.color_scheme_expanded = None;
                 if let Some(color_scheme_name) = match color_scheme_id_opt {
                     Some(color_scheme_id) => self
@@ -2020,87 +4560,49 @@ impl Application for App {
                 }
             }
             Message::ColorSchemeExportResult(color_scheme_kind, color_scheme_id_opt, result) => {
-                //TODO: show errors in UI
                 self.dialog_opt = None;
-                if let DialogResult::Open(paths) = result {
-                    let path = &paths[0];
-                    match color_scheme_id_opt {
-                        Some(color_scheme_id) => {
-                            if let Some(color_scheme) = self
-                                .config
-                                .color_schemes(color_scheme_kind)
-                                .get(&color_scheme_id)
-                            {
-                                match ron::ser::to_string_pretty(
-                                    &color_scheme,
-                                    ron::ser::PrettyConfig::new(),
-                                ) {
-                                    Ok(ron) => {
-                                        if let Err(err) = fs::write(path, ron) {
-                                            log::error!(
-                                                "failed to export {:?} to {:?}: {}",
-                                                color_scheme_id,
-                                                path,
-                                                err
-                                            );
-                                        }
-                                    }
-                                    Err(err) => {
-                                        log::error!(
-                                            "failed to serialize color scheme {:?}: {}",
-                                            color_scheme_id,
-                                            err
-                                        );
-                                    }
-                                }
-                            } else {
-                                log::error!("failed to find color scheme {:?}", color_scheme_id);
-                            }
-                        }
-                        None => {
-                            let name = format!("COSMIC {:?}", color_scheme_kind);
-                            let color_scheme = match color_scheme_kind {
-                                ColorSchemeKind::Dark => ColorScheme::from((
-                                    name.as_str(),
-                                    &terminal_theme::cosmic_dark(),
-                                )),
-                                ColorSchemeKind::Light => ColorScheme::from((
-                                    name.as_str(),
-                                    &terminal_theme::cosmic_light(),
-                                )),
-                            };
-                            //TODO: do not duplicate code
-                            match ron::ser::to_string_pretty(
-                                &color_scheme,
-                                ron::ser::PrettyConfig::new(),
-                            ) {
-                                Ok(ron) => {
-                                    if let Err(err) = fs::write(path, ron) {
-                                        log::error!(
-                                            "failed to export {:?} to {:?}: {}",
-                                            color_scheme.name,
-                                            path,
-                                            err
-                                        );
-                                    }
-                                }
-                                Err(err) => {
-                                    log::error!(
-                                        "failed to serialize color scheme {:?}: {}",
-                                        color_scheme.name,
-                                        err
-                                    );
-                                }
-                            }
-                        }
+                let DialogResult::Open(paths) = result else { return Task::none(); };
+                let Some(path) = paths.into_iter().next() else { return Task::none(); };
+                let scheme = match color_scheme_id_opt {
+                    Some(id) => self.config.color_schemes(color_scheme_kind).get(&id).cloned(),
+                    None => {
+                        let name = format!("COSMIC {:?}", color_scheme_kind);
+                        Some(match color_scheme_kind {
+                            ColorSchemeKind::Dark => ColorScheme::from((name.as_str(), &terminal_theme::cosmic_dark())),
+                            ColorSchemeKind::Light => ColorScheme::from((name.as_str(), &terminal_theme::cosmic_light())),
+                        })
                     }
+                };
+                let Some(scheme) = scheme else { return Task::none(); };
+                self.color_scheme_io = Some(fl!("color-scheme-exporting"));
+                self.color_scheme_io_generation += 1;
+                self.color_scheme_io_slow = false;
+                let generation = self.color_scheme_io_generation;
+                let work = cosmic::task::future(async move {
+                    let result = blocking(move || {
+                        let ron = ron::ser::to_string_pretty(&scheme, ron::ser::PrettyConfig::new())
+                            .map_err(|err| err.to_string())?;
+                        fs::write(&path, ron).map_err(|err| format!("{}: {err}", path.display()))
+                    }).await;
+                    Message::ColorSchemeExported(result)
+                });
+                return Task::batch([work, cosmic::task::future(async move {
+                    tokio::time::sleep(Duration::from_secs(15)).await;
+                    Message::ColorSchemeIoSlow(generation)
+                })]);
+            }
+            Message::ColorSchemeExported(result) => {
+                self.color_scheme_io = None;
+                self.color_scheme_io_slow = false;
+                if let Err(err) = result {
+                    self.color_scheme_errors.push(err);
                 }
             }
             Message::ColorSchemeExpand(color_scheme_kind, color_scheme_id_opt) => {
                 self.color_scheme_expanded = Some((color_scheme_kind, color_scheme_id_opt));
             }
             Message::ColorSchemeImport(color_scheme_kind) => {
-                if self.dialog_opt.is_none() {
+                if self.dialog_opt.is_none() && self.color_scheme_io.is_none() {
                     self.color_scheme_errors.clear();
                     let (dialog, command) = Dialog::new(
                         DialogSettings::new().kind(DialogKind::OpenMultipleFiles),
@@ -2113,37 +4615,48 @@ impl Application for App {
             }
             Message::ColorSchemeImportResult(color_scheme_kind, result) => {
                 self.dialog_opt = None;
-                if let DialogResult::Open(paths) = result {
-                    self.color_scheme_errors.clear();
-                    for path in &paths {
-                        let mut file = match fs::File::open(path) {
-                            Ok(ok) => ok,
-                            Err(err) => {
-                                self.color_scheme_errors
-                                    .push(format!("Failed to open {path:?}: {err}"));
-                                continue;
-                            }
-                        };
-                        match ron::de::from_reader::<_, ColorScheme>(&mut file) {
-                            Ok(color_scheme) => {
-                                // Get next color_scheme ID
-                                let color_scheme_id = self
-                                    .config
-                                    .color_schemes(color_scheme_kind)
-                                    .last_key_value()
-                                    .map(|(id, _)| ColorSchemeId(id.0 + 1))
-                                    .unwrap_or_default();
-                                self.config
-                                    .color_schemes_mut(color_scheme_kind)
-                                    .insert(color_scheme_id, color_scheme);
-                            }
-                            Err(err) => {
-                                self.color_scheme_errors
-                                    .push(format!("Failed to parse {path:?}: {err}"));
-                            }
+                let DialogResult::Open(paths) = result else { return Task::none(); };
+                self.color_scheme_errors.clear();
+                self.color_scheme_io = Some(fl!("color-scheme-importing"));
+                self.color_scheme_io_generation += 1;
+                self.color_scheme_io_slow = false;
+                let generation = self.color_scheme_io_generation;
+                let work = cosmic::task::future(async move {
+                    let results = blocking(move || {
+                        Ok(paths.into_iter().map(|path| {
+                            let file = fs::File::open(&path)
+                                .map_err(|err| format!("Failed to open {path:?}: {err}"))?;
+                            ron::de::from_reader::<_, ColorScheme>(file)
+                                .map_err(|err| format!("Failed to parse {path:?}: {err}"))
+                        }).collect::<Vec<_>>())
+                    }).await.unwrap_or_else(|err| vec![Err(err)]);
+                    Message::ColorSchemeImported(color_scheme_kind, results)
+                });
+                return Task::batch([work, cosmic::task::future(async move {
+                    tokio::time::sleep(Duration::from_secs(15)).await;
+                    Message::ColorSchemeIoSlow(generation)
+                })]);
+            }
+            Message::ColorSchemeImported(color_scheme_kind, results) => {
+                self.color_scheme_io = None;
+                self.color_scheme_io_slow = false;
+                for result in results {
+                    match result {
+                        Ok(color_scheme) => {
+                            let id = self.config.color_schemes(color_scheme_kind)
+                                .last_key_value()
+                                .map(|(id, _)| ColorSchemeId(id.0 + 1))
+                                .unwrap_or_default();
+                            self.config.color_schemes_mut(color_scheme_kind).insert(id, color_scheme);
                         }
+                        Err(err) => self.color_scheme_errors.push(err),
                     }
-                    return self.save_color_schemes(color_scheme_kind);
+                }
+                return self.save_color_schemes(color_scheme_kind);
+            }
+            Message::ColorSchemeIoSlow(generation) => {
+                if self.color_scheme_io.is_some() && self.color_scheme_io_generation == generation {
+                    self.color_scheme_io_slow = true;
                 }
             }
             Message::ColorSchemeRename(color_scheme_kind, color_scheme_id, color_scheme_name) => {
@@ -2350,6 +4863,12 @@ impl Application for App {
                     return dialog.update(*dialog_message);
                 }
             }
+            Message::Drop(Some((pane, _entity, DndDrop {
+                session: Some(session),
+                ..
+            }))) => {
+                return self.receive_tab(pane, session);
+            }
             Message::Drop(Some((pane, entity, data))) => {
                 self.pane_model.set_focus(pane);
                 if let Ok(value) = shlex::try_join(data.paths.iter().filter_map(|p| p.to_str())) {
@@ -2514,6 +5033,40 @@ impl Application for App {
                     }
                 }
             }
+            Message::OpenLocallyByMenu => {
+                if self.pending_commands.contains_key("open-locally") {
+                    return Task::none();
+                }
+                if let Some(tab_model) = self.pane_model.active() {
+                    let entity = tab_model.active();
+                    let session = tab_model.data::<agent::Session>(entity).cloned();
+                    if let Some(terminal) = tab_model.data::<Mutex<Terminal>>(entity) {
+                        let mut terminal = terminal.lock().unwrap();
+                        let target = terminal
+                            .context_menu
+                            .as_ref()
+                            .and_then(|state| state.link.clone().or_else(|| state.word.clone()));
+                        terminal.context_menu = None;
+                        terminal.active_regex_match = None;
+                        terminal.needs_update = true;
+                        if let (Some(session), Some(target)) = (session, target) {
+                            self.pending_commands.insert("open-locally", fl!("opening-locally"));
+                            return cosmic::task::future(async move {
+                                Message::OpenLocallyResult(
+                                    agent::open_locally(session, target).await,
+                                )
+                            });
+                        }
+                    }
+                }
+            }
+            Message::OpenLocallyResult(result) => {
+                self.pending_commands.remove("open-locally");
+                if let Err(err) = result {
+                    log::warn!("failed to open locally: {}", err);
+                    return self.file_open_error(fl!("open-locally-failed", error = err.as_str()), err);
+                }
+            }
             Message::Modifiers(modifiers) => {
                 self.modifiers = modifiers;
             }
@@ -2589,7 +5142,7 @@ impl Application for App {
                     segmented_button::ModelBuilder::default().build(),
                 );
                 if let Some((pane, _)) = result {
-                    self.terminal_ids.insert(pane, widget::Id::unique());
+                    self.terminal_ids.insert(pane, field_id("terminal"));
                     let command =
                         self.create_and_focus_new_terminal(pane, self.get_default_profile(), false);
                     self.pane_model.panes_created += 1;
@@ -2702,7 +5255,1708 @@ impl Application for App {
                 self.profile_expanded = Some(profile_id);
                 return self.save_profiles();
             }
+            Message::SidebarNewMenu => {
+                let open = self.new_tab_menu_open && self.new_tab_menu_in_sidebar;
+                self.new_tab_menu_open = false;
+                if open {
+                    return self.update(Message::NewTabMenuClose);
+                }
+                let task = self.update(Message::NewTabMenuToggle);
+                self.new_tab_menu_in_sidebar = true;
+                return task;
+            }
+            Message::SidebarPeerFound(session, found) => match found {
+                // Open it here straight away, with a bar offering the other
+                // window instead
+                Ok(Some(peer)) => {
+                    let attached = self.update(Message::RemoteAttach(session.clone()));
+                    if let Some((pane, entity)) = self.session_tab(&session)
+                        && let Some(tab_model) = self.pane_model.panes.get_mut(pane)
+                    {
+                        tab_model.data_set::<TabShared>(entity, TabShared { peer });
+                    }
+                    return attached;
+                }
+                // Attached on another computer, or in a window that cannot
+                // say: open it here too
+                result => {
+                    if let Err(err) = result {
+                        log::warn!("could not ask the other windows: {err}");
+                    }
+                    return self.update(Message::RemoteAttach(session));
+                }
+            },
+            Message::SharedGoThere(entity) => {
+                let Some((pane, peer, session)) = self.shared_tab(entity) else {
+                    return Task::none();
+                };
+                let descriptor = session.descriptor();
+                // The copy here goes, leaving the session to the other window
+                self.pane_model.set_focus(pane);
+                let closed = self.update(Message::TabClose(Some(entity)));
+                // Wayland raises a window only with a token from the one in
+                // front
+                let raise = cosmic::iced::platform_specific::shell::commands::activation::request_token(
+                    Some(Self::APP_ID.to_string()),
+                    self.core.main_window_id(),
+                )
+                .map(move |token| {
+                    cosmic::Action::App(Message::PeerFocusToken(peer.clone(), descriptor.clone(), token))
+                });
+                return Task::batch([raise, closed]);
+            }
+            Message::SharedMoveHere(entity) => {
+                let Some((pane, peer, session)) = self.shared_tab(entity) else {
+                    return Task::none();
+                };
+                if let Some(tab_model) = self.pane_model.panes.get_mut(pane) {
+                    tab_model.data_remove::<TabShared>(entity);
+                }
+                let descriptor = session.descriptor();
+                return cosmic::task::future(async move {
+                    Message::PeerAsked(peers::release(peer, descriptor).await)
+                });
+            }
+            Message::SharedDismiss(entity) => {
+                if let Some(pane) = self.tab_pane(entity)
+                    && let Some(tab_model) = self.pane_model.panes.get_mut(pane)
+                {
+                    tab_model.data_remove::<TabShared>(entity);
+                }
+            }
+            Message::PeerFocusToken(peer, descriptor, token) => {
+                return cosmic::task::future(async move {
+                    Message::PeerAsked(peers::focus(peer, descriptor, token.unwrap_or_default()).await)
+                });
+            }
+            Message::PeerAsked(result) => {
+                if let Err(err) = result {
+                    log::warn!("another window did not answer: {err}");
+                }
+            }
+            Message::SessionRename(entity_opt) => {
+                let session = self.pane_model.active().and_then(|tab_model| {
+                    let entity = entity_opt.unwrap_or_else(|| tab_model.active());
+                    tab_model.data::<agent::Session>(entity).cloned()
+                });
+                if let Some(session) = session.filter(|s| s.agent().is_some_and(|a| a != config::Agent::Shell)) {
+                    let current = self.sidebar.title(&session).unwrap_or_default().to_string();
+                    self.rename = Some((session, current));
+                    return Task::batch([
+                        widget::text_input::focus(self.rename_id.clone()),
+                        widget::text_input::select_all(self.rename_id.clone()),
+                    ]);
+                }
+            }
+            Message::RenameInput(name) => {
+                if let Some((_, draft)) = &mut self.rename {
+                    *draft = name;
+                }
+            }
+            Message::RenameSubmit => {
+                if self.pending_commands.contains_key("rename") {
+                    return Task::none();
+                }
+                let Some((session, name)) = self.rename.take() else {
+                    return Task::none();
+                };
+                let name = name.trim().to_string();
+                let Some(kind) = session.agent().filter(|_| !name.is_empty()) else {
+                    return self.update_focus();
+                };
+                self.sidebar.set_title(&session, &name);
+                self.pending_commands.insert("rename", fl!("renaming-conversation"));
+                // The agent retitles its tab too, a moment later
+                let retitle = match self.session_tab(&session) {
+                    Some((pane, entity)) => {
+                        if let Some(tab_model) = self.pane_model.panes.get_mut(pane) {
+                            tab_model.text_set(entity, name.clone());
+                        }
+                        self.update_title(None)
+                    }
+                    None => Task::none(),
+                };
+                return Task::batch([
+                    retitle,
+                    self.update_focus(),
+                    cosmic::task::future(async move {
+                        Message::Renamed(agent::rename_conversation(session, kind, Some(name)).await)
+                    }),
+                ]);
+            }
+            Message::RenameCancel => {
+                self.rename = None;
+                return self.update_focus();
+            }
+            Message::Renamed(result) => {
+                self.pending_commands.remove("rename");
+                if let Err(err) = result {
+                    return self
+                        .toasts
+                        .push(widget::toaster::Toast::new(fl!(
+                            "rename-failed",
+                            error = err.as_str()
+                        )))
+                        .map(cosmic::Action::App);
+                }
+            }
+            Message::SudoConnected(agent) => {
+                self.secrets.agent = Some(agent);
+                self.secrets.send(cosmic_term::sudo_control::ToAgent::Status);
+            }
+            Message::SudoDisconnected => {
+                self.secrets.agent = None;
+                self.secrets_focus = None;
+                self.secrets.pending.clear();
+                self.secrets.state = Default::default();
+                return self.retitle_agent_tabs();
+            }
+            Message::SudoEvent(event) => {
+                let was_unlocked = self.secrets.state.unlocked;
+                let new = self.secrets.receive(&event);
+                let mut tasks = vec![self.retitle_agent_tabs(), self.sudo_arm()];
+                // A field that goes away takes the focus with it, without
+                // saying so: give the keys back to the terminal
+                let gone = match &event {
+                    cosmic_term::sudo_control::FromAgent::Done { .. } => self.secrets_focus.as_ref().is_some_and(|focus| {
+                        !self.secrets.pending.values().any(|p| &p.input == focus)
+                            && ![&self.secrets.password_id, &self.secrets.again_id, &self.secrets.ask_id]
+                                .into_iter()
+                                .chain(&self.secrets.form_ids)
+                                .any(|id| id == focus)
+                    }),
+                    cosmic_term::sudo_control::FromAgent::State(state) => {
+                        state.unlocked != was_unlocked
+                            && self.secrets_focus.as_ref().is_some_and(|focus| {
+                                [&self.secrets.password_id, &self.secrets.again_id].contains(&focus)
+                            })
+                    }
+                    // A wrong password: its field is back, to type again
+                    cosmic_term::sudo_control::FromAgent::Retry { id, .. } => {
+                        if let Some(p) = self.secrets.pending.get(id) {
+                            tasks.push(self.update(Message::SecretsFocus(p.input.clone())));
+                        }
+                        false
+                    }
+                    _ => false,
+                };
+                if gone {
+                    self.secrets_focus = None;
+                    tasks.push(self.update_focus());
+                }
+                if let Some(id) = new {
+                    tasks.push(self.sudo_notify(id));
+                    // A request from a session no tab here shows: its popup's
+                    // field takes the keys
+                    if let Some(p) = self.secrets.pending.get(&id) {
+                        let shown = p.request.session.as_ref().is_some_and(|session| {
+                            self.open_sessions().iter().any(|s| &s.name == session)
+                        });
+                        if !shown && p.request.approval == cosmic_term::sudo_control::Approval::Password {
+                            tasks.push(self.update(Message::SecretsFocus(p.input.clone())));
+                        }
+                    }
+                }
+                match event {
+                    cosmic_term::sudo_control::FromAgent::Generated(info) => {
+                        if let Some((dest, machine)) = self.secrets.setting_up.take()
+                            && machine == info.host
+                        {
+                            tasks.push(cosmic::task::future(async move {
+                                let result = agent::sudo::prepare_setup(dest.clone(), info.public).await;
+                                Message::SudoPrepared(dest, result)
+                            }));
+                        }
+                    }
+                    // Said, as it was asked of no one
+                    cosmic_term::sudo_control::FromAgent::AutoApproved(request) => {
+                        let command = request.command.join(" ");
+                        tasks.push(
+                            self.toasts
+                                .push(widget::toaster::Toast::new(fl!(
+                                    "sudo-auto-approved",
+                                    host = request.host.as_str(),
+                                    command = command.as_str()
+                                )))
+                                .map(cosmic::Action::App),
+                        );
+                    }
+                    cosmic_term::sudo_control::FromAgent::Secret { secret, .. } => {
+                        if let Some(pane) = self.secrets_paste_pane.take() {
+                            tasks.push(self.update(Message::PasswordPaste(secret.into(), pane)));
+                        }
+                    }
+                    _ => {}
+                }
+                return Task::batch(tasks);
+            }
+            Message::SudoPassword(id, password) => {
+                if let Some(p) = self.secrets.pending.get_mut(&id) {
+                    p.password = password;
+                }
+            }
+            Message::SudoApprove(id) => {
+                if let Some(p) = self.secrets.pending.get_mut(&id) {
+                    // The store password, when one is typed, whatever else
+                    // the request offers
+                    let password = (!p.password.is_empty()).then(|| std::mem::take(&mut p.password));
+                    p.error = None;
+                    p.checking = password.is_some();
+                    self.secrets.send(cosmic_term::sudo_control::ToAgent::Approve { id, password });
+                }
+            }
+            Message::SudoDeny(id) => {
+                self.secrets.send(cosmic_term::sudo_control::ToAgent::Deny { id });
+            }
+            Message::SudoRedraw => {}
+            Message::SudoSetup(dest, machine) => {
+                self.secrets.setting_up = Some((dest, machine.clone()));
+                self.secrets.send(cosmic_term::sudo_control::ToAgent::SetUpMachine { host: machine });
+            }
+            Message::SudoPrepared(dest, result) => match result {
+                // The one ordinary sudo: in a tab on the machine, where the
+                // user types the password for real
+                Ok(command) => {
+                    let tab = agent::command_tab(&dest, &command);
+                    return self.create_and_focus_new_terminal_with(
+                        self.pane_model.focused(),
+                        None,
+                        false,
+                        Some(tab),
+                    );
+                }
+                Err(err) => return self.sudo_toast(err),
+            },
+            Message::SudoFinger(index) => {
+                self.secrets.finger = index;
+            }
+            Message::SudoEnrol => {
+                let finger = secrets::FINGERS[self.secrets.finger.min(secrets::FINGERS.len() - 1)];
+                self.secrets.enrolment = Some(fl!("sudo-enrol-touch"));
+                self.secrets.send(cosmic_term::sudo_control::ToAgent::Enrol {
+                    finger: finger.to_string(),
+                });
+            }
+            Message::SecretsToggle => {
+                let task = self.update(Message::ToggleContextPage(ContextPage::Secrets));
+                if self.core.window.show_context && self.context_page == ContextPage::Secrets {
+                    self.secrets.send(cosmic_term::sudo_control::ToAgent::Status);
+                    // Only a locked store has a field to type in
+                    if !self.secrets.state.unlocked {
+                        self.secrets_focus = Some(self.secrets.password_id.clone());
+                        return Task::batch([task, widget::text_input::focus(self.secrets.password_id.clone())]);
+                    }
+                } else {
+                    self.secrets_focus = None;
+                }
+                return task;
+            }
+            Message::TerminalClickFocus(pane) => {
+                // Whatever field had the keys has lost them, and so has every
+                // other terminal: the widget took them itself, so the focus
+                // is moved properly here, as a click on the pane does
+                self.secrets_focus = None;
+                self.pane_model.set_focus(pane);
+                return self.update_focus();
+            }
+            Message::SecretsUnfocus(id) => {
+                // Another field may have the focus already, as the field
+                // that lost it can say so after
+                if self.secrets_focus.as_ref() == Some(&id) {
+                    self.secrets_focus = None;
+                }
+            }
+            Message::SecretsFocus(id) => {
+                // Focusing the field through the app takes the focus from
+                // the terminal, which a click on the field alone does not
+                self.secrets_focus = Some(id.clone());
+                return widget::text_input::focus(id);
+            }
+            Message::SecretsPassword(password) => self.secrets.password = password,
+            Message::SecretsAgain(again) => self.secrets.again = again,
+            Message::SecretsCreate => {
+                if !self.secrets.password.is_empty() && self.secrets.password == self.secrets.again {
+                    let password = std::mem::take(&mut self.secrets.password);
+                    self.secrets.again.clear();
+                    self.secrets.error = None;
+                    self.secrets.send(cosmic_term::sudo_control::ToAgent::Create { password });
+                }
+            }
+            Message::SecretsUnlock => {
+                let password = std::mem::take(&mut self.secrets.password);
+                self.secrets.error = None;
+                self.secrets.send(cosmic_term::sudo_control::ToAgent::Unlock { password });
+            }
+            Message::SecretsLock => {
+                self.secrets.send(cosmic_term::sudo_control::ToAgent::Lock);
+            }
+            Message::SecretsPaste(id) => {
+                self.secrets_paste_pane = Some(self.pane_model.focused());
+                self.secrets.error = None;
+                let entry = self.secrets.state.entries.iter().find(|e| e.id == id);
+                let asks = entry.is_some_and(|e| e.always_ask)
+                    || self.secrets.policy().paste.approval == cosmic_term::sudo_control::ApprovalRule::Password;
+                if asks {
+                    self.secrets.asking = Some(secrets::Asking { id, password: String::new() });
+                    // As from the right-click menu: the pane shows the ask
+                    let mut tasks = Vec::new();
+                    if !(self.core.window.show_context && self.context_page == ContextPage::Secrets) {
+                        tasks.push(self.update(Message::ToggleContextPage(ContextPage::Secrets)));
+                    }
+                    tasks.push(self.update(Message::SecretsFocus(self.secrets.ask_id.clone())));
+                    return Task::batch(tasks);
+                } else {
+                    self.secrets.send(cosmic_term::sudo_control::ToAgent::Reveal { id, password: None });
+                }
+            }
+            Message::SecretsAskPassword(password) => {
+                if let Some(asking) = &mut self.secrets.asking {
+                    asking.password = password;
+                }
+            }
+            Message::SecretsAskSubmit => {
+                if let Some(asking) = self.secrets.asking.take() {
+                    self.secrets.send(cosmic_term::sudo_control::ToAgent::Reveal {
+                        id: asking.id,
+                        password: Some(asking.password),
+                    });
+                }
+            }
+            Message::SecretsAdd(host) => {
+                self.secrets.form = Some(secrets::Form {
+                    id: None,
+                    edit: cosmic_term::sudo_control::EntryEdit { host, ..Default::default() },
+                });
+            }
+            Message::SecretsEdit(id) => {
+                self.secrets.form = id.and_then(|id| {
+                    let entry = self.secrets.state.entries.iter().find(|e| e.id == id)?;
+                    Some(secrets::Form {
+                        id: Some(id),
+                        edit: cosmic_term::sudo_control::EntryEdit {
+                            host: entry.host.clone(),
+                            label: entry.label.clone(),
+                            note: entry.note.clone(),
+                            secret: String::new(),
+                            always_ask: entry.always_ask,
+                        },
+                    })
+                });
+            }
+            Message::SecretsFormLabel(text) => {
+                if let Some(form) = &mut self.secrets.form {
+                    form.edit.label = text;
+                }
+            }
+            Message::SecretsFormSecret(text) => {
+                if let Some(form) = &mut self.secrets.form {
+                    form.edit.secret = text;
+                }
+            }
+            Message::SecretsFormNote(text) => {
+                if let Some(form) = &mut self.secrets.form {
+                    form.edit.note = text;
+                }
+            }
+            Message::SecretsFormAlwaysAsk(on) => {
+                if let Some(form) = &mut self.secrets.form {
+                    form.edit.always_ask = on;
+                }
+            }
+            Message::SecretsSave => {
+                if let Some(form) = self.secrets.form.take() {
+                    self.secrets.send(match form.id {
+                        Some(id) => cosmic_term::sudo_control::ToAgent::EditEntry { id, edit: form.edit },
+                        None => cosmic_term::sudo_control::ToAgent::AddEntry(form.edit),
+                    });
+                }
+            }
+            Message::SecretsDelete(id) => {
+                self.secrets.send(cosmic_term::sudo_control::ToAgent::DeleteEntry { id });
+            }
+            Message::SecretsPolicy(policy) => {
+                self.secrets.send(cosmic_term::sudo_control::ToAgent::SetPolicy(policy));
+            }
+            Message::SecretsImport => {
+                #[cfg(feature = "password_manager")]
+                return cosmic::task::future(async {
+                    Message::SecretsImported(
+                        password_manager::store::export_all().await.map_err(|err| err.to_string()),
+                    )
+                });
+            }
+            Message::SecretsImported(result) => match result {
+                Ok(found) => {
+                    for (name, secret) in found {
+                        self.secrets.send(cosmic_term::sudo_control::ToAgent::AddEntry(
+                            cosmic_term::sudo_control::EntryEdit {
+                                host: None,
+                                label: name,
+                                note: fl!("secrets-imported"),
+                                secret,
+                                always_ask: false,
+                            },
+                        ));
+                    }
+                }
+                Err(err) => self.secrets.error = Some(err),
+            },
+            Message::SudoResult(what, result) => {
+                if let Err(err) = result {
+                    log::warn!("{what}: {err}");
+                }
+            }
+            Message::RemoteFilesOpen(host) => {
+                let show = if self.core.window.show_context && self.context_page == ContextPage::RemoteFiles {
+                    Task::none()
+                } else {
+                    self.update(Message::ToggleContextPage(ContextPage::RemoteFiles))
+                };
+                let mut tasks = vec![show];
+                let mut hosts: BTreeSet<_> = self.mount_setup_machines().into_iter().map(|(host, _)| host).collect();
+                hosts.insert(host);
+                for host in hosts {
+                    if !self.mount_setup.contains_key(&host) {
+                        tasks.push(self.update(Message::RemoteFilesCheck(host)));
+                    }
+                }
+                return Task::batch(tasks);
+            }
+            Message::RemoteFilesCheck(host) => {
+                let request_id = cosmic_term::random_hex(12);
+                self.mount_setup.insert(host.clone(), mount_setup_view::Check {
+                    request_id: request_id.clone(), result: None,
+                });
+                let check_host = host.clone();
+                let connection_id = request_id.clone();
+                let check = cosmic::task::future(async move {
+                    let result = agent::mount_setup(check_host.clone()).await;
+                    Message::RemoteFilesChecked(check_host, request_id, result)
+                });
+                if !host.is_empty() {
+                    return Task::batch([check, cosmic::task::future(async move {
+                        let result = agent::mounts::connect(host.clone()).await;
+                        Message::RemoteFilesConnectionChecked(host, connection_id, result)
+                    })]);
+                }
+                return check;
+            }
+            Message::RemoteFilesChecked(host, request_id, result) => {
+                if let Some(check) = self.mount_setup.get_mut(&host)
+                    && check.request_id == request_id
+                {
+                    if result.as_ref().is_ok_and(|status| status.ready()) {
+                        self.tools_reported.remove(&host);
+                        if self.mount_errors.get(&host).is_some_and(|error| error.contains("sshfs is not installed")) {
+                            self.mount_errors.remove(&host);
+                        }
+                    }
+                    check.result = Some(result);
+                }
+            }
+            Message::RemoteFilesCopy(ref host) | Message::RemoteFilesInstall(ref host) => {
+                let install = matches!(&message, Message::RemoteFilesInstall(_));
+                let status = self.mount_setup.get(host)
+                    .and_then(|check| check.result.as_ref())
+                    .and_then(|result| result.as_ref().ok());
+                if let Some(command) = status.and_then(|status| status.install_command()) {
+                    if !install { return clipboard::write(command); }
+                    // This tab runs on the explicitly named computer. Sudo
+                    // asks there; no system reboot is issued by the app.
+                    let name = self.mount_setup_machines().into_iter().find(|(h, _)| h == host)
+                        .map(|(_, name)| name).unwrap_or_else(|| host.clone());
+                    let after = if status.is_some_and(|status| status.atomic) {
+                        fl!("remote-files-reboot", machine = name.as_str())
+                    } else {
+                        fl!("remote-files-after-install")
+                    };
+                    let command = format!("{command}\nif [ $? -eq 0 ]; then printf '%s\\n' {}; fi", agent::sh_quote(&after));
+                    let tab = agent::command_tab(host, &command);
+                    let close = self.update(Message::ToggleContextPage(ContextPage::RemoteFiles));
+                    let terminal = self.create_and_focus_new_terminal_with(
+                        self.pane_model.focused(), None, false, Some(tab),
+                    );
+                    return Task::batch([close, terminal]);
+                }
+            }
+            Message::RemoteFilesConnectionChecked(host, request_id, result) => {
+                if self.mount_setup.get(&host).is_some_and(|check| check.request_id == request_id) {
+                    return self.mount_connection_result(host, result);
+                }
+            }
+            Message::MountsConnected(host, result) => {
+                // An explicit check supersedes the connection started at
+                // startup. Its tagged result owns the current diagnosis.
+                if !self.mount_setup.contains_key(&host) {
+                    return self.mount_connection_result(host, result);
+                }
+            }
+            Message::PeerRequest(request) => match request {
+                peers::Request::Focus(descriptor, token) => {
+                    let Some(session) = agent::Session::from_descriptor(&descriptor) else {
+                        return Task::none();
+                    };
+                    let Some((pane, entity)) = self.session_tab(&session) else {
+                        return Task::none();
+                    };
+                    self.pane_model.set_focus(pane);
+                    if let Some(tab_model) = self.pane_model.panes.get_mut(pane) {
+                        tab_model.activate(entity);
+                    }
+                    let raise = match self.core.main_window_id() {
+                        Some(window) if !token.is_empty() => {
+                            cosmic::iced::platform_specific::shell::commands::activation::activate(
+                                window, token,
+                            )
+                        }
+                        _ => Task::none(),
+                    };
+                    return Task::batch([raise, self.update_title(Some(pane))]);
+                }
+                peers::Request::Release(descriptor) => {
+                    let Some(session) = agent::Session::from_descriptor(&descriptor) else {
+                        return Task::none();
+                    };
+                    if let Some((pane, entity)) = self.session_tab(&session) {
+                        self.pane_model.set_focus(pane);
+                        return self.update(Message::TabClose(Some(entity)));
+                    }
+                }
+            },
+            Message::SidebarAction(key, action) => {
+                let Some((session, summary)) = self.sidebar.find(key) else {
+                    return Task::none();
+                };
+                let agent = summary.agents.first().cloned();
+                let cwd = summary.cwd.clone().unwrap_or_default();
+                let tab = self.session_tab(&session);
+                // Tab actions act on the focused pane's tabs
+                if let Some((pane, _)) = tab {
+                    self.pane_model.set_focus(pane);
+                }
+                match action {
+                    sidebar::Action::Open => return self.update(Message::SidebarOpen(session)),
+                    sidebar::Action::CloseTab => {
+                        if let Some((_, entity)) = tab {
+                            return self.update(Message::TabClose(Some(entity)));
+                        }
+                    }
+                    sidebar::Action::Rename => {
+                        let current = agent.map(|a| a.title).unwrap_or_default();
+                        self.rename = Some((session, current));
+                        return Task::batch([
+                            widget::text_input::focus(self.rename_id.clone()),
+                            widget::text_input::select_all(self.rename_id.clone()),
+                        ]);
+                    }
+                    sidebar::Action::RenameAuto => {
+                        if self.pending_commands.contains_key("rename") {
+                            return Task::none();
+                        }
+                        let Some(kind) = session.agent() else {
+                            return Task::none();
+                        };
+                        self.pending_commands.insert("rename", fl!("renaming-conversation"));
+                        return cosmic::task::future(async move {
+                            Message::Renamed(agent::rename_conversation(session, kind, None).await)
+                        });
+                    }
+                    sidebar::Action::End => {
+                        if self.pending_commands.contains_key("end-session") {
+                            return Task::none();
+                        }
+                        // Gone from the list now, rather than at the next scan
+                        if let Some(Some(Ok(summaries))) =
+                            self.sidebar.hosts.get_mut(&session.host).map(|h| h.summaries.as_mut())
+                        {
+                            summaries.retain(|s| s.name != session.name);
+                        }
+                        if let Some((_, entity)) = tab {
+                            return self.update(Message::RemoteEnd(Some(entity)));
+                        }
+                        self.pending_commands.insert("end-session", fl!("ending-session"));
+                        return cosmic::task::future(async move {
+                            Message::RemoteEnded(None, agent::kill_session(session).await)
+                        });
+                    }
+                    sidebar::Action::MoveTo(profile_id) | sidebar::Action::ForkTo(profile_id) => {
+                        let mode = if matches!(action, sidebar::Action::MoveTo(_)) {
+                            transfer::Mode::Move
+                        } else {
+                            transfer::Mode::Fork
+                        };
+                        if let Some((_, entity)) = tab {
+                            return self.update(Message::TabTransfer(Some(entity), profile_id, mode));
+                        }
+                        let (Some(agent), Some(kind)) =
+                            (agent, session.agent().and_then(agent_kind))
+                        else {
+                            return Task::none();
+                        };
+                        let Some(id) = agent.conversation.clone() else {
+                            return self.launcher_error(fl!(
+                                "tab-transfer-no-agent",
+                                error = "its conversation was not found"
+                            ));
+                        };
+                        let choice = LaunchChoice::Transfer {
+                            conversation: transfer::ConversationRef {
+                                host: session.host.clone(),
+                                kind,
+                                id,
+                            },
+                            cwd,
+                            title: agent.title.clone(),
+                            mode,
+                        };
+                        // The destination's launcher, with the transfer form open
+                        let pane = self.pane_model.focused();
+                        let opened = self.open_launcher(pane, profile_id);
+                        let Some(launcher) = self.pane_model.panes.get(pane).map(|t| t.active()) else {
+                            return opened;
+                        };
+                        return Task::batch([opened, self.launch_from(launcher, choice)]);
+                    }
+                }
+            }
+            Message::TabHover(pane, hovered) => {
+                self.hovered_tab = hovered.map(|(entity, x)| (pane, entity, x, Instant::now()));
+                if hovered.is_some() {
+                    return cosmic::task::future(async {
+                        tokio::time::sleep(TAB_PREVIEW_DELAY).await;
+                        Message::TabPreviewDue
+                    });
+                }
+            }
+            Message::TabPreviewDue => {}
+            Message::SidebarCompact(compact) => {
+                config_set!(sidebar_compact, compact);
+            }
+            Message::SidebarFilter(filter) => {
+                self.sidebar.filter = filter;
+            }
+            Message::SidebarFilterSubmit => {
+                if let Some(session) = self.sidebar.first_match() {
+                    self.sidebar.filter.clear();
+                    self.sidebar.searching = false;
+                    return self.update(Message::SidebarOpen(session));
+                }
+            }
+            Message::SidebarSearching(searching) => {
+                self.sidebar.searching = searching;
+                // As for the Secrets pane's fields: the terminal gives up
+                // the focus
+                if searching {
+                    return widget::text_input::focus(self.sidebar.filter_id.clone());
+                }
+            }
+            Message::NewTabMenuToggle => {
+                if self.new_tab_menu_open {
+                    return self.update(Message::NewTabMenuClose);
+                }
+                self.new_tab_menu_open = true;
+                self.new_tab_menu_in_sidebar = false;
+            }
+            Message::NewTabMenuClose => {
+                self.new_tab_menu_open = false;
+                return self.update_focus();
+            }
+            Message::RemoteAttach(session) => {
+                self.new_tab_menu_open = false;
+                return self.create_and_focus_new_terminal_with(
+                    self.pane_model.focused(),
+                    None,
+                    false,
+                    Some((agent::attach(&session), session)),
+                );
+            }
+            Message::RemoteEnd(entity_opt) => {
+                if self.pending_commands.contains_key("end-session") {
+                    return Task::none();
+                }
+                let session = self.pane_model.active().and_then(|tab_model| {
+                    let entity = entity_opt.unwrap_or_else(|| tab_model.active());
+                    tab_model.data::<agent::Session>(entity).cloned()
+                });
+                if let Some(session) = session {
+                    self.pending_commands.insert("end-session", fl!("ending-session"));
+                    let entity = entity_opt.or_else(|| self.pane_model.active().map(|tab_model| tab_model.active()));
+                    return cosmic::task::future(async move {
+                        Message::RemoteEnded(entity, agent::kill_session(session).await)
+                    });
+                }
+            }
+            Message::CloseToast(id) => {
+                self.toasts.remove(id);
+            }
+            Message::LauncherData(entity, host, result) => {
+                let cache = listing_cache(&host);
+                let state = match result {
+                    Ok(listing) => {
+                        // Kept for when the host is offline
+                        if let Some(dir) = cache.parent()
+                            && fs::create_dir_all(dir).is_ok()
+                            && let Ok(bytes) = serde_json::to_vec(&listing)
+                        {
+                            let _ = fs::write(&cache, bytes);
+                        }
+                        Listing::Ready(listing)
+                    }
+                    Err(error) => {
+                        log::info!("listing {host:?} failed: {error}");
+                        let cached = fs::read(&cache)
+                            .ok()
+                            .and_then(|bytes| serde_json::from_slice(&bytes).ok());
+                        Listing::Offline(cached, error)
+                    }
+                };
+                if let Some(launcher) = self.launcher_mut(entity) {
+                    launcher.listings.insert(host, state);
+                }
+            }
+            Message::LauncherFocus(entity, id) => {
+                // Its pane is the one in front, so that the focus stays where
+                // it was put rather than going back to the other pane, and
+                // the field takes the keys from any terminal holding them
+                if let Some(pane) = self.tab_pane(entity)
+                    && pane != self.pane_model.focused()
+                {
+                    self.pane_model.set_focus(pane);
+                }
+                self.secrets_focus = None;
+                return widget::text_input::focus(id);
+            }
+            Message::LauncherFormCancel(entity) => {
+                if let Some(launcher) = self.launcher_mut(entity) {
+                    launcher.form = None;
+                }
+                return self.update_focus();
+            }
+            Message::LauncherStart(entity, request_id, dir, result) => {
+                if !matches!(self.launcher(entity).and_then(|l| l.pending_action.as_ref()), Some((id, _)) if id == &request_id) {
+                    return Task::none();
+                }
+                if let Some(launcher) = self.launcher_mut(entity) {
+                    launcher.pending_action = None;
+                }
+                match result {
+                Ok(start) => return self.launch_started(entity, None, &dir, &start),
+                Err(err) => return self.launcher_error(err),
+                }
+            }
+            Message::LauncherWorktreeOptions(entity, request_id, result) => {
+                if let Some(launcher) = self.launcher_mut(entity)
+                    && let Some(LauncherForm::Worktree(form)) = &mut launcher.form
+                    && form.request_id == request_id
+                {
+                    form.set_options(result);
+                    // Typing replaces the suggested name
+                    return Task::batch([
+                        widget::text_input::focus(form.branch_id.clone()),
+                        widget::text_input::select_all(form.branch_id.clone()),
+                    ]);
+                }
+            }
+            Message::LauncherWorktreeEdit(entity, field, value) => {
+                if let Some(launcher) = self.launcher_mut(entity)
+                    && let Some(LauncherForm::Worktree(form)) = &mut launcher.form
+                {
+                    form.edit(field, value);
+                }
+            }
+            Message::LauncherWorktreeBase(entity, index) => {
+                if let Some(launcher) = self.launcher_mut(entity)
+                    && let Some(LauncherForm::Worktree(form)) = &mut launcher.form
+                {
+                    form.base = index;
+                }
+            }
+            Message::LauncherWorktreeCreate(entity) => {
+                let host = self.launcher_host(entity);
+                let Some(launcher) = self.launcher_mut(entity) else {
+                    return Task::none();
+                };
+                let Some(LauncherForm::Worktree(form)) = &mut launcher.form else {
+                    return Task::none();
+                };
+                if form.busy {
+                    return Task::none();
+                }
+                let Some(launcher_forms::WorktreeRequest {
+                    repository,
+                    branch,
+                    base,
+                    path,
+                    from,
+                }) = form.request()
+                else {
+                    return Task::none();
+                };
+                form.busy = true;
+                form.error = None;
+                let request_id = form.request_id.clone();
+                return cosmic::task::future(async move {
+                    let result = blocking(move || {
+                        let request = cosmic_term::helper::Request::CreateWorktree {
+                            repository,
+                            branch,
+                            base,
+                            path,
+                            from,
+                        };
+                        match transfer::Machine::call(&agent::HostMachine { host }, request)? {
+                            cosmic_term::helper::Reply::Path { path } => Ok(path),
+                            cosmic_term::helper::Reply::Error { message } => Err(message),
+                            other => Err(format!("unexpected reply: {other:?}")),
+                        }
+                    })
+                    .await;
+                    Message::LauncherWorktreeCreated(entity, request_id, result)
+                });
+            }
+            Message::LauncherWorktreeCreated(entity, request_id, result) => {
+                if !matches!(self.launcher(entity).and_then(|l| l.form.as_ref()),
+                    Some(LauncherForm::Worktree(form)) if form.request_id == request_id && form.busy)
+                {
+                    return Task::none();
+                }
+                match result {
+                Ok(path) => {
+                    return self.launch_from(entity, LaunchChoice::Dir(path.display().to_string()));
+                }
+                Err(err) => {
+                    if let Some(launcher) = self.launcher_mut(entity)
+                        && let Some(LauncherForm::Worktree(form)) = &mut launcher.form
+                    {
+                        form.busy = false;
+                        form.error = Some(err);
+                    }
+                }
+                }
+            }
+            Message::LauncherTransferDraft(entity, request_id, result) => {
+                let result = *result;
+                if !matches!(self.launcher(entity).and_then(|l| l.form.as_ref()),
+                    Some(LauncherForm::Transfer(form)) if form.request_id == request_id && form.draft.is_none())
+                {
+                    return Task::none();
+                }
+                let bound = result
+                    .as_ref()
+                    .ok()
+                    .and_then(|draft| draft.repositories.bound.clone());
+                if let Some(launcher) = self.launcher_mut(entity)
+                    && let Some(LauncherForm::Transfer(form)) = &mut launcher.form
+                {
+                    form.draft = Some(result);
+                }
+                // A known repository needs no choice
+                if let Some(bound) = bound {
+                    return self.update(Message::LauncherTransferChoose(
+                        entity,
+                        transfer::RepoChoice::Existing(bound),
+                    ));
+                }
+            }
+            Message::LauncherTransferChoose(entity, choice) => {
+                let destination = self.launcher_host(entity);
+                let Some(launcher) = self.launcher_mut(entity) else {
+                    return Task::none();
+                };
+                let Some(LauncherForm::Transfer(form)) = &mut launcher.form else {
+                    return Task::none();
+                };
+                if form.busy {
+                    return Task::none();
+                }
+                let Some(Ok(draft)) = form.draft.clone() else {
+                    return Task::none();
+                };
+                form.choice = Some(choice.clone());
+                form.place = None;
+                form.place_generation += 1;
+                let generation = form.place_generation;
+                let request_id = form.request_id.clone();
+                return cosmic::task::future(async move {
+                    let result = blocking(move || {
+                        transfer::place(&agent::HostMachine { host: destination }, &draft, &choice)
+                    })
+                    .await;
+                    Message::LauncherTransferPlace(entity, request_id, generation, Box::new(result))
+                });
+            }
+            Message::LauncherTransferPlace(entity, request_id, generation, result) => {
+                let result = *result;
+                if let Some(launcher) = self.launcher_mut(entity)
+                    && let Some(LauncherForm::Transfer(form)) = &mut launcher.form
+                    && form.request_id == request_id
+                    && form.place_generation == generation
+                {
+                    if let Ok(place) = &result {
+                        form.path = place.new_path.display().to_string();
+                    }
+                    form.place = Some(result);
+                }
+            }
+            Message::LauncherTransferPath(entity, path) => {
+                if let Some(launcher) = self.launcher_mut(entity)
+                    && let Some(LauncherForm::Transfer(form)) = &mut launcher.form
+                {
+                    form.path = path;
+                }
+            }
+            Message::LauncherTransferStart(entity) => {
+                let plan = self.launcher(entity)
+                    .and_then(|launcher| launcher.form.as_ref())
+                    .and_then(|form| match form {
+                        LauncherForm::Transfer(form) if !form.busy => form.plan(),
+                        _ => None,
+                    });
+                let Some(plan) = plan else {
+                    return Task::none();
+                };
+                let transfer_id = plan.draft.id.clone();
+                if self.active_transfers.contains(&transfer_id) {
+                    return Task::none();
+                }
+                let Some(launcher) = self.launcher_mut(entity) else {
+                    return Task::none();
+                };
+                let Some(LauncherForm::Transfer(form)) = &mut launcher.form else {
+                    return Task::none();
+                };
+                form.busy = true;
+                form.progress = transfer::Step::Started;
+                form.stalled = false;
+                form.error = None;
+                let request_id = form.request_id.clone();
+                self.active_transfers.insert(transfer_id.clone());
+                let (send, receive) = iced::futures::channel::mpsc::unbounded();
+                std::thread::spawn(move || {
+                    let progress_send = send.clone();
+                    let progress_id = request_id.clone();
+                    let result = (|| -> Result<transfer::Launch, String> {
+                        let source = agent::HostMachine { host: plan.draft.conversation.host.clone() };
+                        let destination = agent::HostMachine { host: plan.draft.destination.clone() };
+                        let journal = transfer::Journal::new(&cosmic_term::Env::from_process().state_dir);
+                        let _lock = journal.try_lock(&plan.draft.id)?;
+                        transfer::start_with_progress(&source, &destination, &journal, plan,
+                            &|step| { let _ = progress_send.unbounded_send(
+                                Message::LauncherTransferProgress(entity, progress_id.clone(), step)); })
+                    })();
+                    let _ = send.unbounded_send(Message::LauncherTransferDone(entity, request_id, transfer_id, result));
+                });
+                let slow_id = self.launcher(entity).and_then(|launcher| match launcher.form.as_ref() {
+                    Some(LauncherForm::Transfer(form)) => Some(form.request_id.clone()),
+                    _ => None,
+                }).unwrap_or_default();
+                return Task::batch([
+                    cosmic::task::stream(receive),
+                    cosmic::task::future(async move {
+                        tokio::time::sleep(Duration::from_secs(15)).await;
+                        Message::LauncherTransferSlow(entity, slow_id, transfer::Step::Started)
+                    }),
+                ]);
+            }
+            Message::LauncherTransferProgress(entity, request_id, step) => {
+                if let Some(launcher) = self.launcher_mut(entity)
+                    && let Some(LauncherForm::Transfer(form)) = &mut launcher.form
+                    && form.request_id == request_id && form.busy
+                {
+                    form.progress = step;
+                    form.stalled = false;
+                    return cosmic::task::future(async move {
+                        tokio::time::sleep(Duration::from_secs(15)).await;
+                        Message::LauncherTransferSlow(entity, request_id, step)
+                    });
+                }
+            }
+            Message::LauncherTransferSlow(entity, request_id, step) => {
+                if let Some(launcher) = self.launcher_mut(entity)
+                    && let Some(LauncherForm::Transfer(form)) = &mut launcher.form
+                    && form.request_id == request_id && form.busy && form.progress == step
+                {
+                    form.stalled = true;
+                }
+            }
+            Message::LauncherTransferDone(entity, request_id, transfer_id, result) => {
+                self.active_transfers.remove(&transfer_id);
+                if !matches!(self.launcher(entity).and_then(|l| l.form.as_ref()),
+                    Some(LauncherForm::Transfer(form)) if form.request_id == request_id && form.busy)
+                {
+                    return Task::none();
+                }
+                match result {
+                Ok(launch) => {
+                    let dir = launch.dir.display().to_string();
+                    return self.launch_started(entity, None, &dir, &launch.start);
+                }
+                Err(err) => {
+                    let unfinished = transfer::Journal::new(&cosmic_term::Env::from_process().state_dir).unfinished();
+                    if let Some(launcher) = self.launcher_mut(entity) {
+                        launcher.unfinished = unfinished;
+                        if let Some(LauncherForm::Transfer(form)) = &mut launcher.form {
+                            form.busy = false;
+                            form.error = Some(err);
+                        }
+                    }
+                }
+                }
+            }
+            Message::LauncherRecover(entity, id, resume) => {
+                if self.active_transfers.contains(&id) {
+                    return Task::none();
+                }
+                let Some(mut record) = self
+                    .launcher(entity)
+                    .and_then(|launcher| launcher.unfinished.iter().find(|r| r.plan.draft.id == id).cloned())
+                else {
+                    return Task::none();
+                };
+                let launcher_id = self.launcher(entity).map(|launcher| launcher.id.clone()).unwrap_or_default();
+                self.active_transfers.insert(id.clone());
+                return cosmic::task::future(async move {
+                    let result = async {
+                        for host in [&record.plan.draft.conversation.host, &record.plan.draft.destination] {
+                            agent::ensure_helper(host.clone(), agent::Helper::Transfer).await?;
+                        }
+                        blocking(move || {
+                            let source = agent::HostMachine { host: record.plan.draft.conversation.host.clone() };
+                            let destination = agent::HostMachine { host: record.plan.draft.destination.clone() };
+                            let journal = transfer::Journal::new(&cosmic_term::Env::from_process().state_dir);
+                            let _lock = journal.try_lock(&record.plan.draft.id)?;
+                            if resume {
+                                transfer::resume(&source, &destination, &journal, &mut record).map(Some)
+                            } else {
+                                transfer::rollback(&source, &destination, &journal, &mut record).map(|()| None)
+                            }
+                        })
+                        .await
+                    }
+                    .await;
+                    Message::LauncherRecovered(entity, id, launcher_id, result)
+                });
+            }
+            Message::LauncherRecovered(entity, id, launcher_id, result) => {
+                if !self.active_transfers.remove(&id) {
+                    return Task::none();
+                }
+                if self.launcher(entity).is_none_or(|launcher| launcher.id != launcher_id) {
+                    return Task::none();
+                }
+                let unfinished = transfer::Journal::new(&cosmic_term::Env::from_process().state_dir).unfinished();
+                if let Some(launcher) = self.launcher_mut(entity) {
+                    launcher.unfinished = unfinished;
+                }
+                match result {
+                    Ok(Some(launch)) => {
+                        // The agent the transfer was for, on its computer
+                        let profile_id = self.profile_for(&launch);
+                        let dir = launch.dir.display().to_string();
+                        return self.launch_started(entity, profile_id, &dir, &launch.start);
+                    }
+                    Ok(None) => {}
+                    Err(err) => return self.launcher_error(err),
+                }
+            }
+            Message::LauncherSessions(entity, result) => {
+                if let (Some(launcher), Ok(listed)) = (self.launcher_mut(entity), result) {
+                    launcher.running = listed
+                        .into_iter()
+                        .filter(|listed| listed.session.is_managed() && !listed.exited)
+                        .map(|listed| listed.session)
+                        .collect();
+                }
+            }
+            Message::LauncherFilter(entity, filter) => {
+                if let Some(launcher) = self.launcher_mut(entity) {
+                    launcher.filter = filter;
+                }
+            }
+            Message::LauncherSubmit(entity) => {
+                if self.launcher_locked(entity) {
+                    return Task::none();
+                }
+                // The first row, or home when nothing matches an empty filter
+                let choice = self.launcher(entity).and_then(|launcher| {
+                    let first = self
+                        .launcher_rows(launcher)
+                        .into_iter()
+                        .filter(|(section, _, _)| self.launcher_section_open(launcher, *section))
+                        .flat_map(|(_, _, rows)| rows)
+                        .find_map(|row| row.choice);
+                    first.or_else(|| {
+                        launcher
+                            .filter
+                            .trim()
+                            .is_empty()
+                            .then(|| LaunchChoice::Dir(String::new()))
+                    })
+                });
+                if let Some(choice) = choice {
+                    return self.launch_from(entity, choice);
+                }
+            }
+            Message::LauncherToggleSection(section) => {
+                let mut collapsed = self.config.launcher_collapsed.clone();
+                if !collapsed.remove(&section) {
+                    collapsed.insert(section);
+                }
+                config_set!(launcher_collapsed, collapsed);
+            }
+            Message::LauncherChoose(entity, choice) => {
+                if self.launcher_locked(entity) {
+                    return Task::none();
+                }
+                return self.launch_from(entity, choice);
+            }
+            Message::LauncherMounted(entity, request_id, result) => {
+                if !matches!(self.launcher(entity).and_then(|l| l.pending_action.as_ref()), Some((id, _)) if id == &request_id) {
+                    return Task::none();
+                }
+                if let Some(launcher) = self.launcher_mut(entity) {
+                    launcher.pending_action = None;
+                }
+                match result {
+                // Local folders are chosen directly; remote ones through the
+                // host's sshfs mount
+                Ok(mount) if self.dialog_opt.is_none() => {
+                    let host = self.launcher_host(entity);
+                    let home = self
+                        .launcher(entity)
+                        .and_then(|launcher| launcher.listings.get(&host)?.listing())
+                        .map(|listing| listing.home.clone())
+                        .unwrap_or_default();
+                    let start = if mount.as_os_str().is_empty() {
+                        PathBuf::from(&home)
+                    } else {
+                        mount.join(home.trim_start_matches('/'))
+                    };
+                    let mount = (!mount.as_os_str().is_empty()).then_some(mount);
+                    let (dialog, command) = Dialog::new(
+                        DialogSettings::new()
+                            .kind(DialogKind::OpenFolder)
+                            .path(start),
+                        |msg| Message::DialogMessage(Box::new(msg)),
+                        move |result| Message::LauncherBrowse(entity, mount.clone(), result),
+                    );
+                    self.dialog_opt = Some(dialog);
+                    return command;
+                }
+                Ok(_) => {}
+                Err(err) => {
+                    self.mount_errors.insert(String::new(), err);
+                    self.mount_setup.remove("");
+                    return self.update(Message::RemoteFilesOpen(String::new()));
+                }
+                }
+            }
+            Message::LauncherBrowse(entity, mount, result) => {
+                self.dialog_opt = None;
+                if let DialogResult::Open(paths) = result
+                    && let Some(path) = paths.into_iter().next()
+                {
+                    // Back from the mount to the path on the host
+                    let dir = match &mount {
+                        Some(mount) => match path.strip_prefix(mount) {
+                            Ok(rest) => format!("/{}", rest.display()),
+                            Err(_) => return Task::none(),
+                        },
+                        None => path.display().to_string(),
+                    };
+                    return self.launch_from(entity, LaunchChoice::Dir(dir));
+                }
+            }
+            Message::HostProbed(host, generation, reachable) => {
+                // Only the latest probe counts
+                let Some(&(current, attempt)) = self.reconnecting.get(&host) else {
+                    return Task::none();
+                };
+                if generation != current {
+                    return Task::none();
+                }
+                if self.disconnected_tabs(&host).is_empty() {
+                    self.reconnecting.remove(&host);
+                    return Task::none();
+                }
+                if !reachable {
+                    // 10 seconds, doubling to a minute
+                    let delay = (10u64 << attempt.min(3)).min(60);
+                    return self.probe_host(host, attempt + 1, delay);
+                }
+                self.reconnecting.remove(&host);
+                let sessions_host = host.clone();
+                return cosmic::task::future(async move {
+                    Message::ReconnectSessions(host, agent::list_sessions(sessions_host).await)
+                });
+            }
+            Message::ReconnectNow(host) => {
+                return self.probe_host(host, 0, 0);
+            }
+            Message::ReconnectSessions(host, result) => {
+                let listed = match result {
+                    Ok(listed) => listed,
+                    // Reachable, but not yet usable; keep trying
+                    Err(_) => return self.probe_host(host, 1, 10),
+                };
+                let mut tasks = Vec::new();
+                for (pane, entity) in self.disconnected_tabs(&host) {
+                    let Some(tab_model) = self.pane_model.panes.get(pane) else {
+                        continue;
+                    };
+                    let (Some(session), Some(connection)) = (
+                        tab_model.data::<agent::Session>(entity).cloned(),
+                        tab_model.data::<TabConnection>(entity),
+                    ) else {
+                        continue;
+                    };
+                    let running = listed
+                        .iter()
+                        .any(|listed| listed.session == session && !listed.exited);
+                    // A drop just after starting may have come before the
+                    // session was created
+                    let never_started = connection.lost.is_some_and(|lost| {
+                        lost.duration_since(connection.started) < Duration::from_secs(10)
+                    });
+                    let prepared = if running {
+                        (agent::attach(&session), session)
+                    } else if never_started {
+                        (connection.launch.clone(), session)
+                    } else {
+                        // It ended while out of reach; close, as it would have
+                        self.pane_model.set_focus(pane);
+                        tasks.push(self.update(Message::TabClose(Some(entity))));
+                        tasks.push(
+                            self.toasts
+                                .push(widget::toaster::Toast::new(fl!(
+                                    "session-ended-while-disconnected",
+                                    host = host.as_str()
+                                )))
+                                .map(cosmic::Action::App),
+                        );
+                        continue;
+                    };
+                    tasks.push(self.replace_tab(pane, entity, None, prepared));
+                }
+                return Task::batch(tasks);
+            }
+            Message::SupervisorProgress(host, step) => {
+                self.host_setup.insert(host.clone(), step);
+                self.host_setup_stalled.remove(&host);
+                return cosmic::task::future(async move {
+                    tokio::time::sleep(Duration::from_secs(15)).await;
+                    Message::SupervisorSlow(host, step)
+                });
+            }
+            Message::SupervisorSlow(host, step) => {
+                if self.host_setup.get(&host) == Some(&step) {
+                    self.host_setup_stalled.insert(host);
+                }
+            }
+            Message::SupervisorInstalled(host, result) => {
+                self.host_setup.remove(&host);
+                self.host_setup_stalled.remove(&host);
+                match result {
+                Err(err) => log::warn!("failed to install the helpers on {:?}: {}", host, err),
+                // Said once per machine and run, rather than failing quietly
+                Ok(missing) if !missing.is_empty() && self.tools_reported.insert(host.clone()) => {
+                    let machine = if host.is_empty() {
+                        fl!("this-computer")
+                    } else {
+                        self.config.machine_for_host(&host).map_or_else(|| host.clone(), |m| m.name.clone())
+                    };
+                    let what = missing
+                        .iter()
+                        .map(|tool| fl!("tool-missing", tool = tool.as_str(), needed = tool_needed(tool)))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    log::warn!("missing on {host:?}: {missing:?}");
+                    let mut toast = widget::toaster::Toast::new(fl!(
+                        "tools-missing", machine = machine.as_str(), what = what.as_str()
+                    ));
+                    if missing.iter().any(|tool| !matches!(tool.as_str(), "python3" | "git")) {
+                        toast = toast.action(fl!("remote-files-help"), move |_| Message::RemoteFilesOpen(host.clone()));
+                    }
+                    return self
+                        .toasts
+.push(toast)
+                        .map(cosmic::Action::App);
+                }
+                Ok(_) => {}
+                }
+            }
+            Message::SidebarToggle => {
+                self.show_sidebar = !self.show_sidebar;
+                config_set!(show_sidebar, self.show_sidebar);
+                return self.sidebar_start();
+            }
+            Message::SidebarRefresh(host, generation) => {
+                if generation != self.sidebar.generation {
+                    return Task::none();
+                }
+                let Some(state) = self.sidebar.hosts.get_mut(&host) else {
+                    return Task::none();
+                };
+                if state.scanning {
+                    return Task::none();
+                }
+                state.scanning = true;
+                return cosmic::task::future(async move {
+                    let result = agent::session_summaries(host.clone()).await;
+                    Message::SidebarSummaries(host, generation, result)
+                });
+            }
+            Message::SidebarSummaries(host, generation, result) => {
+                if let Err(err) = &result {
+                    log::debug!("could not list the sessions on {host:?}: {err}");
+                }
+                if let Some(state) = self.sidebar.hosts.get_mut(&host) {
+                    state.scanning = false;
+                    // A host that stops answering keeps showing what it had
+                    if result.is_ok() || !matches!(state.summaries, Some(Ok(_))) {
+                        state.summaries = Some(result);
+                    }
+                }
+                let mut retitled = self.retitle_agent_tabs();
+                // Keep this computer's sudo agent reachable from machines
+                // that this window shows, renewing the forward now and then
+                let shown = !host.is_empty()
+                    && (self.open_sessions().iter().any(|s| s.host == host)
+                        || self.launcher_hosts().contains(&host.as_str()));
+                let due = self
+                    .sudo_forwarded
+                    .get(&host)
+                    .is_none_or(|at| at.elapsed() > Duration::from_secs(60));
+                if shown && due {
+                    self.sudo_forwarded.insert(host.clone(), Instant::now());
+                    let forward_host = host.clone();
+                    retitled = Task::batch([
+                        retitled,
+                        cosmic::task::future(async move {
+                            let result = agent::sudo::forward(forward_host.clone()).await;
+                            Message::SudoResult(format!("forwarding sudo to {forward_host}"), result)
+                        }),
+                    ]);
+                }
+                if generation != self.sidebar.generation {
+                    return retitled;
+                }
+                return Task::batch([retitled, cosmic::task::future(async move {
+                    tokio::time::sleep(sidebar::REFRESH).await;
+                    Message::SidebarRefresh(host, generation)
+                })]);
+            }
+            Message::SidebarOpen(session) => {
+                self.sidebar.searching = false;
+                let elsewhere = self
+                    .sidebar
+                    .find(sidebar::session_key(&session))
+                    .is_some_and(|(_, summary)| summary.clients > 0);
+                if elsewhere && self.session_tab(&session).is_none() {
+                    let descriptor = session.descriptor();
+                    return cosmic::task::future(async move {
+                        Message::SidebarPeerFound(session, peers::find(descriptor).await)
+                    });
+                }
+                if let Some((pane, entity)) = self.session_tab(&session) {
+                    self.pane_model.set_focus(pane);
+                    if let Some(tab_model) = self.pane_model.panes.get_mut(pane) {
+                        tab_model.activate(entity);
+                    }
+                    return Task::batch([
+                        self.update_title(Some(pane)),
+                        self.update_focus(),
+                        self.refresh_focus(entity),
+                    ]);
+                }
+                return self.update(Message::RemoteAttach(session));
+            }
+            Message::SidebarNew {
+                host,
+                repository,
+                agent,
+                worktree,
+            } => {
+                let Some(profile_id) = self.profile_on_host(&host, agent) else {
+                    return self
+                        .toasts
+                        .push(widget::toaster::Toast::new(fl!(
+                            "sidebar-no-profile",
+                            host = host.as_str()
+                        )))
+                        .map(cosmic::Action::App);
+                };
+                // Through a launcher, which starts the session in its place
+                // or shows the new worktree form
+                let pane = self.pane_model.focused();
+                let opened = self.open_launcher(pane, profile_id);
+                let Some(entity) = self.pane_model.active().map(|tab_model| tab_model.active())
+                else {
+                    return opened;
+                };
+                let choice = if worktree {
+                    LaunchChoice::NewWorktree(repository)
+                } else {
+                    LaunchChoice::Dir(repository)
+                };
+                return Task::batch([opened, self.update(Message::LauncherChoose(entity, choice))]);
+            }
+            Message::OpenInFiles => {
+                if self.pending_commands.contains_key("open-files") {
+                    return Task::none();
+                }
+                if let Some(process) = self.active_process() {
+                    self.pending_commands.insert("open-files", fl!("opening-files"));
+                    return cosmic::task::future(async move {
+                        Message::OpenInFilesResult(agent::open_in_files(process).await)
+                    });
+                }
+            }
+            Message::OpenInFilesResult(result) => {
+                self.pending_commands.remove("open-files");
+                if let Err(err) = result {
+                    log::warn!("failed to open in the file manager: {}", err);
+                    return self.file_open_error(fl!("open-in-files-failed", error = err.as_str()), err);
+                }
+            }
+            Message::OpenInZed => {
+                if self.pending_commands.contains_key("open-zed") {
+                    return Task::none();
+                }
+                if let Some(process) = self.active_process() {
+                    self.pending_commands.insert("open-zed", fl!("opening-zed"));
+                    return cosmic::task::future(async move {
+                        Message::OpenInZedResult(agent::open_in_zed(process).await)
+                    });
+                }
+            }
+            Message::OpenInZedResult(result) => {
+                self.pending_commands.remove("open-zed");
+                if let Err(err) = result {
+                    log::warn!("failed to open in Zed: {}", err);
+                    return self.file_open_error(fl!("open-in-zed-failed", error = err.as_str()), err);
+                }
+            }
+            Message::RemoteEnded(entity, result) => {
+                self.pending_commands.remove("end-session");
+                match result {
+                    Ok(()) => {
+                        if let Some(entity) = entity {
+                            return self.update(Message::TabClose(Some(entity)));
+                        }
+                    }
+                    Err(err) => log::warn!("failed to end remote session: {}", err),
+                }
+            }
+            Message::ProfileAgent(profile_id, agent_i) => {
+                if let Some(profile) = self.config.profiles.get_mut(&profile_id)
+                    && let Some(agent) = config::Agent::ALL.get(agent_i)
+                {
+                    profile.agent = *agent;
+                    return self.save_profiles();
+                }
+            }
+            Message::ProfileArgs(profile_id, text) => {
+                if let Some(profile) = self.config.profiles.get_mut(&profile_id) {
+                    profile.args = text;
+                    return self.save_profiles();
+                }
+            }
+            Message::ProfileColor(profile_id, color_i) => {
+                if let Some(profile) = self.config.profiles.get_mut(&profile_id) {
+                    // The first choice is the agent's default
+                    profile.color = color_i
+                        .checked_sub(1)
+                        .and_then(|i| TabColor::PALETTE.get(i))
+                        .map(|(_, hex)| hex.to_string())
+                        .unwrap_or_default();
+                    return self.save_profiles();
+                }
+            }
+            Message::ProfileMachine(profile_id, index) => {
+                let machine = index
+                    .checked_sub(1)
+                    .and_then(|i| self.config.machines.keys().nth(i).copied());
+                let host = machine
+                    .and_then(|m| self.config.machines.get(&m))
+                    .map(config::Machine::destination)
+                    .unwrap_or_default();
+                if let Some(profile) = self.config.profiles.get_mut(&profile_id) {
+                    profile.machine = machine;
+                    profile.host = host;
+                    return self.save_profiles();
+                }
+            }
+            Message::LocalProbed(result) => match result {
+                Ok(probe) => {
+                    self.local = Some(probe);
+                    // This computer may be among the machines by another name
+                    return self.sidebar_start();
+                }
+                Err(err) => log::info!("could not check this computer: {err}"),
+            },
+            Message::MachineAdd => {
+                self.discovery = Some(None);
+                return cosmic::task::future(async {
+                    Message::MachineDiscovered(agent::discovery_sources().await)
+                });
+            }
+            Message::MachineDiscovered(result) => {
+                if self.discovery.is_some() {
+                    let known: Vec<config::Machine> = self.config.machines.values().cloned().collect();
+                    self.discovery = Some(Some(result.map(|(tailscale, ssh)| {
+                        machines::candidates(
+                            &machines::parse_ssh_config(&ssh),
+                            machines::parse_tailscale(&tailscale).as_ref(),
+                            &known,
+                        )
+                    })));
+                }
+            }
+            Message::MachineDiscoveryClose => self.discovery = None,
+            Message::MachineAddCandidate(index) => {
+                let Some(Some(Ok(candidates))) = &self.discovery else {
+                    return Task::none();
+                };
+                let Some(candidate) = candidates.get(index) else {
+                    return Task::none();
+                };
+                let id = self.config.add_machine(candidate.machine());
+                self.discovery = None;
+                self.machine_expanded = Some(id);
+                return Task::batch([self.save_machines(), self.update(Message::MachineCheck(id))]);
+            }
+            Message::MachineAddBlank => {
+                let id = self.config.add_machine(config::Machine {
+                    name: fl!("new-machine"),
+                    ..config::Machine::default()
+                });
+                self.discovery = None;
+                self.machine_expanded = Some(id);
+                return self.save_machines();
+            }
+            Message::MachineEdit(id, field, text) => {
+                let Some(machine) = self.config.machines.get_mut(&id) else {
+                    return Task::none();
+                };
+                match field {
+                    MachineField::Name => machine.name = text,
+                    MachineField::Host => machine.host = text.trim().to_string(),
+                    MachineField::User => machine.user = text.trim().to_string(),
+                }
+                if !matches!(field, MachineField::Name) {
+                    // Another computer, perhaps: what was found no longer holds
+                    machine.hostname.clear();
+                    machine.home.clear();
+                    machine.host_id.clear();
+                    self.machine_checks.remove(&id);
+                }
+                return self.save_machines();
+            }
+            Message::MachineExpand(id) => self.machine_expanded = Some(id),
+            Message::MachineCollapse(id) => {
+                if self.machine_expanded == Some(id) {
+                    self.machine_expanded = None;
+                }
+            }
+            Message::MachineRemove(id) => {
+                let users: Vec<String> = self
+                    .config
+                    .profiles
+                    .values()
+                    .filter(|p| p.machine == Some(id))
+                    .map(|p| p.name.clone())
+                    .collect();
+                if !users.is_empty() {
+                    return self
+                        .toasts
+                        .push(widget::toaster::Toast::new(fl!(
+                            "machine-in-use",
+                            profiles = users.join(", ")
+                        )))
+                        .map(cosmic::Action::App);
+                }
+                self.config.machines.remove(&id);
+                self.machine_checks.remove(&id);
+                return self.save_machines();
+            }
+            Message::MachineCheck(id) => {
+                let Some(destination) = self
+                    .config
+                    .machines
+                    .get(&id)
+                    .map(config::Machine::destination)
+                    .filter(|d| !d.is_empty())
+                else {
+                    return Task::none();
+                };
+                self.machine_checks.insert(id, MachineCheck::Running);
+                return cosmic::task::future(async move {
+                    let result = agent::probe_machine(destination.clone()).await;
+                    Message::MachineChecked(id, destination, result)
+                });
+            }
+            Message::MachineChecked(id, destination, result) => {
+                // Unless the machine was changed meanwhile
+                let Some(machine) = self
+                    .config
+                    .machines
+                    .get_mut(&id)
+                    .filter(|m| m.destination() == destination)
+                else {
+                    return Task::none();
+                };
+                let mut task = Task::none();
+                if let Ok(probe) = &result {
+                    if machine.user.is_empty() {
+                        machine.user = probe.user.clone();
+                    }
+                    machine.hostname = probe.hostname.clone();
+                    machine.home = probe.home.clone();
+                    machine.host_id = probe.host_id.clone();
+                    task = self.save_machines();
+                }
+                self.machine_checks.insert(id, MachineCheck::Done(result));
+                return task;
+            }
+            Message::MachineAddProfiles(id) => {
+                let Some(machine) = self.config.machines.get(&id).cloned() else {
+                    return Task::none();
+                };
+                for (label, agent) in [
+                    ("Claude", config::Agent::Claude),
+                    ("Codex", config::Agent::Codex),
+                    ("Terminal", config::Agent::Shell),
+                ] {
+                    let mut profile = Profile::agent(
+                        &fl!("machine-profile-name", agent = label, name = machine.name.as_str()),
+                        agent,
+                        &machine.destination(),
+                    );
+                    profile.machine = Some(id);
+                    if agent == config::Agent::Codex {
+                        profile.args = agent::CODEX_FULL_ACCESS.to_string();
+                    }
+                    let profile_id = self
+                        .config
+                        .profiles
+                        .last_key_value()
+                        .map(|(id, _)| ProfileId(id.0 + 1))
+                        .unwrap_or_default();
+                    self.config.profiles.insert(profile_id, profile);
+                }
+                let host = machine.destination();
+                self.host_setup.insert(host.clone(), None);
+                return Task::batch([
+                    self.save_profiles(),
+                    setup_host_task(host),
+                ]);
+            }
             Message::ProfileOpen(profile_id) => {
+                self.new_tab_menu_open = false;
+                if self.wants_launcher(Some(profile_id)) {
+                    return self.open_launcher(self.pane_model.focused(), profile_id);
+                }
                 return self.create_and_focus_new_terminal(
                     self.pane_model.focused(),
                     Some(profile_id),
@@ -2779,6 +7033,10 @@ impl Application for App {
                     tab_new_inherit_working_directory
                 );
             }
+            Message::AccentFollowsTab(follows) => {
+                config_set!(accent_follows_tab, follows);
+                return self.apply_theme();
+            }
             Message::ShowPaneBorders(show_pane_borders) => {
                 if show_pane_borders != self.config.show_pane_borders {
                     config_set!(show_pane_borders, show_pane_borders);
@@ -2818,7 +7076,96 @@ impl Application for App {
                 if let Some(tab_model) = self.pane_model.active_mut() {
                     tab_model.activate(entity);
                 }
-                return self.update_title(None);
+                return Task::batch([self.update_title(None), self.refresh_focus(entity)]);
+            }
+            Message::TabFocusFound(entity, result) => {
+                let dir = match result {
+                    Ok(found) => found
+                        .agents
+                        .first()
+                        .and_then(|agent| agent.working_directory().map(str::to_string)),
+                    Err(err) => {
+                        log::debug!("could not find where a tab's agent works: {err}");
+                        None
+                    }
+                };
+                if let Some(pane) = self.tab_pane(entity)
+                    && let Some(tab_model) = self.pane_model.panes.get_mut(pane)
+                    && let Some(focus) = tab_model.data_mut::<TabFocus>(entity)
+                {
+                    focus.pending = false;
+                    focus.checked = Some(Instant::now());
+                    if dir.is_some() {
+                        focus.dir = dir;
+                    }
+                }
+            }
+            Message::TabTransfer(entity_opt, profile_id, mode) => {
+                let entity = entity_opt.or_else(|| self.pane_model.active().map(|t| t.active()));
+                let Some(entity) = entity else {
+                    return Task::none();
+                };
+                let Some(pane) = self.tab_pane(entity) else {
+                    return Task::none();
+                };
+                if self.transfer_lookups.contains_key(&(pane, entity)) {
+                    return Task::none();
+                }
+                let Some(tab_model) = self.pane_model.panes.get(pane) else {
+                    return Task::none();
+                };
+                let Some(session) = tab_model.data::<agent::Session>(entity).cloned() else {
+                    return Task::none();
+                };
+                let title = tab_model.text(entity).unwrap_or_default().to_string();
+                let request_id = cosmic_term::random_hex(16);
+                self.transfer_lookups.insert((pane, entity), request_id.clone());
+                return cosmic::task::future(async move {
+                    let found = agent::tab_agents(agent::TabProcess::Session(session)).await;
+                    Message::TabTransferFound(pane, entity, request_id, profile_id, mode, title, found)
+                });
+            }
+            Message::TabTransferFound(pane, entity, request_id, profile_id, mode, title, found) => {
+                if self.transfer_lookups.get(&(pane, entity)) != Some(&request_id) {
+                    return Task::none();
+                }
+                self.transfer_lookups.remove(&(pane, entity));
+                let Some(session) = self
+                    .tab_pane(entity)
+                    .and_then(|pane| self.pane_model.panes.get(pane))
+                    .and_then(|tab_model| tab_model.data::<agent::Session>(entity).cloned())
+                else {
+                    return Task::none();
+                };
+                let wanted = session.agent();
+                let agent = found.map_err(|err| fl!("tab-transfer-no-agent", error = err.as_str())).and_then(|found| {
+                    found
+                        .agents
+                        .into_iter()
+                        .find(|a| wanted.is_none() || a.agent() == wanted)
+                        .ok_or_else(|| fl!("tab-transfer-no-agent", error = "no Claude or Codex is running in the tab"))
+                });
+                let agent = match agent {
+                    Ok(agent) => agent,
+                    Err(message) => return self.launcher_error(message),
+                };
+                let (Some(kind), Some(id)) = (agent.agent().and_then(agent_kind), agent.conversation.clone()) else {
+                    return self.launcher_error(fl!("tab-transfer-no-agent", error = "its conversation was not found"));
+                };
+                let cwd = agent.working_directory().unwrap_or_default().to_string();
+                let choice = LaunchChoice::Transfer {
+                    conversation: transfer::ConversationRef { host: session.host.clone(), kind, id },
+                    cwd,
+                    title,
+                    mode,
+                };
+                // The destination's launcher, with the transfer form open
+                let pane = self.pane_model.focused();
+                let opened = self.open_launcher(pane, profile_id);
+                let Some(launcher) = self.pane_model.panes.get(pane).map(|t| t.active()) else {
+                    return opened;
+                };
+                return Task::batch([opened, self.launch_from(launcher, choice)]);
             }
             Message::TabActivateJump(pos) => {
                 if let Some(tab_model) = self.pane_model.active() {
@@ -2838,6 +7185,17 @@ impl Application for App {
                 }
             }
             Message::TabClose(entity_opt) => {
+                if let Some(tab_model) = self.pane_model.active() {
+                    let entity = entity_opt.unwrap_or_else(|| tab_model.active());
+                    if self.transfer_lookups.contains_key(&(self.pane_model.focused(), entity)) {
+                        return self.toasts.push(widget::toaster::Toast::new(fl!("launcher-busy-close")))
+                            .map(cosmic::Action::App);
+                    }
+                    if self.launcher_locked(entity) {
+                        return self.toasts.push(widget::toaster::Toast::new(fl!("launcher-busy-close")))
+                            .map(cosmic::Action::App);
+                    }
+                }
                 if let Some(tab_model) = self.pane_model.active_mut() {
                     let entity = entity_opt.unwrap_or_else(|| tab_model.active());
 
@@ -2884,7 +7242,9 @@ impl Application for App {
                     //so only clear the position for them.
                     match action {
                         // these read the link from the menu state and clear it themselves
-                        Action::LaunchUrlByMenu | Action::CopyUrlByMenu => {}
+                        Action::LaunchUrlByMenu
+                        | Action::CopyUrlByMenu
+                        | Action::OpenLocallyByMenu => {}
                         _ => {
                             terminal.context_menu = None;
                         }
@@ -2919,11 +7279,86 @@ impl Application for App {
                 }
             }
             Message::TabNew => {
+                self.new_tab_menu_open = false;
+                if let Some(profile_id) = self.get_default_profile()
+                    && self.wants_launcher(Some(profile_id))
+                {
+                    return self.open_launcher(self.pane_model.focused(), profile_id);
+                }
                 return self.create_and_focus_new_terminal(
                     self.pane_model.focused(),
                     self.get_default_profile(),
                     self.config.tab_new_inherit_working_directory,
                 );
+            }
+            Message::TabBarContext(pane, _entity) => {
+                // The menu's actions act on the focused pane
+                self.pane_model.set_focus(pane);
+            }
+            Message::TabDragStart(pane, entity) => {
+                self.tab_drag = Some((pane, entity, Instant::now()));
+                self.tab_drag_left_window = false;
+            }
+            Message::TabDragOverWindow(over) => {
+                if self.tab_drag.is_some() {
+                    self.tab_drag_left_window = !over;
+                }
+            }
+            Message::TabDragEnded(finished) => {
+                // A reorder, or a drop back on this window, has already
+                // cleared the drag
+                let Some((pane, entity, started)) = self.tab_drag.take() else {
+                    return Task::none();
+                };
+                // Pop out only a tab carried outside the window: not one whose
+                // drag the compositor refused straight away, nor one released
+                // over this window, such as by a click in the terminal
+                if !finished
+                    && (!self.tab_drag_left_window
+                        || started.elapsed() < Duration::from_millis(500))
+                {
+                    return Task::none();
+                }
+                let has_session = self
+                    .pane_model
+                    .panes
+                    .get(pane)
+                    .is_some_and(|tab_model| tab_model.data::<agent::Session>(entity).is_some());
+                if has_session {
+                    self.pane_model.set_focus(pane);
+                    return self.update(if finished {
+                        // Another window has attached to the session
+                        Message::TabClose(Some(entity))
+                    } else {
+                        // Dropped where nothing accepted it, such as the
+                        // desktop
+                        Message::TabPopOut(Some(entity))
+                    });
+                }
+            }
+            Message::TabDropped(pane, data) => {
+                if let Some(session) = data.and_then(|data| data.session) {
+                    return self.receive_tab(pane, session);
+                }
+            }
+            Message::TabPopOut(entity_opt) => {
+                let Some(tab_model) = self.pane_model.active() else {
+                    return Task::none();
+                };
+                let entity = entity_opt.unwrap_or_else(|| tab_model.active());
+                let Some(session) = tab_model.data::<agent::Session>(entity).cloned() else {
+                    return Task::none();
+                };
+                // The new window attaches before this one detaches
+                match env::current_exe().and_then(|exe| {
+                    process::Command::new(exe)
+                        .arg("--attach")
+                        .arg(session.descriptor())
+                        .spawn()
+                }) {
+                    Ok(_child) => return self.update(Message::TabClose(Some(entity))),
+                    Err(err) => log::error!("failed to open a window for {:?}: {}", session, err),
+                }
             }
             Message::TabNewNoProfile => {
                 return self.create_and_focus_new_terminal(
@@ -3004,6 +7439,16 @@ impl Application for App {
                         //TODO: should we blink the cursor?
                     }
                     TermEvent::Exit => {
+                        // A disconnected tab stays, to be reconnected
+                        let disconnected =
+                            self.pane_model.panes.get(pane).is_some_and(|tab_model| {
+                                tab_model
+                                    .data::<TabConnection>(entity)
+                                    .is_some_and(|connection| connection.lost.is_some())
+                            });
+                        if disconnected {
+                            return Task::none();
+                        }
                         return self.update(Message::TabClose(Some(entity)));
                     }
                     TermEvent::PtyWrite(text) => {
@@ -3023,9 +7468,14 @@ impl Application for App {
                                 } else {
                                     None
                                 };
+                            let remote_label = tab_model
+                                .data::<agent::Session>(entity)
+                                .map(agent::Session::label);
                             tab_model.text_set(
                                 entity,
-                                tab_title_override.unwrap_or_else(|| fl!("new-terminal")),
+                                tab_title_override
+                                    .or(remote_label)
+                                    .unwrap_or_else(|| fl!("new-terminal")),
                             );
                         }
                         return self.update_title(Some(pane));
@@ -3049,10 +7499,27 @@ impl Application for App {
                                     false
                                 };
                             if !has_override {
+                                let title = match tab_model.data::<agent::Session>(entity) {
+                                    // An agent's tab is named after its conversation,
+                                    // as in the sidebar, whatever title the agent sets
+                                    Some(session) => match self.sidebar.title(session) {
+                                        Some(conversation) => conversation.to_string(),
+                                        None => agent::strip_zellij_title(&title, &session.name)
+                                            .to_string(),
+                                    },
+                                    None => title,
+                                };
+                                let locked = tab_model
+                                    .data::<agent::Session>(entity)
+                                    .is_some_and(|s| self.secrets.for_session(&s.name).next().is_some());
+                                let title = if locked { format!("{SUDO_LOCK}{title}") } else { title };
                                 tab_model.text_set(entity, title);
                             }
                         }
-                        return self.update_title(Some(pane));
+                        // Agents retitle their tab as they work: a cue to see
+                        // where they are working now
+                        // The header follows the focused pane, whichever was retitled
+                        return Task::batch([self.update_title(None), self.refresh_focus(entity)]);
                     }
                     TermEvent::MouseCursorDirty | TermEvent::Wakeup => {
                         if let Some(tab_model) = self.pane_model.panes.get(pane)
@@ -3062,8 +7529,12 @@ impl Application for App {
                             terminal.needs_update = true;
                         }
                     }
-                    TermEvent::ChildExit(_error_code) => {
-                        //Ignore this for now
+                    TermEvent::ChildExit(code) => {
+                        // ssh lost the connection, rather than the session
+                        // ending or the tab detaching
+                        if code == agent::SSH_CONNECTION_LOST {
+                            return self.tab_disconnected(pane, entity);
+                        }
                     }
                 }
             }
@@ -3094,6 +7565,9 @@ impl Application for App {
                 self.term_event_tx_opt = Some(term_event_tx);
 
                 // Spawn first tab
+                if let Some(session) = self.startup_attach.take() {
+                    return self.update(Message::RemoteAttach(session));
+                }
                 return self.update(Message::TabNew);
             }
             Message::ToggleContextPage(context_page) => {
@@ -3186,12 +7660,14 @@ impl Application for App {
                 }
             },
             Message::WindowFocused => {
+                self.window_focused = true;
                 if !self.core.window.show_context {
                     self.pane_model.update_terminal_focus();
                 }
-                return self.update_focus();
+                return Task::batch([self.update_focus(), self.sudo_arm()]);
             }
             Message::WindowUnfocused => {
+                self.window_focused = false;
                 self.pane_model.unfocus_all_terminals();
             }
             Message::ZoomIn => {
@@ -3215,6 +7691,8 @@ impl Application for App {
                     position,
                 },
             ) => {
+                // The tab stayed in this window
+                self.tab_drag = None;
                 let Some(p) = self.pane_model.panes.get_mut(pane) else {
                     log::error!("Failed to find reordered tab model.");
                     return Task::none();
@@ -3257,6 +7735,15 @@ impl Application for App {
                 Message::ToggleContextPage(ContextPage::Settings),
             )
             .title(fl!("settings")),
+            ContextPage::RemoteFiles => context_drawer::context_drawer(
+                mount_setup_view::pane(self.mount_setup_machines(), &self.mount_setup, &self.mount_errors),
+                Message::ToggleContextPage(ContextPage::RemoteFiles),
+            ).title(fl!("remote-files-title")),
+            ContextPage::Secrets => context_drawer::context_drawer(
+                secrets::pane(&self.secrets, self.secret_machines()),
+                Message::ToggleContextPage(ContextPage::Secrets),
+            )
+            .title(fl!("secrets-title")),
             #[cfg(feature = "password_manager")]
             ContextPage::PasswordManager => context_drawer::context_drawer(
                 self.password_mgr.context_page(self.core.system_theme()),
@@ -3267,6 +7754,42 @@ impl Application for App {
     }
 
     fn dialog(&self) -> Option<Element<'_, Message>> {
+        // A sudo request whose session has no tab here
+        let open = self.open_sessions();
+        if let Some(pending) = self.secrets.pending.values().find(|p| {
+            p.request
+                .session
+                .as_ref()
+                .is_none_or(|session| !open.iter().any(|o| &o.name == session))
+        }) {
+            let session = pending.request.session.as_ref().map(|name| {
+                self.sidebar
+                    .title_by_name(name)
+                    .map_or_else(|| name.clone(), str::to_string)
+            });
+            return Some(secrets::popup(pending, session));
+        }
+        if let Some((_, name)) = &self.rename {
+            return Some(
+                widget::dialog()
+                    .title(fl!("rename-title"))
+                    .body(fl!("rename-body"))
+                    .control(
+                        widget::text_input("", name)
+                            .id(self.rename_id.clone())
+                            .on_input(Message::RenameInput)
+                            .on_submit(|_| Message::RenameSubmit),
+                    )
+                    .primary_action(
+                        widget::button::suggested(fl!("rename"))
+                            .on_press(Message::RenameSubmit),
+                    )
+                    .secondary_action(
+                        widget::button::standard(fl!("cancel")).on_press(Message::RenameCancel),
+                    )
+                    .into(),
+            );
+        }
         let conflict = self.shortcut_conflict.as_ref()?;
         let binding = shortcuts::binding_display(&conflict.binding);
         let existing = shortcuts::action_label(conflict.existing_action);
@@ -3295,15 +7818,70 @@ impl Application for App {
     }
 
     fn header_start(&self) -> Vec<Element<'_, Self::Message>> {
-        vec![menu_bar(&self.core, &self.config, &self.key_binds)]
+        let sidebar = widget::tooltip(
+            widget::button::custom(icon_cache_get("sidebar-show-symbolic", 16))
+                .on_press(Message::SidebarToggle)
+                .padding(8)
+                .class(if self.show_sidebar {
+                    style::Button::Standard
+                } else {
+                    style::Button::Icon
+                }),
+            widget::text(fl!("sidebar-toggle")),
+            widget::tooltip::Position::Bottom,
+        );
+        vec![
+            sidebar.into(),
+            menu_bar(&self.core, &self.config, &self.key_binds, &self.session_menu()),
+        ]
     }
 
     fn header_end(&self) -> Vec<Element<'_, Self::Message>> {
-        vec![
+        // A split button, as in Ptyxis: the main part opens the default
+        // profile and the arrow chooses a profile or session
+        let new_tab = widget::tooltip(
             widget::button::custom(icon_cache_get("list-add-symbolic", 16))
                 .on_press(Message::TabNew)
+                .padding([8, 4, 8, 8])
+                .class(style::Button::Icon),
+            widget::text(fl!("new-tab")),
+            widget::tooltip::Position::Bottom,
+        );
+        let arrow = widget::button::custom(icon_cache_get("pan-down-symbolic", 16))
+            .on_press(Message::NewTabMenuToggle)
+            .padding([8, 6, 8, 2])
+            .class(if self.new_tab_menu_open && !self.new_tab_menu_in_sidebar {
+                style::Button::Standard
+            } else {
+                style::Button::Icon
+            });
+        let mut popover = widget::popover(arrow)
+            .on_close(Message::NewTabMenuClose)
+            .position(widget::popover::Position::Bottom);
+        if self.new_tab_menu_open && !self.new_tab_menu_in_sidebar {
+            popover = popover.popup(self.new_tab_menu());
+        }
+        let open_in_zed = widget::tooltip(
+            widget::button::custom(icon_cache_get("accessories-text-editor-symbolic", 16))
+                .on_press(Message::OpenInZed)
                 .padding(8)
-                .class(style::Button::Icon)
+                .class(style::Button::Icon),
+            widget::text(fl!("open-in-zed")),
+            widget::tooltip::Position::Bottom,
+        );
+        let open_in_files = widget::tooltip(
+            widget::button::custom(icon_cache_get("folder-symbolic", 16))
+                .on_press(Message::OpenInFiles)
+                .padding(8)
+                .class(style::Button::Icon),
+            widget::text(fl!("open-in-files")),
+            widget::tooltip::Position::Bottom,
+        );
+        vec![
+            open_in_files.into(),
+            open_in_zed.into(),
+            widget::row::with_children(vec![new_tab.into(), popover.into()])
+                .align_y(Alignment::Center)
                 .into(),
         ]
     }
@@ -3337,12 +7915,34 @@ impl Application for App {
         let pane_grid = PaneGrid::new(&self.pane_model.panes, |pane, tab_model, _is_maximized| {
             let mut tab_column = widget::column::with_capacity(1);
 
-            if tab_model.iter().count() > 1 {
-                tab_column = tab_column.push(
-                    widget::container(
+            // Always shown, so that a window's only tab can be dragged to
+            // another window
+            {
+                // A dragged tab carries its session, for the window it is
+                // dropped on
+                let drag_data: HashMap<segmented_button::Entity, Vec<u8>> = tab_model
+                    .iter()
+                    .filter_map(|entity| {
+                        let session = tab_model.data::<agent::Session>(entity)?;
+                        Some((entity, session.descriptor().into_bytes()))
+                    })
+                    .collect();
+                let tab_bar = widget::container(
                         widget::tab_bar::horizontal(tab_model)
-                            .enable_tab_drag(String::from("x-cosmic-term/tab"))
+                            .enable_tab_drag(dnd::TAB_MIME.to_string())
                             .on_reorder(move |event| Message::ReorderTab(pane, event))
+                            .tab_drag_data(move |entity| {
+                                drag_data.get(&entity).cloned().unwrap_or_default()
+                            })
+                            .on_tab_drag_start(move |entity| Message::TabDragStart(pane, entity))
+                            .on_tab_hover(move |entity| Message::TabHover(pane, entity))
+                            .on_context(move |entity| Message::TabBarContext(pane, entity))
+                            .context_menu(Some(menu::tab_menu(tab_model, &self.transfer_destinations(tab_model))))
+                            .window_id_maybe(self.core.main_window_id())
+                            .on_surface_action(Message::Surface)
+                            .on_dnd_drop::<DndDrop>(move |_entity, data, _action| {
+                                Message::TabDropped(pane, data)
+                            })
                             .tab_drag_threshold(25.)
                             .button_height(32)
                             .button_spacing(space_xxs)
@@ -3362,17 +7962,92 @@ impl Application for App {
                             snap: true,
                         }
                     })))
-                    .width(Length::Fill),
-                );
+                    .width(Length::Fill);
+                // The hovered tab's preview, as in the sidebar, centred below
+                // that tab once the pointer has rested on it
+                let preview = self
+                    .hovered_tab
+                    .filter(|(hovered_pane, _, _, since)| {
+                        *hovered_pane == pane && since.elapsed() >= TAB_PREVIEW_DELAY
+                    })
+                    .and_then(|(_, entity, x, _)| {
+                        let session = tab_model.data::<agent::Session>(entity)?;
+                        let mark = tab_model.data::<TabMark>(entity).copied().unwrap_or_default();
+                        Some((self.sidebar.tab_preview(session, mark)?, x))
+                    });
+                // Always in a popover, so that the tab bar keeps its state
+                // (and the hover it reports) as the preview comes and goes
+                let mut popover = widget::popover(tab_bar);
+                if let Some((preview, x)) = preview {
+                    popover = popover
+                        .popup(preview)
+                        .position(widget::popover::Position::BelowAt(x));
+                }
+                tab_column = tab_column.push(popover);
             }
 
             let entity = tab_model.active();
+            if self.transfer_lookups.contains_key(&(pane, entity)) {
+                tab_column = tab_column.push(widget::text::caption(fl!("tab-transfer-checking")));
+            }
+            if tab_model
+                .data::<TabConnection>(entity)
+                .is_some_and(|connection| connection.lost.is_some())
+                && let Some(session) = tab_model.data::<agent::Session>(entity)
+            {
+                let host = session.host.clone();
+                tab_column = tab_column.push(
+                    widget::layer_container(
+                        widget::row::with_children(vec![
+                            widget::text::body(fl!("disconnected-banner", host = host.as_str()))
+                                .width(Length::Fill)
+                                .into(),
+                            widget::button::standard(fl!("reconnect-now"))
+                                .on_press(Message::ReconnectNow(host))
+                                .into(),
+                        ])
+                        .align_y(Alignment::Center)
+                        .spacing(space_xxs)
+                        .padding(space_xxs),
+                    )
+                    .layer(cosmic_theme::Layer::Primary),
+                );
+            }
+            // The tab's sudo requests
+            if let Some(session) = tab_model.data::<agent::Session>(entity) {
+                for pending in self.secrets.for_session(&session.name) {
+                    tab_column = tab_column.push(secrets::bar(pending));
+                }
+            }
+            if tab_model.data::<TabShared>(entity).is_some() {
+                tab_column = tab_column.push(secrets::banner(
+                    None,
+                    fl!("shared-banner"),
+                    vec![
+                            widget::button::standard(fl!("shared-go-there"))
+                                .on_press(Message::SharedGoThere(entity))
+                                .into(),
+                            widget::button::standard(fl!("shared-move-here"))
+                                .on_press(Message::SharedMoveHere(entity))
+                                .into(),
+                            widget::tooltip(
+                                button::custom(icon_cache_get("window-close-symbolic", 16))
+                                    .on_press(Message::SharedDismiss(entity))
+                                    .padding(space_xxs)
+                                    .class(style::Button::Icon),
+                                widget::text::body(fl!("shared-keep-both")),
+                                widget::tooltip::Position::Bottom,
+                            )
+                            .into(),
+                    ],
+                ));
+            }
             let entity_middle_click = tab_model.active();
             let terminal_id = self
                 .terminal_ids
                 .get(&pane)
                 .cloned()
-                .unwrap_or_else(widget::Id::unique);
+                .unwrap_or_else(|| field_id("terminal"));
             if let Some(terminal) = tab_model.data::<Mutex<Terminal>>(entity) {
                 let mut terminal_box = terminal_box(terminal, &self.key_binds)
                     .id(terminal_id)
@@ -3382,6 +8057,7 @@ impl Application for App {
                     .on_open_hyperlink(Some(Box::new(Message::LaunchUrl)))
                     .on_window_focused(|| Message::WindowFocused)
                     .on_window_unfocused(|| Message::WindowUnfocused)
+                    .on_click_focus(move || Message::TerminalClickFocus(pane))
                     .opacity(if t.transparent {
                         t.cosmic().alpha_map.blurred_alpha(t.cosmic().frosted)
                     } else {
@@ -3399,19 +8075,29 @@ impl Application for App {
 
                 // The terminal records what was under the right press; the widget opens the
                 // menu on release, so build it from that state
-                let context_link = terminal
-                    .lock()
-                    .unwrap()
-                    .context_menu
-                    .as_ref()
-                    .map(|menu_state| menu_state.link.clone());
+                let context_state = terminal.lock().unwrap().context_menu.clone();
+                let session = tab_model.data::<agent::Session>(entity);
+                // Files named by a remote session can be opened here
+                let open_locally = session.is_some_and(|session| !session.is_local())
+                    && context_state
+                        .as_ref()
+                        .is_some_and(|state| state.path().is_some());
+                let context_link = context_state.map(|state| state.link);
                 if context_link.is_some() {
                     terminal_box = terminal_box.context_menu_open(true);
                 }
                 let mut context_menu = widget::context_menu(
                     terminal_box,
                     context_link.map(|link| {
-                        menu::context_menu(&self.config, &self.key_binds, entity, link)
+                        menu::context_menu(
+                            &self.config,
+                            &self.key_binds,
+                            entity,
+                            link,
+                            session.is_some(),
+                            open_locally,
+                            self.paste_passwords(),
+                        )
                     }),
                 )
                 .item_width(widget::menu::ItemWidth::Uniform(360))
@@ -3480,8 +8166,8 @@ impl Application for App {
 
                 tab_column = tab_column
                     .push(widget::layer_container(find_widget).layer(cosmic_theme::Layer::Primary));
-            } else {
-                // TODO
+            } else if let Some(launcher) = tab_model.data::<Launcher>(entity) {
+                tab_column = tab_column.push(self.launcher_view(entity, launcher));
             }
 
             DndDestination::for_data::<DndDrop>(tab_column, move |data, action| {
@@ -3505,14 +8191,78 @@ impl Application for App {
         .on_drag(Message::PaneDragged);
 
         //TODO: apply window border radius xs at bottom of window
-        if show_pane_borders {
+        let content: Element<_> = if show_pane_borders {
             // Each pane draws its own border stroke. Painting a filled
             // container behind the grid instead would stack its alpha with the
             // translucent panes and wash out the blurred backdrop.
             pane_grid.spacing(space_xxxs).into()
         } else {
             pane_grid.into()
+        };
+        let content: Element<_> = if self.host_setup.is_empty() && self.pending_commands.is_empty() {
+            content
+        } else {
+            let mut column = widget::column::with_capacity(self.host_setup.len() * 3 + self.pending_commands.len() + 1);
+            for status in self.pending_commands.values() {
+                column = column.push(widget::text::caption(status.clone()));
+            }
+            for (host, step) in &self.host_setup {
+                let machine = if host.is_empty() {
+                    fl!("this-computer")
+                } else {
+                    self.config.machine_for_host(host).map_or_else(|| host.clone(), |m| m.name.clone())
+                };
+                let (detail, progress) = match step {
+                    None => (fl!("host-setup-tools"), 0.0),
+                    Some(agent::Helper::Supervise) => (fl!("host-setup-supervisor"), 0.2),
+                    Some(agent::Helper::Transfer) => (fl!("host-setup-transfer"), 0.4),
+                    Some(agent::Helper::PamModule) => (fl!("host-setup-sudo"), 0.6),
+                    Some(agent::Helper::Zellij) => (fl!("host-setup-zellij"), 0.8),
+                    Some(agent::Helper::SudoAgent) => (fl!("host-setup-sudo"), 0.6),
+                };
+                column = column.push(widget::text::caption(fl!("host-setup", host = machine, step = detail)));
+                column = column.push(widget::progress_bar::determinate_linear(progress).width(Length::Fill));
+                if self.host_setup_stalled.contains(host) {
+                    column = column.push(widget::text::caption(fl!("host-setup-waiting")));
+                }
+            }
+            column.push(content).height(Length::Fill).into()
+        };
+        let open = self.open_sessions();
+        // What other windows are told this one shows
+        peers::set_open(open.iter().map(agent::Session::descriptor).collect());
+        // The mounts this window may want: of the machines it shows
+        let shown: BTreeSet<String> = open
+            .iter()
+            .map(|session| session.host.as_str())
+            .chain(self.launcher_hosts())
+            .filter(|host| !host.is_empty())
+            .map(agent::mounts::name_for)
+            .collect();
+        agent::mounts::set_needed(&shown);
+        if !self.show_sidebar {
+            return widget::toaster(&self.toasts, content);
         }
+        let menu = (self.new_tab_menu_open && self.new_tab_menu_in_sidebar)
+            .then(|| self.new_tab_menu());
+        let sidebar = self.sidebar.view(
+            &open,
+            self.active_session(),
+            menu,
+            |session| TabMark {
+                color: self.session_color(session),
+                remote: !session.is_local(),
+                disconnected: false,
+            },
+            |session| self.session_destinations(session),
+            self.core.main_window_id(),
+            self.config.sidebar_compact,
+            |session| self.secrets.for_session(&session.name).next().is_some(),
+        );
+        widget::toaster(
+            &self.toasts,
+            widget::row::with_children(vec![sidebar, widget::divider::vertical::default().into(), content]),
+        )
     }
 
     fn system_theme_update(
@@ -3526,6 +8276,8 @@ impl Application for App {
     fn subscription(&self) -> Subscription<Self::Message> {
         struct ConfigSubscription;
         struct TerminalEventSubscription;
+        struct PeersSubscription;
+        struct SudoSubscription;
 
         Subscription::batch([
             event::listen_with(|event, _status, _window_id| match event {
@@ -3541,7 +8293,87 @@ impl Application for App {
                 Event::Mouse(MouseEvent::ButtonReleased(MouseButton::Left)) => {
                     Some(Message::CopyPrimary(None))
                 }
+                // How a tab dragged from this window was dropped
+                Event::Dnd(DndEvent::Source(SourceEvent::Finished)) => {
+                    Some(Message::TabDragEnded(true))
+                }
+                Event::Dnd(DndEvent::Source(SourceEvent::Cancelled)) => {
+                    Some(Message::TabDragEnded(false))
+                }
+                // Whether a drag is over this window
+                Event::Dnd(DndEvent::Offer(
+                    _,
+                    OfferEvent::Enter { .. } | OfferEvent::Motion { .. },
+                )) => Some(Message::TabDragOverWindow(true)),
+                Event::Dnd(DndEvent::Offer(_, OfferEvent::Leave)) => {
+                    Some(Message::TabDragOverWindow(false))
+                }
                 _ => None,
+            }),
+            Subscription::run_with(TypeId::of::<SudoSubscription>(), |_| {
+                stream::channel(
+                    16,
+                    |mut output: iced::futures::channel::mpsc::Sender<Message>| async move {
+                        use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
+                        // SAFETY: a plain call
+                        let path = cosmic_term::sudo_control::control_path(unsafe { libc::getuid() });
+                        loop {
+                            // systemd starts the agent on connecting
+                            if let Ok(stream) = tokio::net::UnixStream::connect(&path).await {
+                                let (read, mut write) = stream.into_split();
+                                let (agent, mut to_agent) = tokio::sync::mpsc::unbounded_channel();
+                                let _ = output.send(Message::SudoConnected(agent)).await;
+                                let mut lines = tokio::io::BufReader::new(read).lines();
+                                loop {
+                                    tokio::select! {
+                                        line = lines.next_line() => match line {
+                                            Ok(Some(line)) => {
+                                                if let Ok(event) = serde_json::from_str(&line) {
+                                                    let _ = output.send(Message::SudoEvent(event)).await;
+                                                }
+                                            }
+                                            _ => break,
+                                        },
+                                        message = to_agent.recv() => match message {
+                                            Some(message) => {
+                                                let Ok(mut line) = serde_json::to_string(&message) else { continue };
+                                                line.push('\n');
+                                                if write.write_all(line.as_bytes()).await.is_err() {
+                                                    break;
+                                                }
+                                            }
+                                            None => break,
+                                        },
+                                    }
+                                }
+                                let _ = output.send(Message::SudoDisconnected).await;
+                            }
+                            tokio::time::sleep(Duration::from_secs(5)).await;
+                        }
+                    },
+                )
+            }),
+            Subscription::run_with(TypeId::of::<PeersSubscription>(), |_| {
+                stream::channel(
+                    16,
+                    |mut output: iced::futures::channel::mpsc::Sender<Message>| async move {
+                        let (requests, mut received) = mpsc::unbounded_channel();
+                        // Kept, to stay on the bus
+                        let _connection = match peers::serve(requests).await {
+                            Ok(connection) => Some(connection),
+                            Err(err) => {
+                                log::warn!("other windows cannot reach this one: {err}");
+                                None
+                            }
+                        };
+                        while let Some(request) = received.recv().await {
+                            if output.send(Message::PeerRequest(request)).await.is_err() {
+                                break;
+                            }
+                        }
+                        std::future::pending::<()>().await;
+                    },
+                )
             }),
             Subscription::run_with(TypeId::of::<TerminalEventSubscription>(), |_| {
                 stream::channel(
@@ -3614,6 +8446,29 @@ fn pane_border(cosmic: &cosmic_theme::Theme, transparent: bool, show: bool) -> i
 #[cfg(test)]
 mod tests {
     use super::{pane_border, pane_divider_color};
+
+    #[test]
+    fn disconnected_tabs_are_grey() {
+        let mark = crate::TabMark {
+            color: crate::TabColor::parse("#d97757"),
+            remote: true,
+            disconnected: false,
+        };
+        assert_eq!(mark.strip_color(), crate::TabColor::parse("#d97757"));
+        let lost = crate::TabMark {
+            disconnected: true,
+            ..mark
+        };
+        assert_eq!(lost.strip_color(), Some(crate::DISCONNECTED_GREY));
+    }
+
+    #[test]
+    fn long_text_keeps_both_ends() {
+        assert_eq!(crate::ellipsize_middle("short", 10), "short");
+        let shortened = crate::ellipsize_middle("~/Documents/Research/Repositories/project/src", 20);
+        assert_eq!(shortened, "~/Documen…roject/src");
+        assert_eq!(shortened.chars().count(), 20);
+    }
 
     #[test]
     fn pane_border_is_drawn_only_when_enabled() {

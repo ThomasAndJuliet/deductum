@@ -25,6 +25,18 @@ static MENU_ID: LazyLock<cosmic::widget::Id> =
 #[derive(Debug, Clone)]
 pub struct MenuState {
     pub link: Option<String>,
+    /// The word under the pointer, when there is no link
+    pub word: Option<String>,
+}
+
+impl MenuState {
+    /// A path named by the link or word, for opening a remote file locally
+    pub fn path(&self) -> Option<String> {
+        self.link
+            .as_deref()
+            .or(self.word.as_deref())
+            .and_then(crate::agent::link_path)
+    }
 }
 
 /// A context menu action dispatched to the tab the menu was opened on.
@@ -44,6 +56,9 @@ pub fn context_menu(
     key_binds: &HashMap<KeyBind, Action>,
     entity: segmented_button::Entity,
     link: Option<String>,
+    has_session: bool,
+    open_locally: bool,
+    passwords: Option<Vec<(u64, String)>>,
 ) -> Vec<widget::menu::Tree<Message>> {
     let item =
         |label: String, action: Action| MenuItem::Button(label, None, TabAction(entity, action));
@@ -53,6 +68,21 @@ pub fn context_menu(
         MenuItem::Divider,
         item(fl!("copy"), Action::Copy),
         item(fl!("paste"), Action::Paste),
+    ];
+    // The secrets store's saved passwords, to paste; or, while it is locked,
+    // the way to unlock it
+    match passwords {
+        None => items.push(item(fl!("paste-password-unlock"), Action::SecretsToggle)),
+        Some(passwords) if !passwords.is_empty() => items.push(MenuItem::Folder(
+            fl!("paste-password"),
+            passwords
+                .into_iter()
+                .map(|(id, label)| item(label, Action::PastePassword(id)))
+                .collect(),
+        )),
+        Some(_) => {}
+    }
+    items.extend([
         item(fl!("select-all"), Action::SelectAll),
         MenuItem::Divider,
         item(fl!("clear-scrollback"), Action::ClearScrollback),
@@ -68,15 +98,29 @@ pub fn context_menu(
             TabAction(entity, Action::ShowHeaderBar(!config.show_headerbar)),
         ),
         MenuItem::Divider,
-    ];
+    ]);
     #[cfg(feature = "password_manager")]
     items.push(item(fl!("menu-password-manager"), Action::PasswordManager));
     items.push(item(fl!("menu-settings"), Action::Settings));
+    if has_session {
+        items.push(MenuItem::Divider);
+        // Closing a tab only detaches it; say so, next to the action that
+        // does end the session
+        items.push(item(fl!("detach-session"), Action::TabClose));
+        items.push(item(fl!("move-to-new-window"), Action::TabPopOut));
+        items.push(item(fl!("end-remote-session"), Action::RemoteEnd));
+    }
     // If we have a link, prepend the link items
     if link.is_some() {
         items.insert(0, item(fl!("open-link"), Action::LaunchUrlByMenu));
         items.insert(1, item(fl!("copy-link"), Action::CopyUrlByMenu));
         items.insert(2, MenuItem::Divider);
+    }
+    if open_locally {
+        items.insert(0, item(fl!("open-locally"), Action::OpenLocallyByMenu));
+        if link.is_none() {
+            items.insert(1, MenuItem::Divider);
+        }
     }
 
     let key_binds: HashMap<KeyBind, TabAction> = key_binds
@@ -84,6 +128,45 @@ pub fn context_menu(
         .map(|(key_bind, action)| (key_bind.clone(), TabAction(entity, *action)))
         .collect();
     widget::menu::items(&key_binds, items)
+}
+
+/// The menus of the tabs in a tab bar, one per tab in order
+pub fn tab_menu(
+    tab_model: &segmented_button::Model<segmented_button::SingleSelect>,
+    destinations: &HashMap<segmented_button::Entity, Vec<(String, crate::config::ProfileId)>>,
+) -> Vec<widget::menu::Tree<Message>> {
+    let menus = tab_model
+        .iter()
+        .map(|entity| {
+            let item = |label: String, action: Action| {
+                MenuItem::Button(label, None, TabAction(entity, action))
+            };
+            let mut items = vec![item(fl!("new-tab"), Action::TabNew), MenuItem::Divider];
+            if tab_model.data::<crate::agent::Session>(entity).is_some() {
+                // Closing only detaches; say so, beside the action that
+                // ends the session
+                items.push(item(fl!("detach-session"), Action::TabClose));
+                items.push(item(fl!("move-to-new-window"), Action::TabPopOut));
+                items.push(item(fl!("end-remote-session"), Action::RemoteEnd));
+                // An agent's conversation, and its worktree, to another computer
+                let targets = destinations.get(&entity).map(Vec::as_slice).unwrap_or_default();
+                if !targets.is_empty() {
+                    items.push(MenuItem::Divider);
+                    for (name, profile_id) in targets {
+                        items.push(item(fl!("move-to", profile = name.as_str()), Action::TabMoveTo(*profile_id)));
+                    }
+                    for (name, profile_id) in targets {
+                        items.push(item(fl!("fork-to", profile = name.as_str()), Action::TabForkTo(*profile_id)));
+                    }
+                }
+            } else {
+                items.push(item(fl!("close-tab"), Action::TabClose));
+            }
+            items
+        })
+        .collect();
+    // Shortcuts would match only one tab's actions, so none are shown
+    widget::menu::nav_context(&HashMap::<KeyBind, TabAction>::new(), menus)
 }
 
 pub fn color_scheme_menu<'a>(
@@ -135,19 +218,66 @@ pub fn color_scheme_menu<'a>(
         .into()
 }
 
+/// What the Session menu offers for the tab in front
+pub struct SessionMenu {
+    pub session: bool,
+    /// An agent's session, whose conversation can be renamed and moved
+    pub agent: bool,
+    /// The agent profiles on other computers it can move or fork to
+    pub destinations: Vec<(String, crate::config::ProfileId)>,
+}
+
 pub fn menu_bar<'a>(
     core: &Core,
     config: &Config,
     key_binds: &HashMap<KeyBind, Action>,
+    session: &SessionMenu,
 ) -> Element<'a, Message> {
     let mut profile_items = Vec::with_capacity(config.profiles.len());
     for (name, id) in config.profile_names() {
         profile_items.push(MenuItem::Button(name, None, Action::ProfileOpen(id)));
     }
 
-    //TODO: what to do if there are no profiles?
-
     let color_scheme_kind = config.color_scheme_kind(core.system_theme());
+
+    // Items that act on the tab in front, available only when it suits
+    let when = |enabled: bool, label: String, action: Action| {
+        if enabled {
+            MenuItem::Button(label, None, action)
+        } else {
+            MenuItem::ButtonDisabled(label, None, action)
+        }
+    };
+    let mut session_items = vec![
+        when(session.agent, fl!("rename-menu"), Action::SessionRename),
+        MenuItem::Divider,
+        when(session.session, fl!("detach-session"), Action::TabClose),
+        when(session.session, fl!("move-to-new-window"), Action::TabPopOut),
+    ];
+    if session.agent && !session.destinations.is_empty() {
+        session_items.push(MenuItem::Folder(
+            fl!("move-to-menu"),
+            session
+                .destinations
+                .iter()
+                .map(|(name, id)| MenuItem::Button(name.clone(), None, Action::TabMoveTo(*id)))
+                .collect(),
+        ));
+        session_items.push(MenuItem::Folder(
+            fl!("fork-to-menu"),
+            session
+                .destinations
+                .iter()
+                .map(|(name, id)| MenuItem::Button(name.clone(), None, Action::TabForkTo(*id)))
+                .collect(),
+        ));
+    }
+    session_items.extend([
+        when(session.session, fl!("end-remote-session"), Action::RemoteEnd),
+        MenuItem::Divider,
+        MenuItem::Button(fl!("open-in-zed"), None, Action::OpenInZed),
+        MenuItem::Button(fl!("open-in-files"), None, Action::OpenInFiles),
+    ]);
 
     responsive_menu_bar()
         .item_height(ItemHeight::Dynamic(40))
@@ -167,6 +297,9 @@ pub fn menu_bar<'a>(
                         MenuItem::Divider,
                         MenuItem::Folder(fl!("profile"), profile_items),
                         MenuItem::Button(fl!("menu-profiles"), None, Action::Profiles),
+                        MenuItem::Button(fl!("menu-secrets"), None, Action::SecretsToggle),
+                        MenuItem::Button(fl!("remote-files-title"), None, Action::RemoteFiles),
+                        MenuItem::Button(fl!("menu-settings"), None, Action::Settings),
                         MenuItem::Divider,
                         MenuItem::Button(fl!("close-tab"), None, Action::TabClose),
                         MenuItem::Divider,
@@ -188,6 +321,8 @@ pub fn menu_bar<'a>(
                 (
                     fl!("view"),
                     vec![
+                        MenuItem::Button(fl!("menu-sidebar"), None, Action::SidebarToggle),
+                        MenuItem::Divider,
                         MenuItem::Button(fl!("zoom-in"), None, Action::ZoomIn),
                         MenuItem::Button(fl!("zoom-reset"), None, Action::ZoomReset),
                         MenuItem::Button(fl!("zoom-out"), None, Action::ZoomOut),
@@ -212,17 +347,16 @@ pub fn menu_bar<'a>(
                             None,
                             Action::ColorSchemes(color_scheme_kind),
                         ),
+                    ],
+                ),
+                (fl!("session-menu"), session_items),
+                (
+                    fl!("help-menu"),
+                    vec![
                         MenuItem::Button(
                             fl!("menu-keyboard-shortcuts"),
                             None,
                             Action::KeyboardShortcuts,
-                        ),
-                        MenuItem::Button(fl!("menu-settings"), None, Action::Settings),
-                        #[cfg(feature = "password_manager")]
-                        MenuItem::Button(
-                            fl!("menu-password-manager"),
-                            None,
-                            Action::PasswordManager,
                         ),
                         MenuItem::Divider,
                         MenuItem::Button(fl!("menu-about"), None, Action::About),
