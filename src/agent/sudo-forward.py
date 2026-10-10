@@ -22,7 +22,12 @@ def local_agent(peer):
     try:
         name = Path(os.readlink(f"/proc/{pid}/exe")).name
     except OSError:
-        return False  # sshd may hide its executable from this user
+        # A non-dumpable user systemd also hides exe, even from its own
+        # user. comm remains readable and identifies the socket activator.
+        try:
+            name = Path(f"/proc/{pid}/comm").read_text().strip()
+        except OSError:
+            return False
     return name == "systemd" or name.startswith("ct-sudo-agent-") or name == "ct-sudo-agent"
 
 

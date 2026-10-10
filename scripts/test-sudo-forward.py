@@ -71,8 +71,14 @@ class ForwardPreparation(unittest.TestCase):
         for exe, expected in [("/usr/lib/systemd/systemd", True), ("/home/user/ct-sudo-agent-abcd", True), ("/usr/libexec/sshd-session", False)]:
             with patch.object(os, "readlink", return_value=exe):
                 self.assertEqual(forward.local_agent(peer), expected)
-        with patch.object(os, "readlink", side_effect=PermissionError):
+        with patch.object(os, "readlink", side_effect=PermissionError), patch.object(Path, "read_text", side_effect=PermissionError):
             self.assertFalse(forward.local_agent(peer))
+
+    def test_hidden_executable_uses_readable_process_name(self):
+        peer = (123, os.getuid(), os.getgid())
+        for name, expected in [("systemd\n", True), ("ct-sudo-agent-f\n", True), ("sshd-session\n", False)]:
+            with patch.object(os, "readlink", side_effect=PermissionError), patch.object(Path, "read_text", return_value=name):
+                self.assertEqual(forward.local_agent(peer), expected)
 
 
 if __name__ == "__main__":
