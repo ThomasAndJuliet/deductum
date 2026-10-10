@@ -203,6 +203,12 @@ mod tests {
     #[test]
     fn tags_tabs_with_their_token() {
         let options = tab_options(tty::Options::default(), None, "t1");
-        assert_eq!(options.env.get(TAB_VAR).map(String::as_str), Some("t1"));
+        // In the environment, or, from the Flatpak, passed to the host
+        let tagged = options.env.get(TAB_VAR).map(String::as_str) == Some("t1")
+            || options
+                .shell
+                .as_ref()
+                .is_some_and(|shell| format!("{shell:?}").contains(&format!("--env={TAB_VAR}=t1")));
+        assert!(tagged, "{options:?}");
     }
 }

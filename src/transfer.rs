@@ -975,7 +975,16 @@ mod tests {
         assert!(journal.try_lock("example").is_err());
         assert!(journal.try_lock("other").is_ok());
         drop(first);
-        let after = journal.try_lock("example");
+        // A process another test forks meanwhile shares the lock until it
+        // execs, as one any thread of a window spawns would: briefly
+        let mut after = journal.try_lock("example");
+        for _ in 0..40 {
+            if after.is_ok() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+            after = journal.try_lock("example");
+        }
         assert!(after.is_ok(), "{:?}", after.err());
     }
 
