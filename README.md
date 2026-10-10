@@ -46,7 +46,7 @@ system's password authentication.
 
 ## Flatpak builds and publication
 
-Run `scripts/build-flatpak.sh` for a complete local build and installation.
+Run `scripts/build-flatpak.sh` for a complete local build (`--install` to install it too).
 The Flatpak module explicitly composes the Store catalog after installing its
 MetaInfo, desktop entry, and icons, so module-only rebuilds include the catalog
 as well. Do not publish a cached build after running only its Rust commands.

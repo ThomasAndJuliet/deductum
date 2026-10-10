@@ -113,7 +113,7 @@ modules:
       # chartgen, from the diagrams repository shared with Juliet; a local
       # checkout is linked as ../chartgen-src for development
       - type: git
-        url: git@github.com:jcooke848/diagrams.git
+        url: ssh://git@github.com/jcooke848/diagrams.git
         branch: statistical-charts
         commit: 50b5b9773dbcbd1e8c9975c9bc3e107f00496bb6
         dest: chartgen-src
