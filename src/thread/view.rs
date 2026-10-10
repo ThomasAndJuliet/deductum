@@ -556,8 +556,14 @@ fn composer<'a>(tab: &'a ThreadTab, style: &ThreadStyle) -> Element<'a, Message>
         );
     }
     column.push(editor.into());
-    let model_names: Vec<String> = tab.models.iter().map(|(_, name)| name.clone()).collect();
-    let model_selected = tab.models.iter().position(|(value, _)| *value == tab.model);
+    let mut model_names: Vec<String> = tab.models.iter().map(|(_, name)| name.clone()).collect();
+    let mut model_selected = tab.models.iter().position(|(value, _)| *value == tab.model);
+    // A model the CLI's list doesn't name, as one it resolved an alias to,
+    // shows as itself
+    if model_selected.is_none() && !tab.model.is_empty() && !model_names.is_empty() {
+        model_selected = Some(model_names.len());
+        model_names.push(tab.model.clone());
+    }
     let mode_names: Vec<String> = MODES.iter().map(|(_, name)| name.to_string()).collect();
     let mode_selected = MODES.iter().position(|(value, _)| *value == tab.mode).or(Some(0));
     let mut controls: Vec<Element<'a, Message>> = Vec::new();

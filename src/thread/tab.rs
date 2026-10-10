@@ -350,13 +350,20 @@ impl ThreadTab {
         }
         // Join the relay that runs, else start one under a new name
         let attach = match &self.relay {
-            Some(relay) if self.relay_live => session::Attach {
+            Some(relay) if self.relay_live => {
+                // Started by another window, or this one before: its colours
+                // are taken to be these, rather than restarting it to be sure
+                if self.launched_colours.is_none() {
+                    self.launched_colours = self.colours.clone();
+                }
+                session::Attach {
                 host: self.host.clone(),
                 session: relay.name.clone(),
                 from: cosmic_term::relay::Cursor::Live,
                 start: None,
                 conversation: self.session_id.clone(),
-            },
+                }
+            }
             _ => {
                 let relay = crate::agent::new_thread_session(self.agent, &self.cwd, &self.host);
                 self.launched_colours = self.colours.clone();

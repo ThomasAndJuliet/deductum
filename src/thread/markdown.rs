@@ -334,9 +334,10 @@ impl Builder {
                     marker,
                 });
             }
+            // An agent means its line breaks, as chats take them
             Event::SoftBreak => {
                 if self.code.is_none() {
-                    self.push_text(" ", self.style);
+                    self.push_text("\n", self.style);
                 }
             }
             Event::HardBreak => self.push_text("\n", self.style),
