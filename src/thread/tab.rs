@@ -143,6 +143,10 @@ pub struct ThreadTab {
     /// The view's colours for the agent to match, if it should; set by the
     /// app
     pub colours: Option<claude::Colours>,
+    /// Named by the user, so not after its first message
+    pub named: bool,
+    /// More for the agent's system prompt; see [`Launch::note`]
+    pub note: Option<String>,
     /// The colours the running CLI was told
     launched_colours: Option<claude::Colours>,
     /// Rich text built for items, by item and part, with the hash of what
@@ -187,6 +191,8 @@ impl ThreadTab {
             models: Vec::new(),
             failure: None,
             colours: None,
+            named: false,
+            note: None,
             launched_colours: None,
             docs: RefCell::new(HashMap::new()),
         }
@@ -282,6 +288,7 @@ impl ThreadTab {
             permission_mode: Some(self.mode.clone()).filter(|m| !m.is_empty()),
             args: self.args.clone(),
             colours: self.colours.clone(),
+            note: self.note.clone(),
         }
     }
 

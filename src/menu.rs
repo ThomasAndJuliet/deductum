@@ -242,6 +242,8 @@ pub struct SessionMenu {
     pub agent: bool,
     /// The agent profiles on other computers it can move or fork to
     pub destinations: Vec<(String, crate::config::ProfileId)>,
+    /// The tab in front is a thread, which has no terminal to clear
+    pub thread: bool,
 }
 
 pub fn menu_bar<'a>(
@@ -330,7 +332,7 @@ pub fn menu_bar<'a>(
                         MenuItem::Button(fl!("paste"), None, Action::Paste),
                         MenuItem::Button(fl!("select-all"), None, Action::SelectAll),
                         MenuItem::Divider,
-                        MenuItem::Button(fl!("clear-scrollback"), None, Action::ClearScrollback),
+                        when(!session.thread, fl!("clear-scrollback"), Action::ClearScrollback),
                         MenuItem::Divider,
                         MenuItem::Button(fl!("find"), None, Action::Find),
                     ],

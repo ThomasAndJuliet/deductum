@@ -17,6 +17,27 @@ use super::viewer::{ImageWindow, Zoom};
 use crate::config::{PaperFont, PaperTone, ProfileId};
 use crate::{App, Message, TabMark, ThreadSetting};
 
+/// Where a thread runs, for another beside it
+pub(crate) struct ThreadOrigin {
+    pub profile_id: Option<ProfileId>,
+    pub host: String,
+    pub cwd: String,
+    pub args: String,
+    pub agent: crate::config::Agent,
+}
+
+impl ThreadOrigin {
+    pub(crate) fn of(tab: &ThreadTab) -> Self {
+        Self {
+            profile_id: tab.profile_id,
+            host: tab.host.clone(),
+            cwd: tab.cwd.clone(),
+            args: tab.args.clone(),
+            agent: tab.agent,
+        }
+    }
+}
+
 impl App {
     /// Every thread tab, with its pane and whether it is shown
     pub(crate) fn thread_tabs(&self) -> Vec<(pane_grid::Pane, segmented_button::Entity, bool)> {
@@ -30,6 +51,89 @@ impl App {
             }
         }
         out
+    }
+
+    /// A new tab in `pane`: beside a thread, another in the same place; else
+    /// a thread, a launcher or a terminal, as the default profile says
+    pub(crate) fn new_tab_in(&mut self, pane: pane_grid::Pane, from: Option<ThreadOrigin>) -> Task<Message> {
+        if let Some(from) = from {
+            let open = self.open_thread(pane, from.profile_id, from.cwd.clone(), None, None);
+            if let Some(tab) = self.thread_mut(self.next_thread - 1) {
+                tab.host = from.host;
+                tab.args = from.args;
+                tab.agent = from.agent;
+            }
+            return open;
+        }
+        if let Some(profile_id) = self.get_default_profile()
+            && let Some(dir) = self.thread_profile_dir(profile_id)
+        {
+            return self.open_thread(pane, Some(profile_id), dir, None, None);
+        }
+        if let Some(profile_id) = self.get_default_profile()
+            && self.wants_launcher(Some(profile_id))
+        {
+            return self.open_launcher(pane, profile_id);
+        }
+        self.create_and_focus_new_terminal(pane, self.get_default_profile(), self.config.tab_new_inherit_working_directory)
+    }
+
+    /// Move a thread's tab to another pane, with its conversation and agent
+    pub(crate) fn move_thread(
+        &mut self,
+        from: pane_grid::Pane,
+        entity: segmented_button::Entity,
+        to: pane_grid::Pane,
+    ) -> Task<Message> {
+        let Some(source) = self.pane_model.panes.get_mut(from) else { return Task::none() };
+        let Some(slot) = source.data_mut::<ThreadTab>(entity) else { return Task::none() };
+        let tab = std::mem::replace(slot, ThreadTab::new(ThreadId::MAX, None, String::new(), String::new(), String::new()));
+        let mark = source.data::<TabMark>(entity).cloned();
+        let title = source.text(entity).unwrap_or_default().to_string();
+        source.remove(entity);
+        if source.iter().next().is_none() {
+            // The pane it leaves empty goes too
+            if let Some((_, sibling)) = self.pane_model.panes.close(from) {
+                self.pane_model.set_focus(sibling);
+            }
+        }
+        let composer_id = tab.composer_id.clone();
+        let Some(target) = self.pane_model.panes.get_mut(to) else { return Task::none() };
+        let mut builder = target.insert().text(title);
+        if let Some(icon) = mark.as_ref().and_then(|mark| mark.icon(16)) {
+            builder = builder.icon(icon);
+        }
+        let moved = builder.closable().activate().id();
+        if let Some(mark) = mark {
+            target.data_set::<TabMark>(moved, mark);
+        }
+        target.data_set::<ThreadTab>(moved, tab);
+        self.pane_model.set_focus(to);
+        Task::batch([self.update_title(Some(to)), cosmic::widget::text_input::focus(composer_id)])
+    }
+
+    /// Every thread, by id
+    pub(crate) fn thread_ids(&self) -> Vec<ThreadId> {
+        self.pane_model
+            .panes
+            .iter()
+            .flat_map(|(_, tab_model)| tab_model.iter().filter_map(|e| tab_model.data::<ThreadTab>(e).map(|t| t.id)))
+            .collect()
+    }
+
+    /// Stop the idle agents of threads working in or around `dir` on `host`,
+    /// which would keep a transfer of that worktree from starting; they
+    /// start again, resuming, at the next message
+    pub(crate) fn stop_idle_threads_in(&mut self, host: &str, dir: &str) {
+        let dir = std::path::Path::new(dir);
+        for id in self.thread_ids() {
+            if let Some(tab) = self.thread_mut(id)
+                && tab.host == host
+                && (std::path::Path::new(&tab.cwd).starts_with(dir) || dir.starts_with(&tab.cwd))
+            {
+                tab.stop_cli();
+            }
+        }
     }
 
     pub(crate) fn thread(&self, id: ThreadId) -> Option<&ThreadTab> {
@@ -68,7 +172,11 @@ impl App {
         resume: Option<String>,
         replace: Option<segmented_button::Entity>,
     ) -> Task<Message> {
-        let profile = profile_id.and_then(|id| self.config.profiles.get(&id)).cloned().unwrap_or_default();
+        let mut profile = profile_id.and_then(|id| self.config.profiles.get(&id)).cloned().unwrap_or_default();
+        // Without one, a Claude thread, marked as Claude's are
+        if profile.agent == crate::config::Agent::Shell {
+            profile.agent = crate::config::Agent::Claude;
+        }
         let host = profile.host.trim().to_string();
         let mark = TabMark { color: profile.tab_color(), remote: profile.is_remote(), disconnected: false };
         let id = self.next_thread;
@@ -132,7 +240,7 @@ impl App {
             match request {
                 Request::Copy(text) => tasks.push(clipboard::write(text)),
                 Request::PickImages(id) => tasks.push(self.pick_images(id)),
-                Request::Retitle => self.retitle_thread(id),
+                Request::Retitle => tasks.push(self.retitle_thread(id)),
             }
         }
         if started {
@@ -142,15 +250,15 @@ impl App {
     }
 
     /// Name a thread's tab after its first message, once it has one
-    fn retitle_thread(&mut self, id: ThreadId) {
-        let Some(tab) = self.thread(id) else { return };
+    fn retitle_thread(&mut self, id: ThreadId) -> Task<Message> {
+        let Some(tab) = self.thread(id).filter(|tab| !tab.named) else { return Task::none() };
         let Some(first) = tab.entries.as_ref().and_then(|entries| {
             entries.items.iter().find_map(|item| match &item.kind {
                 super::model::ItemKind::User { text, .. } => Some(text.clone()),
                 _ => None,
             })
         }) else {
-            return;
+            return Task::none();
         };
         let line = first.lines().find(|l| !l.trim().is_empty()).unwrap_or_default().trim().to_string();
         let mut title: String = line.chars().take(48).collect();
@@ -158,8 +266,45 @@ impl App {
             title.push('…');
         }
         if title.is_empty() {
-            return;
+            return Task::none();
         }
+        self.set_thread_title(id, title)
+    }
+
+    /// Rename a thread: its tab, and its conversation where the agent keeps
+    /// names, as Claude's `/rename` does
+    pub(crate) fn rename_thread_to(&mut self, id: ThreadId, name: String) -> Task<Message> {
+        if name.is_empty() {
+            return self.update_focus();
+        }
+        let Some(tab) = self.thread_mut(id) else { return Task::none() };
+        tab.named = true;
+        let record = (tab.agent == crate::config::Agent::Claude)
+            .then(|| tab.session_id.clone().map(|session| (tab.host.clone(), session)))
+            .flatten();
+        let retitle = self.set_thread_title(id, name.clone());
+        let save = match record {
+            Some((host, session)) => {
+                let line = serde_json::json!({"type": "custom-title", "customTitle": name, "sessionId": session}).to_string();
+                let script = format!(
+                    "for f in \"$HOME\"/.claude/projects/*/{}.jsonl; do [ -f \"$f\" ] && printf '%s\\n' {} >> \"$f\"; done\n",
+                    crate::agent::sh_quote(&session),
+                    crate::agent::sh_quote(&line),
+                );
+                cosmic::iced::Task::future(async move {
+                    if let Err(err) = crate::agent::run(crate::agent::session_exec(&host, &script)).await {
+                        log::warn!("saving the thread's name: {err}");
+                    }
+                })
+                .discard()
+            }
+            None => Task::none(),
+        };
+        Task::batch([retitle, save, self.update_focus()])
+    }
+
+    /// Name a thread's tab, and the window after it if it is in front
+    pub(crate) fn set_thread_title(&mut self, id: ThreadId, title: String) -> Task<Message> {
         for (pane, entity, _) in self.thread_tabs() {
             if let Some(tab_model) = self.pane_model.panes.get_mut(pane)
                 && let Some(tab) = tab_model.data_mut::<ThreadTab>(entity)
@@ -167,9 +312,10 @@ impl App {
             {
                 tab.title = title.clone();
                 tab_model.text_set(entity, title);
-                return;
+                return self.update_title(None);
             }
         }
+        Task::none()
     }
 
     /// Keep within the limits: unload threads not shown beyond
@@ -421,6 +567,23 @@ impl App {
         }
         self.save_threads_config(threads);
         self.enforce_thread_limits()
+    }
+
+    /// Threads' text a pixel larger or smaller, or with `None` its usual
+    /// size: the paper's when threads are set as papers
+    pub(crate) fn zoom_threads(&mut self, step: Option<i16>) {
+        let mut threads = self.config.threads.clone();
+        let defaults = crate::config::ThreadSettings::default();
+        let (size, default) = if self.config.thread_paper {
+            (&mut threads.paper_size, defaults.paper_size)
+        } else {
+            (&mut threads.text_size, defaults.text_size)
+        };
+        *size = match step {
+            Some(step) => size.saturating_add_signed(step).clamp(9, 40),
+            None => default,
+        };
+        self.save_threads_config(threads);
     }
 
     pub(crate) fn save_threads_config(&mut self, threads: crate::config::ThreadSettings) {

@@ -45,7 +45,7 @@ const LAUNCHER: &str = include_str!("agent/launcher.py");
 
 /// Rounds of built-in profiles. Each round is added once, so deleting one of
 /// its profiles is permanent
-const PROFILE_SEED_VERSION: u32 = 4;
+const PROFILE_SEED_VERSION: u32 = 5;
 
 /// Codex's full access mode: no approval prompts and no sandbox
 pub const CODEX_FULL_ACCESS: &str = "--dangerously-bypass-approvals-and-sandbox";
@@ -77,9 +77,14 @@ pub fn seed_profiles(config: &mut Config) -> bool {
     if done < 4 {
         seeds.push(Profile { thread: true, ..Profile::agent("Claude thread", Agent::Claude, "") });
     }
+    // Round 5: Codex in a rich-text thread
+    if done < 5 {
+        seeds.push(Profile { thread: true, ..Profile::agent("Codex thread", Agent::Codex, "") });
+    }
     let mut changed = !seeds.is_empty();
     for mut profile in seeds {
-        if profile.agent == Agent::Codex {
+        // A thread asks, in the mode chosen in it, as Claude's do
+        if profile.agent == Agent::Codex && !profile.thread {
             profile.args = CODEX_FULL_ACCESS.to_string();
         }
         let profile_id = config
@@ -93,7 +98,7 @@ pub fn seed_profiles(config: &mut Config) -> bool {
     // its profiles arguments of their own
     if done < 3 {
         for profile in config.profiles.values_mut() {
-            if profile.agent == Agent::Codex && profile.args.trim().is_empty() {
+            if profile.agent == Agent::Codex && !profile.thread && profile.args.trim().is_empty() {
                 profile.args = CODEX_FULL_ACCESS.to_string();
                 changed = true;
             }
@@ -611,6 +616,9 @@ pub enum TabProcess {
     /// Directly on this computer, tagged with this [`host::TAB_VAR`] token
     Local(String),
     Session(Session),
+    /// A thread's directory, on its host: a thread has no process of its own
+    /// to ask
+    Dir { host: String, dir: String },
 }
 
 /// The project directories of a tab, and the host they are on if remote:
@@ -630,6 +638,15 @@ async fn project_dirs(process: &TabProcess) -> Result<(Option<String>, Vec<Strin
             );
             let host = (!session.is_local()).then(|| session.host.clone());
             (host, run(session_exec(&session.host, &script)).await?)
+        }
+        // The repository it is in, else the directory itself
+        TabProcess::Dir { host, dir } => {
+            let script = format!(
+                "cd {} 2>/dev/null && {{ git rev-parse --show-toplevel 2>/dev/null || pwd; }}\n",
+                sh_quote(dir)
+            );
+            let output = run(session_exec(host, &script)).await.unwrap_or_else(|_| dir.clone());
+            ((!host.is_empty()).then(|| host.clone()), output)
         }
     };
     let dirs: Vec<String> = output
@@ -762,6 +779,7 @@ pub async fn tab_agents(process: TabProcess) -> Result<TabAgents, String> {
             );
             run(session_exec(&session.host, &script)).await?
         }
+        TabProcess::Dir { .. } => return Err("a thread runs no process in a tab".to_string()),
     };
     serde_json::from_str(&output).map_err(|err| err.to_string())
 }
@@ -1410,7 +1428,7 @@ pub async fn open_locally(session: Session, link: String) -> Result<(), String> 
 }
 
 /// Run a command to completion, returning its stdout
-async fn run(mut command: tokio::process::Command) -> Result<String, String> {
+pub(crate) async fn run(mut command: tokio::process::Command) -> Result<String, String> {
     command.stdin(Stdio::null()).kill_on_drop(true);
     let program = command
         .as_std()
@@ -2042,7 +2060,8 @@ mod tests {
             .filter(|p| p.agent == Agent::Codex)
             .map(|p| p.args.clone())
             .collect();
-        assert_eq!(codex_args, [CODEX_FULL_ACCESS]);
+        // The terminal's, not the thread's, which asks in the mode chosen
+        assert_eq!(codex_args, [CODEX_FULL_ACCESS, ""]);
         assert!(config.profiles.values().all(|p| !p.is_remote()));
         assert!(!seed_profiles(&mut config));
 

@@ -33,6 +33,9 @@ pub struct Launch {
     pub args: String,
     /// The view's colours, for the images the agent draws to match
     pub colours: Option<Colours>,
+    /// More for the system prompt, as where a moved conversation's files
+    /// went
+    pub note: Option<String>,
 }
 
 /// A view's colour scheme, as CSS colours
@@ -116,6 +119,10 @@ impl Launch {
                     colours.background, colours.text, colours.accent,
                 ));
             }
+        }
+        if let Some(note) = &self.note {
+            prompt.push_str("\n\n");
+            prompt.push_str(note);
         }
         prompt
     }
