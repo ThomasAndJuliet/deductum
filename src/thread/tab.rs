@@ -533,7 +533,16 @@ impl ThreadTab {
                             && kind == "turn"
                             && let Some(text) = turn_text(&json)
                         {
-                            self.entries.get_or_insert_with(Entries::default).user(text, Vec::new());
+                            let entries = self.entries.get_or_insert_with(Entries::default);
+                            // Replayed after the history already has it, as
+                            // when joining a turn in progress
+                            let last = entries.items.iter().rev().find_map(|item| match &item.kind {
+                                super::model::ItemKind::User { text, .. } => Some(text.as_str()),
+                                _ => None,
+                            });
+                            if last.map(str::trim) != Some(text.trim()) {
+                                entries.user(text, Vec::new());
+                            }
                         }
                     }
                 }

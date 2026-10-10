@@ -1284,6 +1284,23 @@ mod tests {
     }
 
     #[test]
+    fn a_turn_sent_before_its_thread_starts_is_told_as_a_turn() {
+        let protocol = super::super::protocol::Protocol::new(&launch());
+        let mut codex = Codex::new(&launch());
+        codex.start();
+        let sent = codex.parse(r#"{"id":1,"result":{"userAgent":"x","codexHome":"/home/u/.codex"}}"#, &mut Vec::new());
+        assert!(sent.iter().any(|line| line.contains("thread/start")));
+        assert!(codex.command(user("hi")).is_empty());
+        let replies = codex.parse(
+            &format!(r#"{{"id":2,"result":{{"thread":{{"id":"{THREAD}","cwd":"/tmp/work"}},"model":"m"}}}}"#),
+            &mut Vec::new(),
+        );
+        let turn = replies.iter().find(|line| line.contains("turn/start")).expect("the waiting turn");
+        assert!(protocol.starts_turn(turn));
+        assert!(replies.iter().filter(|line| !line.contains("turn/start")).all(|line| !protocol.starts_turn(line)));
+    }
+
+    #[test]
     fn questions_are_asked_and_answered_by_key() {
         let (mut codex, mut entries) = started(&launch());
         let line = format!(

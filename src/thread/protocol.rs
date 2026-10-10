@@ -91,6 +91,15 @@ impl Protocol {
         }
     }
 
+    /// Whether a line this client writes begins a turn: Codex's
+    /// `turn/start`, sent late when the turn waited for its thread
+    pub fn starts_turn(&self, line: &str) -> bool {
+        match self {
+            Self::Claude => false,
+            Self::Codex(_) => line.contains("\"method\":\"turn/start\""),
+        }
+    }
+
     /// Text in the line that ends a turn, for a relay to tell when the agent
     /// is idle
     pub fn turn_done(&self) -> &'static str {

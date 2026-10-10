@@ -478,7 +478,9 @@ impl Relayed {
                     answers.clear();
                 }
                 for (n, json) in answers.into_iter().enumerate() {
-                    let pending = Pending { id: format!("r{at}-{n}"), kind: "line", json };
+                    // A turn that waited for its thread starts here
+                    let kind = if self.protocol.starts_turn(&json) { "turn" } else { "line" };
+                    let pending = Pending { id: format!("r{at}-{n}"), kind, json };
                     replies.push(pending.line());
                     self.pending.push(pending);
                 }
