@@ -8424,7 +8424,7 @@ impl Application for App {
                 config_set!(default_profile, default.then_some(profile_id));
             }
             Message::WindowClose => {
-                self.save_tabs();
+                self.close_tabs();
                 if let Some(window_id) = self.core.main_window_id() {
                     return window::close(window_id);
                 }

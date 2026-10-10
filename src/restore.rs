@@ -76,7 +76,11 @@ fn lock(file: &File) -> bool {
 impl Claim {
     /// The record of a window no longer running, if there is one, claimed
     pub fn previous() -> Option<(Self, Record)> {
-        let mut found: Vec<(std::time::SystemTime, PathBuf)> = std::fs::read_dir(dir())
+        Self::previous_in(&dir())
+    }
+
+    fn previous_in(dir: &std::path::Path) -> Option<(Self, Record)> {
+        let mut found: Vec<(std::time::SystemTime, PathBuf)> = std::fs::read_dir(dir)
             .ok()?
             .flatten()
             .filter(|entry| entry.path().extension().is_some_and(|e| e == "json"))
@@ -105,8 +109,11 @@ impl Claim {
 
     /// A record of its own for a new window
     pub fn new() -> Option<Self> {
-        let dir = dir();
-        std::fs::create_dir_all(&dir).ok()?;
+        Self::new_in(&dir())
+    }
+
+    fn new_in(dir: &std::path::Path) -> Option<Self> {
+        std::fs::create_dir_all(dir).ok()?;
         let path = dir.join(format!("{}.json", cosmic_term::random_hex(8)));
         let file = File::options().read(true).write(true).create_new(true).open(&path).ok()?;
         lock(&file).then_some(Self { file, path, saved: None })
@@ -141,8 +148,6 @@ mod tests {
     #[test]
     fn a_record_round_trips_and_is_claimed_once() {
         let tmp = std::env::temp_dir().join(format!("ct-restore-{}", std::process::id()));
-        // SAFETY: only this test reads the variable
-        unsafe { std::env::set_var("XDG_STATE_HOME", &tmp) };
         let record = Record {
             tabs: vec![
                 Tab::Thread {
@@ -160,16 +165,16 @@ mod tests {
             ],
             active: 1,
         };
-        let mut claim = Claim::new().unwrap();
+        let mut claim = Claim::new_in(&tmp).unwrap();
         claim.save(&record);
         // Held by its window, it is not anyone else's
-        assert!(Claim::previous().is_none());
+        assert!(Claim::previous_in(&tmp).is_none());
         drop(claim);
-        let (claimed, found) = Claim::previous().unwrap();
+        let (claimed, found) = Claim::previous_in(&tmp).unwrap();
         assert_eq!(found, record);
-        assert!(Claim::previous().is_none());
+        assert!(Claim::previous_in(&tmp).is_none());
         claimed.forget();
-        assert!(Claim::previous().is_none());
+        assert!(Claim::previous_in(&tmp).is_none());
         let _ = std::fs::remove_dir_all(&tmp);
     }
 }
@@ -205,6 +210,17 @@ impl crate::App {
             }
         }
         record
+    }
+
+    /// The window closes: its record is kept for reopening, or dropped
+    /// when it has nothing to reopen
+    pub(crate) fn close_tabs(&mut self) {
+        let record = self.tab_record();
+        match self.restore.take() {
+            Some(claim) if record.tabs.is_empty() => claim.forget(),
+            Some(mut claim) => claim.save(&record),
+            None => {}
+        }
     }
 
     /// Keep the record of this window's tabs up to date
