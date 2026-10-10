@@ -321,7 +321,7 @@ pub struct Profile {
     /// Tab colour as `#rrggbb`, or empty for the agent's default
     #[serde(default)]
     pub color: String,
-    /// A Claude profile's conversations open as rich-text threads, not in a
+    /// An agent profile's conversations open as rich-text threads, not in a
     /// terminal
     #[serde(default)]
     pub thread: bool,

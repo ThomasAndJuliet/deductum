@@ -14,7 +14,7 @@ use std::{
 };
 
 use crate::host::{self, HostCommand};
-use crate::config::{Agent, Config, Profile, ProfileId};
+use crate::config::{Agent, Config, Machine, MachineId, Profile, ProfileId};
 
 /// Prefix of the Zellij sessions this terminal creates, so they can be told
 /// apart from the user's other sessions
@@ -55,7 +55,7 @@ const LAUNCHER: &str = include_str!("agent/launcher.py");
 
 /// Rounds of built-in profiles. Each round is added once, so deleting one of
 /// its profiles is permanent
-const PROFILE_SEED_VERSION: u32 = 5;
+const PROFILE_SEED_VERSION: u32 = 6;
 
 /// Codex's full access mode: no approval prompts and no sandbox
 pub const CODEX_FULL_ACCESS: &str = "--dangerously-bypass-approvals-and-sandbox";
@@ -72,7 +72,6 @@ pub fn seed_profiles(config: &mut Config) -> bool {
     if done >= PROFILE_SEED_VERSION {
         return false;
     }
-    // Profiles for other computers are offered when a machine is added
     let mut seeds = Vec::new();
     if done < 1 {
         seeds.extend([
@@ -90,6 +89,22 @@ pub fn seed_profiles(config: &mut Config) -> bool {
     // Round 5: Codex in a rich-text thread
     if done < 5 {
         seeds.push(Profile { thread: true, ..Profile::agent("Codex thread", Agent::Codex, "") });
+    }
+    // Round 6: machines configured before threads existed also get both
+    // thread launchers. Keep existing profiles and their custom settings.
+    if done < 6 {
+        for (id, machine) in &config.machines {
+            if machine.destination().is_empty() {
+                continue;
+            }
+            seeds.extend(machine_profiles(*id, machine).into_iter().filter(|profile| {
+                profile.thread && !config.profiles.values().any(|existing| {
+                    existing.host.trim() == profile.host
+                        && existing.agent == profile.agent
+                        && existing.thread
+                })
+            }));
+        }
     }
     let mut changed = !seeds.is_empty();
     for mut profile in seeds {
@@ -117,6 +132,29 @@ pub fn seed_profiles(config: &mut Config) -> bool {
     config.agent_profiles_seeded = true;
     config.profile_seed_version = PROFILE_SEED_VERSION;
     changed || done < PROFILE_SEED_VERSION
+}
+
+/// The built-in terminal and thread profiles offered for a machine
+pub fn machine_profiles(id: MachineId, machine: &Machine) -> Vec<Profile> {
+    [
+        ("Claude", Agent::Claude, false),
+        ("Codex", Agent::Codex, false),
+        ("Claude thread", Agent::Claude, true),
+        ("Codex thread", Agent::Codex, true),
+        ("Terminal", Agent::Shell, false),
+    ]
+    .into_iter()
+    .map(|(label, agent, thread)| Profile {
+        machine: Some(id),
+        thread,
+        args: if agent == Agent::Codex && !thread { CODEX_FULL_ACCESS.to_string() } else { String::new() },
+        ..Profile::agent(
+            &crate::fl!("machine-profile-name", agent = label, name = machine.name.as_str()),
+            agent,
+            &machine.destination(),
+        )
+    })
+    .collect()
 }
 
 /// A Zellij session on this computer or a remote host
@@ -2451,6 +2489,70 @@ mod tests {
         assert!(seed_profiles(&mut config));
         assert_eq!(config.profiles[&ProfileId(0)].args, CODEX_FULL_ACCESS);
         assert_eq!(config.profiles[&ProfileId(1)].args, "--model x");
+    }
+
+    #[test]
+    fn existing_machines_get_thread_profiles_once() {
+        let mut config = Config {
+            profile_seed_version: 5,
+            agent_profiles_seeded: true,
+            ..Config::default()
+        };
+        let machine = config.add_machine(Machine::from_destination("alice@remote"));
+        let other = config.add_machine(Machine::from_destination("another"));
+        let terminal = Profile {
+            machine: Some(machine),
+            args: "--model custom".into(),
+            ..Profile::agent("My terminal", Agent::Codex, "alice@remote")
+        };
+        let thread = Profile {
+            machine: Some(machine),
+            thread: true,
+            args: "--model custom".into(),
+            ..Profile::agent("My thread", Agent::Claude, "alice@remote")
+        };
+        config.profiles.insert(ProfileId(10), terminal.clone());
+        config.profiles.insert(ProfileId(11), thread.clone());
+        assert!(seed_profiles(&mut config));
+        assert_eq!(config.profiles[&ProfileId(10)], terminal);
+        assert_eq!(config.profiles[&ProfileId(11)], thread);
+        assert_eq!(config.profiles.len(), 5);
+        for id in [machine, other] {
+            for agent in [Agent::Claude, Agent::Codex] {
+                let found: Vec<_> = config.profiles.values()
+                    .filter(|p| p.machine == Some(id) && p.agent == agent && p.thread)
+                    .collect();
+                assert_eq!(found.len(), 1);
+                assert_eq!(found[0].host, config.machines[&id].destination());
+            }
+        }
+        let codex = config.profiles.iter().find(|(_, p)| p.machine == Some(machine) && p.thread && p.agent == Agent::Codex)
+            .map(|(id, p)| (*id, p.clone())).unwrap();
+        assert_eq!(codex.1.args, "");
+        config.profiles.remove(&codex.0);
+        assert!(!seed_profiles(&mut config));
+        assert!(!config.profiles.contains_key(&codex.0), "a deleted profile stays deleted");
+    }
+
+    #[test]
+    fn legacy_remote_profiles_get_both_thread_views() {
+        let mut config = Config {
+            profile_seed_version: 3,
+            agent_profiles_seeded: true,
+            ..Config::default()
+        };
+        config.profiles.insert(ProfileId(0), Profile::agent("Remote Codex", Agent::Codex, "remote"));
+        assert!(config.adopt_machines());
+        assert!(seed_profiles(&mut config));
+        for agent in [Agent::Claude, Agent::Codex] {
+            assert!(config.profiles.values().any(|p| p.thread && p.agent == agent && !p.is_remote()));
+            assert!(config.profiles.values().any(|p| p.thread && p.agent == agent && p.host == "remote" && p.machine.is_some()));
+        }
+        let profiles = machine_profiles(MachineId(9), &Machine::from_destination("user@new"));
+        assert_eq!(profiles.len(), 5);
+        assert!(profiles.iter().all(|p| p.machine == Some(MachineId(9)) && p.host == "user@new"));
+        assert_eq!(profiles.iter().filter(|p| p.thread).count(), 2);
+        assert!(profiles.iter().filter(|p| p.thread).all(|p| p.args.is_empty() && p.agent != Agent::Shell));
     }
 
     #[test]

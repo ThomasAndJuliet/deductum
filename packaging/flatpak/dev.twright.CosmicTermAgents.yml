@@ -110,6 +110,15 @@ modules:
           - .git
           - .flatpak-builder
           - .local-design
+          - vendor
+      # Worktrees may link vendor/ to another checkout. Copy the patches
+      # explicitly so the build does not depend on an external symlink.
+      - type: dir
+        path: ../../vendor/alacritty_terminal
+        dest: cosmic-term/vendor/alacritty_terminal
+      - type: dir
+        path: ../../vendor/vte
+        dest: cosmic-term/vendor/vte
       # chartgen, from the diagrams repository shared with Juliet; a local
       # checkout is linked as ../chartgen-src for development
       - type: git

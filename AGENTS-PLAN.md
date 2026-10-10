@@ -673,6 +673,13 @@ running, and roughly how much memory their text and formulas take.
 
 ### Opening threads
 
+Existing machines get Claude and Codex thread profiles on the first upgrade
+to profile seed round 6. Existing profiles keep their settings; deleting a
+seeded profile keeps it deleted. **Add profiles** for a machine offers the
+same five profiles, including both thread views. A thread launcher's running
+sessions are thread relays and attach in the thread view. A thread profile
+also keeps its view when startup supplies `--working-directory`.
+
 - A thread profile's launcher opens a thread in the chosen folder, resumes a
   chosen conversation, continues one with the other agent or from another
   computer, or receives a transfer, all as threads.

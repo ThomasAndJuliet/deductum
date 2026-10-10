@@ -487,6 +487,19 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
 
     let mut config = config;
+    // Adopt legacy profiles' hosts before seeding machine thread profiles.
+    if config.adopt_machines()
+        && let Some(config_handler) = &config_handler
+    {
+        for result in [
+            config_handler.set("machines", &config.machines),
+            config_handler.set("profiles", &config.profiles),
+        ] {
+            if let Err(err) = result {
+                log::error!("failed to save machines: {}", err);
+            }
+        }
+    }
     if agent::seed_profiles(&mut config)
         && let Some(config_handler) = &config_handler
     {
@@ -497,19 +510,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         ] {
             if let Err(err) = result {
                 log::error!("failed to save agent profiles: {}", err);
-            }
-        }
-    }
-    // Profiles' hosts become machines, once
-    if config.adopt_machines()
-        && let Some(config_handler) = &config_handler
-    {
-        for result in [
-            config_handler.set("machines", &config.machines),
-            config_handler.set("profiles", &config.profiles),
-        ] {
-            if let Err(err) = result {
-                log::error!("failed to save machines: {}", err);
             }
         }
     }
@@ -3143,13 +3143,14 @@ impl App {
             .profiles
             .get(&launcher.profile_id)
             .map(|profile| profile.agent);
+        let thread = self.config.profiles.get(&launcher.profile_id).is_some_and(|p| p.thread);
         let open = self.open_sessions();
         let mut sections = Vec::new();
 
         let running: Vec<LauncherRow> = launcher
             .running
             .iter()
-            .filter(|session| session.agent() == agent && !open.contains(session) && !session.is_thread())
+            .filter(|session| session.agent() == agent && !open.contains(session) && session.is_thread() == thread)
             .filter(|session| matches(&session.label()))
             .map(|session| LauncherRow {
                 label: session.label(),
@@ -3765,6 +3766,14 @@ impl App {
         let Some(profile) = self.config.profiles.get(&profile_id).cloned() else {
             return Task::none();
         };
+        if let LaunchChoice::Attach(session) = &choice
+            && session.is_thread()
+        {
+            if let Some(tabs) = self.pane_model.panes.get_mut(pane) {
+                tabs.remove(entity);
+            }
+            return self.open_thread_session(pane, session.clone());
+        }
         if profile.thread && profile.agent != config::Agent::Shell {
             match &choice {
                 LaunchChoice::Dir(dir) => {
@@ -4372,6 +4381,24 @@ impl App {
         let inherited_working_directory = inherit_working_directory
             .then(|| self.active_terminal_working_directory())
             .flatten();
+        // A thread profile keeps its view even when a caller goes directly
+        // here, such as startup with --working-directory.
+        if prepared.is_none() && self.startup_command.is_none()
+            && let Some(profile_id) = profile_id_opt
+            && let Some(profile) = self.config.profiles.get(&profile_id)
+            && profile.thread && profile.agent != config::Agent::Shell
+        {
+            let dir = (!profile.is_remote()).then(|| {
+                self.startup_options.as_ref().and_then(|options| options.working_directory.clone())
+                    .or(inherited_working_directory.clone())
+            }).flatten().map(|dir| dir.display().to_string())
+                .or_else(|| self.thread_profile_dir(profile_id));
+            if let Some(dir) = dir {
+                self.startup_options.take();
+                return self.open_thread(pane, Some(profile_id), dir, None, None);
+            }
+            return self.open_launcher(pane, profile_id);
+        }
         // Every tab runs in a session, so it can be reattached or moved to
         // another window, except a command given on the command line
         let (launch_command, session) = match prepared {
@@ -7675,23 +7702,7 @@ impl Application for App {
                 let Some(machine) = self.config.machines.get(&id).cloned() else {
                     return Task::none();
                 };
-                for (label, agent, thread) in [
-                    ("Claude", config::Agent::Claude, false),
-                    ("Codex", config::Agent::Codex, false),
-                    ("Claude thread", config::Agent::Claude, true),
-                    ("Codex thread", config::Agent::Codex, true),
-                    ("Terminal", config::Agent::Shell, false),
-                ] {
-                    let mut profile = Profile::agent(
-                        &fl!("machine-profile-name", agent = label, name = machine.name.as_str()),
-                        agent,
-                        &machine.destination(),
-                    );
-                    profile.machine = Some(id);
-                    profile.thread = thread;
-                    if agent == config::Agent::Codex && !thread {
-                        profile.args = agent::CODEX_FULL_ACCESS.to_string();
-                    }
+                for profile in agent::machine_profiles(id, &machine) {
                     let profile_id = self
                         .config
                         .profiles
