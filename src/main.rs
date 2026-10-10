@@ -765,6 +765,10 @@ pub enum Message {
     AppTheme(AppTheme),
     /// The sessions of a reopened window that still run, to attach again
     RestoreSessions(Vec<agent::Session>),
+    /// A diagram's Mermaid source, to open in a window of its own
+    OpenDiagram(String),
+    /// A control in an image or diagram window
+    Viewer(window::Id, thread::viewer::Action),
     /// A thread tab's own message
     Thread(thread::tab::ThreadId, thread::tab::Msg),
     /// Images chosen to attach to a thread's next message
@@ -4898,7 +4902,7 @@ impl Application for App {
             // Close find if open
             self.find = false;
             self.find_search_value.clear();
-        } else if let Some(id) = self.active_thread().filter(|t| t.is_working()).map(|t| t.id) {
+        } else if let Some(id) = self.active_thread().filter(|t| t.is_working() && self.window_focused).map(|t| t.id) {
             // As in the CLI, Escape stops the agent
             return Task::batch([self.thread_message(id, thread::tab::Msg::Stop), self.update_focus()]);
         }
@@ -4980,6 +4984,12 @@ impl Application for App {
                 return self.update_config();
             }
             Message::OpenImage(path) => return self.open_image(path),
+            Message::OpenDiagram(source) => return self.open_diagram(source),
+            Message::Viewer(id, action) => {
+                if let Some(window) = self.image_windows.get_mut(&id) {
+                    return window.act(id, action);
+                }
+            }
             message @ (Message::ImageZoom(..)
             | Message::ImageCopyPath(_)
             | Message::ImageOpenExternally(_)
@@ -8596,7 +8606,7 @@ impl Application for App {
 
     fn view_window(&self, window_id: window::Id) -> Element<'_, Message> {
         if let Some(image) = self.image_windows.get(&window_id) {
-            return thread::viewer::view(image, window_id);
+            return thread::viewer::view_with(image, move |action| Some(Message::Viewer(window_id, action)));
         }
         match &self.dialog_opt {
             Some(dialog) => dialog.view(window_id),

@@ -249,6 +249,7 @@ pub fn view<'a>(tab: &'a ThreadTab, style: &ThreadStyle, dark: bool) -> Element<
                     .on_select(move |select| Message::Thread(id, Msg::Select(item_id, part, select)))
                     .on_link(Message::LaunchUrl)
                     .on_image(Message::OpenImage)
+                    .on_diagram(Message::OpenDiagram)
                     .into(),
             )
         };

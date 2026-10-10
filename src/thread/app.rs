@@ -394,7 +394,7 @@ impl App {
                 bytes += tab.weight();
             }
         }
-        (loaded, agents, bytes + super::math::cache_usage().0)
+        (loaded, agents, bytes + super::math::cache_usage().0 + super::diagram::cache_usage().0)
     }
 
     fn pick_images(&mut self, id: ThreadId) -> Task<Message> {
@@ -511,6 +511,19 @@ impl App {
             }
         }
         text.map(clipboard::write_primary)
+    }
+
+    pub(crate) fn open_diagram(&mut self, source: String) -> Task<Message> {
+        let diagram = ImageWindow::diagram(source);
+        let (id, open) = window::open(window::Settings {
+            size: diagram.initial_size(),
+            min_size: Some(cosmic::iced::Size::new(320.0, 200.0)),
+            decorations: true,
+            ..Default::default()
+        });
+        let title = diagram.title();
+        self.image_windows.insert(id, diagram);
+        Task::batch([open.map(|_| cosmic::Action::None), self.set_window_title(title, id)])
     }
 
     pub(crate) fn open_image(&mut self, path: PathBuf) -> Task<Message> {
