@@ -452,7 +452,7 @@ threads = Threads
 thread-paper = Maths typesetting
 thread-paper-description = Set threads as a paper: serif text, justified, in a column, with LaTeX set as in print
 thread-match-colours = Images match the colours
-thread-match-colours-description = Ask Claude to draw its plots and diagrams in the thread's colour scheme
+thread-match-colours-description = Ask the agent to draw its plots and diagrams in the thread's colour scheme
 thread-paper-font = Paper font
 thread-font-libertinus = Libertinus Serif (Typst)
 thread-font-new-computer-modern = New Computer Modern (LaTeX)
@@ -489,17 +489,17 @@ thread-load-earlier = {$count ->
     [one] Show the earlier turn
    *[other] Show {$count} earlier turns
 }
-thread-empty-title = Ask Claude
-thread-empty-body = Claude runs through its own command-line tool, so it uses your Claude subscription. LaTeX in replies is typeset.
+thread-empty-title = Ask {$agent}
+thread-empty-body = {$agent} runs through its own command-line tool, so it uses your subscription. LaTeX, charts and diagrams in replies are drawn here.
 thread-you = You
 thread-thinking = Thinking…
 thread-thought = Thought
 thread-thought-tokens = Thought for about {$tokens} tokens
-thread-permission = Claude wants to use {$tool}
+thread-permission = {$agent} wants to use {$tool}
 thread-allow = Allow
 thread-allow-always = Always allow
 thread-deny = Deny
-thread-placeholder = Message Claude — Enter sends, Shift+Enter adds a line
+thread-placeholder = Message {$agent} — Enter sends, Shift+Enter adds a line
 thread-attach = Attach images
 thread-stop = Stop
 thread-send = Send

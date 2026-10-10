@@ -226,8 +226,8 @@ pub fn view<'a>(tab: &'a ThreadTab, style: &ThreadStyle, dark: bool) -> Element<
         items.push(
             widget::container(
                 widget::column::with_children(vec![
-                    widget::text::title3(fl!("thread-empty-title")).into(),
-                    widget::text::body(fl!("thread-empty-body")).into(),
+                    widget::text::title3(fl!("thread-empty-title", agent = tab.agent.label())).into(),
+                    widget::text::body(fl!("thread-empty-body", agent = tab.agent.label())).into(),
                 ])
                 .spacing(spacing.space_xs)
                 .align_x(Alignment::Center),
@@ -462,7 +462,7 @@ fn permission<'a>(tab: &'a ThreadTab, request: &'a super::model::PermissionReque
     let mut column = vec![
         widget::row::with_children(vec![
             icon("dialog-warning-symbolic").into(),
-            widget::text::heading(fl!("thread-permission", tool = request.tool_name.as_str())).into(),
+            widget::text::heading(fl!("thread-permission", agent = tab.agent.label(), tool = request.tool_name.as_str())).into(),
         ])
         .spacing(spacing.space_xs)
         .align_y(Alignment::Center)
@@ -518,7 +518,7 @@ fn composer<'a>(tab: &'a ThreadTab, style: &ThreadStyle) -> Element<'a, Message>
     let working = tab.is_working();
     let editor = text_editor::text_editor(&tab.composer)
         .id(tab.composer_id.clone())
-        .placeholder(fl!("thread-placeholder"))
+        .placeholder(fl!("thread-placeholder", agent = tab.agent.label()))
         .on_action(move |action| Message::Thread(id, Msg::Edit(action)))
         .size(style.small.size.max(14.0))
         .padding(spacing.space_xs)
