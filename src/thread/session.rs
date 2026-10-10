@@ -6,7 +6,9 @@
 //! hundreds of megabytes, mostly tool output. It is read a line at a time,
 //! each line cut down to what the view keeps, and only its last
 //! `turns` user turns are kept, as t3code pages its history: the thread
-//! offers the earlier ones on request.
+//! offers the earlier ones on request. A Codex rollout file
+//! (`~/.codex/sessions/YYYY/MM/DD/rollout-…-<id>.jsonl`) is read the same
+//! way.
 
 use std::collections::VecDeque;
 use std::io::BufRead;
@@ -16,8 +18,9 @@ use serde_json::Value;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
 use tokio::sync::mpsc;
 
-use super::claude;
 use super::model::{Entries, Event, TOOL_TEXT_LIMIT, cut};
+use super::{claude, codex};
+use crate::config::Agent;
 
 /// A conversation's history, as far back as was asked
 #[derive(Debug)]
@@ -27,19 +30,29 @@ pub struct History {
     pub earlier: usize,
 }
 
-/// The last `turns` user turns of conversation `id` on `host`
-pub fn load(host: &str, id: &str, turns: usize) -> Result<History, String> {
+/// The last `turns` user turns of `agent`'s conversation `id` on `host`
+pub fn load(agent: Agent, host: &str, id: &str, turns: usize) -> Result<History, String> {
     if !id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-') || id.is_empty() {
         return Err(format!("bad conversation id: {id:?}"));
     }
+    let codex = agent == Agent::Codex;
+    let history = |reader: &mut dyn BufRead| {
+        if codex { read_codex(reader, turns, host.is_empty()) } else { read(reader, turns) }
+    };
     if host.is_empty() {
         let env = cosmic_term::Env::from_process();
-        let path = cosmic_term::provider::find(&env, cosmic_term::provider::Kind::Claude, id)?;
+        let kind = if codex { cosmic_term::provider::Kind::Codex } else { cosmic_term::provider::Kind::Claude };
+        let path = cosmic_term::provider::find(&env, kind, id)?;
         let file = std::fs::File::open(&path).map_err(|err| format!("{}: {err}", path.display()))?;
-        return Ok(read(std::io::BufReader::with_capacity(256 * 1024, file), turns));
+        return Ok(history(&mut std::io::BufReader::with_capacity(256 * 1024, file)));
     }
+    let files = if codex {
+        format!("\"$HOME\"/.codex/sessions/*/*/*/rollout-*-{id}.jsonl")
+    } else {
+        format!("\"$HOME\"/.claude/projects/*/{id}.jsonl")
+    };
     let script = format!(
-        "for f in \"$HOME\"/.claude/projects/*/{id}.jsonl; do [ -f \"$f\" ] && exec cat \"$f\"; done\n\
+        "for f in {files}; do [ -f \"$f\" ] && exec cat \"$f\"; done\n\
          echo 'conversation not found' >&2; exit 1\n"
     );
     let mut child = crate::agent::session_exec_std(host, &script)
@@ -48,7 +61,7 @@ pub fn load(host: &str, id: &str, turns: usize) -> Result<History, String> {
         .spawn()
         .map_err(|err| format!("ssh: {err}"))?;
     let stdout = child.stdout.take().ok_or("no output")?;
-    let history = read(std::io::BufReader::with_capacity(256 * 1024, stdout), turns);
+    let history = history(&mut std::io::BufReader::with_capacity(256 * 1024, stdout));
     let output = child.wait_with_output().map_err(|err| err.to_string())?;
     if !output.status.success() && history.entries.items.is_empty() {
         return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
@@ -56,39 +69,64 @@ pub fn load(host: &str, id: &str, turns: usize) -> Result<History, String> {
     Ok(history)
 }
 
-/// Read a transcript, keeping its last `turns` user turns
+/// Read a Claude transcript, keeping its last `turns` user turns
 pub fn read(reader: impl BufRead, turns: usize) -> History {
-    let turns = turns.max(1);
-    // Each turn's events, cut down; whole turns drop off the front
-    let mut kept: VecDeque<Vec<Event>> = VecDeque::new();
-    let mut earlier = 0;
     let mut session = None;
-    for line in reader.split(b'\n') {
-        let Ok(line) = line else { break };
-        let Ok(mut value) = serde_json::from_slice::<Value>(&line) else { continue };
-        drop(line);
+    let mut history = keep(reader, turns, |mut value, events| {
         if session.is_none() {
             session = value.get("sessionId").and_then(Value::as_str).map(str::to_string);
         }
         let kind = value.get("type").and_then(Value::as_str).unwrap_or_default().to_string();
         let kind = kind.as_str();
         if !matches!(kind, "user" | "assistant") {
-            continue;
+            return None;
         }
         // Subagents' own transcripts, and the CLI's notes to itself
         if value.get("isSidechain").and_then(Value::as_bool).unwrap_or(false)
             || value.get("isMeta").and_then(Value::as_bool).unwrap_or(false)
         {
-            continue;
+            return None;
         }
         if kind == "user" && is_command_noise(&value) {
-            continue;
+            return None;
         }
         slim(&mut value);
         let starts_turn = kind == "user" && is_user_text(&value);
-        let line = value.to_string();
+        claude::parse_line(&value.to_string(), events);
+        Some(starts_turn)
+    });
+    history.entries.session_id = session;
+    history
+}
+
+/// Read a Codex rollout file, keeping its last `turns` user turns. Images
+/// are shown from their files when `local`
+pub fn read_codex(reader: impl BufRead, turns: usize, local: bool) -> History {
+    let mut session = None;
+    let mut rollout = codex::Rollout::new(local);
+    let mut history = keep(reader, turns, |value, events| {
+        if session.is_none() {
+            session = codex::Rollout::session_id(&value);
+        }
+        rollout.line(&value, events)
+    });
+    history.entries.session_id = session;
+    history
+}
+
+/// The last `turns` user turns of a transcript, each line's events given by
+/// `line`, with whether it starts a turn, or `None` for a line left out
+fn keep(reader: impl BufRead, turns: usize, mut line: impl FnMut(Value, &mut Vec<Event>) -> Option<bool>) -> History {
+    let turns = turns.max(1);
+    // Each turn's events, cut down; whole turns drop off the front
+    let mut kept: VecDeque<Vec<Event>> = VecDeque::new();
+    let mut earlier = 0;
+    for bytes in reader.split(b'\n') {
+        let Ok(bytes) = bytes else { break };
+        let Ok(value) = serde_json::from_slice::<Value>(&bytes) else { continue };
+        drop(bytes);
         let mut events = Vec::new();
-        claude::parse_line(&line, &mut events);
+        let Some(starts_turn) = line(value, &mut events) else { continue };
         if starts_turn || kept.is_empty() {
             kept.push_back(Vec::new());
             if kept.len() > turns {
@@ -104,7 +142,6 @@ pub fn read(reader: impl BufRead, turns: usize) -> History {
     for event in kept.into_iter().flatten() {
         entries.apply(event);
     }
-    entries.session_id = session;
     entries.stopped();
     History { entries, earlier }
 }
@@ -321,6 +358,95 @@ mod tests {
         assert!(history.entries.weight() < 3 * 2 * TOOL_TEXT_LIMIT, "{}", history.entries.weight());
     }
 
+    /// A rollout file of `turns` turns, as codex-cli 0.162 writes them
+    fn rollout(turns: usize) -> String {
+        let mut out = String::from(
+            "{\"timestamp\":\"t\",\"type\":\"session_meta\",\"payload\":{\"id\":\"01a1-thread\",\"cwd\":\"/w\"}}\n\
+             {\"type\":\"response_item\",\"payload\":{\"type\":\"message\",\"role\":\"developer\",\"content\":[{\"type\":\"input_text\",\"text\":\"rules\"}]}}\n",
+        );
+        let item = |item: String| {
+            format!("{{\"type\":\"event_msg\",\"payload\":{{\"type\":\"item_completed\",\"thread_id\":\"01a1-thread\",\"turn_id\":\"t\",\"item\":{item}}}}}\n")
+        };
+        for n in 0..turns {
+            out.push_str(&item(format!(
+                "{{\"type\":\"UserMessage\",\"id\":\"u{n}\",\"content\":[{{\"type\":\"text\",\"text\":\"question {n}\",\"text_elements\":[]}}]}}"
+            )));
+            out.push_str(&item(format!("{{\"type\":\"Reasoning\",\"id\":\"r{n}\",\"summary_text\":[],\"raw_content\":[]}}")));
+            out.push_str(&format!(
+                "{{\"type\":\"response_item\",\"payload\":{{\"type\":\"custom_tool_call\",\"call_id\":\"x{n}\",\"name\":\"exec\",\"input\":\"code\"}}}}\n"
+            ));
+            out.push_str(&item(format!(
+                "{{\"type\":\"CommandExecution\",\"id\":\"c{n}\",\"command\":[\"/usr/bin/bash\",\"-lc\",\"ls\"],\"status\":\"completed\",\"stdout\":\"{0}\",\"aggregated_output\":\"{0}\",\"exit_code\":0}}",
+                "y".repeat(100_000)
+            )));
+            out.push_str(&item(format!(
+                "{{\"type\":\"FileChange\",\"id\":\"f{n}\",\"changes\":{{\"/w/a.rs\":{{\"type\":\"update\",\"unified_diff\":\"@@ -1 +1 @@\\n-a\\n+b\\n\",\"move_path\":null}}}},\"status\":\"completed\"}}"
+            )));
+            out.push_str(&format!(
+                "{{\"type\":\"response_item\",\"payload\":{{\"type\":\"function_call\",\"name\":\"update_plan\",\"call_id\":\"p{n}\",\"arguments\":\"{{\\\"plan\\\":[{{\\\"step\\\":\\\"Look\\\",\\\"status\\\":\\\"completed\\\"}}]}}\"}}}}\n"
+            ));
+            out.push_str(&item(format!(
+                "{{\"type\":\"McpToolCall\",\"id\":\"m{n}\",\"server\":\"docs\",\"tool\":\"search\",\"arguments\":{{\"q\":\"x\"}},\"status\":\"completed\",\"result\":{{\"content\":[{{\"type\":\"text\",\"text\":\"found\"}}],\"isError\":false}}}}"
+            )));
+            out.push_str(&item(format!(
+                "{{\"type\":\"AgentMessage\",\"id\":\"a{n}\",\"content\":[{{\"type\":\"Text\",\"text\":\"answer {n}\"}}],\"phase\":\"final_answer\"}}"
+            )));
+            out.push_str("{\"type\":\"event_msg\",\"payload\":{\"type\":\"task_complete\",\"turn_id\":\"t\"}}\n");
+        }
+        out
+    }
+
+    #[test]
+    fn reads_a_codex_rollout_keeping_the_last_turns() {
+        let history = read_codex(std::io::Cursor::new(rollout(30)), 2, true);
+        assert_eq!(history.earlier, 28);
+        assert_eq!(history.entries.session_id.as_deref(), Some("01a1-thread"));
+        let items = &history.entries.items;
+        let titles: Vec<String> = items
+            .iter()
+            .map(|item| match &item.kind {
+                ItemKind::User { text, .. } | ItemKind::Text { text, .. } => text.clone(),
+                ItemKind::Tool(tool) => tool.title(),
+                other => format!("{other:?}"),
+            })
+            .collect();
+        assert_eq!(
+            titles[..6],
+            ["question 28", "Bash ls", "Edit /w/a.rs", "TodoWrite", "docs: search x", "answer 28"],
+            "{titles:#?}"
+        );
+        assert_eq!(items.len(), 12);
+        let ItemKind::Tool(edit) = &items[2].kind else { panic!() };
+        assert_eq!(edit.patch().as_deref(), Some("@@ -1 +1 @@\n-a\n+b"));
+        let ItemKind::Tool(mcp) = &items[4].kind else { panic!() };
+        assert_eq!(mcp.output, "found");
+        // 2 turns of 100 kB output, cut to a few kB each
+        assert!(history.entries.weight() < 2 * 2 * TOOL_TEXT_LIMIT, "{}", history.entries.weight());
+    }
+
+    #[test]
+    fn reads_older_codex_rollouts() {
+        let lines = r#"{"type":"session_meta","payload":{"id":"old-1"}}
+{"type":"event_msg","payload":{"type":"user_message","message":"hello","images":[],"local_images":[]}}
+{"type":"event_msg","payload":{"type":"agent_reasoning","text":"**Thinking**"}}
+{"type":"response_item","payload":{"type":"function_call","name":"exec_command","arguments":"{\"cmd\":\"ls\"}","call_id":"c1"}}
+{"type":"response_item","payload":{"type":"function_call_output","call_id":"c1","output":"a.txt"}}
+{"type":"response_item","payload":{"type":"custom_tool_call","name":"apply_patch","input":"*** Begin Patch","call_id":"c2"}}
+{"type":"event_msg","payload":{"type":"patch_apply_end","call_id":"c2","success":true,"changes":{"/w/n.txt":{"type":"add","content":"new\n"}}}}
+{"type":"event_msg","payload":{"type":"agent_message","message":"done","phase":"final_answer"}}
+"#;
+        let history = read_codex(std::io::Cursor::new(lines), 5, true);
+        let items = &history.entries.items;
+        assert_eq!(items.len(), 5, "{items:#?}");
+        assert!(matches!(&items[0].kind, ItemKind::User { text, .. } if text == "hello"));
+        assert!(matches!(&items[1].kind, ItemKind::Thinking { text, .. } if text == "**Thinking**"));
+        let ItemKind::Tool(bash) = &items[2].kind else { panic!() };
+        assert_eq!((bash.title().as_str(), bash.output.as_str()), ("Bash ls", "a.txt"));
+        let ItemKind::Tool(write) = &items[3].kind else { panic!() };
+        assert_eq!(write.title(), "Write /w/n.txt");
+        assert!(matches!(&items[4].kind, ItemKind::Text { text, .. } if text == "done"));
+    }
+
     #[test]
     fn command_noise_is_left_out() {
         let lines = "{\"type\":\"user\",\"message\":{\"role\":\"user\",\"content\":\"<command-name>/clear</command-name>\"}}\n";
@@ -330,7 +456,7 @@ mod tests {
 }
 
 /// The real CLI, on this computer, using the user's own login. Run with
-/// `cargo test -- --ignored live_` where `claude` is installed and logged in
+/// `cargo test -- --ignored live_` where the agent is installed and logged in
 #[cfg(test)]
 mod live {
     use super::*;
@@ -344,14 +470,15 @@ mod live {
     use cosmic::iced::futures::StreamExt;
 
     /// Feed the CLI's output to `entries` until its turn ends, answering
-    /// permission prompts with `decision`
+    /// permission prompts with `decision`; how many it answered
     async fn turn(
         stream: &mut (impl Stream<Item = Output> + Unpin),
         tx: &mpsc::UnboundedSender<Command>,
         entries: &mut Entries,
         decision: Decision,
-    ) {
+    ) -> usize {
         let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(180);
+        let mut answered = 0;
         loop {
             let output = tokio::time::timeout_at(deadline, stream.next()).await.expect("a turn within 3 minutes");
             match output {
@@ -363,9 +490,10 @@ mod live {
                     for request in entries.permissions.clone() {
                         tx.send(Command::Answer { request: request.clone(), decision: decision.clone() }).unwrap();
                         entries.answered(&request.request_id, decision != Decision::Deny);
+                        answered += 1;
                     }
                     if done {
-                        return;
+                        return answered;
                     }
                 }
                 Some(Output::Exited(code, stderr)) => panic!("the CLI exited ({code:?}): {stderr}"),
@@ -428,6 +556,87 @@ mod live {
                 }
             }
             assert!(exited);
+        });
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    fn text_of(entries: &Entries) -> String {
+        entries
+            .items
+            .iter()
+            .filter_map(|item| match &item.kind {
+                ItemKind::Text { text, .. } => Some(text.as_str()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Run where `codex` is installed and logged in to ChatGPT
+    #[test]
+    #[ignore]
+    fn live_codex_streams_math_asks_permission_and_resumes() {
+        let dir = std::env::temp_dir().join(format!("ct-live-codex-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let runtime = tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap();
+        let launch = Launch {
+            agent: Agent::Codex,
+            cwd: dir.display().to_string(),
+            model: Some("gpt-5.6-luna".into()),
+            permission_mode: Some("default".into()),
+            args: "-c 'model_reasoning_effort=\"low\"'".into(),
+            ..Launch::default()
+        };
+        let session = runtime.block_on(async {
+            let mut stream = Box::pin(run(launch.clone()));
+            let Some(Output::Ready(tx)) = stream.next().await else { panic!("no CLI") };
+            let mut entries = Entries::default();
+
+            tx.send(user("Reply with exactly this and nothing else: $e^{i\\pi}+1=0$")).unwrap();
+            entries.user(String::new(), Vec::new());
+            turn(&mut stream, &tx, &mut entries, Decision::Allow).await;
+            let text = text_of(&entries);
+            assert!(text.contains("e^{i\\pi}"), "{:#?}", entries.items);
+            assert_eq!(entries.activity, Activity::Idle);
+            assert!(!entries.models.is_empty());
+            assert!(entries.context_tokens.is_some());
+
+            // A command outside the trusted few is asked about
+            tx.send(user("Run the shell command `touch hello.txt` in the current directory, then reply done.")).unwrap();
+            entries.user(String::new(), Vec::new());
+            let asked = turn(&mut stream, &tx, &mut entries, Decision::Allow).await;
+            assert!(asked > 0 && dir.join("hello.txt").exists(), "{:#?}", entries.items);
+            assert!(
+                entries.items.iter().any(|item| matches!(&item.kind, ItemKind::Tool(tool) if tool.name == "Bash")),
+                "{:#?}",
+                entries.items
+            );
+            drop(tx);
+            while stream.next().await.is_some() {}
+            entries.session_id.expect("the thread's id")
+        });
+
+        // Its history reads back from the rollout file
+        let history = load(Agent::Codex, "", &session, 5).unwrap();
+        assert_eq!(history.entries.session_id.as_deref(), Some(session.as_str()));
+        assert!(text_of(&history.entries).contains("e^{i\\pi}"), "{:#?}", history.entries.items);
+        assert!(history.entries.items.iter().any(|item| matches!(&item.kind, ItemKind::User { text, .. } if text.contains("touch"))));
+
+        // And the thread resumes
+        runtime.block_on(async {
+            let mut stream = Box::pin(run(Launch { resume: Some(session.clone()), ..launch }));
+            let Some(Output::Ready(tx)) = stream.next().await else { panic!("no CLI") };
+            let mut entries = Entries::default();
+            while entries.session_id.is_none() {
+                match tokio::time::timeout(std::time::Duration::from_secs(60), stream.next()).await.expect("resumed") {
+                    Some(Output::Events(events)) => events.into_iter().for_each(|event| entries.apply(event)),
+                    Some(Output::Exited(code, stderr)) => panic!("the CLI exited ({code:?}): {stderr}"),
+                    _ => {}
+                }
+            }
+            assert_eq!(entries.session_id, Some(session));
+            assert!(!entries.items.iter().any(|item| matches!(item.kind, ItemKind::Notice { .. })), "{:#?}", entries.items);
+            drop(tx);
+            while stream.next().await.is_some() {}
         });
         let _ = std::fs::remove_dir_all(dir);
     }
