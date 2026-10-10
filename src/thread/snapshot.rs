@@ -476,7 +476,8 @@ mod tests {
                 window.zoom(zoom);
                 window.zoom(super::super::viewer::Zoom::In);
             }
-            let element = super::super::viewer::view(&window, cosmic::iced::window::Id::unique());
+            let id = cosmic::iced::window::Id::unique();
+            let element = super::super::viewer::view_with(&window, move |action| Some(crate::Message::Viewer(id, action)));
             harness.draw(element, name, Size::new(700.0, 420.0));
         }
     }

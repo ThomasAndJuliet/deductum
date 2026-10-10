@@ -188,18 +188,6 @@ impl ImageWindow {
     }
 }
 
-/// The window, its controls sending the app's image messages; those that
-/// have none are left out
-pub fn view(window: &ImageWindow, id: window::Id) -> Element<'_, Message> {
-    view_with(window, move |action| match action {
-        Action::Zoom(zoom) => Some(Message::ImageZoom(id, zoom)),
-        Action::Copy if window.diagram.is_none() => Some(Message::ImageCopyPath(id)),
-        Action::OpenExternally if window.diagram.is_none() => Some(Message::ImageOpenExternally(id)),
-        _ => None,
-    })
-}
-
-/// The window, its controls sending what `on` makes of their actions
 pub fn view_with<'a>(
     window: &'a ImageWindow,
     on: impl Fn(Action) -> Option<Message> + Clone + 'a,
