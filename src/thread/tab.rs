@@ -147,6 +147,8 @@ pub struct ThreadTab {
     pub colours: Option<claude::Colours>,
     /// Named by the user, so not after its first message
     pub named: bool,
+    /// The conversation's name in its transcript, if it has one
+    pub conversation_title: Option<String>,
     /// More for the agent's system prompt; see [`Launch::note`]
     pub note: Option<String>,
     /// The session whose relay runs its CLI, when it has one: it outlives
@@ -201,6 +203,7 @@ impl ThreadTab {
             failure: None,
             colours: None,
             named: false,
+            conversation_title: None,
             note: None,
             relay: None,
             relay_live: false,
@@ -422,6 +425,9 @@ impl ThreadTab {
                             entries.models = old.models.clone();
                         }
                         self.earlier = history.earlier;
+                        if history.title.is_some() {
+                            self.conversation_title = history.title;
+                        }
                         if self.session_id.is_none() {
                             self.session_id = entries.session_id.clone();
                         }

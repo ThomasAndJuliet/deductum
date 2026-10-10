@@ -765,6 +765,9 @@ pub enum Message {
     AppTheme(AppTheme),
     /// The sessions of a reopened window that still run, to attach again
     RestoreSessions(Vec<agent::Session>),
+    /// A conversation whose agent has ended, to continue in a thread or a
+    /// terminal: host, agent, directory and conversation
+    ContinueConversation { host: String, agent: config::Agent, cwd: String, conversation: String, thread: bool },
     /// A diagram's Mermaid source, to open in a window of its own
     OpenDiagram(String),
     /// A control in an image or diagram window
@@ -4966,6 +4969,27 @@ impl Application for App {
                 return self.update_config();
             }
             Message::Thread(id, msg) => return self.thread_message(id, msg),
+            Message::ContinueConversation { host, agent, cwd, conversation, thread } => {
+                let pane = self.pane_model.focused();
+                let Some(profile_id) = self.profile_on_host(&host, Some(agent), thread) else {
+                    return self
+                        .toasts
+                        .push(widget::toaster::Toast::new(fl!("sidebar-no-profile", host = host.as_str())))
+                        .map(cosmic::Action::App);
+                };
+                if thread {
+                    return self.open_thread_as(pane, Some(profile_id), cwd, Some(conversation), None, Some(agent), Some(host));
+                }
+                // A terminal, through the launcher, which resumes it
+                let opened = self.open_launcher(pane, profile_id);
+                let Some(entity) = self.pane_model.active().map(|tab_model| tab_model.active()) else {
+                    return opened;
+                };
+                return Task::batch([
+                    opened,
+                    self.update(Message::LauncherChoose(entity, LaunchChoice::Resume { id: conversation, cwd })),
+                ]);
+            }
             Message::RestoreSessions(sessions) => {
                 let tasks: Vec<_> = sessions.into_iter().map(|s| self.update(Message::RemoteAttach(s))).collect();
                 return Task::batch(tasks);
@@ -6438,6 +6462,40 @@ impl Application for App {
                 if let Some((pane, _)) = tab {
                     self.pane_model.set_focus(pane);
                 }
+                // The conversation, continued in the other view once its agent
+                // here has ended
+                if action == sidebar::Action::SwitchView {
+                    let (Some(kind), Some(conversation)) =
+                        (session.agent(), agent.as_ref().and_then(|a| a.conversation.clone()))
+                    else {
+                        return Task::none();
+                    };
+                    if summary.working() {
+                        return self
+                            .toasts
+                            .push(widget::toaster::Toast::new(fl!("sidebar-switch-busy")))
+                            .map(cosmic::Action::App);
+                    }
+                    let thread = !session.is_thread();
+                    let mut closing = Vec::new();
+                    if let Some((_, entity)) = tab {
+                        closing.push(self.update(Message::TabClose(Some(entity))));
+                    }
+                    let host = session.host.clone();
+                    let end = cosmic::task::future(async move {
+                        let ended = if session.is_thread() {
+                            agent::thread_stop(session).await
+                        } else {
+                            agent::kill_session(session).await
+                        };
+                        if let Err(err) = ended {
+                            log::warn!("ending a session to switch views: {err}");
+                        }
+                        Message::ContinueConversation { host, agent: kind, cwd, conversation, thread }
+                    });
+                    closing.push(end);
+                    return Task::batch(closing);
+                }
                 // A thread's conversation is renamed and moved from its tab,
                 // opened first if need be
                 if session.is_thread()
@@ -6456,6 +6514,8 @@ impl Application for App {
                     });
                 }
                 match action {
+                    // Handled above
+                    sidebar::Action::SwitchView => {}
                     sidebar::Action::Open => return self.update(Message::SidebarOpen(session)),
                     sidebar::Action::CloseTab => {
                         if let Some((_, entity)) = tab {

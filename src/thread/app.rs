@@ -272,6 +272,10 @@ impl App {
     /// Name a thread's tab after its first message, once it has one
     fn retitle_thread(&mut self, id: ThreadId) -> Task<Message> {
         let Some(tab) = self.thread(id).filter(|tab| !tab.named) else { return Task::none() };
+        // The name it was given, before its first message
+        if let Some(title) = tab.conversation_title.clone() {
+            return self.set_thread_title(id, title);
+        }
         let Some(first) = tab.entries.as_ref().and_then(|entries| {
             entries.items.iter().find_map(|item| match &item.kind {
                 super::model::ItemKind::User { text, .. } => Some(text.clone()),

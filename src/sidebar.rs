@@ -74,6 +74,9 @@ pub enum Action {
     RenameAuto,
     MoveTo(ProfileId),
     ForkTo(ProfileId),
+    /// Continue the conversation in the other view: a terminal's as a
+    /// thread, a thread's in a terminal
+    SwitchView,
 }
 
 /// An [`Action`] on the session with this [`session_key`]. Menu actions
@@ -755,6 +758,13 @@ fn context_menu(
     }
     // An agent's conversation, and its worktree, to another computer
     let conversation = row.agent().and_then(|agent| agent.conversation.as_ref());
+    if conversation.is_some() && row.session.agent().is_some() {
+        menu.push(Item::Divider);
+        menu.push(item(
+            if row.session.is_thread() { fl!("sidebar-open-in-terminal") } else { fl!("sidebar-open-as-thread") },
+            Action::SwitchView,
+        ));
+    }
     if conversation.is_some() && !destinations.is_empty() {
         menu.push(Item::Divider);
         for (name, profile_id) in destinations {

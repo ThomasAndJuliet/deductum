@@ -28,6 +28,8 @@ pub struct History {
     pub entries: Entries,
     /// User turns not loaded
     pub earlier: usize,
+    /// The name the user, else the agent, gave the conversation
+    pub title: Option<String>,
 }
 
 /// The last `turns` user turns of `agent`'s conversation `id` on `host`
@@ -72,12 +74,19 @@ pub fn load(agent: Agent, host: &str, id: &str, turns: usize) -> Result<History,
 /// Read a Claude transcript, keeping its last `turns` user turns
 pub fn read(reader: impl BufRead, turns: usize) -> History {
     let mut session = None;
+    let (mut custom, mut ai) = (None, None);
     let mut history = keep(reader, turns, |mut value, events| {
         if session.is_none() {
             session = value.get("sessionId").and_then(Value::as_str).map(str::to_string);
         }
         let kind = value.get("type").and_then(Value::as_str).unwrap_or_default().to_string();
         let kind = kind.as_str();
+        // Names, as `/rename` and the CLI's own titling record them
+        match kind {
+            "custom-title" => custom = value.get("customTitle").and_then(Value::as_str).map(str::to_string),
+            "ai-title" => ai = value.get("aiTitle").and_then(Value::as_str).map(str::to_string),
+            _ => {}
+        }
         if !matches!(kind, "user" | "assistant") {
             return None;
         }
@@ -96,6 +105,7 @@ pub fn read(reader: impl BufRead, turns: usize) -> History {
         Some(starts_turn)
     });
     history.entries.session_id = session;
+    history.title = custom.or(ai).filter(|t| !t.trim().is_empty());
     history
 }
 
@@ -143,7 +153,7 @@ fn keep(reader: impl BufRead, turns: usize, mut line: impl FnMut(Value, &mut Vec
         entries.apply(event);
     }
     entries.stopped();
-    History { entries, earlier }
+    History { entries, earlier, title: None }
 }
 
 /// Whether a user line is the user's own words, not tool results
