@@ -2,7 +2,8 @@
 
 //! Run a command so that Ctrl+Z suspends it and Enter resumes it.
 //!
-//! Usage: `ct-supervise PROGRAM [ARGS...]`
+//! Usage: `ct-supervise PROGRAM [ARGS...]`, or `ct-supervise --relay …` and
+//! `ct-supervise --connect …` for a thread's CLI: see `cosmic_term::relay`
 //!
 //! A session's pane has no interactive shell, so nothing would resume an
 //! agent that stops itself on Ctrl+Z, and shells differ in whether `fg` works
@@ -29,6 +30,12 @@ fn give_terminal(pgrp: libc::pid_t) {
 }
 
 fn main() {
+    let mut relay_args = std::env::args_os().skip(1);
+    match relay_args.next().as_deref().and_then(|arg| arg.to_str()) {
+        Some("--relay") => exit(cosmic_term::relay::relay_main(relay_args.collect())),
+        Some("--connect") => exit(cosmic_term::relay::connect_main(relay_args.collect())),
+        _ => {}
+    }
     let args: Vec<CString> = std::env::args_os()
         .skip(1)
         .map(|arg| CString::new(arg.as_bytes()).expect("no NUL in arguments"))
