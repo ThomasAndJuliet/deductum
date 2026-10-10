@@ -10,6 +10,19 @@ back to using `softbuffer` and `tiny-skia`.
 Custom color schemes can be imported from the `View -> Color schemes...` menu item.
 You can find templates for color schemes in the [color-schemes](color-schemes) folder.
 
+## Agent threads
+
+A Claude or Codex profile can open its conversations as rich-text threads
+instead of terminals: the built-in **Claude thread** and **Codex thread**
+profiles do. Replies are set with their LaTeX typeset, `chartgen` charts and
+Mermaid diagrams drawn in the thread's colours, and text can be selected and
+copied anywhere in the thread; images and diagrams open in their own windows.
+**View → Maths typesetting** sets the thread as a paper, and **Settings →
+Threads** holds its fonts and its memory limits. Threads run the `claude` and
+`codex` command-line tools, so they use your subscriptions, and they run in a
+relay that outlives the window: a turn finishes with the window closed, and
+the window reopens its threads. See `AGENTS-PLAN.md`, "Threads".
+
 ## Fedora COSMIC Atomic
 
 Install COSMIC Terminal Agents as a user Flatpak. Its terminals and agent helpers
@@ -33,7 +46,7 @@ system's password authentication.
 
 ## Flatpak builds and publication
 
-Run `scripts/build-flatpak.sh` for a complete local build and installation.
+Run `scripts/build-flatpak.sh` for a complete local build (`--install` to install it too).
 The Flatpak module explicitly composes the Store catalog after installing its
 MetaInfo, desktop entry, and icons, so module-only rebuilds include the catalog
 as well. Do not publish a cached build after running only its Rust commands.

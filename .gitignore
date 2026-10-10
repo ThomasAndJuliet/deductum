@@ -14,3 +14,4 @@ nohup.out
 /.local-design/
 __pycache__/
 *.pyc
+/chartgen-src

@@ -446,7 +446,15 @@ impl<'a, Message: Clone + 'static> Widget<Message, crate::Theme, crate::Renderer
     }
 
     fn id(&self) -> Option<iced_core::widget::Id> {
-        ew::<Message>(&self.inner).id()
+        // With the context menu the inner editor's tree is a child of this
+        // one, and carries the id itself. Were both trees to carry it, the
+        // named-state restoration would hand the editor's state to this
+        // wrapper and leave the editor stateless
+        if self.has_context_menu {
+            None
+        } else {
+            ew::<Message>(&self.inner).id()
+        }
     }
 
     fn set_id(&mut self, id: iced_core::widget::Id) {

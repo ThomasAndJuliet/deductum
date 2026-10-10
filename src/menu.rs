@@ -51,6 +51,23 @@ impl MenuAction for TabAction {
     }
 }
 
+/// A thread's right-click menu
+pub fn thread_context_menu(has_selection: bool, paper: bool) -> Vec<widget::menu::Tree<Message>> {
+    let copy = if has_selection {
+        MenuItem::Button(fl!("copy"), None, Action::ThreadCopy)
+    } else {
+        MenuItem::ButtonDisabled(fl!("copy"), None, Action::ThreadCopy)
+    };
+    let items = vec![
+        copy,
+        MenuItem::Button(fl!("select-all"), None, Action::ThreadSelectAll),
+        MenuItem::Divider,
+        MenuItem::CheckBox(fl!("thread-paper"), None, paper, Action::ThreadPaper),
+        MenuItem::CheckBox(fl!("dark-mode"), None, cosmic::theme::is_dark(), Action::DarkModeToggle),
+    ];
+    widget::menu::items(&HashMap::<KeyBind, Action>::new(), items)
+}
+
 pub fn context_menu(
     config: &Config,
     key_binds: &HashMap<KeyBind, Action>,
@@ -159,6 +176,22 @@ pub fn tab_menu(
                         items.push(item(fl!("fork-to", profile = name.as_str()), Action::TabForkTo(*profile_id)));
                     }
                 }
+            } else if tab_model.data::<crate::thread::tab::ThreadTab>(entity).is_some() {
+                // A thread: renamed, moved or forked as a session is
+                items.push(item(fl!("close-tab"), Action::TabClose));
+                items.push(item(fl!("move-to-new-window"), Action::TabPopOut));
+                items.push(item(fl!("end-remote-session"), Action::RemoteEnd));
+                items.push(item(fl!("rename-menu"), Action::SessionRename));
+                let targets = destinations.get(&entity).map(Vec::as_slice).unwrap_or_default();
+                if !targets.is_empty() {
+                    items.push(MenuItem::Divider);
+                    for (name, profile_id) in targets {
+                        items.push(item(fl!("move-to", profile = name.as_str()), Action::TabMoveTo(*profile_id)));
+                    }
+                    for (name, profile_id) in targets {
+                        items.push(item(fl!("fork-to", profile = name.as_str()), Action::TabForkTo(*profile_id)));
+                    }
+                }
             } else {
                 items.push(item(fl!("close-tab"), Action::TabClose));
             }
@@ -225,6 +258,8 @@ pub struct SessionMenu {
     pub agent: bool,
     /// The agent profiles on other computers it can move or fork to
     pub destinations: Vec<(String, crate::config::ProfileId)>,
+    /// The tab in front is a thread, which has no terminal to clear
+    pub thread: bool,
 }
 
 pub fn menu_bar<'a>(
@@ -252,7 +287,7 @@ pub fn menu_bar<'a>(
         when(session.agent, fl!("rename-menu"), Action::SessionRename),
         MenuItem::Divider,
         when(session.session, fl!("detach-session"), Action::TabClose),
-        when(session.session, fl!("move-to-new-window"), Action::TabPopOut),
+        when(session.session || session.thread, fl!("move-to-new-window"), Action::TabPopOut),
     ];
     if session.agent && !session.destinations.is_empty() {
         session_items.push(MenuItem::Folder(
@@ -273,7 +308,7 @@ pub fn menu_bar<'a>(
         ));
     }
     session_items.extend([
-        when(session.session, fl!("end-remote-session"), Action::RemoteEnd),
+        when(session.session || session.thread, fl!("end-remote-session"), Action::RemoteEnd),
         MenuItem::Divider,
         MenuItem::Button(fl!("open-in-zed"), None, Action::OpenInZed),
         MenuItem::Button(fl!("open-in-files"), None, Action::OpenInFiles),
@@ -313,7 +348,7 @@ pub fn menu_bar<'a>(
                         MenuItem::Button(fl!("paste"), None, Action::Paste),
                         MenuItem::Button(fl!("select-all"), None, Action::SelectAll),
                         MenuItem::Divider,
-                        MenuItem::Button(fl!("clear-scrollback"), None, Action::ClearScrollback),
+                        when(!session.thread, fl!("clear-scrollback"), Action::ClearScrollback),
                         MenuItem::Divider,
                         MenuItem::Button(fl!("find"), None, Action::Find),
                     ],
@@ -322,6 +357,12 @@ pub fn menu_bar<'a>(
                     fl!("view"),
                     vec![
                         MenuItem::Button(fl!("menu-sidebar"), None, Action::SidebarToggle),
+                        MenuItem::Divider,
+                        MenuItem::CheckBox(fl!("thread-paper"), None, config.thread_paper, Action::ThreadPaper),
+                        MenuItem::CheckBox(fl!("dark-mode"), None, cosmic::theme::is_dark(), Action::DarkModeToggle),
+                        MenuItem::CheckBox(fl!("thread-match-colours"), None, config.thread_match_colours, Action::ThreadMatchColours),
+                        MenuItem::CheckBox(fl!("thread-show-thinking"), None, config.thread_show_thinking, Action::ThreadShowThinking),
+                        MenuItem::CheckBox(fl!("thread-show-tools"), None, config.thread_show_tools, Action::ThreadShowTools),
                         MenuItem::Divider,
                         MenuItem::Button(fl!("zoom-in"), None, Action::ZoomIn),
                         MenuItem::Button(fl!("zoom-reset"), None, Action::ZoomReset),

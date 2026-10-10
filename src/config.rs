@@ -26,14 +26,23 @@ pub enum AppTheme {
 
 impl AppTheme {
     pub fn theme(&self) -> theme::Theme {
+        // A desktop that never saved one of its themes, or saved only some
+        // of its fields, gives libcosmic's dark defaults for what is missing:
+        // the light theme would then be dark. COSMIC's own stands in for it
         match self {
             Self::Dark => {
                 let mut t = theme::system_dark();
+                if !t.cosmic().is_dark {
+                    return theme::Theme::dark();
+                }
                 t.theme_type.prefer_dark(Some(true));
                 t
             }
             Self::Light => {
                 let mut t = theme::system_light();
+                if t.cosmic().is_dark {
+                    return theme::Theme::light();
+                }
                 t.theme_type.prefer_dark(Some(false));
                 t
             }
@@ -312,6 +321,10 @@ pub struct Profile {
     /// Tab colour as `#rrggbb`, or empty for the agent's default
     #[serde(default)]
     pub color: String,
+    /// A Claude profile's conversations open as rich-text threads, not in a
+    /// terminal
+    #[serde(default)]
+    pub thread: bool,
 }
 
 impl Profile {
@@ -390,6 +403,7 @@ impl Default for Profile {
             machine: None,
             args: String::new(),
             color: String::new(),
+            thread: false,
         }
     }
 }
@@ -445,6 +459,114 @@ pub struct Config {
     /// Whether the accent colour is that of the tab in front, when it has one
     #[serde(default = "default_true")]
     pub accent_follows_tab: bool,
+    /// Threads are set as a paper: serif text, justified, in a column
+    #[serde(default = "default_true")]
+    pub thread_paper: bool,
+    /// Threads tell the agent the view's colours, for the images it draws
+    /// to match them
+    #[serde(default = "default_true")]
+    pub thread_match_colours: bool,
+    /// Threads show the agent's thinking among its replies; else only
+    /// while it thinks, above the composer
+    #[serde(default = "default_true")]
+    pub thread_show_thinking: bool,
+    /// Threads show each tool call among the replies; else only the one
+    /// running, above the composer
+    #[serde(default = "default_true")]
+    pub thread_show_tools: bool,
+    #[serde(default)]
+    pub threads: ThreadSettings,
+}
+
+/// The font a paper is set in
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
+pub enum PaperFont {
+    /// Typst's default
+    #[default]
+    Libertinus,
+    /// LaTeX's Computer Modern, as New Computer Modern
+    NewComputerModern,
+    /// The system's serif
+    Serif,
+    /// The interface's sans-serif
+    Sans,
+}
+
+impl PaperFont {
+    pub const ALL: [Self; 4] = [Self::Libertinus, Self::NewComputerModern, Self::Serif, Self::Sans];
+
+    /// The family name, or empty for the theme's sans-serif
+    pub fn family(self) -> &'static str {
+        match self {
+            Self::Libertinus => "Libertinus Serif",
+            Self::NewComputerModern => "NewComputerModern",
+            Self::Serif => "serif",
+            Self::Sans => "",
+        }
+    }
+}
+
+/// The colours of a paper
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
+pub enum PaperTone {
+    /// The theme's own, light or dark
+    #[default]
+    Theme,
+    /// Black on white, whatever the theme
+    White,
+    /// Dark brown on cream
+    Sepia,
+}
+
+impl PaperTone {
+    pub const ALL: [Self; 3] = [Self::Theme, Self::White, Self::Sepia];
+}
+
+/// How threads are set, and how much of them is kept in memory
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(default)]
+pub struct ThreadSettings {
+    /// Text size in normal mode, in pixels
+    pub text_size: u16,
+    pub paper_font: PaperFont,
+    /// Text size of a paper, in pixels
+    pub paper_size: u16,
+    /// A paper's line height, in percent of its size
+    pub paper_line_height: u16,
+    /// A paper's text width, in ems
+    pub paper_measure: u16,
+    pub paper_justify: bool,
+    pub paper_tone: PaperTone,
+    /// Formulas' size against the text's, in percent
+    pub math_scale: u16,
+    /// Minutes an idle agent keeps running before it is stopped; its thread
+    /// starts it again when needed
+    pub idle_minutes: u16,
+    /// Agents kept running at once, at most
+    pub live_agents: u16,
+    /// Threads kept in memory while not shown, at most
+    pub loaded_threads: u16,
+    /// User turns read back from a conversation at first
+    pub history_turns: u16,
+}
+
+impl Default for ThreadSettings {
+    fn default() -> Self {
+        Self {
+            text_size: 15,
+            paper_font: PaperFont::default(),
+            paper_size: 20,
+            paper_line_height: 145,
+            paper_measure: 48,
+            paper_justify: true,
+            paper_tone: PaperTone::default(),
+            math_scale: 110,
+            idle_minutes: 10,
+            live_agents: 3,
+            loaded_threads: 4,
+            history_turns: 20,
+        }
+    }
 }
 
 fn default_true() -> bool {
@@ -483,6 +605,11 @@ impl Default for Config {
             sidebar_compact: false,
             show_secrets: false,
             accent_follows_tab: true,
+            thread_paper: true,
+            thread_match_colours: true,
+            thread_show_thinking: true,
+            thread_show_tools: true,
+            threads: ThreadSettings::default(),
         }
     }
 }
