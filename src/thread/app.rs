@@ -122,16 +122,18 @@ impl App {
     /// Stop the idle agents of threads working in or around `dir` on `host`,
     /// which would keep a transfer of that worktree from starting; they
     /// start again, resuming, at the next message
-    pub(crate) fn stop_idle_threads_in(&mut self, host: &str, dir: &str) {
+    pub(crate) fn stop_idle_threads_in(&mut self, host: &str, dir: &str) -> Task<Message> {
         let dir = std::path::Path::new(dir);
+        let mut ended = Vec::new();
         for id in self.thread_ids() {
             if let Some(tab) = self.thread_mut(id)
                 && tab.host == host
                 && (std::path::Path::new(&tab.cwd).starts_with(dir) || dir.starts_with(&tab.cwd))
             {
-                tab.stop_cli();
+                ended.push(tab.end_cli());
             }
         }
+        Task::batch(ended)
     }
 
     pub(crate) fn thread(&self, id: ThreadId) -> Option<&ThreadTab> {

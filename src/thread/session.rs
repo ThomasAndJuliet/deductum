@@ -345,6 +345,8 @@ pub struct Attach {
     pub session: String,
     pub from: cosmic_term::relay::Cursor,
     pub start: Option<claude::Launch>,
+    /// Joining a running relay: the conversation it holds, if known
+    pub conversation: Option<String>,
 }
 
 /// What a relay starting `launch` records of it, for the sidebar
@@ -517,10 +519,14 @@ pub fn run_relayed(attach: Attach) -> impl Stream<Item = Output> {
         let launch = attach.start.clone().unwrap_or_else(|| claude::Launch {
             agent: session.agent().unwrap_or_default(),
             host: attach.host.clone(),
+            resume: attach.conversation.clone(),
             ..claude::Launch::default()
         });
         let mut protocol = super::protocol::Protocol::new(&launch);
         let start_lines = protocol.start();
+        if attach.start.is_none() {
+            protocol.attached();
+        }
         let done = protocol.turn_done();
         let mut script = None;
         if let Some(start) = &attach.start {

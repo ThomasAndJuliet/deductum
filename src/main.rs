@@ -3125,7 +3125,7 @@ impl App {
         let running: Vec<LauncherRow> = launcher
             .running
             .iter()
-            .filter(|session| session.agent() == agent && !open.contains(session))
+            .filter(|session| session.agent() == agent && !open.contains(session) && !session.is_thread())
             .filter(|session| matches(&session.label()))
             .map(|session| LauncherRow {
                 label: session.label(),
@@ -3650,7 +3650,13 @@ impl App {
         self.pane_model.panes.iter().find_map(|(pane, tab_model)| {
             tab_model
                 .iter()
-                .find(|&entity| tab_model.data::<agent::Session>(entity) == Some(session))
+                .find(|&entity| {
+                    tab_model.data::<agent::Session>(entity) == Some(session)
+                        // A thread, by the session of its relay
+                        || tab_model
+                            .data::<thread::tab::ThreadTab>(entity)
+                            .is_some_and(|t| t.relay_live && t.relay.as_ref() == Some(session))
+                })
                 .map(|entity| (*pane, entity))
         })
     }
@@ -3800,13 +3806,14 @@ impl App {
                 let Some(target) = agent_kind(profile.agent) else {
                     return Task::none();
                 };
-                self.stop_idle_threads_in(&conversation.host, &cwd);
+                // A relayed agent ends first, as its CLI would block the plan
+                let ended = self.stop_idle_threads_in(&conversation.host, &cwd);
                 let form = TransferForm::new(mode, title, Some(retry));
                 let request_id = form.request_id.clone();
                 if let Some(launcher) = self.launcher_mut(entity) {
                     launcher.form = Some(LauncherForm::Transfer(Box::new(form)));
                 }
-                return cosmic::task::future(async move {
+                return ended.chain(cosmic::task::future(async move {
                     let result = async {
                         agent::ensure_helper(conversation.host.clone(), agent::Helper::Transfer).await?;
                         agent::ensure_helper(destination.clone(), agent::Helper::Transfer).await?;
@@ -3819,7 +3826,7 @@ impl App {
                     }
                     .await;
                     Message::LauncherTransferDraft(entity, request_id, Box::new(result))
-                });
+                }));
             }
             LaunchChoice::Browse => {
                 let request_id = cosmic_term::random_hex(16);
@@ -4205,9 +4212,15 @@ impl App {
             .panes
             .iter()
             .flat_map(|(_pane, tab_model)| {
-                tab_model
-                    .iter()
-                    .filter_map(|entity| tab_model.data::<agent::Session>(entity).cloned())
+                tab_model.iter().filter_map(|entity| {
+                    tab_model.data::<agent::Session>(entity).cloned().or_else(|| {
+                        // A thread's relay, which it shows
+                        tab_model
+                            .data::<thread::tab::ThreadTab>(entity)
+                            .filter(|t| t.relay_live)
+                            .and_then(|t| t.relay.clone())
+                    })
+                })
             })
             .collect()
     }
@@ -6425,6 +6438,23 @@ impl Application for App {
                 if let Some((pane, _)) = tab {
                     self.pane_model.set_focus(pane);
                 }
+                // A thread's conversation is renamed and moved from its tab,
+                // opened first if need be
+                if session.is_thread()
+                    && matches!(
+                        action,
+                        sidebar::Action::Rename | sidebar::Action::RenameAuto | sidebar::Action::MoveTo(_) | sidebar::Action::ForkTo(_)
+                    )
+                {
+                    let Some((_, entity)) = tab else {
+                        return self.update(Message::SidebarOpen(session));
+                    };
+                    return self.update(match action {
+                        sidebar::Action::MoveTo(profile_id) => Message::TabTransfer(Some(entity), profile_id, transfer::Mode::Move),
+                        sidebar::Action::ForkTo(profile_id) => Message::TabTransfer(Some(entity), profile_id, transfer::Mode::Fork),
+                        _ => Message::SessionRename(Some(entity)),
+                    });
+                }
                 match action {
                     sidebar::Action::Open => return self.update(Message::SidebarOpen(session)),
                     sidebar::Action::CloseTab => {
@@ -6552,6 +6582,10 @@ impl Application for App {
                 self.new_tab_menu_open = false;
                 return self.update_focus();
             }
+            // A thread's relay opens as a thread, never in a terminal
+            Message::RemoteAttach(session) if session.is_thread() => {
+                return self.update(Message::SidebarOpen(session));
+            }
             Message::RemoteAttach(session) => {
                 self.new_tab_menu_open = false;
                 return self.create_and_focus_new_terminal_with(
@@ -6562,6 +6596,14 @@ impl Application for App {
                 );
             }
             Message::RemoteEnd(entity_opt) => {
+                // A thread's agent ends, relay and all
+                let thread = self.pane_model.active().and_then(|tab_model| {
+                    let entity = entity_opt.unwrap_or_else(|| tab_model.active());
+                    tab_model.data::<thread::tab::ThreadTab>(entity).map(|t| t.id)
+                });
+                if let Some(id) = thread {
+                    return self.thread_mut(id).map_or_else(Task::none, |tab| tab.end_cli());
+                }
                 if self.pending_commands.contains_key("end-session") {
                     return Task::none();
                 }
@@ -7239,6 +7281,43 @@ impl Application for App {
                     tokio::time::sleep(sidebar::REFRESH).await;
                     Message::SidebarRefresh(host, generation)
                 })]);
+            }
+            Message::SidebarOpen(session) if session.is_thread() && self.session_tab(&session).is_none() => {
+                self.sidebar.searching = false;
+                // A thread joins its relay, in a thread tab
+                let found = self.sidebar.find(sidebar::session_key(&session)).map(|(_, summary)| {
+                    let thread = summary.thread.clone();
+                    let cwd = thread
+                        .as_ref()
+                        .and_then(|t| t.meta.get("cwd").and_then(|c| c.as_str()).map(str::to_string))
+                        .or_else(|| summary.cwd.clone())
+                        .unwrap_or_default();
+                    (cwd, thread.and_then(|t| t.conversation))
+                });
+                let Some((cwd, conversation)) = found else { return Task::none() };
+                let agent = session.agent().unwrap_or(config::Agent::Claude);
+                let profile_id = self.profile_on_host(&session.host, Some(agent), true);
+                let id = self.next_thread;
+                let has_history = conversation.is_some();
+                let opened = self.open_thread_as(
+                    self.pane_model.focused(),
+                    profile_id,
+                    cwd,
+                    conversation,
+                    None,
+                    Some(agent),
+                    Some(session.host.clone()),
+                );
+                let mut attach = Task::none();
+                if let Some(tab) = self.thread_mut(id) {
+                    tab.relay = Some(session);
+                    tab.relay_live = true;
+                    tab.attach_on_load = has_history;
+                    if !has_history {
+                        attach = tab.attach();
+                    }
+                }
+                return Task::batch([opened, attach]);
             }
             Message::SidebarOpen(session) => {
                 self.sidebar.searching = false;

@@ -66,6 +66,8 @@ pub enum Msg {
     Attached(Vec<PathBuf>),
     Detach(usize),
     CopyItem(u64),
+    /// The thread's last relay has ended: start another for what waits
+    Relaunch,
 }
 
 /// What a thread asks of the app
@@ -147,6 +149,13 @@ pub struct ThreadTab {
     pub named: bool,
     /// More for the agent's system prompt; see [`Launch::note`]
     pub note: Option<String>,
+    /// The session whose relay runs its CLI, when it has one: it outlives
+    /// the tab, so that a turn finishes with the window closed
+    pub relay: Option<crate::agent::Session>,
+    /// Whether that relay is thought to run, to join rather than start
+    pub relay_live: bool,
+    /// Join the relay once the history is read, as a restored thread does
+    pub attach_on_load: bool,
     /// The colours the running CLI was told
     launched_colours: Option<claude::Colours>,
     /// Rich text built for items, by item and part, with the hash of what
@@ -193,6 +202,9 @@ impl ThreadTab {
             colours: None,
             named: false,
             note: None,
+            relay: None,
+            relay_live: false,
+            attach_on_load: false,
             launched_colours: None,
             docs: RefCell::new(HashMap::new()),
         }
@@ -330,10 +342,60 @@ impl ThreadTab {
         self.generation += 1;
         self.cli = Cli::Starting;
         self.failure = None;
-        self.launched_colours = self.colours.clone();
         let (id, generation) = (self.id, self.generation);
-        Task::run(session::run(self.launch()), move |output| {
-            cosmic::Action::App(Message::Thread(id, Msg::Cli(generation, output)))
+        let to_thread = move |output| cosmic::Action::App(Message::Thread(id, Msg::Cli(generation, output)));
+        if !crate::agent::relay_available() {
+            self.launched_colours = self.colours.clone();
+            return Task::run(session::run(self.launch()), to_thread);
+        }
+        // Join the relay that runs, else start one under a new name
+        let attach = match &self.relay {
+            Some(relay) if self.relay_live => session::Attach {
+                host: self.host.clone(),
+                session: relay.name.clone(),
+                from: cosmic_term::relay::Cursor::Live,
+                start: None,
+                conversation: self.session_id.clone(),
+            },
+            _ => {
+                let relay = crate::agent::new_thread_session(self.agent, &self.cwd, &self.host);
+                self.launched_colours = self.colours.clone();
+                let attach = session::Attach {
+                    host: self.host.clone(),
+                    session: relay.name.clone(),
+                    from: cosmic_term::relay::Cursor::Offset(0),
+                    start: Some(self.launch()),
+                    conversation: self.session_id.clone(),
+                };
+                self.relay = Some(relay);
+                self.relay_live = true;
+                attach
+            }
+        };
+        Task::run(session::run_relayed(attach), to_thread)
+    }
+
+    /// Join the thread's relay, to follow a turn in progress
+    pub fn attach(&mut self) -> Task<Message> {
+        if self.relay_live && matches!(self.cli, Cli::Stopped) { self.start_cli() } else { Task::none() }
+    }
+
+    /// End the thread's CLI for good, relay and all; it starts again,
+    /// resuming, at the next message
+    pub fn end_cli(&mut self) -> Task<Message> {
+        if self.is_working() {
+            return Task::none();
+        }
+        self.cli = Cli::Stopped;
+        self.generation += 1;
+        self.relay_live = false;
+        let Some(relay) = self.relay.take() else { return cosmic::task::message(Message::Thread(self.id, Msg::Relaunch)) };
+        let id = self.id;
+        cosmic::task::future(async move {
+            if let Err(err) = crate::agent::thread_stop(relay).await {
+                log::warn!("ending a thread's relay: {err}");
+            }
+            Message::Thread(id, Msg::Relaunch)
         })
     }
 
@@ -361,9 +423,12 @@ impl ThreadTab {
                         self.selection = None;
                         self.docs.borrow_mut().clear();
                         requests.push(Request::Retitle);
+                        // A restored thread follows its turn in progress
+                        let attach = if std::mem::take(&mut self.attach_on_load) { self.attach() } else { Task::none() };
                         if self.follow {
-                            return scroll_to_end(&self.scroll_id);
+                            return Task::batch([attach, scroll_to_end(&self.scroll_id)]);
                         }
+                        return attach;
                     }
                     Err(err) => {
                         self.load = Load::Failed(err);
@@ -410,6 +475,13 @@ impl ThreadTab {
                     }
                     Output::Exited(code, stderr) => {
                         self.cli = Cli::Stopped;
+                        // A relay joined but gone: a new one takes what waits
+                        if self.relay_live {
+                            self.relay_live = false;
+                            if !self.pending.is_empty() && !self.is_working() {
+                                return self.start_cli();
+                            }
+                        }
                         let was_working = self.is_working();
                         if let Some(entries) = &mut self.entries {
                             entries.stopped();
@@ -435,7 +507,16 @@ impl ThreadTab {
                         }
                     }
                     // Only from a relayed CLI (session::run_relayed)
-                    Output::Hello { .. } | Output::Input { .. } | Output::Disconnected => {}
+                    Output::Hello { .. } | Output::Disconnected => {}
+                    // Another window's message to the same agent
+                    Output::Input { kind, json, own, .. } => {
+                        if !own
+                            && kind == "turn"
+                            && let Some(text) = turn_text(&json)
+                        {
+                            self.entries.get_or_insert_with(Entries::default).user(text, Vec::new());
+                        }
+                    }
                 }
             }
             Msg::Edit(action) => {
@@ -462,15 +543,26 @@ impl ThreadTab {
                     }
                 }
                 // Its system prompt holds the colours, so a CLI told others
-                // starts again, resuming, to learn the new ones
-                if matches!(self.cli, Cli::Running(_)) && self.session_id.is_some() && self.colours != self.launched_colours {
-                    self.stop_cli();
+                // starts again, resuming, to learn the new ones; the message
+                // waits for the old one to end
+                let mut relaunch = None;
+                if (matches!(self.cli, Cli::Running(_)) || self.relay_live)
+                    && self.session_id.is_some()
+                    && self.colours != self.launched_colours
+                    && !self.is_working()
+                {
+                    relaunch = Some(self.end_cli());
                 }
                 let line = Command::User { text: text.clone(), images };
                 let refs = self.attachments.drain(..).map(|path| super::model::ImageRef { path }).collect();
                 self.entries.get_or_insert_with(Entries::default).user(text, refs);
                 self.composer = text_editor::Content::new();
                 self.follow = true;
+                if let Some(relaunch) = relaunch {
+                    // After the old relay ends: Relaunch starts the new one
+                    self.pending.push(line);
+                    return Task::batch([relaunch, scroll_to_end(&self.scroll_id)]);
+                }
                 return Task::batch([self.send_line(line), scroll_to_end(&self.scroll_id)]);
             }
             Msg::Stop => {
@@ -547,6 +639,11 @@ impl ThreadTab {
                     if let Cli::Running(tx) = &self.cli {
                         let _ = tx.send(Command::SetMode(value.to_string()));
                     }
+                }
+            }
+            Msg::Relaunch => {
+                if !self.pending.is_empty() && matches!(self.cli, Cli::Stopped) {
+                    return self.start_cli();
                 }
             }
             Msg::Attach => requests.push(Request::PickImages(self.id)),
@@ -908,4 +1005,20 @@ mod tests {
         let doc = tool_input_doc(&tool);
         assert!(matches!(&doc.blocks[0], markdown::Block::Code { lang, text, .. } if lang == "diff" && text == "-a\n-b\n+c"));
     }
+}
+
+/// The text of a user's turn, as a relay echoes it: Claude's message, or
+/// Codex's `turn/start`
+fn turn_text(json: &str) -> Option<String> {
+    let value: serde_json::Value = serde_json::from_str(json).ok()?;
+    let parts = value
+        .pointer("/message/content")
+        .or_else(|| value.pointer("/params/input"))
+        .and_then(serde_json::Value::as_array)?;
+    let text: Vec<&str> = parts
+        .iter()
+        .filter(|part| part.get("type").and_then(serde_json::Value::as_str) == Some("text"))
+        .filter_map(|part| part.get("text").and_then(serde_json::Value::as_str))
+        .collect();
+    (!text.is_empty()).then(|| text.join("\n"))
 }

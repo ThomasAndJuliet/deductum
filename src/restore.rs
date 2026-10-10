@@ -45,6 +45,9 @@ pub enum Tab {
         mode: String,
         #[serde(default)]
         title: String,
+        /// The session of the relay running its agent, to join again
+        #[serde(default)]
+        relay: Option<String>,
     },
     /// A Zellij session, by its descriptor (`name@host`)
     Session { descriptor: String },
@@ -151,6 +154,7 @@ mod tests {
                     model: String::new(),
                     mode: "auto".into(),
                     title: "A thread".into(),
+                    relay: Some("ct-thread-claude-tmp-0123abcd".into()),
                 },
                 Tab::Session { descriptor: "ct-claude-x@neo".into() },
             ],
@@ -187,6 +191,7 @@ impl crate::App {
                         model: thread.model.clone(),
                         mode: thread.mode.clone(),
                         title: if thread.named { thread.title.clone() } else { String::new() },
+                        relay: thread.relay.as_ref().filter(|_| thread.relay_live).map(|r| r.name.clone()),
                     }
                 } else if let Some(session) = tab_model.data::<crate::agent::Session>(entity) {
                     Tab::Session { descriptor: session.descriptor() }
@@ -218,14 +223,25 @@ impl crate::App {
         let mut sessions = Vec::new();
         for tab in record.tabs {
             match tab {
-                Tab::Thread { agent, host, cwd, profile, conversation, model, mode, title } => {
+                Tab::Thread { agent, host, cwd, profile, conversation, model, mode, title, relay } => {
                     let profile_id = profile
                         .map(crate::config::ProfileId)
                         .filter(|id| self.config.profiles.contains_key(id));
                     let id = self.next_thread;
                     let agent = if agent == "codex" { crate::config::Agent::Codex } else { crate::config::Agent::Claude };
+                    let has_history = conversation.is_some();
                     tasks.push(self.open_thread_as(pane, profile_id, cwd, conversation, None, Some(agent), Some(host)));
                     if let Some(tab) = self.thread_mut(id) {
+                        // Its relay may still run, with a turn in progress
+                        if let Some(relay) = relay {
+                            tab.relay = Some(crate::agent::Session { host: tab.host.clone(), name: relay });
+                            tab.relay_live = true;
+                            // After its history, or now if it has none yet
+                            tab.attach_on_load = has_history;
+                            if !has_history {
+                                tasks.push(tab.attach());
+                            }
+                        }
                         if !model.is_empty() {
                             tab.model = model;
                         }

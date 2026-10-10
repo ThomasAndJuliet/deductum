@@ -471,7 +471,8 @@ impl Sidebar {
                     repository: row.summary.repository.clone().unwrap_or_default(),
                     agent: rows.iter().find_map(|row| row.session.agent()),
                     worktree,
-                    thread: false,
+                    // In the view its latest session was in
+                    thread: rows.iter().find(|row| row.session.agent().is_some()).is_some_and(|row| row.session.is_thread()),
                 };
                 let color = mark(&row.session).color;
                 heading = heading

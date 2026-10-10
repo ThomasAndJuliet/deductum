@@ -50,6 +50,14 @@ impl Protocol {
         }
     }
 
+    /// Joining a CLI another client started, whose opening lines it never
+    /// sees
+    pub fn attached(&mut self) {
+        if let Self::Codex(codex) = self {
+            codex.attached();
+        }
+    }
+
     /// The lines for `command`
     pub fn command(&mut self, command: Command) -> Vec<String> {
         match self {

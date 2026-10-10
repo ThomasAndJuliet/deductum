@@ -180,6 +180,7 @@ pub fn tab_menu(
                 // A thread: renamed, moved or forked as a session is
                 items.push(item(fl!("close-tab"), Action::TabClose));
                 items.push(item(fl!("move-to-new-window"), Action::TabPopOut));
+                items.push(item(fl!("end-remote-session"), Action::RemoteEnd));
                 items.push(item(fl!("rename-menu"), Action::SessionRename));
                 let targets = destinations.get(&entity).map(Vec::as_slice).unwrap_or_default();
                 if !targets.is_empty() {
@@ -307,7 +308,7 @@ pub fn menu_bar<'a>(
         ));
     }
     session_items.extend([
-        when(session.session, fl!("end-remote-session"), Action::RemoteEnd),
+        when(session.session || session.thread, fl!("end-remote-session"), Action::RemoteEnd),
         MenuItem::Divider,
         MenuItem::Button(fl!("open-in-zed"), None, Action::OpenInZed),
         MenuItem::Button(fl!("open-in-files"), None, Action::OpenInFiles),

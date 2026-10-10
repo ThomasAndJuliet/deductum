@@ -64,6 +64,15 @@ pub struct Codex {
 }
 
 impl Codex {
+    /// Joining an app-server already started: the thread is the one
+    /// resumed, and request ids keep clear of those in its replayed log
+    pub fn attached(&mut self) {
+        if self.thread.is_none() {
+            self.thread = self.resume.clone();
+        }
+        self.next_id = self.next_id.max(1 << 40) + u64::from(rand_offset());
+    }
+
     pub fn new(launch: &Launch) -> Self {
         let args = shlex::split(&launch.args).unwrap_or_default();
         let bypass = args.iter().any(|arg| matches!(arg.as_str(), "--dangerously-bypass-approvals-and-sandbox" | "--yolo"));
@@ -1363,4 +1372,9 @@ mod tests {
         assert_eq!(tool.title(), "Edit /w/a.rs, /w/b.rs");
         assert_eq!(tool.patch().unwrap(), "@@ /w/a.rs\n@@ -1 +1 @@\n-old\n+new\n@@ /w/b.rs\n-gone");
     }
+}
+
+/// Something different for each client, from the clock
+fn rand_offset() -> u32 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.subsec_nanos())
 }
