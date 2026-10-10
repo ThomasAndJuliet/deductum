@@ -1,27 +1,41 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! An image from a thread, in a window of its own.
+//! An image or a diagram from a thread, in a window of its own.
 //!
 //! Laid out as Marginalium lays out a page: a toolbar with the zoom (fit,
-//! actual size, out, in, and the percentage), and the image on a neutral
+//! actual size, out, in, and the percentage), and the picture on a neutral
 //! ground that scrolls both ways when it is larger than the window.
-//! Ctrl+scroll zooms. The image is decoded only for this window, and freed
-//! when it closes.
+//! Ctrl+scroll zooms; the window goes full screen, and Escape brings it
+//! back. An image is decoded only for this window, and freed when it
+//! closes. A diagram is drawn again in the window's colours, and shows its
+//! Mermaid source in place of the drawing at the press of a button, as in
+//! Zed.
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
-use cosmic::iced::{Alignment, ContentFit, Length};
-use cosmic::widget::{self, button};
+use cosmic::iced::advanced::widget::{Operation, Tree};
+use cosmic::iced::advanced::{Clipboard, Layout, Shell, Widget, layout, mouse, overlay, renderer};
+use cosmic::iced::keyboard::{self, key::Named};
+use cosmic::iced::{Alignment, ContentFit, Event, Length, Rectangle, Size, Vector, window};
+use cosmic::widget::{self, button, text_editor};
 use cosmic::{Element, theme};
 
+use super::diagram::{self, Diagram, Palette};
 use crate::Message;
 use crate::fl;
 
 pub struct ImageWindow {
+    /// The image's file; empty for a diagram
     pub path: PathBuf,
     pub size: Option<(u32, u32)>,
     /// `None` fits the window
     pub zoom: Option<f32>,
+    /// A diagram's Mermaid source, for a diagram's window
+    pub diagram: Option<String>,
+    /// The source, shown in place of the drawing
+    pub source: Option<text_editor::Content>,
+    pub full_screen: bool,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -33,15 +47,64 @@ pub enum Zoom {
     Scroll(f32),
 }
 
+/// What the window's controls ask for
+#[derive(Clone, Debug)]
+pub enum Action {
+    Zoom(Zoom),
+    /// The file's path, or the diagram's source
+    Copy,
+    /// The file, or the diagram as SVG, in another app
+    OpenExternally,
+    /// Into or out of full screen
+    FullScreen,
+    /// Escape: out of full screen
+    Escape,
+    /// The diagram's source, or its drawing
+    Source,
+    /// A selection in the source
+    Edit(text_editor::Action),
+}
+
 const STEPS: [f32; 13] = [0.1, 0.25, 0.33, 0.5, 0.67, 0.8, 1.0, 1.25, 1.5, 2.0, 3.0, 4.0, 8.0];
+
+/// The colours a diagram is drawn in, in a window of `theme`'s: those of a
+/// thread set in the theme
+pub fn palette(theme: &cosmic::Theme) -> Palette {
+    let cosmic = theme.cosmic();
+    let page: cosmic::iced::Color = cosmic.bg_color().into();
+    let text: cosmic::iced::Color = cosmic.on_bg_color().into();
+    let over = |color: cosmic::iced::Color, alpha: f32| cosmic::iced::Color {
+        r: page.r + (color.r - page.r) * alpha * color.a,
+        g: page.g + (color.g - page.g) * alpha * color.a,
+        b: page.b + (color.b - page.b) * alpha * color.a,
+        a: 1.0,
+    };
+    Palette {
+        page: cosmic::iced::Color { a: 1.0, ..page },
+        surface: over(cosmic.bg_component_color().into(), 1.0),
+        text: over(text, 1.0),
+        muted: over(text, 0.68),
+        rule: over(text, 0.25),
+        accent: over(cosmic.accent_text_color().into(), 1.0),
+        error: over(cosmic.destructive_text_color().into(), 1.0),
+    }
+}
 
 impl ImageWindow {
     pub fn new(path: PathBuf) -> Self {
         let size = super::images::dimensions(&path);
-        Self { path, size, zoom: None }
+        Self { path, size, zoom: None, diagram: None, source: None, full_screen: false }
     }
 
-    /// The window's size to start with: the image's, within reason
+    /// A window for the diagram of `source`
+    pub fn diagram(source: String) -> Self {
+        let size = diagram::render(&source, &palette(&theme::active()))
+            .ok()
+            .map(|d| (d.width.ceil() as u32, d.height.ceil() as u32));
+        Self { path: PathBuf::new(), size, zoom: None, diagram: Some(source), source: None, full_screen: false }
+    }
+
+    /// The window's size to start with: the picture's, within reason
     pub fn initial_size(&self) -> cosmic::iced::Size {
         let (w, h) = self.size.unwrap_or((800, 600));
         let scale = (1400.0 / w as f32).min(1000.0 / h as f32).min(1.0);
@@ -49,6 +112,9 @@ impl ImageWindow {
     }
 
     pub fn title(&self) -> String {
+        if self.diagram.is_some() {
+            return fl!("diagram");
+        }
         self.path.file_name().map_or_else(|| fl!("image"), |n| n.to_string_lossy().into_owned())
     }
 
@@ -62,49 +128,160 @@ impl ImageWindow {
             Zoom::Scroll(lines) => Some((current * 1.1f32.powf(lines)).clamp(0.05, 16.0)),
         };
     }
+
+    /// The diagram, drawn in `theme`'s colours, or why it can't be
+    fn drawn(&self, theme: &cosmic::Theme) -> Option<Result<Arc<Diagram>, String>> {
+        self.diagram.as_ref().map(|source| diagram::render(source, &palette(theme)))
+    }
+
+    /// Do what a control asks, for the window `id`
+    pub fn act(&mut self, id: window::Id, action: Action) -> cosmic::app::Task<Message> {
+        match action {
+            Action::Zoom(zoom) => self.zoom(zoom),
+            Action::Copy => {
+                let text = self.diagram.clone().unwrap_or_else(|| self.path.display().to_string());
+                return cosmic::iced::clipboard::write(text);
+            }
+            Action::OpenExternally => {
+                let path = match self.drawn(&theme::active()) {
+                    Some(Ok(drawn)) => {
+                        let path = std::env::temp_dir().join(format!("cosmic-term-diagram-{}.svg", std::process::id()));
+                        if let Err(err) = std::fs::write(&path, drawn.svg.as_bytes()) {
+                            log::warn!("failed to write {}: {err}", path.display());
+                            return cosmic::app::Task::none();
+                        }
+                        path
+                    }
+                    Some(Err(_)) => return cosmic::app::Task::none(),
+                    None => self.path.clone(),
+                };
+                if let Err(err) = open::that_detached(&path) {
+                    log::warn!("failed to open {}: {err}", path.display());
+                }
+            }
+            Action::FullScreen => {
+                self.full_screen = !self.full_screen;
+                let mode = if self.full_screen { window::Mode::Fullscreen } else { window::Mode::Windowed };
+                return window::set_mode(id, mode);
+            }
+            Action::Escape if self.full_screen => {
+                self.full_screen = false;
+                return window::set_mode(id, window::Mode::Windowed);
+            }
+            Action::Escape => {}
+            Action::Source => {
+                self.source = match (&self.source, &self.diagram) {
+                    (None, Some(source)) => Some(text_editor::Content::with_text(source)),
+                    _ => None,
+                };
+            }
+            Action::Edit(action) => {
+                // The source is read-only: it selects, but does not change
+                if let Some(content) = &mut self.source
+                    && !action.is_edit()
+                {
+                    content.perform(action);
+                }
+            }
+        }
+        cosmic::app::Task::none()
+    }
 }
 
-pub fn view(window: &ImageWindow, id: cosmic::iced::window::Id) -> Element<'_, Message> {
+/// The window, its controls sending the app's image messages; those that
+/// have none are left out
+pub fn view(window: &ImageWindow, id: window::Id) -> Element<'_, Message> {
+    view_with(window, move |action| match action {
+        Action::Zoom(zoom) => Some(Message::ImageZoom(id, zoom)),
+        Action::Copy if window.diagram.is_none() => Some(Message::ImageCopyPath(id)),
+        Action::OpenExternally if window.diagram.is_none() => Some(Message::ImageOpenExternally(id)),
+        _ => None,
+    })
+}
+
+/// The window, its controls sending what `on` makes of their actions
+pub fn view_with<'a>(
+    window: &'a ImageWindow,
+    on: impl Fn(Action) -> Option<Message> + Clone + 'a,
+) -> Element<'a, Message> {
     let spacing = theme::active().cosmic().spacing;
+    let active = theme::active();
     let icon = |name| crate::icon_cache_get(name, 16);
-    let zoom = move |zoom| Message::ImageZoom(id, zoom);
     let percent = window.zoom.map_or_else(|| fl!("image-fit"), |z| format!("{:.0}%", z * 100.0));
     let dimensions = window.size.map(|(w, h)| format!("{w} × {h}")).unwrap_or_default();
-    let tool = |name, tip: String, message| -> Element<'_, Message> {
-        widget::tooltip(button::custom(icon(name)).class(theme::Button::Icon).padding(spacing.space_xxs).on_press(message), widget::text::body(tip), widget::tooltip::Position::Bottom)
-            .into()
+    let tool = |name, tip: String, action: Action| -> Option<Element<'a, Message>> {
+        let message = on(action)?;
+        Some(
+            widget::tooltip(
+                button::custom(icon(name)).class(theme::Button::Icon).padding(spacing.space_xxs).on_press(message),
+                widget::text::body(tip),
+                widget::tooltip::Position::Bottom,
+            )
+            .into(),
+        )
     };
-    let toolbar = widget::row::with_children(vec![
-        widget::text::body(window.title()).into(),
-        widget::text::caption(dimensions).into(),
-        widget::Space::new().width(Length::Fill).into(),
-        tool("zoom-fit-best-symbolic", fl!("image-fit"), zoom(Zoom::Fit)),
-        tool("zoom-original-symbolic", fl!("image-actual"), zoom(Zoom::Actual)),
-        tool("zoom-out-symbolic", fl!("image-zoom-out"), zoom(Zoom::Out)),
-        widget::text::body(percent).width(Length::Fixed(52.0)).align_x(Alignment::Center).into(),
-        tool("zoom-in-symbolic", fl!("image-zoom-in"), zoom(Zoom::In)),
-        tool("edit-copy-symbolic", fl!("image-copy-path"), Message::ImageCopyPath(id)),
-        tool("document-open-symbolic", fl!("image-open-externally"), Message::ImageOpenExternally(id)),
-    ])
-    .spacing(spacing.space_xxs)
-    .align_y(Alignment::Center)
-    .padding([spacing.space_xxs, spacing.space_s]);
+    let diagram = window.diagram.is_some();
+    let showing_source = window.source.is_some();
+    let mut tools: Vec<Option<Element<'a, Message>>> = vec![
+        Some(widget::text::body(window.title()).into()),
+        Some(widget::text::caption(dimensions).into()),
+        Some(widget::Space::new().width(Length::Fill).into()),
+    ];
+    if diagram && let Some(message) = on(Action::Source) {
+        // Zed's Source and Preview, as one toggle
+        let label = if showing_source { fl!("diagram-preview") } else { fl!("diagram-source") };
+        tools.push(Some(button::text(label).on_press(message).into()));
+    }
+    if !showing_source {
+        tools.extend([
+            tool("zoom-fit-best-symbolic", fl!("image-fit"), Action::Zoom(Zoom::Fit)),
+            tool("zoom-original-symbolic", fl!("image-actual"), Action::Zoom(Zoom::Actual)),
+            tool("zoom-out-symbolic", fl!("image-zoom-out"), Action::Zoom(Zoom::Out)),
+            Some(widget::text::body(percent).width(Length::Fixed(52.0)).align_x(Alignment::Center).into()),
+            tool("zoom-in-symbolic", fl!("image-zoom-in"), Action::Zoom(Zoom::In)),
+        ]);
+    }
+    tools.extend([
+        if diagram {
+            tool("edit-copy-symbolic", fl!("diagram-copy-source"), Action::Copy)
+        } else {
+            tool("edit-copy-symbolic", fl!("image-copy-path"), Action::Copy)
+        },
+        if diagram {
+            tool("document-open-symbolic", fl!("diagram-open-externally"), Action::OpenExternally)
+        } else {
+            tool("document-open-symbolic", fl!("image-open-externally"), Action::OpenExternally)
+        },
+        if window.full_screen {
+            tool("view-restore-symbolic", fl!("image-leave-full-screen"), Action::FullScreen)
+        } else {
+            tool("view-fullscreen-symbolic", fl!("image-full-screen"), Action::FullScreen)
+        },
+    ]);
+    let toolbar = widget::row::with_children(tools.into_iter().flatten().collect::<Vec<_>>())
+        .spacing(spacing.space_xxs)
+        .align_y(Alignment::Center)
+        .padding([spacing.space_xxs, spacing.space_s]);
 
+    let drawn = window.drawn(&active);
     // An image at `size`, or filling the space; a drawing stays sharp at
     // any zoom
-    let picture = |size: Option<(f32, f32)>, smooth: bool| -> Element<'_, Message> {
+    let picture = |size: Option<(f32, f32)>, smooth: bool| -> Element<'a, Message> {
         let (width, height, fit) = match size {
             Some((w, h)) => (Length::Fixed(w), Length::Fixed(h), ContentFit::Fill),
             None => (Length::Fill, Length::Fill, ContentFit::Contain),
         };
-        if super::images::is_svg(&window.path) {
-            widget::svg(widget::svg::Handle::from_path(window.path.clone()))
-                .width(width)
-                .height(height)
-                .content_fit(fit)
-                .into()
-        } else {
-            widget::image(widget::image::Handle::from_path(window.path.clone()))
+        match &drawn {
+            Some(Ok(drawn)) => widget::svg(drawn.full.clone()).width(width).height(height).content_fit(fit).into(),
+            Some(Err(err)) => widget::text::body(format!("mermaid: {err}")).into(),
+            None if super::images::is_svg(&window.path) => {
+                widget::svg(widget::svg::Handle::from_path(window.path.clone()))
+                    .width(width)
+                    .height(height)
+                    .content_fit(fit)
+                    .into()
+            }
+            None => widget::image(widget::image::Handle::from_path(window.path.clone()))
                 .width(width)
                 .height(height)
                 .content_fit(fit)
@@ -113,11 +290,19 @@ pub fn view(window: &ImageWindow, id: cosmic::iced::window::Id) -> Element<'_, M
                 } else {
                     widget::image::FilterMethod::Nearest
                 })
-                .into()
+                .into(),
         }
     };
-    let content: Element<'_, Message> = match (window.zoom, window.size) {
-        (Some(zoom), Some((w, h))) => widget::scrollable(
+    let content: Element<'a, Message> = match (&window.source, window.zoom, window.size) {
+        (Some(source), _, _) => {
+            let mut editor = text_editor::text_editor(source).font(cosmic::font::mono()).padding(spacing.space_s).height(Length::Fill);
+            let edit = on.clone();
+            if on(Action::Edit(text_editor::Action::SelectAll)).is_some() {
+                editor = editor.on_action(move |action| edit(Action::Edit(action)).expect("an edit message"));
+            }
+            editor.into()
+        }
+        (None, Some(zoom), Some((w, h))) => widget::scrollable(
             widget::container(picture(Some((w as f32 * zoom, h as f32 * zoom)), zoom < 2.0))
                 .center(Length::Shrink)
                 .padding(spacing.space_s),
@@ -138,7 +323,7 @@ pub fn view(window: &ImageWindow, id: cosmic::iced::window::Id) -> Element<'_, M
     ]);
     // Opaque, whatever the window's transparency: the toolbar would show
     // the desktop through it
-    widget::container(column)
+    let window_element: Element<'a, Message> = widget::container(column)
         .class(theme::Container::custom(|theme| {
             let cosmic = theme.cosmic();
             let background: cosmic::iced::Color = cosmic.bg_color().into();
@@ -152,7 +337,103 @@ pub fn view(window: &ImageWindow, id: cosmic::iced::window::Id) -> Element<'_, M
         }))
         .width(Length::Fill)
         .height(Length::Fill)
-        .into()
+        .into();
+    match on(Action::Escape) {
+        Some(message) if window.full_screen => Element::new(OnEscape { content: window_element, message }),
+        _ => window_element,
+    }
+}
+
+/// Its content, and a message for Escape that nothing in it took
+struct OnEscape<'a> {
+    content: Element<'a, Message>,
+    message: Message,
+}
+
+impl Widget<Message, cosmic::Theme, cosmic::Renderer> for OnEscape<'_> {
+    fn children(&self) -> Vec<Tree> {
+        vec![Tree::new(&self.content)]
+    }
+
+    fn diff(&mut self, tree: &mut Tree) {
+        tree.diff_children(std::slice::from_mut(&mut self.content));
+    }
+
+    fn size(&self) -> Size<Length> {
+        self.content.as_widget().size()
+    }
+
+    fn layout(&mut self, tree: &mut Tree, renderer: &cosmic::Renderer, limits: &layout::Limits) -> layout::Node {
+        self.content.as_widget_mut().layout(&mut tree.children[0], renderer, limits)
+    }
+
+    fn operate(
+        &mut self,
+        tree: &mut Tree,
+        layout: Layout<'_>,
+        renderer: &cosmic::Renderer,
+        operation: &mut dyn Operation,
+    ) {
+        self.content.as_widget_mut().operate(&mut tree.children[0], layout, renderer, operation);
+    }
+
+    fn update(
+        &mut self,
+        tree: &mut Tree,
+        event: &Event,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        renderer: &cosmic::Renderer,
+        clipboard: &mut dyn Clipboard,
+        shell: &mut Shell<'_, Message>,
+        viewport: &Rectangle,
+    ) {
+        self.content
+            .as_widget_mut()
+            .update(&mut tree.children[0], event, layout, cursor, renderer, clipboard, shell, viewport);
+        if shell.is_event_captured() {
+            return;
+        }
+        if let Event::Keyboard(keyboard::Event::KeyPressed { key: keyboard::Key::Named(Named::Escape), .. }) = event {
+            shell.publish(self.message.clone());
+            shell.capture_event();
+        }
+    }
+
+    fn mouse_interaction(
+        &self,
+        tree: &Tree,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        viewport: &Rectangle,
+        renderer: &cosmic::Renderer,
+    ) -> mouse::Interaction {
+        self.content.as_widget().mouse_interaction(&tree.children[0], layout, cursor, viewport, renderer)
+    }
+
+    fn draw(
+        &self,
+        tree: &Tree,
+        renderer: &mut cosmic::Renderer,
+        theme: &cosmic::Theme,
+        style: &renderer::Style,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        viewport: &Rectangle,
+    ) {
+        self.content.as_widget().draw(&tree.children[0], renderer, theme, style, layout, cursor, viewport);
+    }
+
+    fn overlay<'b>(
+        &'b mut self,
+        tree: &'b mut Tree,
+        layout: Layout<'b>,
+        renderer: &cosmic::Renderer,
+        viewport: &Rectangle,
+        translation: Vector,
+    ) -> Option<overlay::Element<'b, Message, cosmic::Theme, cosmic::Renderer>> {
+        self.content.as_widget_mut().overlay(&mut tree.children[0], layout, renderer, viewport, translation)
+    }
 }
 
 #[cfg(test)]
@@ -161,7 +442,8 @@ mod tests {
 
     #[test]
     fn zoom_steps_through_the_ladder() {
-        let mut window = ImageWindow { path: PathBuf::new(), size: Some((100, 100)), zoom: None };
+        let mut window = ImageWindow::new(PathBuf::new());
+        window.size = Some((100, 100));
         window.zoom(Zoom::In);
         assert_eq!(window.zoom, Some(1.25));
         window.zoom(Zoom::Out);
@@ -169,5 +451,24 @@ mod tests {
         assert_eq!(window.zoom, Some(0.8));
         window.zoom(Zoom::Fit);
         assert_eq!(window.zoom, None);
+    }
+
+    #[test]
+    fn a_diagram_window_shows_its_source_and_goes_full_screen() {
+        let id = window::Id::unique();
+        let mut window = ImageWindow::diagram("flowchart LR\n    A --> B".into());
+        assert!(window.size.is_some_and(|(w, h)| w > 20 && h > 10), "{:?}", window.size);
+        assert_eq!(window.title(), fl!("diagram"));
+        let _ = window.act(id, Action::Source);
+        assert_eq!(window.source.as_ref().map(|s| s.text()).as_deref().map(str::trim_end), Some("flowchart LR\n    A --> B"));
+        // Read-only: typing changes nothing
+        let _ = window.act(id, Action::Edit(text_editor::Action::Edit(text_editor::Edit::Insert('x'))));
+        assert!(!window.source.as_ref().unwrap().text().contains('x'));
+        let _ = window.act(id, Action::Source);
+        assert!(window.source.is_none());
+        let _ = window.act(id, Action::FullScreen);
+        assert!(window.full_screen);
+        let _ = window.act(id, Action::Escape);
+        assert!(!window.full_screen);
     }
 }

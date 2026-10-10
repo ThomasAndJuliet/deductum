@@ -404,6 +404,66 @@ mod tests {
         assert!(part.contains("Central") && !part.contains("chartspec"), "{part:?}");
     }
 
+    const FLOWCHART: &str = "flowchart TD\n    A[Parse markdown] --> B{Mermaid fence?}\n    B -->|closed| C[Draw the diagram]\n    B -->|still open| D[Show it as code]\n    C --> E[(Diagram cache)]";
+    const ARCHITECTURE: &str = "architecture-beta\n    group api(cloud)[API]\n    service db(database)[Database] in api\n    service disk(disk)[Storage] in api\n    service server(server)[Server] in api\n    service net(internet)[Internet]\n    db:L -- R:server\n    disk:T -- B:server\n    net:R -- L:server";
+
+    /// A thread whose answer holds a flowchart and an architecture diagram
+    fn diagram_tab() -> ThreadTab {
+        let text = format!("Two diagrams.\n\n```mermaid\n{FLOWCHART}\n```\n\nAnd the services:\n\n```mermaid\n{ARCHITECTURE}\n```\n\nThe end.");
+        let lines = [
+            serde_json::json!({"type":"user","sessionId":"diagrams","message":{"role":"user","content":"Draw it"}}),
+            serde_json::json!({"type":"assistant","message":{"id":"m1","content":[{"type":"text","text":text}]}}),
+        ];
+        let transcript: String = lines.iter().map(|line| format!("{line}\n")).collect();
+        let history = super::super::session::read(std::io::Cursor::new(transcript), 20);
+        let mut tab = ThreadTab::new(1, None, String::new(), "/tmp".into(), String::new());
+        tab.entries = Some(history.entries);
+        tab
+    }
+
+    #[test]
+    fn draws_diagrams_whose_text_selects_and_copies() {
+        let mut harness = Harness::new(diagram_tab());
+        harness.config.thread_paper = false;
+        harness.snapshot("diagrams");
+        harness.tab.select_all();
+        let all = harness.tab.selected_text().unwrap();
+        assert!(all.contains(&format!("```mermaid\n{FLOWCHART}\n```")), "{all}");
+        assert!(all.contains(&format!("```mermaid\n{ARCHITECTURE}\n```")), "{all}");
+        assert!(!all.contains("mermaid: "), "a diagram failed: {all}");
+        harness.snapshot("diagrams-all");
+        harness.config.app_theme = crate::config::AppTheme::Light;
+        harness.snapshot("diagrams-light");
+        // A drag across the flowchart's first label selects it as text
+        harness.tab.selection = None;
+        harness.drag(Point::new(380.0, 262.0), Point::new(528.0, 262.0));
+        let part = harness.tab.selected_text().unwrap_or_default();
+        harness.snapshot("diagrams-selected");
+        assert_eq!(part, "Parse markdown");
+        harness.config.app_theme = crate::config::AppTheme::Dark;
+        harness.config.thread_paper = true;
+        harness.snapshot("diagrams-paper");
+    }
+
+    #[test]
+    fn draws_a_diagram_window_with_its_source() {
+        use super::super::viewer::{Action, ImageWindow, view_with};
+        let mut harness = Harness::new(diagram_tab());
+        let id = cosmic::iced::window::Id::unique();
+        let mut window = ImageWindow::diagram(ARCHITECTURE.to_string());
+        // Every control, as the app gives each a message
+        let on = move |_: Action| Some(Message::ImageZoom(id, super::super::viewer::Zoom::Fit));
+        harness.draw(view_with(&window, on), "diagram-window", Size::new(900.0, 700.0));
+        let _ = window.act(id, Action::Source);
+        harness.draw(view_with(&window, on), "diagram-window-source", Size::new(900.0, 700.0));
+        let _ = window.act(id, Action::Source);
+        // At its own size; the window's colours are the app's theme's
+        window.zoom(super::super::viewer::Zoom::Actual);
+        let frame = harness.draw(view_with(&window, on), "diagram-window-actual", Size::new(900.0, 700.0));
+        let first = &frame[..4];
+        assert!(frame.chunks(4).filter(|px| *px != first).count() > 10_000);
+    }
+
     #[test]
     fn draws_an_image_window() {
         let tab = demo_tab();
