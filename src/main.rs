@@ -8814,8 +8814,11 @@ impl Application for App {
                     .layer(cosmic_theme::Layer::Primary),
                 );
             }
-            // The tab's sudo requests
-            if let Some(session) = tab_model.data::<agent::Session>(entity) {
+            // The tab's sudo requests: its session's, or its thread's relay's
+            let sudo_session = tab_model.data::<agent::Session>(entity).cloned().or_else(|| {
+                tab_model.data::<thread::tab::ThreadTab>(entity).and_then(|t| t.relay.clone())
+            });
+            if let Some(session) = sudo_session {
                 for pending in self.secrets.for_session(&session.name) {
                     tab_column = tab_column.push(secrets::bar(pending));
                 }
