@@ -154,7 +154,8 @@ fn status_icon(status: ToolStatus) -> (&'static str, bool) {
 /// Tools whose changes are shown open, so nothing that changed the code is
 /// hidden
 fn open_by_default(name: &str, status: ToolStatus) -> bool {
-    matches!(name, "Edit" | "MultiEdit" | "Write" | "TodoWrite") || status == ToolStatus::Asking
+    // A question is asked in its own card, not as its input
+    matches!(name, "Edit" | "MultiEdit" | "Write" | "TodoWrite") || (status == ToolStatus::Asking && name != "AskUserQuestion")
 }
 
 pub fn view<'a>(tab: &'a ThreadTab, style: &ThreadStyle, dark: bool) -> Element<'a, Message> {

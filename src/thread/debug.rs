@@ -9,7 +9,8 @@
 //! `wait 2; shot plain; paper on; shot paper; scroll 0.5; selectall; copy;
 //! dark; shot dark; image; wait 1; quit`
 //!
-//! `split`, `find TEXT`, `findnext` and `zoomin` act as their menu items;
+//! `mode NAME` sets the permission mode; `choose ANSWER` answers the first
+//! open question the agent asked. `split`, `find TEXT`, `findnext` and `zoomin` act as their menu items;
 //! `diagram SOURCE` opens a Mermaid diagram's window (`\n` for new lines).
 //! `type TEXT` types keys no widget took, and `composer` prints the
 //! composer's text; `page up` and `page down` press those keys; `paneclick` sends the click a pane reports for any click inside it, and
@@ -182,6 +183,26 @@ impl App {
                 let text = self.active_thread().map(|t| t.composer.text()).unwrap_or_default();
                 eprintln!("composer: {:?}", text.trim_end());
                 cosmic::task::message(next())
+            }
+            "mode" => {
+                let Some(id) = self.active_thread().map(|t| t.id) else { return cosmic::task::message(next()) };
+                match super::tab::MODES.iter().position(|(value, _)| *value == rest) {
+                    Some(index) => then(self.thread_message(id, super::tab::Msg::SetMode(index))),
+                    None => cosmic::task::message(next()),
+                }
+            }
+            "choose" => {
+                // The first open question of the first prompt that asks some
+                let found = self.active_thread().and_then(|t| {
+                    let request = t.entries.as_ref()?.permissions.iter().find(|r| !r.questions.is_empty())?;
+                    let question = request.questions.iter().find(|q| !t.answers.contains_key(&q.key))?;
+                    Some((t.id, request.request_id.clone(), question.key.clone()))
+                });
+                eprintln!("choose {rest:?}: {}", if found.is_some() { "asked" } else { "no question" });
+                match found {
+                    Some((id, request, key)) => then(self.thread_message(id, super::tab::Msg::Choose(request, key, rest.to_string()))),
+                    None => cosmic::task::message(next()),
+                }
             }
             "split" => then(self.update(Message::PaneSplit(cosmic::widget::pane_grid::Axis::Vertical))),
             "find" => then(Task::batch([
