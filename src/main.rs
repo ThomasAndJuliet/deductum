@@ -765,6 +765,9 @@ pub enum Message {
     AppTheme(AppTheme),
     /// The sessions of a reopened window that still run, to attach again
     RestoreSessions(Vec<agent::Session>),
+    /// A thread's relay session, to open in a pane as a thread once its
+    /// meta.json is read
+    ThreadSessionFound(pane_grid::Pane, agent::Session, Result<serde_json::Value, String>),
     /// A conversation whose agent has ended, to continue in a thread or a
     /// terminal: host, agent, directory and conversation
     ContinueConversation { host: String, agent: config::Agent, cwd: String, conversation: String, thread: bool },
@@ -3951,11 +3954,12 @@ impl App {
     /// Open a tab dropped on `pane`, from this window or another
     fn receive_tab(&mut self, pane: pane_grid::Pane, session: agent::Session) -> Task<Message> {
         if let Some((drag_pane, drag_entity, _)) = self.tab_drag {
-            let dragged = self
-                .pane_model
-                .panes
-                .get(drag_pane)
-                .and_then(|tab_model| tab_model.data::<agent::Session>(drag_entity));
+            let dragged = self.pane_model.panes.get(drag_pane).and_then(|tab_model| {
+                tab_model.data::<agent::Session>(drag_entity).cloned().or_else(|| {
+                    tab_model.data::<thread::tab::ThreadTab>(drag_entity).and_then(|t| t.relay.clone())
+                })
+            });
+            let dragged = dragged.as_ref();
             // Dropped back where it came from. Dropped on another pane, the
             // original closes when the drag ends
             if dragged == Some(&session) && drag_pane == pane {
@@ -3964,6 +3968,10 @@ impl App {
             }
         }
         self.pane_model.set_focus(pane);
+        // A thread from another window joins its relay here
+        if session.is_thread() {
+            return self.open_thread_session(pane, session);
+        }
         self.create_and_focus_new_terminal_with(
             pane,
             None,
@@ -7344,40 +7352,18 @@ impl Application for App {
             }
             Message::SidebarOpen(session) if session.is_thread() && self.session_tab(&session).is_none() => {
                 self.sidebar.searching = false;
-                // A thread joins its relay, in a thread tab
-                let found = self.sidebar.find(sidebar::session_key(&session)).map(|(_, summary)| {
-                    let thread = summary.thread.clone();
-                    let cwd = thread
-                        .as_ref()
-                        .and_then(|t| t.meta.get("cwd").and_then(|c| c.as_str()).map(str::to_string))
-                        .or_else(|| summary.cwd.clone())
-                        .unwrap_or_default();
-                    (cwd, thread.and_then(|t| t.conversation))
-                });
-                let Some((cwd, conversation)) = found else { return Task::none() };
-                let agent = session.agent().unwrap_or(config::Agent::Claude);
-                let profile_id = self.profile_on_host(&session.host, Some(agent), true);
-                let id = self.next_thread;
-                let has_history = conversation.is_some();
-                let opened = self.open_thread_as(
-                    self.pane_model.focused(),
-                    profile_id,
-                    cwd,
-                    conversation,
-                    None,
-                    Some(agent),
-                    Some(session.host.clone()),
-                );
-                let mut attach = Task::none();
-                if let Some(tab) = self.thread_mut(id) {
-                    tab.relay = Some(session);
-                    tab.relay_live = true;
-                    tab.attach_on_load = has_history;
-                    if !has_history {
-                        attach = tab.attach();
+                return self.open_thread_session(self.pane_model.focused(), session);
+            }
+            Message::ThreadSessionFound(pane, session, meta) => {
+                let meta = match meta {
+                    Ok(meta) => meta,
+                    Err(err) => {
+                        log::warn!("reading thread {}: {err}", session.name);
+                        return Task::none();
                     }
-                }
-                return Task::batch([opened, attach]);
+                };
+                let text = |key: &str| meta.get(key).and_then(|v| v.as_str()).map(str::to_string);
+                return self.open_thread_attached(pane, session, text("cwd").unwrap_or_default(), text("conversation"));
             }
             Message::SidebarOpen(session) => {
                 self.sidebar.searching = false;
@@ -8084,12 +8070,15 @@ impl Application for App {
                 {
                     return Task::none();
                 }
-                // A thread carried out of the window opens in one of its own
-                if !finished
-                    && self.pane_model.panes.get(pane).is_some_and(|t| t.data::<thread::tab::ThreadTab>(entity).is_some())
-                {
+                // A thread carried out of the window opens in one of its own;
+                // dropped on another window, that one has joined its relay
+                if self.pane_model.panes.get(pane).is_some_and(|t| t.data::<thread::tab::ThreadTab>(entity).is_some()) {
                     self.pane_model.set_focus(pane);
-                    return self.update(Message::TabPopOut(Some(entity)));
+                    return self.update(if finished {
+                        Message::TabClose(Some(entity))
+                    } else {
+                        Message::TabPopOut(Some(entity))
+                    });
                 }
                 let has_session = self
                     .pane_model
@@ -8128,13 +8117,24 @@ impl Application for App {
                 let entity = entity_opt.unwrap_or_else(|| tab_model.active());
                 // A thread reopens in the new window, continuing its conversation
                 if let Some(thread) = tab_model.data::<thread::tab::ThreadTab>(entity) {
-                    if thread.is_working() {
-                        return Task::none();
-                    }
                     let mut command = process::Command::new(match env::current_exe() {
                         Ok(exe) => exe,
                         Err(_) => return Task::none(),
                     });
+                    // Its relay, joined by the new window, turn and all
+                    if let Some(relay) = thread.relay.as_ref().filter(|_| thread.relay_live) {
+                        command.arg("--attach").arg(relay.descriptor());
+                        return match command.spawn() {
+                            Ok(_child) => self.update(Message::TabClose(Some(entity))),
+                            Err(err) => {
+                                log::error!("failed to open a window for a thread: {err}");
+                                Task::none()
+                            }
+                        };
+                    }
+                    if thread.is_working() {
+                        return Task::none();
+                    }
                     command.arg("--thread").arg(&thread.cwd);
                     command.arg("--agent").arg(if thread.agent == config::Agent::Codex { "codex" } else { "claude" });
                     if !thread.host.is_empty() {
@@ -8784,7 +8784,13 @@ impl Application for App {
                 let drag_data: HashMap<segmented_button::Entity, Vec<u8>> = tab_model
                     .iter()
                     .filter_map(|entity| {
-                        let session = tab_model.data::<agent::Session>(entity)?;
+                        // A thread, by its relay's session
+                        let session = tab_model.data::<agent::Session>(entity).cloned().or_else(|| {
+                            tab_model
+                                .data::<thread::tab::ThreadTab>(entity)
+                                .filter(|t| t.relay_live)
+                                .and_then(|t| t.relay.clone())
+                        })?;
                         Some((entity, session.descriptor().into_bytes()))
                     })
                     .collect();

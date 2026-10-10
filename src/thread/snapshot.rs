@@ -450,7 +450,7 @@ mod tests {
         use super::super::viewer::{Action, ImageWindow, view_with};
         let mut harness = Harness::new(diagram_tab());
         let id = cosmic::iced::window::Id::unique();
-        let mut window = ImageWindow::diagram(ARCHITECTURE.to_string());
+        let mut window = ImageWindow::diagram(ARCHITECTURE.to_string(), None);
         // Every control, as the app gives each a message
         let on = move |_: Action| Some(Message::ImageZoom(id, super::super::viewer::Zoom::Fit));
         harness.draw(view_with(&window, on), "diagram-window", Size::new(900.0, 700.0));
@@ -462,6 +462,38 @@ mod tests {
         let frame = harness.draw(view_with(&window, on), "diagram-window-actual", Size::new(900.0, 700.0));
         let first = &frame[..4];
         assert!(frame.chunks(4).filter(|px| *px != first).count() > 10_000);
+    }
+
+    #[test]
+    fn asks_the_agents_questions() {
+        use super::super::model::{Event, PermissionRequest, Question};
+        let mut harness = harness();
+        let question = |key: &str, options: &[&str], free: bool| Question {
+            key: key.into(),
+            header: "Store".into(),
+            question: format!("{key}?"),
+            options: options.iter().map(|o| (o.to_string(), String::new())).collect(),
+            free,
+        };
+        harness.tab.entries.as_mut().unwrap().apply(Event::Permission(PermissionRequest {
+            request_id: "q".into(),
+            tool_name: "AskUserQuestion".into(),
+            tool_use_id: String::new(),
+            title: String::new(),
+            input: serde_json::Value::Null,
+            suggestions: serde_json::Value::Null,
+            always_allowed: false,
+            questions: vec![question("Which database", &["SQLite", "Postgres"], true), question("Its name", &[], true)],
+        }));
+        let _ = harness.tab.update(Msg::Choose("q".into(), "Which database".into(), "SQLite".into()), &mut Vec::new());
+        harness.snapshot("questions");
+        // The composer answers the question left, and both go
+        harness.tab.composer = cosmic::widget::text_editor::Content::with_text("inventory");
+        let _ = harness.tab.update(Msg::Send, &mut Vec::new());
+        let entries = harness.tab.entries.as_ref().unwrap();
+        assert!(entries.permissions.is_empty());
+        assert!(harness.tab.answers.is_empty());
+        assert!(harness.tab.composer.text().trim().is_empty());
     }
 
     #[test]

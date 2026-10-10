@@ -61,6 +61,22 @@ pub struct PermissionRequest {
     pub suggestions: Value,
     /// Whether "always allow" may be offered
     pub always_allowed: bool,
+    /// What the agent asks the user, when the prompt is its questions
+    /// rather than a tool to allow
+    pub questions: Vec<Question>,
+}
+
+/// A question the agent asks, with the answers it offers
+#[derive(Clone, Debug, PartialEq)]
+pub struct Question {
+    /// What its answer is filed under: Codex's id, Claude's question
+    pub key: String,
+    pub header: String,
+    pub question: String,
+    /// Each answer offered, and what it means
+    pub options: Vec<(String, String)>,
+    /// Whether an answer of the user's own is taken
+    pub free: bool,
 }
 
 /// An image, kept in a file

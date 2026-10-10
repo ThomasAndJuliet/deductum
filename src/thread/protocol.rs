@@ -22,6 +22,8 @@ pub enum Command {
     Interrupt,
     /// The answer to a permission prompt
     Answer { request: PermissionRequest, decision: Decision },
+    /// The user's answers to the agent's questions, by question key
+    Answers { request: PermissionRequest, answers: Vec<(String, String)> },
     SetModel(String),
     /// A permission mode, by the names the composer uses: `default`,
     /// `acceptEdits`, `auto`, `plan` and `bypassPermissions`
@@ -65,6 +67,7 @@ impl Protocol {
                 Command::User { text, images } => claude::user_message(&text, &images),
                 Command::Interrupt => claude::control(&cosmic_term::random_hex(8), "interrupt", serde_json::json!({})),
                 Command::Answer { request, decision } => claude::permission_response(&request, &decision),
+                Command::Answers { request, answers } => claude::answers_response(&request, &answers),
                 Command::SetModel(model) => claude::control(
                     &cosmic_term::random_hex(8),
                     "set_model",

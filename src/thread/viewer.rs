@@ -36,6 +36,9 @@ pub struct ImageWindow {
     /// The source, shown in place of the drawing
     pub source: Option<text_editor::Content>,
     pub full_screen: bool,
+    /// The colours of the paper the diagram was on, when the thread is set
+    /// on white or sepia rather than in the theme's
+    pub paper: Option<Palette>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -93,15 +96,15 @@ pub fn palette(theme: &cosmic::Theme) -> Palette {
 impl ImageWindow {
     pub fn new(path: PathBuf) -> Self {
         let size = super::images::dimensions(&path);
-        Self { path, size, zoom: None, diagram: None, source: None, full_screen: false }
+        Self { path, size, zoom: None, diagram: None, source: None, full_screen: false, paper: None }
     }
 
-    /// A window for the diagram of `source`
-    pub fn diagram(source: String) -> Self {
-        let size = diagram::render(&source, &palette(&theme::active()))
+    /// A window for the diagram of `source`, on `paper` if it was on one
+    pub fn diagram(source: String, paper: Option<Palette>) -> Self {
+        let size = diagram::render(&source, &paper.unwrap_or_else(|| palette(&theme::active())))
             .ok()
             .map(|d| (d.width.ceil() as u32, d.height.ceil() as u32));
-        Self { path: PathBuf::new(), size, zoom: None, diagram: Some(source), source: None, full_screen: false }
+        Self { path: PathBuf::new(), size, zoom: None, diagram: Some(source), source: None, full_screen: false, paper }
     }
 
     /// The window's size to start with: the picture's, within reason
@@ -131,7 +134,8 @@ impl ImageWindow {
 
     /// The diagram, drawn in `theme`'s colours, or why it can't be
     fn drawn(&self, theme: &cosmic::Theme) -> Option<Result<Arc<Diagram>, String>> {
-        self.diagram.as_ref().map(|source| diagram::render(source, &palette(theme)))
+        let palette = self.paper.unwrap_or_else(|| palette(theme));
+        self.diagram.as_ref().map(|source| diagram::render(source, &palette))
     }
 
     /// Do what a control asks, for the window `id`
@@ -313,11 +317,13 @@ pub fn view_with<'a>(
     ]);
     // Opaque, whatever the window's transparency: the toolbar would show
     // the desktop through it
+    let paper = window.paper;
     let window_element: Element<'a, Message> = widget::container(column)
-        .class(theme::Container::custom(|theme| {
+        .class(theme::Container::custom(move |theme| {
             let cosmic = theme.cosmic();
-            let background: cosmic::iced::Color = cosmic.bg_color().into();
-            let text: cosmic::iced::Color = cosmic.on_bg_color().into();
+            // The paper's colours, else the theme's
+            let background: cosmic::iced::Color = paper.map_or_else(|| cosmic.bg_color().into(), |p| p.page);
+            let text: cosmic::iced::Color = paper.map_or_else(|| cosmic.on_bg_color().into(), |p| p.text);
             cosmic::iced::widget::container::Style {
                 background: Some(cosmic::iced::Color { a: 1.0, ..background }.into()),
                 text_color: Some(cosmic::iced::Color { a: 1.0, ..text }),
@@ -446,7 +452,7 @@ mod tests {
     #[test]
     fn a_diagram_window_shows_its_source_and_goes_full_screen() {
         let id = window::Id::unique();
-        let mut window = ImageWindow::diagram("flowchart LR\n    A --> B".into());
+        let mut window = ImageWindow::diagram("flowchart LR\n    A --> B".into(), None);
         assert!(window.size.is_some_and(|(w, h)| w > 20 && h > 10), "{:?}", window.size);
         assert_eq!(window.title(), fl!("diagram"));
         let _ = window.act(id, Action::Source);

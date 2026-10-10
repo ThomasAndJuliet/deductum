@@ -54,6 +54,9 @@ pub enum Msg {
     Send,
     Stop,
     Answer(String, Decision),
+    /// An answer to one of the agent's questions: the prompt, the question's
+    /// key, and the answer
+    Choose(String, String, String),
     Toggle(u64),
     Select(u64, Part, Select),
     LoadEarlier,
@@ -149,6 +152,8 @@ pub struct ThreadTab {
     pub named: bool,
     /// The conversation's name in its transcript, if it has one
     pub conversation_title: Option<String>,
+    /// Answers given so far to the agent's questions, by question key
+    pub answers: HashMap<String, String>,
     /// More for the agent's system prompt; see [`Launch::note`]
     pub note: Option<String>,
     /// The session whose relay runs its CLI, when it has one: it outlives
@@ -204,6 +209,7 @@ impl ThreadTab {
             colours: None,
             named: false,
             conversation_title: None,
+            answers: HashMap::new(),
             note: None,
             relay: None,
             relay_live: false,
@@ -540,6 +546,18 @@ impl ThreadTab {
             }
             Msg::Send => {
                 let text = self.composer.text().trim_end().to_string();
+                // A question waiting for an answer of the user's own takes it
+                let open = self.entries.as_ref().and_then(|entries| {
+                    let request = entries.permissions.iter().find(|r| !r.questions.is_empty())?;
+                    let question = request.questions.iter().find(|q| q.free && !self.answers.contains_key(&q.key))?;
+                    Some((request.request_id.clone(), question.key.clone()))
+                });
+                if let Some((request_id, key)) = open
+                    && !text.trim().is_empty()
+                {
+                    self.composer = text_editor::Content::new();
+                    return self.update(Msg::Choose(request_id, key, text), requests);
+                }
                 if text.trim().is_empty() && self.attachments.is_empty() {
                     return Task::none();
                 }
@@ -591,6 +609,23 @@ impl ThreadTab {
                 entries.answered(&request_id, decision != Decision::Deny);
                 if let Cli::Running(tx) = &self.cli {
                     let _ = tx.send(Command::Answer { request, decision });
+                }
+            }
+            Msg::Choose(request_id, key, answer) => {
+                self.answers.insert(key, answer);
+                let Some(entries) = &mut self.entries else { return Task::none() };
+                let Some(request) = entries.permissions.iter().find(|r| r.request_id == request_id).cloned() else {
+                    return Task::none();
+                };
+                // Once every question has its answer, they go together
+                if request.questions.iter().all(|q| self.answers.contains_key(&q.key)) {
+                    let answers =
+                        request.questions.iter().map(|q| (q.key.clone(), self.answers.remove(&q.key).unwrap_or_default())).collect();
+                    entries.answered(&request_id, true);
+                    self.answers.clear();
+                    if let Cli::Running(tx) = &self.cli {
+                        let _ = tx.send(Command::Answers { request, answers });
+                    }
                 }
             }
             Msg::Toggle(item) => {

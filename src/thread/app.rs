@@ -110,6 +110,56 @@ impl App {
         Task::batch([self.update_title(Some(to)), cosmic::widget::text_input::focus(composer_id)])
     }
 
+    /// Open a thread's relay session in `pane` as a thread: from what the
+    /// sidebar knows of it, else from its meta.json on its host
+    pub(crate) fn open_thread_session(&mut self, pane: pane_grid::Pane, session: crate::agent::Session) -> Task<Message> {
+        let known = self.sidebar.find(crate::sidebar::session_key(&session)).and_then(|(_, summary)| {
+            let thread = summary.thread.clone()?;
+            let cwd = thread
+                .meta
+                .get("cwd")
+                .and_then(|c| c.as_str())
+                .map(str::to_string)
+                .or_else(|| summary.cwd.clone())
+                .unwrap_or_default();
+            Some((cwd, thread.conversation))
+        });
+        match known {
+            Some((cwd, conversation)) => self.open_thread_attached(pane, session, cwd, conversation),
+            None => cosmic::task::future(async move {
+                let meta = crate::agent::thread_meta(session.clone()).await;
+                Message::ThreadSessionFound(pane, session, meta)
+            }),
+        }
+    }
+
+    /// A thread tab in `pane` joined to the relay of `session`
+    pub(crate) fn open_thread_attached(
+        &mut self,
+        pane: pane_grid::Pane,
+        session: crate::agent::Session,
+        cwd: String,
+        conversation: Option<String>,
+    ) -> Task<Message> {
+        let agent = session.agent().unwrap_or(crate::config::Agent::Claude);
+        let profile_id = self.profile_on_host(&session.host, Some(agent), true);
+        let id = self.next_thread;
+        let has_history = conversation.is_some();
+        let host = session.host.clone();
+        let opened = self.open_thread_as(pane, profile_id, cwd, conversation, None, Some(agent), Some(host));
+        let mut attach = Task::none();
+        if let Some(tab) = self.thread_mut(id) {
+            tab.relay = Some(session);
+            tab.relay_live = true;
+            // After its history, or now if it has none yet
+            tab.attach_on_load = has_history;
+            if !has_history {
+                attach = tab.attach();
+            }
+        }
+        Task::batch([opened, attach])
+    }
+
     /// Every thread, by id
     pub(crate) fn thread_ids(&self) -> Vec<ThreadId> {
         self.pane_model
@@ -520,7 +570,10 @@ impl App {
     }
 
     pub(crate) fn open_diagram(&mut self, source: String) -> Task<Message> {
-        let diagram = ImageWindow::diagram(source);
+        // On white or sepia paper, in the paper's colours
+        let style = super::view::ThreadStyle::new(&self.config, &cosmic::theme::active());
+        let paper = style.page.map(|_| style.body.diagram_palette());
+        let diagram = ImageWindow::diagram(source, paper);
         let (id, open) = window::open(window::Settings {
             size: diagram.initial_size(),
             min_size: Some(cosmic::iced::Size::new(320.0, 200.0)),

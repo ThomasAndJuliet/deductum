@@ -155,6 +155,17 @@ impl Codex {
                     Vec::new()
                 }
             },
+            // Questions dismissed are answered with nothing
+            Command::Answer { request, .. } if !request.questions.is_empty() => {
+                let Some(id) = self.approvals.remove(&request.request_id) else { return Vec::new() };
+                vec![json!({"id": id, "result": {"answers": {}}}).to_string()]
+            }
+            Command::Answers { request, answers } => {
+                let Some(id) = self.approvals.remove(&request.request_id) else { return Vec::new() };
+                let answers: serde_json::Map<String, Value> =
+                    answers.into_iter().map(|(key, answer)| (key, json!({"answers": [answer]}))).collect();
+                vec![json!({"id": id, "result": {"answers": answers}}).to_string()]
+            }
             Command::Answer { request, decision } => {
                 let Some(id) = self.approvals.remove(&request.request_id) else { return Vec::new() };
                 let decision = match decision {
@@ -334,6 +345,28 @@ impl Codex {
 
     fn server_request(&mut self, method: &str, id: Value, params: Option<&Value>, events: &mut Vec<Event>) -> Vec<String> {
         let params = params.unwrap_or(&Value::Null);
+        // Questions for the user, asked as a prompt of their own
+        if method == "item/tool/requestUserInput" && self.ours(params) {
+            let questions = questions(params);
+            if !questions.is_empty() {
+                let request_id = match &id {
+                    Value::String(id) => id.clone(),
+                    id => id.to_string(),
+                };
+                self.approvals.insert(request_id.clone(), id);
+                events.push(Event::Permission(PermissionRequest {
+                    request_id,
+                    tool_name: "AskUserQuestion".to_string(),
+                    tool_use_id: str_field(params, "itemId"),
+                    title: String::new(),
+                    input: Value::Null,
+                    suggestions: Value::Null,
+                    always_allowed: false,
+                    questions,
+                }));
+                return Vec::new();
+            }
+        }
         if !matches!(method, "item/commandExecution/requestApproval" | "item/fileChange/requestApproval")
             || !self.ours(params)
         {
@@ -365,6 +398,7 @@ impl Codex {
             input,
             suggestions: json!(["acceptForSession"]),
             always_allowed: true,
+            questions: Vec::new(),
         }));
         Vec::new()
     }
@@ -1250,6 +1284,26 @@ mod tests {
     }
 
     #[test]
+    fn questions_are_asked_and_answered_by_key() {
+        let (mut codex, mut entries) = started(&launch());
+        let line = format!(
+            r#"{{"method":"item/tool/requestUserInput","id":9,"params":{{"threadId":"{THREAD}","turnId":"t1","itemId":"q1","isBlocking":true,"questions":[{{"id":"db","header":"Store","question":"Which database?","isOther":true,"isSecret":false,"options":[{{"label":"SQLite","description":"one file"}},{{"label":"Postgres","description":""}}]}}]}}}}"#
+        );
+        assert!(feed(&mut codex, &mut entries, &line).is_empty());
+        let request = entries.permissions[0].clone();
+        assert_eq!(request.questions.len(), 1);
+        assert_eq!(request.questions[0].key, "db");
+        assert_eq!(request.questions[0].options[0], ("SQLite".to_string(), "one file".to_string()));
+        assert!(request.questions[0].free);
+        let reply = json_lines(&codex.command(Command::Answers {
+            request,
+            answers: vec![("db".to_string(), "Postgres".to_string())],
+        }));
+        assert_eq!(reply[0]["id"], 9);
+        assert_eq!(reply[0]["result"]["answers"]["db"]["answers"][0], "Postgres");
+    }
+
+    #[test]
     fn requests_it_cannot_answer_get_an_error() {
         let (mut codex, mut entries) = started(&launch());
         let line = format!(r#"{{"method":"item/tool/requestUserInput","id":7,"params":{{"threadId":"{THREAD}","questions":[]}}}}"#);
@@ -1372,6 +1426,31 @@ mod tests {
         assert_eq!(tool.title(), "Edit /w/a.rs, /w/b.rs");
         assert_eq!(tool.patch().unwrap(), "@@ /w/a.rs\n@@ -1 +1 @@\n-old\n+new\n@@ /w/b.rs\n-gone");
     }
+}
+
+/// The questions of a `requestUserInput`; a secret's answer is typed as any
+/// other's
+fn questions(params: &Value) -> Vec<super::model::Question> {
+    params
+        .get("questions")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .map(|q| super::model::Question {
+            key: str_field(q, "id"),
+            header: str_field(q, "header"),
+            question: str_field(q, "question"),
+            options: q
+                .get("options")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .map(|o| (str_field(o, "label"), str_field(o, "description")))
+                .collect(),
+            free: q.get("isOther").and_then(Value::as_bool).unwrap_or(false)
+                || q.get("options").and_then(Value::as_array).is_none_or(|o| o.is_empty()),
+        })
+        .collect()
 }
 
 /// Something different for each client, from the clock

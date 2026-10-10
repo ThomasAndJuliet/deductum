@@ -365,7 +365,7 @@ pub fn view<'a>(tab: &'a ThreadTab, style: &ThreadStyle, dark: bool) -> Element<
     if let Some(entries) = entries
         && let Some(request) = entries.permissions.first()
     {
-        column.push(permission(tab, request, style));
+        column.push(if request.questions.is_empty() { permission(tab, request, style) } else { questions(tab, request, style) });
     }
     column.push(composer(tab, style));
     // The thread draws its own ground, as a terminal does
@@ -504,6 +504,71 @@ fn permission<'a>(tab: &'a ThreadTab, request: &'a super::model::PermissionReque
     let card = widget::container(widget::column::with_children(column).spacing(spacing.space_xs))
         .class(theme::Container::Card)
         .padding(spacing.space_s)
+        .max_width(style.measure + 2.0 * f32::from(spacing.space_m));
+    widget::container(card)
+        .center_x(Length::Fill)
+        .padding(Padding::from([spacing.space_xxs, spacing.space_m]))
+        .into()
+}
+
+/// The agent's questions: each with its answers as buttons, and the
+/// composer for an answer of the user's own
+fn questions<'a>(tab: &'a ThreadTab, request: &'a super::model::PermissionRequest, style: &ThreadStyle) -> Element<'a, Message> {
+    let id = tab.id;
+    let spacing = theme::active().cosmic().spacing;
+    let mut column = vec![
+        widget::row::with_children(vec![
+            icon("dialog-warning-symbolic").into(),
+            widget::text::heading(fl!("thread-question", agent = tab.agent.label())).into(),
+        ])
+        .spacing(spacing.space_xs)
+        .align_y(Alignment::Center)
+        .into(),
+    ];
+    for question in &request.questions {
+        if !question.header.is_empty() {
+            column.push(widget::text::caption(question.header.clone()).into());
+        }
+        column.push(widget::text::body(question.question.clone()).into());
+        let chosen = tab.answers.get(&question.key);
+        let options: Vec<Element<'a, Message>> = question
+            .options
+            .iter()
+            .map(|(label, description)| {
+                let choose = Message::Thread(id, Msg::Choose(request.request_id.clone(), question.key.clone(), label.clone()));
+                let button: Element<'a, Message> = if chosen == Some(label) {
+                    button::suggested(label.clone()).on_press(choose).into()
+                } else {
+                    button::standard(label.clone()).on_press(choose).into()
+                };
+                if description.is_empty() {
+                    button
+                } else {
+                    widget::tooltip(button, widget::text::body(description.clone()), widget::tooltip::Position::Top).into()
+                }
+            })
+            .collect();
+        if !options.is_empty() {
+            column.push(widget::flex_row(options).row_spacing(spacing.space_xxs).column_spacing(spacing.space_xxs).into());
+        }
+        if let Some(answer) = chosen.filter(|a| !question.options.iter().any(|(label, _)| label == *a)) {
+            column.push(widget::text::caption(fl!("thread-answered", answer = answer.as_str())).into());
+        } else if question.free && chosen.is_none() {
+            column.push(widget::text::caption(fl!("thread-answer-below")).into());
+        }
+    }
+    column.push(
+        widget::row::with_children(vec![
+            button::standard(fl!("thread-skip"))
+                .on_press(Message::Thread(id, Msg::Answer(request.request_id.clone(), Decision::Deny)))
+                .into(),
+        ])
+        .into(),
+    );
+    let card = widget::container(widget::column::with_children(column).spacing(spacing.space_xs))
+        .class(theme::Container::Card)
+        .padding(spacing.space_s)
+        .width(Length::Fill)
         .max_width(style.measure + 2.0 * f32::from(spacing.space_m));
     widget::container(card)
         .center_x(Length::Fill)

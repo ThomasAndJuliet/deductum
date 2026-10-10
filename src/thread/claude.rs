@@ -15,7 +15,7 @@
 
 use serde_json::{Value, json};
 
-use super::model::{Event, PermissionRequest};
+use super::model::{Event, PermissionRequest, Question};
 
 /// How a thread's CLI is started
 #[derive(Clone, Debug, Default)]
@@ -206,6 +206,50 @@ pub fn permission_response(request: &PermissionRequest, decision: &Decision) -> 
     .to_string()
 }
 
+/// The user's answers to `AskUserQuestion`, as its input with them added,
+/// keyed by question
+pub fn answers_response(request: &PermissionRequest, answers: &[(String, String)]) -> String {
+    let mut input = request.input.clone();
+    if let Value::Object(map) = &mut input {
+        let answers: serde_json::Map<String, Value> =
+            answers.iter().map(|(key, answer)| (key.clone(), Value::String(answer.clone()))).collect();
+        map.insert("answers".to_string(), Value::Object(answers));
+    }
+    json!({
+        "type": "control_response",
+        "response": {
+            "subtype": "success",
+            "request_id": request.request_id,
+            "response": {"behavior": "allow", "updatedInput": input},
+        },
+    })
+    .to_string()
+}
+
+/// The questions in an `AskUserQuestion` tool's input
+fn questions(input: &Value) -> Vec<Question> {
+    input
+        .get("questions")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .map(|q| Question {
+            key: str_field(q, "question"),
+            header: str_field(q, "header"),
+            question: str_field(q, "question"),
+            options: q
+                .get("options")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .map(|o| (str_field(o, "label"), str_field(o, "description")))
+                .collect(),
+            // The CLI always offers an answer of one's own
+            free: true,
+        })
+        .collect()
+}
+
 /// A reply to a control request the CLI sent that this client does not handle
 fn control_error(request_id: &str, error: &str) -> String {
     json!({
@@ -290,6 +334,11 @@ pub fn parse_line(line: &str, out: &mut Vec<Event>) -> Option<String> {
                         .get("suppress_always_allow_rule")
                         .and_then(Value::as_bool)
                         .unwrap_or(false),
+                    questions: if str_field(&request, "tool_name") == "AskUserQuestion" {
+                        questions(request.get("input").unwrap_or(&Value::Null))
+                    } else {
+                        Vec::new()
+                    },
                 })),
                 _ => return Some(control_error(&request_id, "not supported by this client")),
             }
@@ -411,6 +460,25 @@ mod tests {
         let colours = Colours { dark: true, background: "#1b1b1b".into(), text: "#e7e7e7".into(), accent: "#63d0df".into() };
         let matched = Launch { colours: Some(colours), ..Launch::default() }.script();
         assert!(matched.contains("a dark colour scheme") && matched.contains("#1b1b1b") && matched.contains("#63d0df"));
+    }
+
+    #[test]
+    fn ask_user_question_is_a_question_answered_in_its_input() {
+        let line = r#"{"type":"control_request","request_id":"q1","request":{"subtype":"can_use_tool","tool_name":"AskUserQuestion","input":{"questions":[{"question":"Which database?","header":"Store","multiSelect":false,"options":[{"label":"SQLite","description":"one file"},{"label":"Postgres","description":"a server"}]}]},"tool_use_id":"toolu_q"}}"#;
+        let mut events = Vec::new();
+        assert!(parse_line(line, &mut events).is_none());
+        let Some(Event::Permission(request)) = events.pop() else { panic!("no question") };
+        assert_eq!(request.questions.len(), 1);
+        assert_eq!(request.questions[0].key, "Which database?");
+        assert_eq!(request.questions[0].options.len(), 2);
+        let reply: Value = serde_json::from_str(&answers_response(
+            &request,
+            &[("Which database?".to_string(), "SQLite".to_string())],
+        ))
+        .unwrap();
+        assert_eq!(reply.pointer("/response/response/behavior").unwrap(), "allow");
+        assert_eq!(reply.pointer("/response/response/updatedInput/answers/Which database?").unwrap(), "SQLite");
+        assert!(reply.pointer("/response/response/updatedInput/questions").is_some());
     }
 
     #[test]

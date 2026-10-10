@@ -657,6 +657,14 @@ fn thread_dir(session: &Session) -> String {
     format!("\"{THREADS_DIR}\"/{}", sh_quote(&session.name))
 }
 
+/// A thread's `meta.json`: its agent, directory and conversation, as its
+/// relay was started with them
+pub async fn thread_meta(session: Session) -> Result<serde_json::Value, String> {
+    let script = format!("cat {}/meta.json\n", thread_dir(&session));
+    let output = run(session_exec(&session.host, &script)).await?;
+    serde_json::from_str(&output).map_err(|err| err.to_string())
+}
+
 /// Whether this program can keep threads' CLIs in relays; without the
 /// supervisor, a thread runs its CLI directly
 pub fn relay_available() -> bool {
