@@ -39,11 +39,11 @@ pub extern "C" fn pow(x: f64, y: f64) -> f64 {
 }
 use std::{
     collections::{BTreeMap, HashMap},
-    io::{BufRead, BufReader, Write},
+    io::{BufRead, BufReader, Read, Write},
     os::{
         fd::{AsRawFd, FromRawFd},
         unix::{
-            fs::{OpenOptionsExt, PermissionsExt},
+            fs::OpenOptionsExt,
             net::{UnixListener, UnixStream},
         },
     },
@@ -270,14 +270,37 @@ impl Agent {
     fn serve_module(self: &Arc<Self>, mut conn: UnixStream) -> Result<(), String> {
         conn.set_read_timeout(Some(Duration::from_secs(5)))
             .map_err(|err| err.to_string())?;
-        let bytes = protocol::read_request(&mut conn).map_err(|err| err.0)?;
-        let challenge = Challenge::decode(&bytes).map_err(|err| err.0)?;
+        conn.set_write_timeout(Some(Duration::from_secs(5)))
+            .map_err(|err| err.to_string())?;
+        let mut version = [0];
+        // SSH forwarding checks connect and close without sending a request.
+        // A clean EOF before the first byte is not a truncated PAM message.
+        if conn.read(&mut version).map_err(|err| err.to_string())? == 0 {
+            return Ok(());
+        }
+        let bytes = match protocol::read_request(&mut version.as_slice().chain(&mut conn)) {
+            Ok(bytes) => bytes,
+            Err(err) => {
+                let _ = protocol::write_request_refusal(&mut conn, version[0], err.0.clone());
+                return Err(err.0);
+            }
+        };
         let refuse = |conn: &mut UnixStream, reason: String| {
             let _ = protocol::write_reply(conn, &Reply::Refused(reason.clone()));
             Err(reason)
         };
+        let challenge = match Challenge::decode(&bytes) {
+            Ok(challenge) => challenge,
+            Err(err) => return refuse(&mut conn, err.0),
+        };
+        if challenge.module_version != protocol::MODULE_VERSION {
+            return refuse(&mut conn, format!(
+                "sudo module version mismatch: PAM uses {}, agent expects {}; update the PAM module",
+                challenge.module_version, protocol::MODULE_VERSION
+            ));
+        }
         if !self.machines().contains(&challenge.host) {
-            return refuse(&mut conn, format!("{} is not set up", challenge.host));
+            return refuse(&mut conn, format!("{} is not set up in this agent's store ({}); check that the sudo socket forwards to the terminal with this machine's key", challenge.host, self.store_path.display()));
         }
         let session = challenge.session.clone().unwrap_or_default();
         let command: Vec<String> = challenge.command().into_iter().map(str::to_string).collect();
@@ -964,18 +987,14 @@ fn systemd_sockets() -> HashMap<String, UnixListener> {
 
 /// Listen at a path ourselves, replacing a dead socket left there
 fn listen(path: &Path) -> std::io::Result<UnixListener> {
-    if path.exists() && UnixStream::connect(path).is_err() {
-        let _ = std::fs::remove_file(path);
-    }
-    if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir)?;
-    }
-    let listener = UnixListener::bind(path)?;
-    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))?;
-    Ok(listener)
+    cosmic_term::sudo_socket::listen(path)
 }
 
 fn main() {
+    if std::env::args().nth(1).as_deref() == Some("--version") {
+        println!("ct-sudo-agent {} (sudo protocol {}, PAM module {})", env!("CARGO_PKG_VERSION"), protocol::VERSION, protocol::MODULE_VERSION);
+        return;
+    }
     // SAFETY: a plain call
     let uid = unsafe { libc::getuid() };
     let home = std::env::var_os("HOME").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("/"));
@@ -1037,5 +1056,73 @@ fn main() {
                 eprintln!("ct-sudo-agent: {err}");
             }
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn agent() -> Arc<Agent> {
+        Arc::new(Agent {
+            store_path: std::env::temp_dir().join(cosmic_term::random_hex(16)).join("vault"),
+            policy_path: PathBuf::new(),
+            user: "test".into(),
+            store: Mutex::new(None),
+            policy: Mutex::new(Policy::default()),
+            pending: Mutex::new(BTreeMap::new()),
+            windows: Mutex::new(Vec::new()),
+            next: AtomicU64::new(1),
+            finger_busy: AtomicBool::new(false),
+            finger_for: Mutex::new(None),
+        })
+    }
+
+    #[test]
+    fn connect_and_close_probe_is_silent() {
+        let (server, client) = UnixStream::pair().unwrap();
+        drop(client);
+        assert!(agent().serve_module(server).is_ok());
+    }
+
+    #[test]
+    fn legacy_pam_gets_the_version_mismatch_in_its_own_framing() {
+        let (server, mut client) = UnixStream::pair().unwrap();
+        let serving = thread::spawn(move || agent().serve_module(server));
+        client.write_all(&[1, 0, 0, 0, 3, b'a', b'b', b'c']).unwrap();
+        let mut head = [0; 5];
+        client.read_exact(&mut head).unwrap();
+        assert_eq!(head[0], 0);
+        let mut body = vec![0; u32::from_be_bytes(head[1..].try_into().unwrap()) as usize];
+        client.read_exact(&mut body).unwrap();
+        let reason = String::from_utf8(body).unwrap();
+        assert!(reason.contains("PAM module uses 1, local uses 2"));
+        assert_eq!(serving.join().unwrap().unwrap_err(), reason);
+    }
+
+    #[test]
+    fn module_version_and_missing_machine_refusals_explain_what_to_update() {
+        for module_version in [1, protocol::MODULE_VERSION] {
+            let challenge = Challenge {
+                nonce: [7; 32], host: "neo".into(), user: "twright".into(),
+                target: "root".into(), cwd: "/tmp".into(),
+                argv: vec!["sudo".into(), "true".into()],
+                session: Some("ct-claude-53b3".into()), cgroup: String::new(),
+                issued_at: 0, module_version,
+            };
+            let (server, mut client) = UnixStream::pair().unwrap();
+            let serving = thread::spawn(move || agent().serve_module(server));
+            protocol::write_request(&mut client, &challenge.encode()).unwrap();
+            let Reply::Refused(reason) = protocol::read_reply(&mut client).unwrap() else {
+                panic!("an incompatible or unconfigured module must not get a signature");
+            };
+            if module_version == 1 {
+                assert!(reason.contains("PAM uses 1, agent expects 2"));
+            } else {
+                assert!(reason.contains("neo is not set up in this agent's store"));
+                assert!(reason.contains("check that the sudo socket forwards"));
+            }
+            assert_eq!(serving.join().unwrap().unwrap_err(), reason);
+        }
     }
 }

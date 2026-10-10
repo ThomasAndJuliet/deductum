@@ -36,12 +36,13 @@ pub const KEYS_DIR: &str = "/etc/cosmic-term/sudo-keys";
 /// as an approval
 pub const NAMESPACE: &str = "sudo@cosmic-term";
 
-/// This protocol's version, sent in every request
-pub const VERSION: u8 = 1;
+/// The wire version, sent in requests and replies. Version 1 replies had
+/// only a result tag; version 2 puts the version before that tag.
+pub const VERSION: u8 = 2;
 
 /// The module's version, in each challenge, so the terminal can tell when a
 /// machine's module is out of date
-pub const MODULE_VERSION: u32 = 1;
+pub const MODULE_VERSION: u32 = 2;
 
 /// How long the module waits for the user's answer
 pub const TIMEOUT: Duration = Duration::from_secs(120);
@@ -240,25 +241,47 @@ pub fn write_request(out: &mut impl Write, challenge: &[u8]) -> Result<(), Error
     Ok(())
 }
 
-fn read_frame(input: &mut impl Read, max: usize) -> Result<(u8, Vec<u8>), Error> {
-    let mut head = [0u8; 5];
-    input.read_exact(&mut head)?;
-    let len = u32::from_be_bytes(head[1..].try_into().unwrap()) as usize;
+fn read_byte(input: &mut impl Read, part: &str) -> Result<u8, Error> {
+    let mut byte = [0];
+    input.read_exact(&mut byte).map_err(|err| {
+        error(format!("cannot read {part} (local sudo protocol {VERSION}): {err}; update the PAM module and ct-sudo-agent together"))
+    })?;
+    Ok(byte[0])
+}
+
+fn check_version(version: u8, peer: &str) -> Result<(), Error> {
+    if version != VERSION {
+        return Err(error(format!(
+            "sudo protocol version mismatch: {peer} uses {version}, local uses {VERSION}; update the PAM module and ct-sudo-agent together"
+        )));
+    }
+    Ok(())
+}
+
+fn read_body(input: &mut impl Read, max: usize) -> Result<Vec<u8>, Error> {
+    let mut head = [0u8; 4];
+    input
+        .read_exact(&mut head)
+        .map_err(|err| error(format!("incomplete sudo frame length: {err}")))?;
+    let len = u32::from_be_bytes(head) as usize;
     if len > max {
         return Err(error("the message is too long"));
     }
     let mut body = vec![0u8; len];
-    input.read_exact(&mut body)?;
-    Ok((head[0], body))
+    input.read_exact(&mut body).map_err(|err| {
+        error(format!(
+            "incomplete sudo frame body (expected {len} bytes): {err}"
+        ))
+    })?;
+    Ok(body)
 }
 
 /// Read a request, returning the challenge's bytes
 pub fn read_request(input: &mut impl Read) -> Result<Vec<u8>, Error> {
-    let (version, body) = read_frame(input, MAX_CHALLENGE)?;
-    if version != VERSION {
-        return Err(error(format!("protocol version {version}, not {VERSION}")));
-    }
-    Ok(body)
+    // Check before reading the length or payload: incompatible peers need
+    // not have our framing, and must not make us wait for a bogus length.
+    check_version(read_byte(input, "PAM request version")?, "PAM module")?;
+    read_body(input, MAX_CHALLENGE)
 }
 
 pub fn write_reply(out: &mut impl Write, reply: &Reply) -> Result<(), Error> {
@@ -266,7 +289,7 @@ pub fn write_reply(out: &mut impl Write, reply: &Reply) -> Result<(), Error> {
         Reply::Refused(reason) => (0u8, reason.as_bytes()),
         Reply::Signed(signature) => (1u8, signature.as_bytes()),
     };
-    let mut frame = vec![tag];
+    let mut frame = vec![VERSION, tag];
     put(&mut frame, body);
     out.write_all(&frame)?;
     out.flush()?;
@@ -274,12 +297,34 @@ pub fn write_reply(out: &mut impl Write, reply: &Reply) -> Result<(), Error> {
 }
 
 pub fn read_reply(input: &mut impl Read) -> Result<Reply, Error> {
-    let (tag, body) = read_frame(input, MAX_REPLY)?;
+    let version = read_byte(input, "agent reply version")?;
+    // Both possible first bytes of a v1 reply were tags, not versions.
+    check_version(if version <= 1 { 1 } else { version }, "ct-sudo-agent")?;
+    let tag = read_byte(input, "agent reply tag")?;
+    let body = read_body(input, MAX_REPLY)?;
     let text = String::from_utf8(body).map_err(|_| error("the reply is not UTF-8"))?;
     match tag {
         0 => Ok(Reply::Refused(text)),
         1 => Ok(Reply::Signed(text)),
         _ => Err(error("an unknown reply")),
+    }
+}
+
+/// Refuse an incompatible request in the format that peer understands.
+/// Only refusals use the legacy format; never send a legacy signature.
+pub fn write_request_refusal(
+    out: &mut impl Write,
+    peer_version: u8,
+    reason: String,
+) -> Result<(), Error> {
+    if peer_version == 1 {
+        let mut frame = vec![0];
+        put(&mut frame, reason.as_bytes());
+        out.write_all(&frame)?;
+        out.flush()?;
+        Ok(())
+    } else {
+        write_reply(out, &Reply::Refused(reason))
     }
 }
 
@@ -488,6 +533,70 @@ mod tests {
             write_reply(&mut buf, &reply).unwrap();
             assert_eq!(read_reply(&mut buf.as_slice()).unwrap(), reply);
         }
+    }
+
+    #[test]
+    fn incompatible_versions_are_reported_before_reading_the_payload() {
+        for version in [1, 3, 255] {
+            let err = read_request(&mut [version].as_slice()).unwrap_err();
+            assert!(
+                err.0
+                    .contains(&format!("PAM module uses {version}, local uses {VERSION}")),
+                "{err}"
+            );
+        }
+        for version in [0, 1, 3, 255] {
+            let err = read_reply(&mut [version].as_slice()).unwrap_err();
+            let peer = if version <= 1 { 1 } else { version };
+            assert!(
+                err.0
+                    .contains(&format!("ct-sudo-agent uses {peer}, local uses {VERSION}")),
+                "{err}"
+            );
+        }
+    }
+
+    #[test]
+    fn legacy_modules_receive_a_readable_refusal_not_a_signature() {
+        let reason = read_request(&mut [1].as_slice()).unwrap_err().0;
+        let mut frame = Vec::new();
+        write_request_refusal(&mut frame, 1, reason.clone()).unwrap();
+        // The deployed v1 PAM reader consumes tag, length, UTF-8 body.
+        assert_eq!(frame[0], 0);
+        assert_eq!(
+            u32::from_be_bytes(frame[1..5].try_into().unwrap()) as usize,
+            frame.len() - 5
+        );
+        assert_eq!(std::str::from_utf8(&frame[5..]).unwrap(), reason);
+        let mut frame = Vec::new();
+        write_request_refusal(&mut frame, 3, reason.clone()).unwrap();
+        assert_eq!(
+            read_reply(&mut frame.as_slice()).unwrap(),
+            Reply::Refused(reason)
+        );
+    }
+
+    #[test]
+    fn cut_short_and_oversized_frames_have_specific_errors() {
+        let err = read_reply(&mut [].as_slice()).unwrap_err();
+        assert!(err.0.contains("agent reply version"));
+        let mut frame = vec![VERSION];
+        frame.extend_from_slice(&u32::MAX.to_be_bytes());
+        assert!(
+            read_request(&mut frame.as_slice())
+                .unwrap_err()
+                .0
+                .contains("too long")
+        );
+        let mut frame = Vec::new();
+        write_request(&mut frame, b"abc").unwrap();
+        frame.pop();
+        assert!(
+            read_request(&mut frame.as_slice())
+                .unwrap_err()
+                .0
+                .contains("expected 3 bytes")
+        );
     }
 
     /// A module's surroundings, with an agent that answers as told

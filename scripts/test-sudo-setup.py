@@ -74,6 +74,33 @@ class PamRules(unittest.TestCase):
         self.assertNotEqual(self.run_function("list_module").returncode, 0)
         self.assertEqual(self.pam.read_text(), original)
 
+    def test_module_only_upgrade_preserves_pam_and_key(self):
+        original = PAM.replace("auth include", f"{BEGIN}\nauth sufficient pam_cosmic_term_sudo.so\n{END}\nauth include", 1)
+        self.pam.write_text(original)
+        directory = Path(self.tmp.name)
+        installed = directory / "pam_cosmic_term_sudo.so"
+        installed.write_bytes(b"old module")
+        replacement = directory / "new-module.so"
+        replacement.write_bytes(b"new module")
+        key = directory / "key.pub"
+        key.write_text("keep this key")
+        harness = FUNCTIONS + '''
+need_root() { :; }
+pam_dir() { echo "$fixture_dir"; }
+install() { cp "$7" "$8"; }
+restorecon() { :; }
+fixture_pam=$1
+fixture_dir=$2
+pam_files() { echo "$fixture_pam"; }
+update_module "$3"
+'''
+        result = subprocess.run(["sh", "-c", harness, "upgrade-fixture", str(self.pam), str(directory), str(replacement)], capture_output=True, text=True, timeout=5)
+        self.assert_success(result)
+        self.assertEqual(installed.read_bytes(), b"new module")
+        self.assertEqual(self.pam.read_text(), original)
+        self.assertEqual(key.read_text(), "keep this key")
+        self.assertFalse(Path(str(installed) + ".new").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -12,6 +12,8 @@
 #            take all of that out again
 #        ct-sudo-setup status
 #            what is installed, without needing root
+#        sudo ct-sudo-setup update-module MODULE
+#            replace the currently listed module, keeping PAM rules and keys
 #
 # The module is listed first in /etc/pam.d/sudo and sudo-i, as
 #     auth sufficient /usr/local/lib/cosmic-term/pam_cosmic_term_sudo.so
@@ -163,6 +165,32 @@ uninstall_all() {
     echo "Removed: sudo asks for the password as before."
 }
 
+# Upgrade only the binary used by the existing PAM rules. In particular,
+# this does not migrate legacy rules, rewrite key files or alter sudoers.
+update_module() {
+    need_root
+    module=${1:-}
+    [ -f "$module" ] || die "no module at $module"
+    installed=
+    for f in $(pam_files); do
+        rule=$(awk '$1 == "auth" && $2 == "sufficient" &&
+            ($3 == "pam_cosmic_term_sudo.so" || $3 == "/usr/local/lib/cosmic-term/pam_cosmic_term_sudo.so") { print $3 }' "$f")
+        [ -n "$rule" ] || continue
+        case "$rule" in
+            pam_cosmic_term_sudo.so) dir=$(pam_dir) || die "cannot find the PAM module directory"; path=$dir/$module_name ;;
+            "$module_path") path=$module_path ;;
+            *) die "ambiguous module rules in $f" ;;
+        esac
+        [ -z "$installed" ] || [ "$installed" = "$path" ] || die "PAM files use different modules"
+        installed=$path
+    done
+    [ -n "$installed" ] && [ -f "$installed" ] || die "no installed module is listed; use install to set up this machine"
+    install -o root -g root -m 0644 "$module" "$installed.new"
+    mv "$installed.new" "$installed"
+    command -v restorecon >/dev/null && restorecon "$installed" 2>/dev/null || true
+    echo "Updated module: $installed (PAM rules and keys preserved)."
+}
+
 status() {
     user=${SUDO_USER:-$(id -un)}
     if [ -f "$module_path" ]; then
@@ -185,6 +213,7 @@ status() {
 case "${1:-}" in
     install) install_all "${2:-}" "${3:-}" ;;
     uninstall) uninstall_all ;;
+    update-module) update_module "${2:-}" ;;
     status) status ;;
     *) sed -n '/^# Usage:/,/^# *$/p' "$0" | sed 's/^# \{0,1\}//' ;;
 esac

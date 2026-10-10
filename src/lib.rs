@@ -14,6 +14,7 @@ pub mod mount_setup;
 pub mod project;
 pub mod provider;
 pub mod sudo_control;
+pub mod sudo_socket;
 pub mod transfer;
 pub mod vault;
 pub mod workspace;

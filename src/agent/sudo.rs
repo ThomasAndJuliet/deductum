@@ -8,6 +8,7 @@
 use super::{CONFIG_DIR, Helper, ensure_helper, helper_name, run, session_exec, sh_quote, ssh_options};
 
 const SETUP: &str = include_str!("ct-sudo-setup.sh");
+const FORWARD_PREPARE: &str = include_str!("sudo-forward.py");
 
 /// Where `ct-sudo-setup` is on every machine, as a shell word
 pub const SETUP_COMMAND: &str = "\"$HOME/.config/cosmic-term-agents/ct-sudo-setup\"";
@@ -80,7 +81,7 @@ pub async fn install_agent() -> Result<(), String> {
     script.push_str(
         "if [ -n \"$changed\" ]; then\n\
          \tsystemctl --user daemon-reload\n\
-         \tsystemctl --user stop ct-sudo-agent.service 2>/dev/null\n\
+         \tsystemctl --user stop ct-sudo-agent.service ct-sudo-agent.socket ct-sudo-agent-control.socket 2>/dev/null\n\
          \tsystemctl --user restart ct-sudo-agent.socket ct-sudo-agent-control.socket 2>/dev/null\n\
          fi\n\
          systemctl --user enable --now ct-sudo-agent.socket ct-sudo-agent-control.socket 2>&1\n",
@@ -89,21 +90,18 @@ pub async fn install_agent() -> Result<(), String> {
 }
 
 /// Forward this computer's agent socket to the same path on a host, over
-/// the shared ssh connection, unless a live one is there already. Done
-/// again from time to time, since the shared connection, and the forward
+/// the shared ssh connection, replacing a remote machine's local agent
+/// binding when necessary. Done again from time to time, since the shared
+/// connection, and the forward
 /// with it, go when nothing has used it for a while
 pub async fn forward(host: String) -> Result<(), String> {
-    // A dead socket left by an earlier forward would block this one
+    // A live local agent is also the wrong destination: its store need not
+    // contain the keys held by the terminal on this computer.
     let prepare = format!(
         "p=/run/user/$(id -u)/{socket}\n\
-         if [ -S \"$p\" ]; then\n\
-         \tif python3 -c 'import socket,sys; s=socket.socket(socket.AF_UNIX); s.connect(sys.argv[1])' \"$p\" 2>/dev/null; then\n\
-         \t\techo live; exit 0\n\
-         \tfi\n\
-         \trm -f \"$p\"\n\
-         fi\n\
-         echo \"$p\"\n",
-        socket = ct_sudo_protocol::SOCKET
+         python3 -c {} \"$p\"\n",
+        sh_quote(FORWARD_PREPARE),
+        socket = ct_sudo_protocol::SOCKET,
     );
     let remote = run(session_exec(&host, &prepare)).await?;
     let remote = remote.trim();
@@ -112,11 +110,17 @@ pub async fn forward(host: String) -> Result<(), String> {
     }
     // SAFETY: a plain call
     let local = ct_sudo_protocol::socket_path(unsafe { libc::getuid() });
+    let binding = format!("{remote}:{}", local.display());
+    // The master may still remember a forward whose pathname was replaced
+    // by systemd. Cancel that detached listener before asking it to rebind.
+    let mut cancel = crate::host::command("ssh");
+    cancel.args(ssh_options()).args(["-O", "cancel", "-R"]).arg(&binding).arg(&host);
+    let _ = run(cancel).await;
     let mut command = crate::host::command("ssh");
     command
         .args(ssh_options())
         .args(["-O", "forward", "-R"])
-        .arg(format!("{remote}:{}", local.display()))
+        .arg(binding)
         .arg(&host);
     run(command).await.map(|_| ())
 }

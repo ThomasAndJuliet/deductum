@@ -198,7 +198,14 @@ pub unsafe extern "C" fn pam_sm_authenticate(
             PAM_AUTH_ERR
         }
         Outcome::Ignored(reason) => {
-            log(libc::LOG_DEBUG, &reason);
+            // Wire errors must be visible at the same journal level as
+            // refusals, rather than disappearing as debug-only fallback.
+            let priority = if reason.contains("sudo protocol") || reason.contains("sudo frame") {
+                libc::LOG_NOTICE
+            } else {
+                libc::LOG_DEBUG
+            };
+            log(priority, &reason);
             PAM_IGNORE
         }
     }
