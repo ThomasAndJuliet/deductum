@@ -13,6 +13,7 @@ pub mod helper;
 pub mod mount_setup;
 pub mod project;
 pub mod provider;
+pub mod relay;
 pub mod sudo_control;
 pub mod transfer;
 pub mod vault;

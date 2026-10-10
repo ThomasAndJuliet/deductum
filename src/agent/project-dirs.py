@@ -42,6 +42,11 @@
 #     "since": when that command started,
 #     "agents": as above, each with "title", "state": "working"|"idle",
 #               "last": its latest message, "updated": transcript mtime}]
+# and for each rich-text thread whose relay is running (named ct-thread-…,
+# with or without Zellij), a row of the same shape with
+#     "thread": {"agent", "busy", "conversation", "meta": its meta.json,
+#                "turn_start", "end": offsets into its log, "created"}
+# Threads' directories whose relay has been gone a day are removed.
 #
 # Runs locally and on remote hosts, so it uses only the standard library.
 
@@ -842,13 +847,100 @@ def repository_of(path):
     return repo, branch.stdout.strip() or None
 
 
+THREADS = os.path.join(os.environ.get("XDG_STATE_HOME") or os.path.join(HOME, ".local", "state"),
+                       "cosmic-term", "threads")
+THREAD_GC_AGE = 24 * 3600
+
+
+def relay_live(directory):
+    """Whether a relay holds the thread directory's lock"""
+    import fcntl
+    try:
+        fd = os.open(os.path.join(directory, "lock"), os.O_RDONLY)
+    except OSError:
+        return False
+    try:
+        fcntl.flock(fd, fcntl.LOCK_SH | fcntl.LOCK_NB)
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        return False
+    except OSError:
+        return True
+    finally:
+        os.close(fd)
+
+
+def read_json(path):
+    try:
+        value = json.loads(read(path) or b"null")
+    except ValueError:
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def thread_rows():
+    """The live relays of rich-text threads (see relay.rs), as session rows
+    with a "thread" object; and the removal of those gone a day"""
+    import shutil
+    import time
+    rows = []
+    try:
+        names = sorted(os.listdir(THREADS))
+    except OSError:
+        return rows
+    for name in names:
+        directory = os.path.join(THREADS, name)
+        if not name.startswith("ct-thread-") or not os.path.isdir(directory):
+            continue
+        if not relay_live(directory):
+            if time.time() - max(mtime(os.path.join(directory, "state")), mtime(directory)) > THREAD_GC_AGE:
+                shutil.rmtree(directory, ignore_errors=True)
+            continue
+        meta = read_json(os.path.join(directory, "meta.json"))
+        state = read_json(os.path.join(directory, "state"))
+        kind = meta.get("agent") or "claude"
+        conversation = meta.get("conversation")
+        where = os.path.expanduser(meta.get("cwd") or "~")
+        summary = {}
+        if conversation and kind == "claude":
+            transcripts = glob.glob(os.path.join(HOME, ".claude", "projects", "*", f"{conversation}.jsonl"))
+            if transcripts:
+                summary = claude_summary(transcripts[0], tail_lines(transcripts[0]))
+        elif conversation and kind == "codex":
+            rollouts = glob.glob(os.path.join(HOME, ".codex", "sessions", "*", "*", "*", f"rollout-*-{conversation}.jsonl"))
+            if rollouts:
+                summary = codex_summary(rollouts[0], conversation, tail_lines(rollouts[0]))
+        busy = bool(state.get("busy"))
+        agent = {"kind": kind, "pid": state.get("cli") or 0, "conversation": conversation,
+                 "started_in": where, "cwd": where, "focus": [], "projects": [], "status": "running",
+                 **summary, "state": "working" if busy else "idle"}
+        repository, branch = repository_of(where) if os.path.isdir(where) else (None, None)
+        rows.append({"name": name, "clients": state.get("clients") or 0, "cwd": where,
+                     "project": project_root(where) if os.path.isdir(where) else None,
+                     "repository": repository, "branch": branch, "command": None,
+                     "since": meta.get("created"), "screen": [], "agents": [agent],
+                     "thread": {"agent": kind, "busy": busy, "conversation": conversation,
+                                "meta": meta, "turn_start": state.get("turn_start") or 0,
+                                "end": state.get("end") or 0, "created": meta.get("created") or 0}})
+    claims = os.path.join(THREADS, "by-conversation")
+    try:
+        for claim in os.listdir(claims):
+            path = os.path.join(claims, claim)
+            if os.path.islink(path) and not os.path.exists(path):
+                os.unlink(path)
+    except OSError:
+        pass
+    return rows
+
+
 def sessions():
     ppid = parents()
-    found = []
+    found = thread_rows()
     # The newest first, since an agent's guessed conversation is the newest
-    # one begun where it started that no newer agent has
+    # one begun where it started that no newer agent has. A thread's session
+    # runs its relay, which is described above
     servers = sorted(
-        ((name, server) for name, server in zellij_servers().items() if name.startswith("ct-")),
+        ((name, server) for name, server in zellij_servers().items()
+         if name.startswith("ct-") and not name.startswith("ct-thread-")),
         key=lambda s: -started_at(s[1]))
     trees = {}
     # Conversations that are certain are claimed before any is guessed

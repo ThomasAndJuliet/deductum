@@ -216,6 +216,17 @@ pub enum Output {
     Events(Vec<Event>),
     /// It exited, with the end of what it wrote to stderr
     Exited(Option<i32>, String),
+    /// A relayed CLI's relay, on each connection: where the log stood
+    /// before the first turn and at the latest turn, its end, and whether a
+    /// turn is in progress. What follows comes from the log at the cursor
+    Hello { head: u64, turn_start: u64, end: u64, busy: bool },
+    /// An input the relay passed to the CLI: `kind` is `turn` for a user's
+    /// turn, else `line`; `own` if this stream sent it, else another window
+    /// did, or this one before it was restarted
+    Input { id: String, kind: String, json: String, own: bool },
+    /// The connection to the relay was lost; it is tried again, and inputs
+    /// are kept until it has them
+    Disconnected,
 }
 
 /// Run the CLI, as `launch` says. The stream ends when it exits
@@ -323,6 +334,389 @@ pub fn run(launch: claude::Launch) -> impl Stream<Item = Output> {
         let tail = stderr_task.await.unwrap_or_default();
         let _ = output.send(Output::Exited(status, tail)).await;
     })
+}
+
+/// A relayed thread to show: its relay's session, where to start reading,
+/// and, to start the relay, the CLI's launch
+#[derive(Clone, Debug)]
+pub struct Attach {
+    pub host: String,
+    /// The thread's session name, from [`crate::agent::new_thread_session`]
+    pub session: String,
+    pub from: cosmic_term::relay::Cursor,
+    pub start: Option<claude::Launch>,
+}
+
+/// What a relay starting `launch` records of it, for the sidebar
+fn thread_meta(session: &str, launch: &claude::Launch) -> Value {
+    serde_json::json!({
+        "session": session,
+        "agent": launch.agent.session_kind(),
+        "cwd": launch.cwd,
+        "conversation": launch.resume,
+        "model": launch.model,
+        "permission_mode": launch.permission_mode,
+        "created": cosmic_term::now(),
+    })
+}
+
+/// An input for a relay, kept until the relay has echoed it
+struct Pending {
+    id: String,
+    kind: &'static str,
+    json: String,
+}
+
+impl Pending {
+    fn line(&self) -> String {
+        format!("{} {} {}\n", self.kind, self.id, self.json)
+    }
+}
+
+/// What the relay's lines say, given to a thread: see [`run_relayed`]
+struct Relayed {
+    protocol: super::protocol::Protocol,
+    /// Inputs sent, or to send, that the relay has not echoed
+    pending: Vec<Pending>,
+    /// Where to read the log from on the next connection
+    from: cosmic_term::relay::Cursor,
+    /// The log offset of the next line
+    offset: u64,
+    /// This connection's greeting
+    hello: Option<cosmic_term::relay::Hello>,
+    /// The conversation id recorded in the thread's meta.json, or to be
+    conversation: Option<String>,
+    meta_sent: Option<String>,
+}
+
+/// What one line from a relay comes to
+enum Step {
+    Out(Output),
+    Events(Vec<Event>),
+    /// The CLI has ended
+    End(Output),
+    Nothing,
+}
+
+impl Relayed {
+    fn new(protocol: super::protocol::Protocol, from: cosmic_term::relay::Cursor) -> Self {
+        Self { protocol, pending: Vec::new(), from, offset: 0, hello: None, conversation: None, meta_sent: None }
+    }
+
+    fn meta(&mut self, replies: &mut Vec<String>) {
+        if let Some(id) = &self.conversation
+            && self.meta_sent.as_ref() != Some(id)
+        {
+            replies.push(format!("meta {}\n", serde_json::json!({"conversation": id})));
+            self.meta_sent = Some(id.clone());
+        }
+    }
+
+    /// Take one line, with its newline, from the connection; gives what it
+    /// means, and adds the lines for the relay it calls for to `replies`
+    fn line(&mut self, line: &[u8], replies: &mut Vec<String>) -> Step {
+        use cosmic_term::relay::{Cursor, Record};
+        let text = String::from_utf8_lossy(line);
+        let Some(hello) = self.hello else {
+            // The greeting, which is not in the log
+            let Some(Record::Hello(hello)) = Record::parse(&text) else { return Step::Nothing };
+            self.hello = Some(hello);
+            self.offset = match self.from {
+                Cursor::Offset(n) => n.min(hello.end),
+                Cursor::Live if hello.busy => hello.turn_start,
+                Cursor::Live => hello.end,
+            };
+            self.from = Cursor::Offset(self.offset);
+            for pending in &self.pending {
+                replies.push(pending.line());
+            }
+            self.meta(replies);
+            return Step::Out(Output::Hello {
+                head: hello.head,
+                turn_start: hello.turn_start,
+                end: hello.end,
+                busy: hello.busy,
+            });
+        };
+        let at = self.offset;
+        self.offset += line.len() as u64;
+        self.from = Cursor::Offset(self.offset);
+        match Record::parse(&text) {
+            Some(Record::Input { id, kind, json }) => {
+                let own = match self.pending.iter().position(|p| p.id == id) {
+                    Some(index) => {
+                        self.pending.remove(index);
+                        true
+                    }
+                    None => false,
+                };
+                Step::Out(Output::Input { id, kind, json, own })
+            }
+            Some(Record::Exited { code, stderr }) => Step::End(Output::Exited(Some(code), stderr)),
+            Some(Record::Lost) => Step::End(Output::Exited(None, "the thread's agent was lost".into())),
+            Some(Record::Hello(_)) => Step::Nothing,
+            None => {
+                let mut events = Vec::new();
+                let text = text.trim_end_matches(['\n', '\r']);
+                let mut answers = self.protocol.parse(text, &mut events);
+                // Answers to lines of turns before this one were given then.
+                // Each is named by its line, so that two windows answering
+                // the same line are heard once
+                if at < hello.turn_start {
+                    answers.clear();
+                }
+                for (n, json) in answers.into_iter().enumerate() {
+                    let pending = Pending { id: format!("r{at}-{n}"), kind: "line", json };
+                    replies.push(pending.line());
+                    self.pending.push(pending);
+                }
+                for event in &events {
+                    if let Event::Started { session_id, .. } = event
+                        && !session_id.is_empty()
+                    {
+                        self.conversation = Some(session_id.clone());
+                    }
+                }
+                self.meta(replies);
+                if events.is_empty() { Step::Nothing } else { Step::Events(events) }
+            }
+        }
+    }
+
+    /// The lines for a command from the thread, kept until echoed
+    fn command(&mut self, command: super::protocol::Command) -> Vec<String> {
+        let user = matches!(command, super::protocol::Command::User { .. });
+        let mut lines = Vec::new();
+        for (n, json) in self.protocol.command(command).into_iter().enumerate() {
+            let pending = Pending {
+                id: cosmic_term::random_hex(12),
+                kind: if user && n == 0 { "turn" } else { "line" },
+                json,
+            };
+            lines.push(pending.line());
+            self.pending.push(pending);
+        }
+        lines
+    }
+}
+
+/// Like [`run`], with the CLI kept by a relay on its host (see
+/// `cosmic_term::relay`), so that it outlives this stream. With
+/// `attach.start`, the relay is started first; without, the thread's
+/// running relay is joined, or what its log holds is read once it has gone.
+/// The log is read from `attach.from` on, with the relay's greeting, each
+/// window's inputs and lost connections besides; a lost connection is tried
+/// again, from where it was, until the CLI exits. Dropping the sender of
+/// [`Output::Ready`] lets go of the relay, which keeps the CLI: end it with
+/// [`crate::agent::thread_stop`]. Without the relay's supervisor, a started
+/// thread's CLI is run directly, by [`run`]
+pub fn run_relayed(attach: Attach) -> impl Stream<Item = Output> {
+    cosmic::iced::stream::channel(64, move |mut output: cosmic::iced::futures::channel::mpsc::Sender<Output>| async move {
+        use cosmic::iced::futures::StreamExt;
+        let session = crate::agent::Session { host: attach.host.clone(), name: attach.session.clone() };
+        let launch = attach.start.clone().unwrap_or_else(|| claude::Launch {
+            agent: session.agent().unwrap_or_default(),
+            host: attach.host.clone(),
+            ..claude::Launch::default()
+        });
+        let mut protocol = super::protocol::Protocol::new(&launch);
+        let start_lines = protocol.start();
+        let done = protocol.turn_done();
+        let mut script = None;
+        if let Some(start) = &attach.start {
+            if let Err(err) = crate::agent::ensure_helper(start.host.clone(), crate::agent::Helper::Chartgen).await {
+                log::warn!("installing ct-chartgen: {err}");
+            }
+            let installed = crate::agent::ensure_helper(start.host.clone(), crate::agent::Helper::Supervise).await;
+            if let Err(err) = &installed {
+                log::warn!("installing ct-supervise: {err}");
+            }
+            script = installed.ok().and_then(|()| {
+                crate::agent::thread_start_script(
+                    &session,
+                    &start.script(),
+                    done,
+                    crate::agent::THREAD_LINGER,
+                    &thread_meta(&attach.session, start),
+                )
+            });
+            if script.is_none() {
+                let mut direct = std::pin::pin!(run(start.clone()));
+                while let Some(item) = direct.next().await {
+                    if output.send(item).await.is_err() {
+                        return;
+                    }
+                }
+                return;
+            }
+        }
+        let mut relayed = Relayed::new(protocol, attach.from);
+        relayed.conversation = launch.resume.clone();
+        // A started relay was told in its meta.json
+        relayed.meta_sent = attach.start.as_ref().and_then(|start| start.resume.clone());
+        // The opening lines go to a new CLI only, named so that resending
+        // them is harmless
+        if attach.start.is_some() {
+            for (n, json) in start_lines.into_iter().enumerate() {
+                relayed.pending.push(Pending { id: format!("s{n}"), kind: "line", json });
+            }
+        }
+        relay_loop(&mut output, &session, relayed, script, crate::agent::session_exec).await;
+    })
+}
+
+/// Connect to the relay with `script` (the start script, or else an attach
+/// script), run by `exec` on the session's host, and again whenever the
+/// connection is lost
+async fn relay_loop(
+    output: &mut cosmic::iced::futures::channel::mpsc::Sender<Output>,
+    session: &crate::agent::Session,
+    mut relayed: Relayed,
+    script: Option<String>,
+    exec: impl Fn(&str, &str) -> tokio::process::Command,
+) {
+    use std::time::Duration;
+    use tokio::io::AsyncReadExt;
+    let (to_cli, mut commands) = mpsc::unbounded_channel::<super::protocol::Command>();
+    if output.send(Output::Ready(to_cli)).await.is_err() {
+        return;
+    }
+    let mut script = script.unwrap_or_else(|| crate::agent::thread_attach_script(session, relayed.from));
+    let mut backoff = Duration::from_secs(1);
+    loop {
+        let mut command = exec(&session.host, &script);
+        command
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .kill_on_drop(true);
+        relayed.hello = None;
+        let mut ended = None;
+        match command.spawn() {
+            Ok(mut child) => {
+                let (Some(mut stdin), Some(stdout), Some(stderr)) = (child.stdin.take(), child.stdout.take(), child.stderr.take())
+                else {
+                    return;
+                };
+                let stderr_task = tokio::spawn(async move {
+                    let mut text = String::new();
+                    let _ = tokio::io::BufReader::new(stderr).take(1 << 16).read_to_string(&mut text).await;
+                    text
+                });
+                let mut reader = tokio::io::BufReader::with_capacity(256 * 1024, stdout);
+                let mut stdin_open = true;
+                let mut replies = Vec::new();
+                let mut line = Vec::new();
+                loop {
+                    tokio::select! {
+                        read = reader.read_until(b'\n', &mut line) => {
+                            if !matches!(read, Ok(n) if n > 0) || !line.ends_with(b"\n") {
+                                break;
+                            }
+                            let mut events = Vec::new();
+                            let mut outs = Vec::new();
+                            // Deltas come in bursts; send what is already here together
+                            loop {
+                                match relayed.line(&line, &mut replies) {
+                                    Step::Events(more) => events.extend(more),
+                                    Step::Out(out) => outs.push(out),
+                                    Step::End(out) => ended = Some(out),
+                                    Step::Nothing => {}
+                                }
+                                line.clear();
+                                if ended.is_some() || events.len() > 256 || !outs.is_empty() {
+                                    break;
+                                }
+                                match tokio::time::timeout(Duration::from_millis(4), reader.read_until(b'\n', &mut line)).await {
+                                    Ok(Ok(n)) if n > 0 && line.ends_with(b"\n") => {}
+                                    // A partial line stays for the next read
+                                    Ok(Ok(n)) if n > 0 => break,
+                                    Ok(_) => break,
+                                    Err(_) => break,
+                                }
+                            }
+                            for reply in replies.drain(..) {
+                                if stdin_open {
+                                    stdin_open = stdin.write_all(reply.as_bytes()).await.is_ok() && stdin.flush().await.is_ok();
+                                }
+                            }
+                            if !events.is_empty() && output.send(Output::Events(events)).await.is_err() {
+                                return;
+                            }
+                            for out in outs {
+                                if matches!(out, Output::Hello { .. }) {
+                                    backoff = Duration::from_secs(1);
+                                }
+                                if output.send(out).await.is_err() {
+                                    return;
+                                }
+                            }
+                            if ended.is_some() {
+                                break;
+                            }
+                        }
+                        command = commands.recv() => match command {
+                            Some(command) => {
+                                for line in relayed.command(command) {
+                                    if stdin_open && relayed.hello.is_some() {
+                                        stdin_open = stdin.write_all(line.as_bytes()).await.is_ok() && stdin.flush().await.is_ok();
+                                    }
+                                }
+                            }
+                            // Let go: the relay keeps the CLI
+                            None => {
+                                let _ = stdin.shutdown().await;
+                                return;
+                            }
+                        },
+                    }
+                }
+                drop(stdin);
+                let status = tokio::time::timeout(Duration::from_secs(5), child.wait())
+                    .await
+                    .ok()
+                    .and_then(Result::ok)
+                    .and_then(|status| status.code());
+                let stderr = tokio::time::timeout(Duration::from_secs(1), stderr_task)
+                    .await
+                    .ok()
+                    .and_then(Result::ok)
+                    .unwrap_or_default();
+                // It failed before the relay said anything, and not by
+                // losing the connection
+                if ended.is_none()
+                    && relayed.hello.is_none()
+                    && status.is_some_and(|code| code != crate::agent::SSH_CONNECTION_LOST)
+                {
+                    ended = Some(Output::Exited(status, stderr.trim().to_string()));
+                }
+            }
+            Err(err) => ended = Some(Output::Exited(None, err.to_string())),
+        }
+        if let Some(out) = ended {
+            let _ = output.send(out).await;
+            return;
+        }
+        if output.send(Output::Disconnected).await.is_err() {
+            return;
+        }
+        // Again, from what has been read, keeping commands meanwhile
+        script = crate::agent::thread_attach_script(session, relayed.from);
+        let sleep = tokio::time::sleep(backoff);
+        tokio::pin!(sleep);
+        backoff = (backoff * 2).min(Duration::from_secs(30));
+        loop {
+            tokio::select! {
+                _ = &mut sleep => break,
+                command = commands.recv() => match command {
+                    Some(command) => {
+                        relayed.command(command);
+                    }
+                    None => return,
+                },
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -453,6 +847,179 @@ mod tests {
         let history = read(std::io::Cursor::new(lines), 5);
         assert!(history.entries.items.is_empty());
     }
+
+    #[test]
+    fn relayed_lines_become_outputs() {
+        use cosmic_term::relay::Cursor;
+        let mut relayed = Relayed::new(super::super::protocol::Protocol::Claude, Cursor::Live);
+        relayed.pending.push(Pending { id: "s0".into(), kind: "line", json: "{\"init\":1}".into() });
+        let mut replies = Vec::new();
+        // Joined mid-turn: read from the turn's start, and what was not
+        // echoed is sent again
+        let step = relayed.line(b"#ct hello 1 pid=5 head=10 turn=40 end=200 busy=1\n", &mut replies);
+        assert!(matches!(step, Step::Out(Output::Hello { head: 10, turn_start: 40, end: 200, busy: true })));
+        assert_eq!(relayed.offset, 40);
+        assert_eq!(replies, ["line s0 {\"init\":1}\n"]);
+        replies.clear();
+        let lines: [&[u8]; 5] = [
+            b"#ct< s0 line {\"init\":1}\n",
+            b"#ct< other turn {\"type\":\"user\"}\n",
+            b"{\"type\":\"system\",\"subtype\":\"init\",\"session_id\":\"c-1\",\"model\":\"m\",\"cwd\":\"/\",\"permissionMode\":\"default\"}\n",
+            b"{\"type\":\"assistant\",\"message\":{\"id\":\"m1\",\"content\":[{\"type\":\"text\",\"text\":\"hi\"}]}}\n",
+            b"#ct exited 0 b29wcw==\n",
+        ];
+        let steps: Vec<Step> = lines.iter().map(|line| relayed.line(line, &mut replies)).collect();
+        assert!(matches!(&steps[0], Step::Out(Output::Input { id, kind, own: true, .. }) if id == "s0" && kind == "line"));
+        assert!(matches!(&steps[1], Step::Out(Output::Input { id, kind, own: false, .. }) if id == "other" && kind == "turn"));
+        assert!(matches!(&steps[2], Step::Events(events) if matches!(&events[0], Event::Started { session_id, .. } if session_id == "c-1")));
+        assert!(matches!(&steps[3], Step::Events(events) if matches!(&events[0], Event::Assistant { message_id, .. } if message_id == "m1")));
+        assert!(matches!(&steps[4], Step::End(Output::Exited(Some(0), stderr)) if stderr == "oops"));
+        assert!(relayed.pending.is_empty());
+        // The conversation's id is recorded, once
+        assert_eq!(replies, ["meta {\"conversation\":\"c-1\"}\n"]);
+        assert_eq!(relayed.offset, 40 + lines.iter().map(|l| l.len() as u64).sum::<u64>());
+        assert_eq!(relayed.from, Cursor::Offset(relayed.offset));
+
+        // A user's turn is framed as one, the rest as lines
+        let sent = relayed.command(super::super::protocol::Command::User { text: "x".into(), images: Vec::new() });
+        assert!(sent[0].starts_with("turn ") && sent[0].ends_with("}\n"), "{sent:?}");
+        let sent = relayed.command(super::super::protocol::Command::Interrupt);
+        assert!(sent[0].starts_with("line "), "{sent:?}");
+        assert_eq!(relayed.pending.len(), 2);
+    }
+
+    /// The stream through a real relay, with the `ct-supervise` built
+    /// beside the tests and a stand-in Claude: a connection cut mid-turn is
+    /// made again from where it was, a turn sent meanwhile arrives once, a
+    /// second stream replays what the first saw, and a stopped relay's log
+    /// ends the stream
+    #[test]
+    fn relayed_threads_reconnect_and_replay() {
+        use cosmic::iced::futures::StreamExt;
+        use cosmic_term::relay::{self, Cursor};
+        let Some(supervisor) = std::env::current_exe()
+            .ok()
+            .and_then(|exe| Some(exe.parent()?.parent()?.join("ct-supervise")))
+            .filter(|path| path.exists())
+        else {
+            eprintln!("no ct-supervise built beside the tests: skipped");
+            return;
+        };
+        let home = std::env::temp_dir().join(format!("ct-relayed-test-{}", cosmic_term::random_hex(8)));
+        let session = crate::agent::Session { host: String::new(), name: "ct-thread-claude-t-00000001".into() };
+        let dir = home.join(".local/state/cosmic-term/threads").join(&session.name);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join(relay::RELAY_BIN), format!("{}\n", supervisor.display())).unwrap();
+        // Each line read is answered with a message and the turn's end
+        let fake = "n=0\nwhile IFS= read -r line; do n=$((n + 1))\n\
+                    printf '{\"type\":\"assistant\",\"message\":{\"id\":\"m%s\",\"content\":[{\"type\":\"text\",\"text\":\"ok\"}]}}\\n' $n\n\
+                    printf '{\"type\":\"result\",\"is_error\":false,\"duration_ms\":1}\\n'\n\
+                    done\n";
+        let mut options = relay::Options::new(&dir, vec!["sh".into(), "-c".into(), fake.into()]);
+        options.done = Some("\"type\":\"result\"".into());
+        let relay_thread = std::thread::spawn(move || relay::relay(options, None));
+        while !dir.join(relay::STATE).exists() {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        // The first connection is cut after the greeting and one line
+        let cut = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
+        let exec = {
+            let (home, cut) = (home.clone(), cut.clone());
+            move |_: &str, script: &str| {
+                let script = if cut.swap(false, std::sync::atomic::Ordering::SeqCst) {
+                    format!("{{ {script}\n}} | {{ IFS= read -r a; printf '%s\\n' \"$a\"; IFS= read -r b; printf '%s\\n' \"$b\"; kill $$; }}")
+                } else {
+                    script.to_string()
+                };
+                let mut command = tokio::process::Command::new("sh");
+                command.arg("-c").arg(script).env("HOME", &home).env_remove("XDG_STATE_HOME");
+                command
+            }
+        };
+        let stream = |from: Cursor, exec: Box<dyn Fn(&str, &str) -> tokio::process::Command + Send>| {
+            let session = session.clone();
+            cosmic::iced::stream::channel(64, move |mut output: cosmic::iced::futures::channel::mpsc::Sender<Output>| async move {
+                let relayed = Relayed::new(super::super::protocol::Protocol::Claude, from);
+                relay_loop(&mut output, &session, relayed, None, exec).await;
+            })
+        };
+        let user = |text: &str| super::super::protocol::Command::User { text: text.into(), images: Vec::new() };
+        let runtime = tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap();
+        let next = |stream: &mut (dyn cosmic::iced::futures::Stream<Item = Output> + Unpin)| {
+            runtime
+                .block_on(async { tokio::time::timeout(std::time::Duration::from_secs(20), stream.next()).await })
+                .expect("output within 20 s")
+        };
+        let mut first = Box::pin(stream(Cursor::Offset(0), Box::new(exec)));
+        let Some(Output::Ready(tx)) = next(&mut first) else { panic!("not ready") };
+        assert!(matches!(next(&mut first), Some(Output::Hello { end: 0, .. })));
+        tx.send(user("one")).unwrap();
+        assert!(matches!(next(&mut first), Some(Output::Input { kind, own: true, .. }) if kind == "turn"));
+        assert!(matches!(next(&mut first), Some(Output::Disconnected)));
+        // Sent while the connection is down
+        tx.send(user("two")).unwrap();
+        let mut seen = Vec::new();
+        let mut done = 0;
+        while done < 2 {
+            match next(&mut first) {
+                Some(Output::Events(events)) => {
+                    done += events.iter().filter(|e| matches!(e, Event::TurnDone { .. })).count();
+                    seen.extend(events);
+                }
+                Some(Output::Input { kind, own, .. }) => {
+                    assert!(own && kind == "turn");
+                    seen.push(Event::Notice("input".into()));
+                }
+                Some(Output::Hello { .. }) => {}
+                other => panic!("{other:?}"),
+            }
+        }
+        let messages: Vec<&str> = seen
+            .iter()
+            .filter_map(|e| match e {
+                Event::Assistant { message_id, .. } => Some(message_id.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(messages, ["m1", "m2"]);
+        let log = std::fs::read_to_string(dir.join(relay::LOG)).unwrap();
+        assert_eq!(log.matches("#ct< ").count(), 2, "{log}");
+        // Letting go ends the stream, and leaves the relay
+        drop(tx);
+        assert!(next(&mut first).is_none());
+        assert!(relay::is_live(&dir));
+
+        // Another window reads it all, and sees the other's turns as theirs
+        let exec = {
+            let home = home.clone();
+            move |_: &str, script: &str| {
+                let mut command = tokio::process::Command::new("sh");
+                command.arg("-c").arg(script).env("HOME", &home).env_remove("XDG_STATE_HOME");
+                command
+            }
+        };
+        let mut second = Box::pin(stream(Cursor::Offset(0), Box::new(exec.clone())));
+        let Some(Output::Ready(_tx)) = next(&mut second) else { panic!("not ready") };
+        assert!(matches!(next(&mut second), Some(Output::Hello { end, busy: false, .. }) if end == log.len() as u64));
+        assert!(matches!(next(&mut second), Some(Output::Input { own: false, .. })));
+        assert!(relay::stop(&dir, std::time::Duration::from_secs(10)));
+        assert_eq!(relay_thread.join().unwrap(), Ok(0));
+        let mut ended = None;
+        while let Some(output) = next(&mut second) {
+            if let Output::Exited(code, _) = output {
+                ended = Some(code);
+            }
+        }
+        assert_eq!(ended, Some(Some(0)));
+
+        // Once it has gone, the log's end is still read
+        let mut third = Box::pin(stream(Cursor::Live, Box::new(exec)));
+        let Some(Output::Ready(_tx)) = next(&mut third) else { panic!("not ready") };
+        assert!(matches!(next(&mut third), Some(Output::Hello { .. })));
+        assert!(matches!(next(&mut third), Some(Output::Exited(Some(0), _))));
+        assert!(next(&mut third).is_none());
+        let _ = std::fs::remove_dir_all(home);
+    }
 }
 
 /// The real CLI, on this computer, using the user's own login. Run with
@@ -497,7 +1064,7 @@ mod live {
                     }
                 }
                 Some(Output::Exited(code, stderr)) => panic!("the CLI exited ({code:?}): {stderr}"),
-                Some(Output::Ready(_)) => {}
+                Some(Output::Ready(_) | Output::Hello { .. } | Output::Input { .. } | Output::Disconnected) => {}
                 None => panic!("the CLI's output ended"),
             }
         }
