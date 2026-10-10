@@ -114,7 +114,9 @@ impl std::str::FromStr for Cursor {
         if s == "live" {
             return Ok(Self::Live);
         }
-        s.parse().map(Self::Offset).map_err(|_| format!("bad offset: {s}"))
+        s.parse()
+            .map(Self::Offset)
+            .map_err(|_| format!("bad offset: {s}"))
     }
 }
 
@@ -166,8 +168,15 @@ impl Hello {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Record {
     Hello(Hello),
-    Input { id: String, kind: String, json: String },
-    Exited { code: i32, stderr: String },
+    Input {
+        id: String,
+        kind: String,
+        json: String,
+    },
+    Exited {
+        code: i32,
+        stderr: String,
+    },
     /// The relay ended without saying how the CLI did
     Lost,
 }
@@ -178,8 +187,16 @@ impl Record {
         let line = line.strip_suffix('\n').unwrap_or(line);
         if let Some(rest) = line.strip_prefix("#ct< ") {
             let mut parts = rest.splitn(3, ' ');
-            let (id, kind, json) = (parts.next()?, parts.next()?, parts.next().unwrap_or_default());
-            return Some(Self::Input { id: id.into(), kind: kind.into(), json: json.into() });
+            let (id, kind, json) = (
+                parts.next()?,
+                parts.next()?,
+                parts.next().unwrap_or_default(),
+            );
+            return Some(Self::Input {
+                id: id.into(),
+                kind: kind.into(),
+                json: json.into(),
+            });
         }
         if let Some(rest) = line.strip_prefix("#ct exited ") {
             let (code, tail) = rest.split_once(' ').unwrap_or((rest, ""));
@@ -219,12 +236,22 @@ pub fn socket_path(dir: &Path) -> io::Result<PathBuf> {
         Err(err) => return Err(err),
     }
     let meta = fs::symlink_metadata(&base)?;
-    if !meta.is_dir() || std::os::unix::fs::MetadataExt::uid(&meta) != uid || meta.permissions().mode() & 0o077 != 0 {
-        return Err(io::Error::other(format!("{} is not this user's own", base.display())));
+    if !meta.is_dir()
+        || std::os::unix::fs::MetadataExt::uid(&meta) != uid
+        || meta.permissions().mode() & 0o077 != 0
+    {
+        return Err(io::Error::other(format!(
+            "{} is not this user's own",
+            base.display()
+        )));
     }
-    let hash = dir.as_os_str().as_encoded_bytes().iter().fold(0xcbf2_9ce4_8422_2325_u64, |hash, byte| {
-        (hash ^ u64::from(*byte)).wrapping_mul(0x0100_0000_01b3)
-    });
+    let hash = dir
+        .as_os_str()
+        .as_encoded_bytes()
+        .iter()
+        .fold(0xcbf2_9ce4_8422_2325_u64, |hash, byte| {
+            (hash ^ u64::from(*byte)).wrapping_mul(0x0100_0000_01b3)
+        });
     Ok(base.join(format!("{hash:016x}")))
 }
 
@@ -247,7 +274,9 @@ fn lock_exclusive(file: &File) -> bool {
 
 /// Whether a relay holds `dir`'s lock
 pub fn is_live(dir: &Path) -> bool {
-    let Ok(file) = File::open(dir.join(LOCK)) else { return false };
+    let Ok(file) = File::open(dir.join(LOCK)) else {
+        return false;
+    };
     if flock(&file, libc::LOCK_SH) {
         flock(&file, libc::LOCK_UN);
         false
@@ -257,7 +286,11 @@ pub fn is_live(dir: &Path) -> bool {
 }
 
 fn valid_id(id: &str) -> bool {
-    !id.is_empty() && id.len() <= 128 && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+    !id.is_empty()
+        && id.len() <= 128
+        && id
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
 }
 
 /// Claim conversation `id` for the relay in `dir`, unless a live relay
@@ -284,7 +317,11 @@ pub fn claim_conversation(dir: &Path, id: &str) -> Result<(), String> {
     if let Ok(target) = fs::read_link(&link) {
         let holder = claims.join(&target);
         if target.file_name() != Some(name) && is_live(&holder) {
-            return Err(target.file_name().unwrap_or_default().to_string_lossy().into_owned());
+            return Err(target
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .into_owned());
         }
     }
     let tmp = claims.join(format!(".{id}.{}", std::process::id()));
@@ -402,24 +439,16 @@ pub fn relay(options: Options, signals: Option<RawFd>) -> Result<i32, String> {
         .map_err(|err| err.to_string())?;
     let socket = socket_path(&dir).map_err(|err| err.to_string())?;
     let _ = fs::remove_file(&socket);
-    let listener = UnixListener::bind(&socket).map_err(|err| format!("{}: {err}", socket.display()))?;
-    listener.set_nonblocking(true).map_err(|err| err.to_string())?;
-    let err_log = OpenOptions::new().create(true).append(true).open(dir.join("err.log")).ok();
-
-    let mut seen = HashSet::new();
-    let mut order = VecDeque::new();
-    if let Ok(old) = File::open(dir.join(format!("{LOG}.1"))) {
-        for line in io::BufReader::new(old).split(b'\n').map_while(Result::ok) {
-            if let Some(Record::Input { id, .. }) = line.starts_with(b"#ct< ").then(|| Record::parse(&String::from_utf8_lossy(&line))).flatten() {
-                if seen.insert(id.clone()) {
-                    order.push_back(id);
-                }
-                if order.len() > REMEMBERED {
-                    order.pop_front().map(|id| seen.remove(&id));
-                }
-            }
-        }
-    }
+    let listener =
+        UnixListener::bind(&socket).map_err(|err| format!("{}: {err}", socket.display()))?;
+    listener
+        .set_nonblocking(true)
+        .map_err(|err| err.to_string())?;
+    let err_log = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(dir.join("err.log"))
+        .ok();
 
     let fail = |mut log: &File, code: i32, message: String| {
         let _ = log.write_all(exit_line(code, message.as_bytes()).as_bytes());
@@ -433,10 +462,18 @@ pub fn relay(options: Options, signals: Option<RawFd>) -> Result<i32, String> {
     if let Some(id) = &options.conversation
         && let Err(holder) = claim_conversation(&dir, id)
     {
-        return fail(&log, CLAIMED, format!("conversation {id} is open in thread {holder}"));
+        return fail(
+            &log,
+            CLAIMED,
+            format!("conversation {id} is open in thread {holder}"),
+        );
     }
     let mut command = std::process::Command::new(options.program.first().ok_or("no program")?);
-    command.args(&options.program[1..]).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
+    command
+        .args(&options.program[1..])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
     // In a session of its own, apart from any terminal the relay has
     // SAFETY: setsid is async-signal-safe
     unsafe {
@@ -448,12 +485,22 @@ pub fn relay(options: Options, signals: Option<RawFd>) -> Result<i32, String> {
     let spawned = command.spawn();
     let mut child = match spawned {
         Ok(child) => child,
-        Err(err) => return fail(&log, 127, format!("{}: {err}", options.program[0].to_string_lossy())),
+        Err(err) => {
+            return fail(
+                &log,
+                127,
+                format!("{}: {err}", options.program[0].to_string_lossy()),
+            );
+        }
     };
     let (stdin, stdout, stderr) = (child.stdin.take(), child.stdout.take(), child.stderr.take());
-    for fd in [stdin.as_ref().map(AsRawFd::as_raw_fd), stdout.as_ref().map(AsRawFd::as_raw_fd), stderr.as_ref().map(AsRawFd::as_raw_fd)]
-        .into_iter()
-        .flatten()
+    for fd in [
+        stdin.as_ref().map(AsRawFd::as_raw_fd),
+        stdout.as_ref().map(AsRawFd::as_raw_fd),
+        stderr.as_ref().map(AsRawFd::as_raw_fd),
+    ]
+    .into_iter()
+    .flatten()
     {
         set_nonblocking(fd);
     }
@@ -475,8 +522,8 @@ pub fn relay(options: Options, signals: Option<RawFd>) -> Result<i32, String> {
         stderr_tail: Vec::new(),
         err_log,
         clients: Vec::new(),
-        seen,
-        order,
+        seen: HashSet::new(),
+        order: VecDeque::new(),
         stop: Stop::No,
         status: None,
         exited_at: None,
@@ -485,6 +532,17 @@ pub fn relay(options: Options, signals: Option<RawFd>) -> Result<i32, String> {
         state_dirty: true,
         state_at: now,
     };
+    // Inputs the last relay here had, as a client may send them again
+    if let Ok(old) = File::open(relay.options.dir.join(format!("{LOG}.1"))) {
+        for line in io::BufReader::new(old).split(b'\n').map_while(Result::ok) {
+            if line.starts_with(b"#ct< ")
+                && let Some(Record::Input { id, .. }) =
+                    Record::parse(&String::from_utf8_lossy(&line))
+            {
+                relay.remember(&id);
+            }
+        }
+    }
     relay.write_state();
     let code = relay.run(&listener, signals);
     drop(listener);
@@ -507,12 +565,20 @@ impl Relay {
     }
 
     fn attached(&self) -> usize {
-        self.clients.iter().filter(|c| c.pos.is_some() && !c.closed).count()
+        self.clients
+            .iter()
+            .filter(|c| c.pos.is_some() && !c.closed)
+            .count()
     }
 
     fn write_state(&mut self) {
         let hello = self.hello();
-        let names: Vec<&str> = self.clients.iter().filter(|c| c.pos.is_some()).filter_map(|c| c.name.as_deref()).collect();
+        let names: Vec<&str> = self
+            .clients
+            .iter()
+            .filter(|c| c.pos.is_some())
+            .filter_map(|c| c.name.as_deref())
+            .collect();
         let code = self.status.map(exit_code);
         let state = json!({
             "pid": hello.pid,
@@ -616,7 +682,9 @@ impl Relay {
     }
 
     fn meta(&mut self, json: &str) {
-        let Ok(Value::Object(update)) = serde_json::from_str::<Value>(json) else { return };
+        let Ok(Value::Object(update)) = serde_json::from_str::<Value>(json) else {
+            return;
+        };
         let path = self.options.dir.join(META);
         let mut meta = fs::read(&path)
             .ok()
@@ -630,7 +698,9 @@ impl Relay {
             && meta.get("conversation").and_then(Value::as_str) != Some(id)
             && let Err(holder) = claim_conversation(&self.options.dir, id)
         {
-            self.note(&format!("conversation {id} is also open in thread {holder}\n"));
+            self.note(&format!(
+                "conversation {id} is also open in thread {holder}\n"
+            ));
         }
         meta.extend(update);
         let _ = write_atomic(&path, Value::Object(meta).to_string().as_bytes());
@@ -643,7 +713,9 @@ impl Relay {
     }
 
     fn read_stdout(&mut self) {
-        let Some(stdout) = &mut self.stdout else { return };
+        let Some(stdout) = &mut self.stdout else {
+            return;
+        };
         let mut buf = [0u8; 65536];
         let mut eof = false;
         loop {
@@ -670,12 +742,16 @@ impl Relay {
                 self.partial.push(b'\n');
             }
         }
-        let Some(cut) = self.partial.iter().rposition(|&b| b == b'\n') else { return };
+        let Some(cut) = self.partial.iter().rposition(|&b| b == b'\n') else {
+            return;
+        };
         let lines: Vec<u8> = self.partial.drain(..=cut).collect();
         self.active_at = Instant::now();
         if self.busy
             && let Some(done) = &self.options.done
-            && lines.split(|&b| b == b'\n').any(|line| contains(line, done.as_bytes()))
+            && lines
+                .split(|&b| b == b'\n')
+                .any(|line| contains(line, done.as_bytes()))
         {
             self.busy = false;
             self.append(&lines);
@@ -686,7 +762,9 @@ impl Relay {
     }
 
     fn read_stderr(&mut self) {
-        let Some(stderr) = &mut self.stderr else { return };
+        let Some(stderr) = &mut self.stderr else {
+            return;
+        };
         let mut buf = [0u8; 16384];
         loop {
             match stderr.read(&mut buf) {
@@ -709,7 +787,8 @@ impl Relay {
             }
         }
         if self.stderr_tail.len() > 2 * STDERR_TAIL {
-            self.stderr_tail.drain(..self.stderr_tail.len() - STDERR_TAIL);
+            self.stderr_tail
+                .drain(..self.stderr_tail.len() - STDERR_TAIL);
         }
     }
 
@@ -783,9 +862,13 @@ impl Relay {
                     }
                 }
             }
-            let Some(pos) = client.pos.filter(|&pos| pos < end) else { break };
+            let Some(pos) = client.pos.filter(|&pos| pos < end) else {
+                break;
+            };
             let want = ((end - pos) as usize).min(buf.len());
-            let Ok(got) = self.log.read_at(&mut buf[..want], pos) else { break };
+            let Ok(got) = self.log.read_at(&mut buf[..want], pos) else {
+                break;
+            };
             if got == 0 {
                 break;
             }
@@ -799,7 +882,8 @@ impl Relay {
     }
 
     fn wants_write(&self, client: &Client) -> bool {
-        !client.closed && (!client.prefix.is_empty() || client.pos.is_some_and(|pos| pos < self.end))
+        !client.closed
+            && (!client.prefix.is_empty() || client.pos.is_some_and(|pos| pos < self.end))
     }
 
     /// Timers, and whether the CLI is done with
@@ -814,7 +898,8 @@ impl Relay {
         }
         if let Some(at) = self.exited_at {
             // Its output, unless something it left behind holds the pipe
-            if (self.stdout.is_none() && self.stderr.is_none()) || now - at > Duration::from_secs(1) {
+            if (self.stdout.is_none() && self.stderr.is_none()) || now - at > Duration::from_secs(1)
+            {
                 return true;
             }
         }
@@ -823,7 +908,9 @@ impl Relay {
             if !self.busy && self.options.linger.is_some_and(|linger| idle >= linger) {
                 self.note("stopping: idle with no window\n");
                 self.begin_stop();
-            } else if self.busy && now.saturating_duration_since(self.alone_since) >= self.options.max_blocked {
+            } else if self.busy
+                && now.saturating_duration_since(self.alone_since) >= self.options.max_blocked
+            {
                 self.note("stopping: busy too long with no window\n");
                 self.begin_stop();
             }
@@ -853,22 +940,55 @@ impl Relay {
                 break;
             }
             let mut fds = vec![
-                libc::pollfd { fd: listener.as_raw_fd(), events: libc::POLLIN, revents: 0 },
-                libc::pollfd { fd: signals.unwrap_or(-1), events: libc::POLLIN, revents: 0 },
-                libc::pollfd { fd: self.stdout.as_ref().map_or(-1, AsRawFd::as_raw_fd), events: libc::POLLIN, revents: 0 },
-                libc::pollfd { fd: self.stderr.as_ref().map_or(-1, AsRawFd::as_raw_fd), events: libc::POLLIN, revents: 0 },
                 libc::pollfd {
-                    fd: self.stdin.as_ref().filter(|_| !self.to_cli.is_empty()).map_or(-1, AsRawFd::as_raw_fd),
+                    fd: listener.as_raw_fd(),
+                    events: libc::POLLIN,
+                    revents: 0,
+                },
+                libc::pollfd {
+                    fd: signals.unwrap_or(-1),
+                    events: libc::POLLIN,
+                    revents: 0,
+                },
+                libc::pollfd {
+                    fd: self.stdout.as_ref().map_or(-1, AsRawFd::as_raw_fd),
+                    events: libc::POLLIN,
+                    revents: 0,
+                },
+                libc::pollfd {
+                    fd: self.stderr.as_ref().map_or(-1, AsRawFd::as_raw_fd),
+                    events: libc::POLLIN,
+                    revents: 0,
+                },
+                libc::pollfd {
+                    fd: self
+                        .stdin
+                        .as_ref()
+                        .filter(|_| !self.to_cli.is_empty())
+                        .map_or(-1, AsRawFd::as_raw_fd),
                     events: libc::POLLOUT,
                     revents: 0,
                 },
             ];
             const CLIENTS: usize = 5;
             for client in &self.clients {
-                let events = libc::POLLIN | if self.wants_write(client) { libc::POLLOUT } else { 0 };
-                fds.push(libc::pollfd { fd: client.stream.as_raw_fd(), events, revents: 0 });
+                let events = libc::POLLIN
+                    | if self.wants_write(client) {
+                        libc::POLLOUT
+                    } else {
+                        0
+                    };
+                fds.push(libc::pollfd {
+                    fd: client.stream.as_raw_fd(),
+                    events,
+                    revents: 0,
+                });
             }
-            let timeout = if self.exited_at.is_some() || self.stop != Stop::No { 100 } else { 1000 };
+            let timeout = if self.exited_at.is_some() || self.stop != Stop::No {
+                100
+            } else {
+                1000
+            };
             // SAFETY: `fds` is a live array of pollfds of its length
             let n = unsafe { libc::poll(fds.as_mut_ptr(), fds.len() as libc::nfds_t, timeout) };
             if n < 0 {
@@ -964,7 +1084,9 @@ impl Relay {
 }
 
 fn exit_code(status: std::process::ExitStatus) -> i32 {
-    status.code().unwrap_or_else(|| 128 + status.signal().unwrap_or(0))
+    status
+        .code()
+        .unwrap_or_else(|| 128 + status.signal().unwrap_or(0))
 }
 
 /// How to reach a relay
@@ -979,12 +1101,23 @@ pub struct Connect {
 
 /// Bridge `input` and `output` to the relay in `dir`, or replay its log
 /// once it is gone: see the module's description
-pub fn connect(options: &Connect, input: impl Read + Send + 'static, mut output: impl Write) -> io::Result<()> {
+pub fn connect(
+    options: &Connect,
+    input: impl Read + Send + 'static,
+    mut output: impl Write,
+) -> io::Result<()> {
     let deadline = Instant::now() + options.wait;
     loop {
-        if let Some(mut stream) = socket_path(&options.dir).ok().and_then(|path| UnixStream::connect(path).ok()) {
+        if let Some(mut stream) = socket_path(&options.dir)
+            .ok()
+            .and_then(|path| UnixStream::connect(path).ok())
+        {
             let mut attach = format!("attach {}", options.from);
-            if let Some(name) = options.client.as_deref().filter(|n| !n.contains(char::is_whitespace)) {
+            if let Some(name) = options
+                .client
+                .as_deref()
+                .filter(|n| !n.contains(char::is_whitespace))
+            {
                 attach.push(' ');
                 attach.push_str(name);
             }
@@ -992,7 +1125,8 @@ pub fn connect(options: &Connect, input: impl Read + Send + 'static, mut output:
             if stream.write_all(attach.as_bytes()).is_ok() {
                 let mut reader = io::BufReader::new(stream.try_clone()?);
                 let mut hello = Vec::new();
-                if reader.read_until(b'\n', &mut hello).is_ok() && hello.starts_with(b"#ct hello ") {
+                if reader.read_until(b'\n', &mut hello).is_ok() && hello.starts_with(b"#ct hello ")
+                {
                     output.write_all(&hello)?;
                     output.flush()?;
                     return bridge(stream, reader, input, output);
@@ -1051,9 +1185,18 @@ fn replay(options: &Connect, output: &mut impl Write) -> io::Result<()> {
         .and_then(|b| serde_json::from_slice::<Value>(&b).ok())
         .unwrap_or(Value::Null);
     let log = File::open(options.dir.join(LOG)).ok();
-    let end = log.as_ref().and_then(|l| l.metadata().ok()).map_or(0, |m| m.len());
+    let end = log
+        .as_ref()
+        .and_then(|l| l.metadata().ok())
+        .map_or(0, |m| m.len());
     let get = |key: &str| state.get(key).and_then(Value::as_u64).unwrap_or(0).min(end);
-    let hello = Hello { pid: 0, head: get("head"), turn_start: get("turn_start"), end, busy: false };
+    let hello = Hello {
+        pid: 0,
+        head: get("head"),
+        turn_start: get("turn_start"),
+        end,
+        busy: false,
+    };
     output.write_all(hello.line().as_bytes())?;
     let from = match options.from {
         Cursor::Offset(n) => n.min(end),
@@ -1071,13 +1214,19 @@ fn replay(options: &Connect, output: &mut impl Write) -> io::Result<()> {
             output.write_all(&buf[..n])?;
             pos += n as u64;
         }
-        // Whether the log ends with the relay's account of the end
-        let start = end.saturating_sub(STDERR_TAIL as u64 * 2 + 64);
+        // Whether the log ends with the relay's account of the end, which
+        // is given again to a client that has read past its start
+        let start = end.saturating_sub(STDERR_TAIL as u64 * 3);
         let mut tail = vec![0u8; (end - start) as usize];
         if log.read_exact_at(&mut tail, start).is_ok() {
-            let tail = tail.strip_suffix(b"\n").unwrap_or(&tail);
-            let last = tail.rsplit(|&b| b == b'\n').next().unwrap_or_default();
+            let body = tail.strip_suffix(b"\n").unwrap_or(&tail);
+            let last = body.rsplit(|&b| b == b'\n').next().unwrap_or_default();
             ended = last.starts_with(b"#ct exited ");
+            let last_start = end - (tail.len() - (body.len() - last.len())) as u64;
+            if ended && from > last_start {
+                output.write_all(last)?;
+                output.write_all(b"\n")?;
+            }
         }
     }
     if !ended {
@@ -1138,26 +1287,44 @@ fn seconds(value: Option<OsString>, flag: &str) -> Result<Duration, String> {
 pub fn relay_main(args: Vec<OsString>) -> i32 {
     let mut args = args.into_iter();
     let Some(dir) = args.next() else {
-        eprintln!("usage: ct-supervise --relay DIR [--done PATTERN] [--linger SECS] [--max-blocked SECS] [--conversation ID] -- PROGRAM ARGS...");
+        eprintln!(
+            "usage: ct-supervise --relay DIR [--done PATTERN] [--linger SECS] [--max-blocked SECS] [--conversation ID] -- PROGRAM ARGS..."
+        );
         return 2;
     };
     let mut options = Options::new(dir, Vec::new());
     let parsed = (|| {
         while let Some(arg) = args.next() {
             match arg.to_str().unwrap_or_default() {
-                "--done" => options.done = Some(args.next().ok_or("--done needs a pattern")?.to_string_lossy().into_owned()),
+                "--done" => {
+                    options.done = Some(
+                        args.next()
+                            .ok_or("--done needs a pattern")?
+                            .to_string_lossy()
+                            .into_owned(),
+                    )
+                }
                 "--linger" => options.linger = Some(seconds(args.next(), "--linger")?),
                 "--max-blocked" => options.max_blocked = seconds(args.next(), "--max-blocked")?,
                 "--grace" => options.grace = seconds(args.next(), "--grace")?,
                 "--conversation" => {
-                    options.conversation = Some(args.next().ok_or("--conversation needs an id")?.to_string_lossy().into_owned())
+                    options.conversation = Some(
+                        args.next()
+                            .ok_or("--conversation needs an id")?
+                            .to_string_lossy()
+                            .into_owned(),
+                    )
                 }
                 "--" => break,
                 other => return Err(format!("unknown option {other}")),
             }
         }
         options.program = args.by_ref().collect();
-        if options.program.is_empty() { Err("no program".to_string()) } else { Ok(()) }
+        if options.program.is_empty() {
+            Err("no program".to_string())
+        } else {
+            Ok(())
+        }
     })();
     if let Err(err) = parsed {
         eprintln!("ct-supervise --relay: {err}");
@@ -1176,17 +1343,37 @@ pub fn relay_main(args: Vec<OsString>) -> i32 {
 pub fn connect_main(args: Vec<OsString>) -> i32 {
     let mut args = args.into_iter();
     let Some(dir) = args.next() else {
-        eprintln!("usage: ct-supervise --connect DIR [--from OFFSET|live] [--wait SECS] [--client NAME] | --connect DIR --stop");
+        eprintln!(
+            "usage: ct-supervise --connect DIR [--from OFFSET|live] [--wait SECS] [--client NAME] | --connect DIR --stop"
+        );
         return 2;
     };
-    let mut options = Connect { dir: dir.into(), from: Cursor::Offset(0), wait: Duration::ZERO, client: None };
+    let mut options = Connect {
+        dir: dir.into(),
+        from: Cursor::Offset(0),
+        wait: Duration::ZERO,
+        client: None,
+    };
     let mut stopping = false;
     let parsed = (|| {
         while let Some(arg) = args.next() {
             match arg.to_str().unwrap_or_default() {
-                "--from" => options.from = args.next().ok_or("--from needs an offset")?.to_string_lossy().parse()?,
+                "--from" => {
+                    options.from = args
+                        .next()
+                        .ok_or("--from needs an offset")?
+                        .to_string_lossy()
+                        .parse()?
+                }
                 "--wait" => options.wait = seconds(args.next(), "--wait")?,
-                "--client" => options.client = Some(args.next().ok_or("--client needs a name")?.to_string_lossy().into_owned()),
+                "--client" => {
+                    options.client = Some(
+                        args.next()
+                            .ok_or("--client needs a name")?
+                            .to_string_lossy()
+                            .into_owned(),
+                    )
+                }
                 "--stop" => stopping = true,
                 other => return Err(format!("unknown option {other}")),
             }
@@ -1198,7 +1385,11 @@ pub fn connect_main(args: Vec<OsString>) -> i32 {
         return 2;
     }
     if stopping {
-        return if stop(&options.dir, Duration::from_secs(20)) { 0 } else { 1 };
+        return if stop(&options.dir, Duration::from_secs(20)) {
+            0
+        } else {
+            1
+        };
     }
     match connect(&options, io::stdin(), io::stdout()) {
         Ok(()) => 0,
@@ -1229,12 +1420,20 @@ echo "stdin closed" >&2
 "#;
 
     fn tempdir(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("ct-relay-{name}-{}-{}", std::process::id(), crate::random_hex(6)));
+        let dir = std::env::temp_dir().join(format!(
+            "ct-relay-{name}-{}-{}",
+            std::process::id(),
+            crate::random_hex(6)
+        ));
         fs::create_dir_all(&dir).unwrap();
         dir
     }
 
-    fn start(threads: &Path, name: &str, configure: impl FnOnce(&mut Options)) -> (PathBuf, std::thread::JoinHandle<Result<i32, String>>) {
+    fn start(
+        threads: &Path,
+        name: &str,
+        configure: impl FnOnce(&mut Options),
+    ) -> (PathBuf, std::thread::JoinHandle<Result<i32, String>>) {
         start_with(threads, name, FAKE, configure)
     }
 
@@ -1272,7 +1471,9 @@ echo "stdin closed" >&2
     impl TestClient {
         fn attach(dir: &Path, from: &str) -> Self {
             let mut stream = UnixStream::connect(socket_path(dir).unwrap()).unwrap();
-            stream.write_all(format!("attach {from} test\n").as_bytes()).unwrap();
+            stream
+                .write_all(format!("attach {from} test\n").as_bytes())
+                .unwrap();
             let (tx, lines) = std::sync::mpsc::channel();
             let reader = io::BufReader::new(stream.try_clone().unwrap());
             std::thread::spawn(move || {
@@ -1286,7 +1487,9 @@ echo "stdin closed" >&2
         }
 
         fn send(&mut self, line: &str) {
-            self.stream.write_all(format!("{line}\n").as_bytes()).unwrap();
+            self.stream
+                .write_all(format!("{line}\n").as_bytes())
+                .unwrap();
         }
 
         /// Lines until one contains `want`
@@ -1332,10 +1535,19 @@ echo "stdin closed" >&2
         a.send("turn t1 {\"turn\":1}");
         a.send("line l2 {\"n\":2}");
         let got = a.until("{\"got\":{\"n\":2}}");
-        assert_eq!(got.iter().filter(|l| l.contains("\"turn\":1")).count(), 2, "{got:#?}");
+        assert_eq!(
+            got.iter().filter(|l| l.contains("\"turn\":1")).count(),
+            2,
+            "{got:#?}"
+        );
         wait_for("idle", || !state(&dir)["busy"].as_bool().unwrap());
         let log = fs::read(dir.join(LOG)).unwrap();
-        assert_eq!(String::from_utf8_lossy(&log).matches("#ct< t1 turn").count(), 1);
+        assert_eq!(
+            String::from_utf8_lossy(&log)
+                .matches("#ct< t1 turn")
+                .count(),
+            1
+        );
 
         // Reattaching at an offset gives exactly the log's bytes from there
         let offset = String::from_utf8_lossy(&log).find("#ct< t1 ").unwrap() as u64;
@@ -1370,7 +1582,10 @@ echo "stdin closed" >&2
         for client in [&a, &b] {
             let got = client.until("\"type\":\"result\"");
             assert!(got[0].starts_with("#ct< x1 turn "), "{got:#?}");
-            assert!(got.iter().any(|l| l == "{\"got\":{\"turn\":\"hi\"}}"), "{got:#?}");
+            assert!(
+                got.iter().any(|l| l == "{\"got\":{\"turn\":\"hi\"}}"),
+                "{got:#?}"
+            );
         }
         a.send("stop");
         handle.join().unwrap().unwrap();
@@ -1391,7 +1606,9 @@ echo "stdin closed" >&2
         assert!(started.elapsed() < Duration::from_secs(4));
         assert_eq!(handle.join().unwrap(), Ok(0));
         let got = a.until("#ct exited");
-        let Some(Record::Exited { code, stderr }) = Record::parse(got.last().unwrap()) else { panic!("{got:#?}") };
+        let Some(Record::Exited { code, stderr }) = Record::parse(got.last().unwrap()) else {
+            panic!("{got:#?}")
+        };
         assert_eq!((code, stderr.trim()), (0, "stdin closed"));
         assert!(!is_live(&dir));
         assert!(!socket_path(&dir).unwrap().exists());
@@ -1400,12 +1617,36 @@ echo "stdin closed" >&2
         // After the end, connecting replays the rest, with the exit record
         let log = fs::read(dir.join(LOG)).unwrap();
         let mut out = Vec::new();
-        let options = Connect { dir: dir.clone(), from: Cursor::Offset(5), wait: Duration::from_secs(1), client: None };
+        let options = Connect {
+            dir: dir.clone(),
+            from: Cursor::Offset(5),
+            wait: Duration::from_secs(1),
+            client: None,
+        };
         connect(&options, io::empty(), &mut out).unwrap();
         let (hello, rest) = out.split_at(out.iter().position(|&b| b == b'\n').unwrap() + 1);
         let hello = Hello::parse(&String::from_utf8_lossy(hello)).unwrap();
         assert_eq!((hello.pid, hello.end), (0, log.len() as u64));
         assert_eq!(rest, &log[5..]);
+        // and one that had read it all is told again how it ended
+        let mut out = Vec::new();
+        connect(
+            &Connect {
+                from: Cursor::Live,
+                ..options
+            },
+            io::empty(),
+            &mut out,
+        )
+        .unwrap();
+        let out = String::from_utf8(out).unwrap();
+        let last = String::from_utf8_lossy(&log)
+            .lines()
+            .last()
+            .unwrap()
+            .to_string();
+        assert_eq!(out.lines().nth(1), Some(last.as_str()));
+        assert_eq!(out.lines().count(), 2);
         let _ = fs::remove_dir_all(threads);
     }
 
@@ -1413,13 +1654,18 @@ echo "stdin closed" >&2
     fn relay_terminates_a_cli_that_ignores_stdin() {
         let threads = tempdir("term");
         let script = "trap 'echo terminated >&2; exit 143' TERM\nwhile :; do sleep 0.05; done\n";
-        let (dir, handle) = start_with(&threads, "t1", script, |o| o.grace = Duration::from_millis(300));
+        let (dir, handle) = start_with(&threads, "t1", script, |o| {
+            o.grace = Duration::from_millis(300)
+        });
         assert!(stop(&dir, Duration::from_secs(10)));
         assert_eq!(handle.join().unwrap(), Ok(143));
         let log = fs::read_to_string(dir.join(LOG)).unwrap();
         assert_eq!(
             Record::parse(log.lines().last().unwrap()),
-            Some(Record::Exited { code: 143, stderr: "terminated\n".into() })
+            Some(Record::Exited {
+                code: 143,
+                stderr: "terminated\n".into()
+            })
         );
         let _ = fs::remove_dir_all(threads);
     }
@@ -1427,7 +1673,9 @@ echo "stdin closed" >&2
     #[test]
     fn relay_lingers_only_while_idle() {
         let threads = tempdir("linger");
-        let (dir, handle) = start(&threads, "t1", |o| o.linger = Some(Duration::from_millis(600)));
+        let (dir, handle) = start(&threads, "t1", |o| {
+            o.linger = Some(Duration::from_millis(600))
+        });
         let mut a = TestClient::attach(&dir, "0");
         // A slow turn: busy, so leaving does not stop it
         a.send("turn t1 {\"turn\":\"slow\"}");
@@ -1438,9 +1686,16 @@ echo "stdin closed" >&2
         // Once the turn is done, it waits for the linger time and stops
         let started = Instant::now();
         assert_eq!(handle.join().unwrap(), Ok(0));
-        assert!(started.elapsed() >= Duration::from_millis(900), "{:?}", started.elapsed());
+        assert!(
+            started.elapsed() >= Duration::from_millis(900),
+            "{:?}",
+            started.elapsed()
+        );
         let log = fs::read_to_string(dir.join(LOG)).unwrap();
-        assert!(log.contains("{\"type\":\"result\"}\n#ct exited 0 "), "{log}");
+        assert!(
+            log.contains("{\"type\":\"result\"}\n#ct exited 0 "),
+            "{log}"
+        );
         let _ = fs::remove_dir_all(threads);
     }
 
@@ -1451,7 +1706,13 @@ echo "stdin closed" >&2
         let mut a = TestClient::attach(&dir, "0");
         a.send("line q {\"quit\":1}");
         let got = a.until("#ct exited");
-        assert_eq!(Record::parse(got.last().unwrap()), Some(Record::Exited { code: 3, stderr: "bye\n".into() }));
+        assert_eq!(
+            Record::parse(got.last().unwrap()),
+            Some(Record::Exited {
+                code: 3,
+                stderr: "bye\n".into()
+            })
+        );
         assert_eq!(handle.join().unwrap(), Ok(3));
         let _ = fs::remove_dir_all(threads);
     }
@@ -1462,7 +1723,12 @@ echo "stdin closed" >&2
         let dir = threads.join("t1");
         let (to_relay, input) = std::os::unix::net::UnixStream::pair().unwrap();
         let (output, from_relay) = std::os::unix::net::UnixStream::pair().unwrap();
-        let options = Connect { dir: dir.clone(), from: Cursor::Offset(0), wait: Duration::from_secs(10), client: Some("me".into()) };
+        let options = Connect {
+            dir: dir.clone(),
+            from: Cursor::Offset(0),
+            wait: Duration::from_secs(10),
+            client: Some("me".into()),
+        };
         let bridge = std::thread::spawn(move || connect(&options, input, output));
         // Started after the connector
         std::thread::sleep(Duration::from_millis(200));
@@ -1470,10 +1736,18 @@ echo "stdin closed" >&2
         let mut to_relay = to_relay;
         to_relay.write_all(b"turn a {\"turn\":1}\n").unwrap();
         let mut lines = io::BufReader::new(from_relay).lines();
-        assert!(lines.next().unwrap().unwrap().starts_with("#ct hello 1 pid="));
+        assert!(
+            lines
+                .next()
+                .unwrap()
+                .unwrap()
+                .starts_with("#ct hello 1 pid=")
+        );
         assert_eq!(lines.next().unwrap().unwrap(), "#ct< a turn {\"turn\":1}");
         assert_eq!(lines.next().unwrap().unwrap(), "{\"got\":{\"turn\":1}}");
-        wait_for("the client's name", || state(&dir)["names"] == json!(["me"]));
+        wait_for("the client's name", || {
+            state(&dir)["names"] == json!(["me"])
+        });
         // Closing the input detaches, and the bridge ends
         drop(to_relay);
         bridge.join().unwrap().unwrap();
@@ -1487,10 +1761,18 @@ echo "stdin closed" >&2
     #[test]
     fn connect_to_a_relay_that_never_came_says_lost() {
         let threads = tempdir("lost");
-        let options = Connect { dir: threads.join("none"), from: Cursor::Offset(0), wait: Duration::from_millis(200), client: None };
+        let options = Connect {
+            dir: threads.join("none"),
+            from: Cursor::Offset(0),
+            wait: Duration::from_millis(200),
+            client: None,
+        };
         let mut out = Vec::new();
         connect(&options, io::empty(), &mut out).unwrap();
-        assert_eq!(String::from_utf8(out).unwrap(), "#ct hello 1 pid=0 head=0 turn=0 end=0 busy=0\n#ct lost\n");
+        assert_eq!(
+            String::from_utf8(out).unwrap(),
+            "#ct hello 1 pid=0 head=0 turn=0 end=0 busy=0\n#ct lost\n"
+        );
         let _ = fs::remove_dir_all(threads);
     }
 
@@ -1502,14 +1784,20 @@ echo "stdin closed" >&2
         // Its lock is its own
         let again = relay(Options::new(&dir, vec!["true".into()]), None);
         assert_eq!(again, Ok(RUNNING));
-        assert_eq!(conversation_holder(&threads, "c-1"), Some(threads.join(BY_CONVERSATION).join("../t1")));
+        assert_eq!(
+            conversation_holder(&threads, "c-1"),
+            Some(threads.join(BY_CONVERSATION).join("../t1"))
+        );
         // A second relay for the conversation ends at once, saying why
         let (other, second) = start(&threads, "t2", |o| o.conversation = Some("c-1".into()));
         assert_eq!(second.join().unwrap(), Ok(CLAIMED));
         let log = fs::read_to_string(other.join(LOG)).unwrap();
         assert_eq!(
             Record::parse(&log),
-            Some(Record::Exited { code: CLAIMED, stderr: "conversation c-1 is open in thread t1".into() })
+            Some(Record::Exited {
+                code: CLAIMED,
+                stderr: "conversation c-1 is open in thread t1".into()
+            })
         );
         assert!(stop(&dir, Duration::from_secs(10)));
         handle.join().unwrap().unwrap();
@@ -1541,11 +1829,27 @@ echo "stdin closed" >&2
     fn records_parse() {
         assert_eq!(
             Record::parse("#ct< ab-1 turn {\"x\":\"a b\"}\n"),
-            Some(Record::Input { id: "ab-1".into(), kind: "turn".into(), json: "{\"x\":\"a b\"}".into() })
+            Some(Record::Input {
+                id: "ab-1".into(),
+                kind: "turn".into(),
+                json: "{\"x\":\"a b\"}".into()
+            })
         );
-        assert_eq!(Record::parse(&exit_line(2, b"oops")), Some(Record::Exited { code: 2, stderr: "oops".into() }));
+        assert_eq!(
+            Record::parse(&exit_line(2, b"oops")),
+            Some(Record::Exited {
+                code: 2,
+                stderr: "oops".into()
+            })
+        );
         assert_eq!(Record::parse("{\"type\":\"result\"}"), None);
-        let hello = Hello { pid: 7, head: 1, turn_start: 2, end: 3, busy: true };
+        let hello = Hello {
+            pid: 7,
+            head: 1,
+            turn_start: 2,
+            end: 3,
+            busy: true,
+        };
         assert_eq!(Hello::parse(&hello.line()), Some(hello));
         assert_eq!("live".parse(), Ok(Cursor::Live));
         assert_eq!("12".parse(), Ok(Cursor::Offset(12)));

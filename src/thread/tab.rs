@@ -412,6 +412,8 @@ impl ThreadTab {
                             self.failure = Some(stderr);
                         }
                     }
+                    // Only from a relayed CLI (session::run_relayed)
+                    Output::Hello { .. } | Output::Input { .. } | Output::Disconnected => {}
                 }
             }
             Msg::Edit(action) => {
