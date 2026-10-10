@@ -8385,7 +8385,10 @@ impl Application for App {
                     self.restore = restore::Claim::new();
                 }
                 if let Some(session) = self.startup_attach.take() {
-                    return self.update(Message::RemoteAttach(session));
+                    let attached = self.update(Message::RemoteAttach(session));
+                    #[cfg(debug_assertions)]
+                    let attached = Task::batch([attached, cosmic::task::message(Message::DebugStep(0))]);
+                    return attached;
                 }
                 if let Some(start) = self.startup_thread.take() {
                     // A local thread profile of the agent, if there is one, for
