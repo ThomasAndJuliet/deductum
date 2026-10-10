@@ -593,6 +593,38 @@ impl ThreadTab {
         Some(parts.join("\n\n")).filter(|text| !text.is_empty())
     }
 
+    /// Select the next (or previous) place `needle` appears, after (or
+    /// before) the selection, wrapping round; gives how far down the thread
+    /// it is, from 0 to 1, to scroll to
+    pub fn find(&mut self, needle: &str, forward: bool) -> Option<f32> {
+        let entries = self.entries.as_ref()?;
+        let mut matches = Vec::new();
+        let mut weight = 0usize;
+        let mut weights = Vec::with_capacity(entries.items.len());
+        for (index, item) in entries.items.iter().enumerate() {
+            weights.push(weight);
+            for part in [BODY, INPUT, OUTPUT] {
+                if let Some(doc) = self.doc(item, part) {
+                    weight += doc.blocks.len().max(1);
+                    for (start, end) in rich::find(&doc, needle) {
+                        matches.push(((index, part, start), (index, part, end), item.id));
+                    }
+                }
+            }
+        }
+        let here = self.ordered().map(|(start, _)| start);
+        let next = match (here, forward) {
+            (Some(here), true) => matches.iter().find(|m| m.0 > here).or(matches.first()),
+            (Some(here), false) => matches.iter().rev().find(|m| m.0 < here).or(matches.last()),
+            (None, true) => matches.first(),
+            (None, false) => matches.last(),
+        }?;
+        let ((index, part, start), (_, _, end), id) = *next;
+        self.selection = Some((Anchor { item: id, part, pos: start }, Anchor { item: id, part, pos: end }));
+        self.follow = false;
+        Some(weights[index] as f32 / weight.max(1) as f32)
+    }
+
     pub fn select_all(&mut self) {
         let Some(entries) = &self.entries else { return };
         let (Some(first), Some(last)) = (entries.items.first(), entries.items.last()) else { return };

@@ -305,6 +305,24 @@ impl App {
         Some(focus)
     }
 
+    /// Find the search box's text in the thread in front, and scroll to it
+    pub(crate) fn thread_find(&mut self, forward: bool, typing: bool) -> Task<Message> {
+        let needle = self.find_search_value.clone();
+        let Some(id) = self.active_thread().map(|t| t.id) else { return Task::none() };
+        let Some(tab) = self.thread_mut(id) else { return Task::none() };
+        if typing {
+            // Typing more of the word keeps the match where it is
+            if let Some((start, _)) = tab.selection {
+                tab.selection = Some((start, start));
+            }
+        }
+        let Some(at) = tab.find(&needle, forward) else { return Task::none() };
+        cosmic::iced::widget::scrollable::snap_to(
+            tab.scroll_id.clone(),
+            cosmic::iced::widget::scrollable::RelativeOffset { x: None, y: Some(at) },
+        )
+    }
+
     pub(crate) fn thread_select_all(&mut self) {
         if let Some(id) = self.active_thread_id()
             && let Some(tab) = self.thread_mut(id)

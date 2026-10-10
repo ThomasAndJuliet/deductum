@@ -5275,6 +5275,8 @@ impl Application for App {
                 // Focus correct input
                 return self.update_focus();
             }
+            Message::FindNext if self.active_thread().is_some() => return self.thread_find(true, false),
+            Message::FindPrevious if self.active_thread().is_some() => return self.thread_find(false, false),
             Message::FindNext => {
                 if !self.find_search_value.is_empty()
                     && let Some(tab_model) = self.pane_model.active()
@@ -5305,6 +5307,10 @@ impl Application for App {
             }
             Message::FindSearchValueChanged(value) => {
                 self.find_search_value = value;
+                // A thread finds as the words are typed
+                if self.active_thread().is_some() {
+                    return self.thread_find(true, true);
+                }
             }
             Message::MiddleClick(pane, entity_opt) => {
                 self.pane_model.set_focus(pane);
@@ -8579,8 +8585,15 @@ impl Application for App {
                 tab_column = tab_column.push(context_menu);
             }
 
+            if let Some(launcher) = tab_model.data::<Launcher>(entity) {
+                tab_column = tab_column.push(self.launcher_view(entity, launcher));
+            } else if let Some(thread) = tab_model.data::<thread::tab::ThreadTab>(entity) {
+                tab_column = tab_column.push(thread::view::view(thread, &thread_style, cosmic::theme::is_dark()));
+            }
+
             //Only draw find in the currently focused pane
-            if self.find && pane == self.pane_model.focused() {
+            let in_thread = tab_model.data::<thread::tab::ThreadTab>(entity).is_some();
+            if self.find && pane == self.pane_model.focused() && tab_model.data::<Launcher>(entity).is_none() {
                 let find_input = widget::text_input::text_input(
                     fl!("find-placeholder"),
                     &self.find_search_value,
@@ -8589,8 +8602,9 @@ impl Application for App {
                 .on_input(Message::FindSearchValueChanged)
                 // This is inverted for ease of use, usually in terminals you want to search
                 // upwards, which is FindPrevious
-                .on_submit(|_| {
-                    if self.modifiers.contains(Modifiers::SHIFT) {
+                .on_submit(move |_| {
+                    // A thread reads down, as a document does
+                    if self.modifiers.contains(Modifiers::SHIFT) != in_thread {
                         Message::FindNext
                     } else {
                         Message::FindPrevious
@@ -8636,10 +8650,6 @@ impl Application for App {
 
                 tab_column = tab_column
                     .push(widget::layer_container(find_widget).layer(cosmic_theme::Layer::Primary));
-            } else if let Some(launcher) = tab_model.data::<Launcher>(entity) {
-                tab_column = tab_column.push(self.launcher_view(entity, launcher));
-            } else if let Some(thread) = tab_model.data::<thread::tab::ThreadTab>(entity) {
-                tab_column = tab_column.push(thread::view::view(thread, &thread_style, cosmic::theme::is_dark()));
             }
 
             DndDestination::for_data::<DndDrop>(tab_column, move |data, action| {

@@ -97,18 +97,21 @@ modules:
         --data-dir=/app/share/app-info/xmls
         --icons-dir=/app/share/app-info/icons/flatpak
         --components=dev.twright.CosmicTermAgents /app
+    # The terminal's source in cosmic-term/, beside chartgen's, which it
+    # depends on by path
+    subdir: cosmic-term
     sources:
       - type: dir
         path: ../..
+        dest: cosmic-term
         skip:
           - target
           - build-flatpak
           - .git
           - .flatpak-builder
           - .local-design
-          - chartgen-src
       # chartgen, from the diagrams repository shared with Juliet; a local
-      # checkout is linked as chartgen-src for development
+      # checkout is linked as ../chartgen-src for development
       - type: git
         url: git@github.com:jcooke848/diagrams.git
         branch: statistical-charts

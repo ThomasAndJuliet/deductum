@@ -369,6 +369,49 @@ fn is_row_break(block: &Block, i: usize) -> bool {
     false
 }
 
+/// A block's linear text: its cells with what lies between them, and one
+/// placeholder byte for a formula or an image
+fn linear_text(block: &Block) -> String {
+    match block {
+        Block::Math { .. } | Block::Image { .. } => "\u{1}".to_string(),
+        Block::Rule => String::new(),
+        _ => {
+            let cells = block_cells(block);
+            let mut out = String::new();
+            for (i, (start, cell)) in cells.iter().enumerate() {
+                while out.len() < *start {
+                    out.push(if is_row_break(block, i) { '\n' } else { '\t' });
+                }
+                out.push_str(&cell.text);
+            }
+            if out.is_empty() && block_len(block) == 1 {
+                out.push('\u{1}');
+            }
+            out
+        }
+    }
+}
+
+/// Where `needle` appears in `doc`, ignoring ASCII case, as ranges of
+/// positions; a match never spans blocks
+pub fn find(doc: &Doc, needle: &str) -> Vec<(Pos, Pos)> {
+    let needle = needle.to_ascii_lowercase();
+    if needle.is_empty() {
+        return Vec::new();
+    }
+    let mut out = Vec::new();
+    for (index, block) in doc.blocks.iter().enumerate() {
+        let text = linear_text(block).to_ascii_lowercase();
+        let mut from = 0;
+        while let Some(at) = text.get(from..).and_then(|rest| rest.find(&needle)) {
+            let start = from + at;
+            out.push((Pos { block: index, offset: start }, Pos { block: index, offset: start + needle.len() }));
+            from = start + needle.len().max(1);
+        }
+    }
+    out
+}
+
 /// The text from `start` to `end` of `doc`, as the user would paste it
 pub fn copy(doc: &Doc, start: Pos, end: Pos) -> String {
     let mut parts = Vec::new();
