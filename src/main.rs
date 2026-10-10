@@ -394,6 +394,16 @@ fn main() -> Result<(), Box<dyn Error>> {
                     process::exit(1);
                 }
             },
+            Some(arg_str @ "--host") => match raw_args.next_os(&mut cursor) {
+                Some(host) => {
+                    startup_thread.get_or_insert_with(StartupThread::default).host =
+                        Some(host.to_string_lossy().into_owned());
+                }
+                None => {
+                    eprintln!("Missing destination for {arg_str}");
+                    process::exit(1);
+                }
+            },
             Some(arg_str @ "--agent") => match raw_args.next_os(&mut cursor).map(|a| a.to_string_lossy().into_owned()) {
                 Some(agent) if agent == "claude" || agent == "codex" => {
                     startup_thread.get_or_insert_with(StartupThread::default).codex = agent == "codex";
@@ -560,6 +570,7 @@ Options:
   --attach <session>[@<host>]     Open a tab attached to a Zellij session
   --thread <dir>                  Open an agent thread working in <dir>
   --agent claude|codex            ... with this agent (Claude by default)
+  --host <destination>            ... on this machine, over ssh
   --resume <id>                   ... continuing conversation <id>
   --prompt <text>                 ... and send <text> as its first message"#
     );
@@ -573,6 +584,8 @@ pub struct StartupThread {
     prompt: Option<String>,
     /// Codex's rather than Claude's
     codex: bool,
+    /// The machine it runs on, an ssh destination, if not this one
+    host: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -960,6 +973,8 @@ pub enum Message {
         repository: String,
         agent: Option<config::Agent>,
         worktree: bool,
+        /// In a thread rather than a terminal
+        thread: bool,
     },
     ReconnectNow(String),
     ReconnectSessions(String, Result<Vec<agent::ListedSession>, String>),
@@ -3981,14 +3996,16 @@ impl App {
 
     /// A profile running `agent` on `host`, else the default profile if it
     /// runs there, else any profile that does
-    fn profile_on_host(&self, host: &str, agent: Option<config::Agent>) -> Option<ProfileId> {
+    fn profile_on_host(&self, host: &str, agent: Option<config::Agent>, thread: bool) -> Option<ProfileId> {
         let on_host = |p: &&Profile| p.host.trim() == host;
         let profiles = &self.config.profiles;
+        // The agent in the view asked for, else in the other
         agent
             .and_then(|agent| {
                 profiles
                     .iter()
-                    .find(|(_, p)| on_host(p) && p.agent == agent)
+                    .filter(|(_, p)| on_host(p) && p.agent == agent)
+                    .min_by_key(|(_, p)| p.thread != thread)
                     .map(|(id, _)| *id)
             })
             .or_else(|| {
@@ -7222,8 +7239,9 @@ impl Application for App {
                 repository,
                 agent,
                 worktree,
+                thread,
             } => {
-                let Some(profile_id) = self.profile_on_host(&host, agent) else {
+                let Some(profile_id) = self.profile_on_host(&host, agent, thread) else {
                     return self
                         .toasts
                         .push(widget::toaster::Toast::new(fl!(
@@ -7896,6 +7914,13 @@ impl Application for App {
                 {
                     return Task::none();
                 }
+                // A thread carried out of the window opens in one of its own
+                if !finished
+                    && self.pane_model.panes.get(pane).is_some_and(|t| t.data::<thread::tab::ThreadTab>(entity).is_some())
+                {
+                    self.pane_model.set_focus(pane);
+                    return self.update(Message::TabPopOut(Some(entity)));
+                }
                 let has_session = self
                     .pane_model
                     .panes
@@ -7931,6 +7956,29 @@ impl Application for App {
                     return Task::none();
                 };
                 let entity = entity_opt.unwrap_or_else(|| tab_model.active());
+                // A thread reopens in the new window, continuing its conversation
+                if let Some(thread) = tab_model.data::<thread::tab::ThreadTab>(entity) {
+                    if thread.is_working() {
+                        return Task::none();
+                    }
+                    let mut command = process::Command::new(match env::current_exe() {
+                        Ok(exe) => exe,
+                        Err(_) => return Task::none(),
+                    });
+                    command.arg("--thread").arg(&thread.cwd);
+                    command.arg("--agent").arg(if thread.agent == config::Agent::Codex { "codex" } else { "claude" });
+                    if !thread.host.is_empty() {
+                        command.arg("--host").arg(&thread.host);
+                    }
+                    if let Some(session) = &thread.session_id {
+                        command.arg("--resume").arg(session);
+                    }
+                    match command.spawn() {
+                        Ok(_child) => return self.update(Message::TabClose(Some(entity))),
+                        Err(err) => log::error!("failed to open a window for a thread: {err}"),
+                    }
+                    return Task::none();
+                }
                 let Some(session) = tab_model.data::<agent::Session>(entity).cloned() else {
                     return Task::none();
                 };
@@ -8171,6 +8219,12 @@ impl Application for App {
                         start.resume,
                         None,
                     )];
+                    if let Some(tab) = self.thread_mut(id) {
+                        tab.agent = agent;
+                        if let Some(host) = start.host {
+                            tab.host = host;
+                        }
+                    }
                     if let Some(prompt) = start.prompt
                         && let Some(tab) = self.thread_mut(id)
                     {

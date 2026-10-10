@@ -176,6 +176,21 @@ pub fn tab_menu(
                         items.push(item(fl!("fork-to", profile = name.as_str()), Action::TabForkTo(*profile_id)));
                     }
                 }
+            } else if tab_model.data::<crate::thread::tab::ThreadTab>(entity).is_some() {
+                // A thread: renamed, moved or forked as a session is
+                items.push(item(fl!("close-tab"), Action::TabClose));
+                items.push(item(fl!("move-to-new-window"), Action::TabPopOut));
+                items.push(item(fl!("rename-menu"), Action::SessionRename));
+                let targets = destinations.get(&entity).map(Vec::as_slice).unwrap_or_default();
+                if !targets.is_empty() {
+                    items.push(MenuItem::Divider);
+                    for (name, profile_id) in targets {
+                        items.push(item(fl!("move-to", profile = name.as_str()), Action::TabMoveTo(*profile_id)));
+                    }
+                    for (name, profile_id) in targets {
+                        items.push(item(fl!("fork-to", profile = name.as_str()), Action::TabForkTo(*profile_id)));
+                    }
+                }
             } else {
                 items.push(item(fl!("close-tab"), Action::TabClose));
             }
@@ -271,7 +286,7 @@ pub fn menu_bar<'a>(
         when(session.agent, fl!("rename-menu"), Action::SessionRename),
         MenuItem::Divider,
         when(session.session, fl!("detach-session"), Action::TabClose),
-        when(session.session, fl!("move-to-new-window"), Action::TabPopOut),
+        when(session.session || session.thread, fl!("move-to-new-window"), Action::TabPopOut),
     ];
     if session.agent && !session.destinations.is_empty() {
         session_items.push(MenuItem::Folder(

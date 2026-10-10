@@ -471,6 +471,7 @@ impl Sidebar {
                     repository: row.summary.repository.clone().unwrap_or_default(),
                     agent: rows.iter().find_map(|row| row.session.agent()),
                     worktree,
+                    thread: false,
                 };
                 let color = mark(&row.session).color;
                 heading = heading
