@@ -10,6 +10,16 @@ back to using `softbuffer` and `tiny-skia`.
 Custom color schemes can be imported from the `View -> Color schemes...` menu item.
 You can find templates for color schemes in the [color-schemes](color-schemes) folder.
 
+## Agent threads
+
+A Claude profile can open its conversations as rich-text threads instead of
+terminals: the built-in **Claude thread** profile does. Replies are set with
+their LaTeX typeset, text can be selected and copied anywhere in the thread,
+and images open in their own windows. **View → Maths typesetting** sets the
+thread as a paper, and **Settings → Threads** holds its fonts and its memory
+limits. Threads run the `claude` command-line tool, so they use your Claude
+subscription. See `AGENTS-PLAN.md`, "Threads".
+
 ## Fedora COSMIC Atomic
 
 Install COSMIC Terminal Agents as a user Flatpak. Its terminals and agent helpers

@@ -56,6 +56,21 @@ impl IconCache {
         bundle!("view-expanded-symbolic", 16);
         bundle!("view-more-symbolic", 16);
         bundle!("window-close-symbolic", 16);
+        // Threads
+        bundle!("weather-clear-night-symbolic", 16);
+        bundle!("weather-clear-symbolic", 16);
+        bundle!("x-office-document-symbolic", 16);
+        bundle!("media-playback-stop-symbolic", 16);
+        bundle!("insert-image-symbolic", 16);
+        bundle!("zoom-in-symbolic", 16);
+        bundle!("zoom-out-symbolic", 16);
+        bundle!("zoom-fit-best-symbolic", 16);
+        bundle!("zoom-original-symbolic", 16);
+        bundle!("edit-copy-symbolic", 16);
+        bundle!("dialog-warning-symbolic", 16);
+        bundle!("emblem-ok-symbolic", 16);
+        bundle!("pan-end-symbolic", 16);
+        bundle!("document-open-symbolic", 16);
 
         Self {
             cache,

@@ -170,6 +170,20 @@ impl Cache {
 
                 let mut rgba = img.take();
 
+                // tiny-skia's pixels are premultiplied, and the image
+                // pipeline blends straight alpha: unless divided out, the
+                // alpha applies twice, darkening every antialiased edge
+                rgba.chunks_exact_mut(4).for_each(|rgba| {
+                    let alpha = u16::from(rgba[3]);
+                    if alpha > 0 && alpha < 255 {
+                        for channel in &mut rgba[..3] {
+                            *channel = ((u16::from(*channel) * 255 + alpha / 2)
+                                / alpha)
+                                .min(255) as u8;
+                        }
+                    }
+                });
+
                 if let Some(color) = color {
                     rgba.chunks_exact_mut(4).for_each(|rgba| {
                         if rgba[3] > 0 {

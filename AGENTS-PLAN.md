@@ -494,6 +494,168 @@ and `ct-remote-mcp` runs an MCP server that shows windows — Marginalium —
 there too, translating paths both ways. The `fleet` skill tells agents all
 this.
 
+## Threads
+
+A Claude profile marked **Open as rich-text thread** (the built-in "Claude thread"
+profile is one) shows its conversation as rich text in the tab, rather than
+running the Claude TUI in a terminal. The code is `src/thread/`.
+
+### Talking to Claude
+
+The thread runs the `claude` CLI itself, headless, as the Claude Agent SDK
+does: `claude --input-format stream-json --output-format stream-json
+--verbose --include-partial-messages --permission-prompt-tool stdio`, with
+`--resume=<id>`, `--model` and `--permission-mode` when they apply. The CLI
+uses its own login, so turns count against the user's subscription and never
+against API credits; `ANTHROPIC_API_KEY` is unset in its environment, as the
+CLI would otherwise prefer it. It runs on the profile's machine through the
+same `sh` or `ssh` command as other helpers (`agent::session_exec`), and so
+through `flatpak-spawn --host` in the Flatpak.
+
+The protocol is one JSON object per line (`thread::claude`):
+
+- **In:** an `initialize` control request, then each user message, with any
+  images as base64 blocks. `interrupt`, `set_model` and `set_permission_mode`
+  are control requests.
+- **Out:** `system`/`init` (the session id, model and permission mode),
+  `stream_event`s carrying the API's deltas, a complete `assistant` message
+  per content block, `user` messages with tool results, and a `result` per
+  turn. A `control_request` with subtype `can_use_tool` asks permission; the
+  thread answers allow (echoing the input), allow with the CLI's suggested
+  rule for the session, or deny. Any other control request gets an error
+  reply.
+
+### The thread
+
+As in Zed's agent panel, a thread is a flat list of entries
+(`thread::model`): the user's messages, the assistant's prose, thinking,
+tool calls and notices. Streamed deltas build an entry, and the complete
+message that follows replaces its text, so what is shown is what was sent. A
+tool call is patched in place as its input streams in, its permission is
+asked and its result arrives. A subagent's steps appear inside its Task call.
+The same events build a thread from the CLI's transcript
+(`~/.claude/projects/<dir>/<id>.jsonl`).
+
+The view (`thread::view`):
+
+- **Entries.** User messages are cards, the assistant's prose is set as
+  rich text, and thinking and tool calls are cards that open. Edits, writes
+  and todo lists are open from the start, as Delta shows them: nothing that
+  changed the code is hidden. An edit is shown as a diff.
+- **Permissions** sit above the composer, as in t3code, so they stay in view.
+- **The composer** sends with Enter (Shift+Enter adds a line), attaches
+  images, and chooses the model and permission mode. Stop interrupts a turn.
+- **Following.** The view follows new output while it is scrolled to the
+  end, and stays put while the user reads further up.
+
+### Rich text and maths
+
+`thread::markdown` parses markdown with pulldown-cmark, with `$…$` and
+`$$…$$` math. Claude also writes `\(…\)`, `\[…\]` and bare
+`\begin{align}…`, which CommonMark reads as escapes; these are rewritten to
+dollars first, outside code.
+
+`thread::math` sets LaTeX with RaTeX, a pure-Rust port of KaTeX, as SVG whose
+glyphs are paths. A formula takes well under a millisecond, so formulas are
+set as they are laid out, from one cache bounded at 24 MB. Numbered
+environments are set unnumbered, since each formula stands alone. A formula
+RaTeX cannot parse is shown as its source in the error colour.
+
+`thread::rich` lays the blocks out with cosmic-text and draws the buffers
+itself, as the terminal draws its grid, so every glyph can be hit:
+
+- **Selection.** Text is selected by dragging, double-clicking a word or
+  triple-clicking a block, across blocks and across entries. Ctrl+C or the
+  right-click menu copies; on release the selection also becomes the primary
+  selection. Ctrl+Shift+A or Edit → Select all selects the thread.
+- **Inline math** stands in the line as a transparent letter whose letter
+  spacing makes it the formula's width, and the formula is drawn on the
+  line's baseline. It wraps, selects and copies with the words around it,
+  and copies as its LaTeX. (A no-break space would not do: cosmic-text hangs
+  spaces past the end of a line.)
+- **Cost.** While text streams in, only the block that changed is shaped
+  again; the rest are moved. Only the blocks on screen are drawn.
+
+### Maths typesetting mode
+
+**View → Maths typesetting**, or the button in the thread's header, sets
+threads as a paper: a serif text font, justified, in a column of fixed
+measure. The fonts are Typst's default, Libertinus Serif, and LaTeX's, New
+Computer Modern, both bundled (`res/fonts`), or the system's serif or
+sans-serif. Settings → Threads has the font, the text size, line spacing and
+width, justification, the formula size, and the paper's colours: the theme's,
+white, or sepia. A white or sepia paper sets the whole thread in the light
+theme. **View → Dark mode** switches the app between light and dark.
+
+### Images
+
+Images in messages and tool results never stay in memory as data. Where the
+CLI's output is parsed, off the UI thread, each base64 image is written to
+`$XDG_CACHE_HOME/cosmic-term/thread-images/` under a hash of its bytes, with
+a thumbnail when it is larger than 960 pixels, and only the path is kept.
+iced decodes the images on screen and drops them when they leave it. Images
+in markdown are shown from their paths, relative to the thread's directory.
+Files unused for two weeks are removed at startup.
+
+Clicking an image opens it in a window of its own (`thread::viewer`), laid
+out as Marginalium lays out a page: a toolbar with fit, actual size, zoom
+out and in and the percentage, copy path and open in another app, and the
+image on a neutral ground that scrolls when it is larger than the window.
+Ctrl+scroll zooms.
+
+### Memory
+
+Memory goes where the user is looking:
+
+- **Transcripts are read a line at a time.** Each line is cut down to what the
+  view keeps before the next is read, and only the last 20 user turns are
+  kept, as t3code pages its history; **Show earlier turns** reads further
+  back. A transcript of hundreds of megabytes costs a few hundred kilobytes.
+- **Tool input and output are cut** to 12 KB, keeping both ends. The
+  assistant's prose is kept whole.
+- **Threads not shown are unloaded** beyond `loaded_threads` (4), least
+  recently shown first: their entries are dropped, and read back from the
+  transcript when the tab is shown again. A thread mid-turn is never
+  unloaded.
+- **Idle agents are stopped.** Each CLI is a Node process of a few hundred
+  megabytes. One idle for `idle_minutes` (10), or beyond `live_agents` (3)
+  running at once, is stopped by closing its input; the next message starts
+  it again with `--resume`.
+- **Layout is cached per block, and drawing is culled** to the blocks on
+  screen; formulas and images live in bounded caches.
+
+Settings → Threads shows how many threads are loaded, how many agents are
+running, and roughly how much memory their text and formulas take.
+
+### Opening threads
+
+- A thread profile's launcher opens a thread in the chosen folder, or
+  resumes a chosen Claude conversation as a thread. Its other choices
+  (attaching, moving, continuing with the other agent) open terminals.
+- A thread profile with a working directory opens straight into a thread.
+- **New tab** from a thread opens another thread in the same place.
+- `cosmic-term --thread DIR [--resume ID] [--prompt TEXT]` opens one at
+  startup.
+
+### Testing
+
+`thread::snapshot` builds the real view, sends it pointer events through
+iced's `UserInterface`, and draws it with the tiny-skia renderer, with no
+window or GPU: selection and copying are tested end to end, and with
+`CT_SNAPSHOTS=<dir>` the frames are written out as PNG files.
+`thread::session::live` (ignored by default) runs the real CLI: a turn that
+streams math, and a permission prompt answered with Allow. In debug builds,
+`COSMIC_TERM_DEBUG_STEPS` scripts the running app (`thread::debug`).
+
+### Not yet done
+
+- Codex threads: Codex profiles still run in a terminal. `codex app-server`
+  speaks a similar JSON-RPC protocol and would fit the same model.
+- Closing a thread's tab mid-turn ends the turn, as its CLI is a child of the
+  window. The conversation itself is kept by the CLI and resumes.
+- Pasting images into the composer; images are attached from files.
+- Syntax highlighting in code blocks.
+
 ## Not yet verified
 
 - That a copied Codex conversation resumes natively. Codex keeps its own

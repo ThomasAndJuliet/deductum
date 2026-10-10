@@ -51,6 +51,7 @@ use config::{
     Profile, ProfileId, TabColor,
 };
 mod agent;
+mod thread;
 mod host;
 mod launcher_forms;
 mod machines;
@@ -348,6 +349,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut daemonize = true;
     let mut working_directory = None;
     let mut startup_attach = None;
+    let mut startup_thread: Option<StartupThread> = None;
     // Parse the arguments using clap_lex
     while let Some(arg) = raw_args.next_os(&mut cursor) {
         match arg.to_str() {
@@ -382,6 +384,31 @@ fn main() -> Result<(), Box<dyn Error>> {
                     }
                 }
             }
+            Some(arg_str @ "--thread") => match raw_args.next_os(&mut cursor) {
+                Some(dir) => {
+                    startup_thread.get_or_insert_with(StartupThread::default).dir =
+                        dir.to_string_lossy().into_owned();
+                }
+                None => {
+                    eprintln!("Missing directory for {arg_str}");
+                    process::exit(1);
+                }
+            },
+            Some(arg_str @ ("--resume" | "--prompt")) => match raw_args.next_os(&mut cursor) {
+                Some(value) => {
+                    let thread = startup_thread.get_or_insert_with(StartupThread::default);
+                    let value = value.to_string_lossy().into_owned();
+                    if arg_str == "--resume" {
+                        thread.resume = Some(value);
+                    } else {
+                        thread.prompt = Some(value);
+                    }
+                }
+                None => {
+                    eprintln!("Missing argument for {arg_str}");
+                    process::exit(1);
+                }
+            },
             Some("--no-daemon") => {
                 daemonize = false;
             }
@@ -501,6 +528,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         startup_options,
         startup_command,
         startup_attach,
+        startup_thread,
         term_config,
     };
 
@@ -520,8 +548,19 @@ Options:
   --help                          Show this message
   --version                       Show the version of cosmic-term
   -w, --working-directory <dir>   Set the working directory for the terminal
-  --attach <session>[@<host>]     Open a tab attached to a Zellij session"#
+  --attach <session>[@<host>]     Open a tab attached to a Zellij session
+  --thread <dir>                  Open a Claude thread working in <dir>
+  --resume <id>                   ... continuing Claude conversation <id>
+  --prompt <text>                 ... and send <text> as its first message"#
     );
+}
+
+/// A thread to open at startup, from `--thread`, `--resume` and `--prompt`
+#[derive(Clone, Debug, Default)]
+pub struct StartupThread {
+    dir: String,
+    resume: Option<String>,
+    prompt: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -532,12 +571,18 @@ pub struct Flags {
     startup_options: Option<tty::Options>,
     startup_command: Option<host::HostCommand>,
     startup_attach: Option<agent::Session>,
+    startup_thread: Option<StartupThread>,
     term_config: term::Config,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Action {
     About,
+    DarkModeToggle,
+    ThreadMatchColours,
+    ThreadCopy,
+    ThreadPaper,
+    ThreadSelectAll,
     ClearScrollback,
     ColorSchemes(ColorSchemeKind),
     Copy,
@@ -605,6 +650,11 @@ impl Action {
     fn message(&self, entity_opt: Option<segmented_button::Entity>) -> Message {
         match self {
             Self::About => Message::ToggleContextPage(ContextPage::About),
+            Self::DarkModeToggle => Message::ToggleDarkMode,
+            Self::ThreadMatchColours => Message::ThreadMatchColours(None),
+            Self::ThreadCopy => Message::ThreadCopy,
+            Self::ThreadPaper => Message::ThreadPaperToggle,
+            Self::ThreadSelectAll => Message::ThreadSelectAll,
             Self::ClearScrollback => Message::ClearScrollback(entity_opt),
             Self::ColorSchemes(color_scheme_kind) => {
                 Message::ToggleContextPage(ContextPage::ColorSchemes(*color_scheme_kind))
@@ -682,6 +732,34 @@ impl MenuAction for Action {
 #[derive(Clone, Debug)]
 pub enum Message {
     AppTheme(AppTheme),
+    /// A thread tab's own message
+    Thread(thread::tab::ThreadId, thread::tab::Msg),
+    /// Images chosen to attach to a thread's next message
+    ThreadImagesPicked(thread::tab::ThreadId, DialogResult),
+    /// Set threads as papers, or not
+    ThreadPaper(bool),
+    ThreadPaperToggle,
+    /// Set, or with `None` toggle, whether images match the view's colours
+    ThreadMatchColours(Option<bool>),
+    ThreadCopy,
+    ThreadSelectAll,
+    /// A thread setting changed
+    ThreadSetting(ThreadSetting),
+    /// Stop idle agents and unload threads beyond the limits
+    ThreadTick,
+    ToggleDarkMode,
+    OpenImage(PathBuf),
+    ImageZoom(window::Id, thread::viewer::Zoom),
+    ImageCopyPath(window::Id),
+    ImageOpenExternally(window::Id),
+    ImageWindowClosed(window::Id),
+    /// The wheel turned in a window, for Ctrl+scroll zoom
+    Wheel(window::Id, iced::mouse::ScrollDelta),
+    /// A step of the debug driver; see `thread::debug`
+    #[cfg(debug_assertions)]
+    DebugStep(usize),
+    #[cfg(debug_assertions)]
+    DebugShot(String, window::Screenshot, usize),
     ClearScrollback(Option<segmented_button::Entity>),
     ColorSchemeCollapse,
     ColorSchemeDelete(ColorSchemeKind, ColorSchemeId),
@@ -717,6 +795,8 @@ pub enum Message {
     MiddleClick(pane_grid::Pane, Option<segmented_button::Entity>),
     FocusFollowMouse(bool),
     Key(Modifiers, Physical, Key),
+    /// A key no widget took, with the text it types
+    KeyUnclaimed(Modifiers, Physical, Key, Option<String>),
     LaunchUrl(String),
     LaunchUrlByMenu,
     Modifiers(Modifiers),
@@ -896,6 +976,8 @@ pub enum Message {
     PasteValue(Option<segmented_button::Entity>, String),
     ProfileAgent(ProfileId, usize),
     ProfileArgs(ProfileId, String),
+    /// Whether a Claude profile opens rich-text threads
+    ProfileThread(ProfileId, bool),
     ProfileCollapse(ProfileId),
     ProfileColor(ProfileId, usize),
     ProfileCommand(ProfileId, String),
@@ -978,6 +1060,32 @@ pub enum Message {
     ZoomReset,
 }
 
+/// A change on the settings page's Threads section
+#[derive(Clone, Copy, Debug)]
+pub enum ThreadSetting {
+    TextSize(usize),
+    PaperFont(usize),
+    PaperSize(usize),
+    PaperLineHeight(usize),
+    PaperMeasure(usize),
+    PaperJustify(bool),
+    PaperTone(usize),
+    MathScale(usize),
+    IdleMinutes(usize),
+    LiveAgents(usize),
+    LoadedThreads(usize),
+}
+
+/// The choices the Threads settings offer
+const THREAD_TEXT_SIZES: [u16; 7] = [12, 13, 14, 15, 16, 17, 18];
+const PAPER_SIZES: [u16; 8] = [14, 15, 16, 17, 18, 19, 20, 22];
+const PAPER_LINE_HEIGHTS: [u16; 5] = [120, 130, 140, 145, 160];
+const PAPER_MEASURES: [u16; 6] = [28, 32, 36, 40, 48, 60];
+const MATH_SCALES: [u16; 6] = [90, 100, 110, 121, 130, 150];
+const IDLE_MINUTES: [u16; 6] = [1, 2, 5, 10, 30, 60];
+const LIVE_AGENTS: [u16; 5] = [1, 2, 3, 5, 8];
+const LOADED_THREADS: [u16; 5] = [1, 2, 4, 8, 16];
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum NewTabEntryKind {
     Header,
@@ -1029,6 +1137,10 @@ struct ShortcutConflict {
 /// The [`App`] stores application-specific state.
 pub struct App {
     core: Core,
+    /// The next thread tab's id
+    next_thread: thread::tab::ThreadId,
+    /// Images opened from threads, each in its window
+    image_windows: HashMap<window::Id, thread::viewer::ImageWindow>,
     about: About,
     pane_model: TerminalPaneGrid,
     config_handler: Option<cosmic_config::Config>,
@@ -1119,6 +1231,7 @@ pub struct App {
     startup_command: Option<host::HostCommand>,
     /// A session given on the command line, for the first tab
     startup_attach: Option<agent::Session>,
+    startup_thread: Option<StartupThread>,
     /// Remote hosts being reconnected to, with the generation of the pending
     /// probe and the number of attempts so far
     reconnecting: BTreeMap<String, (u64, u32)>,
@@ -1373,7 +1486,25 @@ impl App {
                     f32::from(b) / 255.0,
                     1.0,
                 );
-                cosmic::theme::Theme::custom(std::sync::Arc::new(theme.cosmic().with_accent(accent)))
+                let base = theme.cosmic();
+                let mut tinted = base.with_accent(accent);
+                if tinted.is_dark != base.is_dark {
+                    // `with_accent` starts again from the desktop's saved
+                    // builder, which can lack the very fields `AppTheme::theme`
+                    // stood in for; COSMIC's own builder takes its place
+                    use cosmic::cosmic_theme::palette::{IntoColor, Oklcha, Srgb};
+                    let mut oklcha: Oklcha = accent.into_color();
+                    let current: Oklcha = base.accent_color().into_color();
+                    oklcha.l = current.l;
+                    let accent: Srgb = oklcha.into_color();
+                    let builder = if base.is_dark {
+                        cosmic::cosmic_theme::ThemeBuilder::dark()
+                    } else {
+                        cosmic::cosmic_theme::ThemeBuilder::light()
+                    };
+                    tinted = builder.accent(accent).build();
+                }
+                cosmic::theme::Theme::custom(std::sync::Arc::new(tinted))
             }
             None => theme,
         }
@@ -1505,6 +1636,10 @@ impl App {
             }
 
             Task::none()
+        } else if let Some(thread) = self.active_thread() {
+            // The pane's terminal isn't drawn behind a thread: focusing its
+            // id would only take the focus from the composer
+            widget::text_input::focus(thread.composer_id.clone())
         } else if let Some(terminal_id) = self.terminal_ids.get(&self.pane_model.focused()).cloned()
         {
             widget::text_input::focus(terminal_id)
@@ -2002,7 +2137,7 @@ impl App {
                                     .spacing(space_xxxs)
                                     .into()
                                 } else {
-                                    widget::column::with_children(vec![
+                                    let mut children = vec![
                                         widget::text(fl!("agent-arguments")).into(),
                                         widget::text_input("", &profile.args)
                                             .on_input(move |text| {
@@ -2012,7 +2147,17 @@ impl App {
                                                 Message::ProfileArgs(profile_id, text)
                                             })
                                             .into(),
-                                    ])
+                                    ];
+                                    // Claude's conversations can be rich-text threads
+                                    if profile.agent == config::Agent::Claude {
+                                        children.push(
+                                            widget::toggler(profile.thread)
+                                                .label(fl!("profile-thread"))
+                                                .on_toggle(move |on| Message::ProfileThread(profile_id, on))
+                                                .into(),
+                                        );
+                                    }
+                                    widget::column::with_children(children)
                                     .spacing(space_xxxs)
                                     .into()
                                 },
@@ -2161,7 +2306,8 @@ impl App {
             Some(agent::Helper::Supervise) => (fl!("host-setup-supervisor"), 0.2),
             Some(agent::Helper::Transfer) => (fl!("host-setup-transfer"), 0.4),
             Some(agent::Helper::PamModule | agent::Helper::SudoAgent) => (fl!("host-setup-sudo"), 0.6),
-            Some(agent::Helper::Zellij) => (fl!("host-setup-zellij"), 0.8),
+            Some(agent::Helper::Zellij) => (fl!("host-setup-zellij"), 0.75),
+            Some(agent::Helper::Chartgen) => (fl!("host-setup-chartgen"), 0.9),
         };
         let mut message = fl!("host-setup", host = machine, step = detail);
         if self.host_setup_stalled.contains(host) {
@@ -2604,10 +2750,113 @@ impl App {
         widget::settings::view_column(vec![
             appearance_section.into(),
             font_section.into(),
+            self.threads_section(),
             splits_section.into(),
             advanced_section.into(),
         ])
         .into()
+    }
+
+    /// Settings for agent threads: how they are set, and how much of them
+    /// is kept in memory
+    fn threads_section(&self) -> Element<'_, Message> {
+        let threads = &self.config.threads;
+        let dropdown = |labels: Vec<String>, selected: Option<usize>, on: fn(usize) -> ThreadSetting| {
+            widget::dropdown(labels, selected, move |i| Message::ThreadSetting(on(i)))
+        };
+        let numbers = |list: &[u16], unit: &dyn Fn(u16) -> String| list.iter().map(|n| unit(*n)).collect::<Vec<_>>();
+        let position = |list: &[u16], value: u16| list.iter().position(|n| *n == value);
+        let px = |n: u16| format!("{n} px");
+        let (loaded, agents, bytes) = self.thread_memory();
+        widget::settings::section()
+            .title(fl!("threads"))
+            .add(
+                widget::settings::item::builder(fl!("thread-paper"))
+                    .description(fl!("thread-paper-description"))
+                    .toggler(self.config.thread_paper, Message::ThreadPaper),
+            )
+            .add(
+                widget::settings::item::builder(fl!("thread-match-colours"))
+                    .description(fl!("thread-match-colours-description"))
+                    .toggler(self.config.thread_match_colours, |on| Message::ThreadMatchColours(Some(on))),
+            )
+            .add(widget::settings::item::builder(fl!("thread-paper-font")).control(dropdown(
+                vec![
+                    fl!("thread-font-libertinus"),
+                    fl!("thread-font-new-computer-modern"),
+                    fl!("thread-font-serif"),
+                    fl!("thread-font-sans"),
+                ],
+                config::PaperFont::ALL.iter().position(|f| *f == threads.paper_font),
+                ThreadSetting::PaperFont,
+            )))
+            .add(widget::settings::item::builder(fl!("thread-paper-size")).control(dropdown(
+                numbers(&PAPER_SIZES, &px),
+                position(&PAPER_SIZES, threads.paper_size),
+                ThreadSetting::PaperSize,
+            )))
+            .add(widget::settings::item::builder(fl!("thread-paper-line-height")).control(dropdown(
+                numbers(&PAPER_LINE_HEIGHTS, &|n| format!("{:.2}", f32::from(n) / 100.0)),
+                position(&PAPER_LINE_HEIGHTS, threads.paper_line_height),
+                ThreadSetting::PaperLineHeight,
+            )))
+            .add(widget::settings::item::builder(fl!("thread-paper-measure")).control(dropdown(
+                numbers(&PAPER_MEASURES, &|n| fl!("thread-ems", n = n)),
+                position(&PAPER_MEASURES, threads.paper_measure),
+                ThreadSetting::PaperMeasure,
+            )))
+            .add(
+                widget::settings::item::builder(fl!("thread-paper-justify"))
+                    .toggler(threads.paper_justify, |on| Message::ThreadSetting(ThreadSetting::PaperJustify(on))),
+            )
+            .add(widget::settings::item::builder(fl!("thread-paper-tone")).control(dropdown(
+                vec![fl!("thread-tone-theme"), fl!("thread-tone-white"), fl!("thread-tone-sepia")],
+                config::PaperTone::ALL.iter().position(|t| *t == threads.paper_tone),
+                ThreadSetting::PaperTone,
+            )))
+            .add(
+                widget::settings::item::builder(fl!("thread-math-scale"))
+                    .description(fl!("thread-math-scale-description"))
+                    .control(dropdown(
+                        numbers(&MATH_SCALES, &|n| format!("{n}%")),
+                        position(&MATH_SCALES, threads.math_scale),
+                        ThreadSetting::MathScale,
+                    )),
+            )
+            .add(widget::settings::item::builder(fl!("thread-text-size")).control(dropdown(
+                numbers(&THREAD_TEXT_SIZES, &px),
+                position(&THREAD_TEXT_SIZES, threads.text_size),
+                ThreadSetting::TextSize,
+            )))
+            .add(
+                widget::settings::item::builder(fl!("thread-idle"))
+                    .description(fl!("thread-idle-description"))
+                    .control(dropdown(
+                        numbers(&IDLE_MINUTES, &|n| fl!("thread-minutes", n = n)),
+                        position(&IDLE_MINUTES, threads.idle_minutes),
+                        ThreadSetting::IdleMinutes,
+                    )),
+            )
+            .add(widget::settings::item::builder(fl!("thread-live-agents")).control(dropdown(
+                numbers(&LIVE_AGENTS, &|n| n.to_string()),
+                position(&LIVE_AGENTS, threads.live_agents),
+                ThreadSetting::LiveAgents,
+            )))
+            .add(
+                widget::settings::item::builder(fl!("thread-loaded"))
+                    .description(fl!(
+                        "thread-memory",
+                        loaded = loaded,
+                        agents = agents,
+                        size = format!("{:.1}", bytes as f64 / 1_048_576.0)
+                    ))
+                    .control(dropdown(
+                        numbers(&LOADED_THREADS, &|n| n.to_string()),
+                        position(&LOADED_THREADS, threads.loaded_threads),
+                        ThreadSetting::LoadedThreads,
+                    )),
+            )
+            .into()
     }
     /// The popover listing profiles and remote sessions
     fn new_tab_menu(&self) -> Element<'_, Message> {
@@ -2716,6 +2965,14 @@ impl App {
                     && !given_dir
                     && self.startup_command.is_none()
             })
+    }
+
+    /// A thread profile's directory, when it opens straight into a thread
+    /// rather than a launcher
+    fn thread_profile_dir(&self, profile_id: ProfileId) -> Option<String> {
+        let profile = self.config.profiles.get(&profile_id)?;
+        let dir = profile.working_directory.trim();
+        (profile.thread && profile.agent == config::Agent::Claude && !dir.is_empty()).then(|| dir.to_string())
     }
 
     /// Open a launcher tab for an agent profile, and look up what it offers
@@ -3394,6 +3651,17 @@ impl App {
         let Some(profile) = self.config.profiles.get(&profile_id).cloned() else {
             return Task::none();
         };
+        if profile.thread && profile.agent == config::Agent::Claude {
+            match &choice {
+                LaunchChoice::Dir(dir) => {
+                    return self.open_thread(pane, Some(profile_id), dir.clone(), None, Some(entity));
+                }
+                LaunchChoice::Resume { id, cwd } => {
+                    return self.open_thread(pane, Some(profile_id), cwd.clone(), Some(id.clone()), Some(entity));
+                }
+                _ => {}
+            }
+        }
         let prepared = match choice {
             LaunchChoice::Dir(dir) => {
                 agent::launch(&profile, Some(dir.as_str()).filter(|dir| !dir.is_empty()))
@@ -4231,7 +4499,13 @@ impl Application for App {
                 .raw()
                 .db_mut()
                 .set_monospace_family(&flags.config.font_name);
+            // The fonts threads are set in as papers
+            for data in thread::FONTS {
+                font_system.raw().db_mut().load_font_data(data.to_vec());
+            }
         }
+        // Thread images nobody has looked at for a while
+        std::thread::spawn(thread::images::prune);
 
         let app_themes = vec![fl!("match-desktop"), fl!("dark"), fl!("light")];
 
@@ -4417,6 +4691,7 @@ impl Application for App {
             startup_options: flags.startup_options,
             startup_command: flags.startup_command,
             startup_attach: flags.startup_attach,
+            startup_thread: flags.startup_thread,
             tab_drag: None,
             reconnecting: BTreeMap::new(),
             tab_drag_left_window: false,
@@ -4440,6 +4715,8 @@ impl Application for App {
             shortcut_search_regex: None,
             shortcut_search_value: String::new(),
             modifiers: Modifiers::empty(),
+            next_thread: 1,
+            image_windows: HashMap::new(),
             #[cfg(feature = "password_manager")]
             password_mgr: Default::default(),
         };
@@ -4479,6 +4756,10 @@ impl Application for App {
     }
 
     //TODO: currently the first escape unfocuses, and the second calls this function
+    fn on_close_requested(&self, id: window::Id) -> Option<Message> {
+        self.image_windows.contains_key(&id).then_some(Message::ImageWindowClosed(id))
+    }
+
     fn on_escape(&mut self) -> Task<Message> {
         if self.rename.take().is_some() {
             return self.update_focus();
@@ -4510,6 +4791,9 @@ impl Application for App {
             // Close find if open
             self.find = false;
             self.find_search_value.clear();
+        } else if let Some(id) = self.active_thread().filter(|t| t.is_working()).map(|t| t.id) {
+            // As in the CLI, Escape stops the agent
+            return Task::batch([self.thread_message(id, thread::tab::Msg::Stop), self.update_focus()]);
         }
 
         // Focus correct widget
@@ -4557,6 +4841,36 @@ impl Application for App {
                 config_set!(app_theme, app_theme);
                 return self.update_config();
             }
+            Message::Thread(id, msg) => return self.thread_message(id, msg),
+            #[cfg(debug_assertions)]
+            Message::DebugStep(index) => return self.debug_step(index),
+            #[cfg(debug_assertions)]
+            Message::DebugShot(name, shot, next) => return self.debug_shot(name, shot, next),
+            Message::ThreadImagesPicked(id, result) => return self.images_picked(id, result),
+            Message::ThreadPaper(paper) => self.set_thread_paper(paper),
+            Message::ThreadPaperToggle => self.set_thread_paper(!self.config.thread_paper),
+            Message::ThreadMatchColours(on) => {
+                config_set!(thread_match_colours, on.unwrap_or(!self.config.thread_match_colours));
+            }
+            Message::ThreadCopy => {
+                if let Some(task) = self.thread_copy() {
+                    return task;
+                }
+            }
+            Message::ThreadSelectAll => self.thread_select_all(),
+            Message::ThreadSetting(setting) => return self.thread_setting(setting),
+            Message::ThreadTick => return self.enforce_thread_limits(),
+            Message::ToggleDarkMode => {
+                let dark = cosmic::theme::is_dark();
+                config_set!(app_theme, if dark { AppTheme::Light } else { AppTheme::Dark });
+                return self.update_config();
+            }
+            Message::OpenImage(path) => return self.open_image(path),
+            message @ (Message::ImageZoom(..)
+            | Message::ImageCopyPath(_)
+            | Message::ImageOpenExternally(_)
+            | Message::ImageWindowClosed(_)
+            | Message::Wheel(..)) => return self.image_message(message),
             Message::ClearScrollback(entity_opt) => {
                 if let Some(tab_model) = self.pane_model.active() {
                     let entity = entity_opt.unwrap_or_else(|| tab_model.active());
@@ -4754,6 +5068,9 @@ impl Application for App {
                 }
             }
             Message::Copy(entity_opt) => {
+                if let Some(task) = self.thread_copy() {
+                    return task;
+                }
                 if let Some(tab_model) = self.pane_model.active() {
                     let entity = entity_opt.unwrap_or_else(|| tab_model.active());
                     if let Some(terminal) = tab_model.data::<Mutex<Terminal>>(entity) {
@@ -4800,6 +5117,11 @@ impl Application for App {
                 }
             }
             Message::CopyPrimary(entity_opt) => {
+                if entity_opt.is_none()
+                    && let Some(task) = self.thread_drag_ended()
+                {
+                    return task;
+                }
                 if let Some(tab_model) = self.pane_model.active() {
                     let entity = entity_opt.unwrap_or_else(|| tab_model.active());
                     if let Some(terminal) = tab_model.data::<Mutex<Terminal>>(entity) {
@@ -4997,7 +5319,38 @@ impl Application for App {
             Message::FocusFollowMouse(focus_follow_mouse) => {
                 config_set!(focus_follow_mouse, focus_follow_mouse);
             }
+            Message::KeyUnclaimed(modifiers, physical, key, text) => {
+                if let Some(task) = self.thread_type(modifiers, &key, text.as_deref()) {
+                    return task;
+                }
+                return self.update(Message::Key(modifiers, physical, key));
+            }
             Message::Key(modifiers, physical, key) => {
+                // A thread copies its selection with Ctrl+C, as a document
+                // does, and selects all of itself with Ctrl+Shift+A
+                if self.active_thread().is_some()
+                    && modifiers.control()
+                    && let Key::Character(c) = &key
+                {
+                    if c.as_str().eq_ignore_ascii_case("c")
+                        && let Some(task) = self.thread_copy()
+                    {
+                        return task;
+                    }
+                    if c.as_str().eq_ignore_ascii_case("a") && modifiers.shift() {
+                        self.thread_select_all();
+                        return Task::none();
+                    }
+                }
+                // Page Up and Down page through a thread, wherever the keys are
+                if let Some(id) = self.active_thread().map(|t| t.id)
+                    && let Key::Named(named @ (Named::PageUp | Named::PageDown)) = key
+                    && !modifiers.control()
+                    && !modifiers.alt()
+                {
+                    let pages = if named == Named::PageUp { -1.0 } else { 1.0 };
+                    return self.thread_message(id, thread::tab::Msg::Page(pages));
+                }
                 // Hard-coded keys
                 match key {
                     Key::Named(Named::Copy) => {
@@ -5119,6 +5472,7 @@ impl Application for App {
             }
             Message::Modifiers(modifiers) => {
                 self.modifiers = modifiers;
+                thread::rich::set_shift(modifiers.shift());
             }
             Message::MouseEnter(pane) => {
                 self.pane_model.set_focus(pane);
@@ -5181,6 +5535,12 @@ impl Application for App {
                 config_set!(opacity, cmp::min(100, opacity));
             }
             Message::PaneClicked(pane) => {
+                // A click in the thread in front has put the focus where it
+                // belongs, in the composer or out of it to select the
+                // thread's text; refocusing would undo it
+                if pane == self.pane_model.focused() && self.active_thread().is_some() {
+                    return Task::none();
+                }
                 self.pane_model.set_focus(pane);
                 let title_task = self.update_title(Some(pane));
                 return Task::batch([self.update_focus(), title_task]);
@@ -6809,6 +7169,12 @@ impl Application for App {
                     return self.save_profiles();
                 }
             }
+            Message::ProfileThread(profile_id, on) => {
+                if let Some(profile) = self.config.profiles.get_mut(&profile_id) {
+                    profile.thread = on;
+                    return self.save_profiles();
+                }
+            }
             Message::ProfileArgs(profile_id, text) => {
                 if let Some(profile) = self.config.profiles.get_mut(&profile_id) {
                     profile.args = text;
@@ -7008,6 +7374,9 @@ impl Application for App {
             }
             Message::ProfileOpen(profile_id) => {
                 self.new_tab_menu_open = false;
+                if let Some(dir) = self.thread_profile_dir(profile_id) {
+                    return self.open_thread(self.pane_model.focused(), Some(profile_id), dir, None, None);
+                }
                 if self.wants_launcher(Some(profile_id)) {
                     return self.open_launcher(self.pane_model.focused(), profile_id);
                 }
@@ -7066,6 +7435,10 @@ impl Application for App {
                 }
             }
             Message::SelectAll(entity_opt) => {
+                if entity_opt.is_none() && self.active_thread().is_some() {
+                    self.thread_select_all();
+                    return Task::none();
+                }
                 if let Some(tab_model) = self.pane_model.active() {
                     let entity = entity_opt.unwrap_or_else(|| tab_model.active());
                     if let Some(terminal) = tab_model.data::<Mutex<Terminal>>(entity) {
@@ -7130,7 +7503,11 @@ impl Application for App {
                 if let Some(tab_model) = self.pane_model.active_mut() {
                     tab_model.activate(entity);
                 }
-                return Task::batch([self.update_title(None), self.refresh_focus(entity)]);
+                return Task::batch([
+                    self.update_title(None),
+                    self.refresh_focus(entity),
+                    self.enforce_thread_limits(),
+                ]);
             }
             Message::TabFocusFound(entity, result) => {
                 let dir = match result {
@@ -7334,6 +7711,15 @@ impl Application for App {
             }
             Message::TabNew => {
                 self.new_tab_menu_open = false;
+                // From a thread, a new thread in the same place
+                if let Some((profile_id, cwd)) = self.active_thread().map(|t| (t.profile_id, t.cwd.clone())) {
+                    return self.open_thread(self.pane_model.focused(), profile_id, cwd, None, None);
+                }
+                if let Some(profile_id) = self.get_default_profile()
+                    && let Some(dir) = self.thread_profile_dir(profile_id)
+                {
+                    return self.open_thread(self.pane_model.focused(), Some(profile_id), dir, None, None);
+                }
                 if let Some(profile_id) = self.get_default_profile()
                     && self.wants_launcher(Some(profile_id))
                 {
@@ -7621,6 +8007,32 @@ impl Application for App {
                 // Spawn first tab
                 if let Some(session) = self.startup_attach.take() {
                     return self.update(Message::RemoteAttach(session));
+                }
+                if let Some(start) = self.startup_thread.take() {
+                    // A local Claude thread profile, if there is one, for its arguments
+                    let profile_id = self
+                        .config
+                        .profiles
+                        .iter()
+                        .find(|(_, p)| p.thread && p.agent == config::Agent::Claude && !p.is_remote())
+                        .map(|(id, _)| *id);
+                    let id = self.next_thread;
+                    let mut opened = vec![self.open_thread(
+                        self.pane_model.focused(),
+                        profile_id,
+                        start.dir,
+                        start.resume,
+                        None,
+                    )];
+                    if let Some(prompt) = start.prompt
+                        && let Some(tab) = self.thread_mut(id)
+                    {
+                        tab.composer = widget::text_editor::Content::with_text(&prompt);
+                        opened.push(self.thread_message(id, thread::tab::Msg::Send));
+                    }
+                    #[cfg(debug_assertions)]
+                    opened.push(cosmic::task::message(Message::DebugStep(0)));
+                    return Task::batch(opened);
                 }
                 return self.update(Message::TabNew);
             }
@@ -7941,6 +8353,9 @@ impl Application for App {
     }
 
     fn view_window(&self, window_id: window::Id) -> Element<'_, Message> {
+        if let Some(image) = self.image_windows.get(&window_id) {
+            return thread::viewer::view(image, window_id);
+        }
         match &self.dialog_opt {
             Some(dialog) => dialog.view(window_id),
             None => widget::text("Unknown window ID").into(),
@@ -7949,6 +8364,7 @@ impl Application for App {
 
     /// Creates a view after each update.
     fn view(&self) -> Element<'_, Self::Message> {
+        let thread_style = thread::view::ThreadStyle::new(&self.config, &cosmic::theme::active());
         let t = self.core().system_theme();
         let cosmic = t.cosmic();
         let cosmic_theme::Spacing {
@@ -8222,6 +8638,8 @@ impl Application for App {
                     .push(widget::layer_container(find_widget).layer(cosmic_theme::Layer::Primary));
             } else if let Some(launcher) = tab_model.data::<Launcher>(entity) {
                 tab_column = tab_column.push(self.launcher_view(entity, launcher));
+            } else if let Some(thread) = tab_model.data::<thread::tab::ThreadTab>(entity) {
+                tab_column = tab_column.push(thread::view::view(thread, &thread_style, cosmic::theme::is_dark()));
             }
 
             DndDestination::for_data::<DndDrop>(tab_column, move |data, action| {
@@ -8305,19 +8723,27 @@ impl Application for App {
         struct SudoSubscription;
 
         Subscription::batch([
-            event::listen_with(|event, _status, _window_id| match event {
+            // Idle agents stop, and threads unload, on time
+            iced::time::every(Duration::from_secs(30)).map(|_| Message::ThreadTick),
+            event::listen_with(|event, status, _window_id| match event {
                 Event::Keyboard(KeyEvent::KeyPressed {
                     key,
                     physical_key,
                     modifiers,
+                    text,
                     ..
-                }) => Some(Message::Key(modifiers, physical_key, key)),
+                }) => Some(if status == event::Status::Ignored {
+                    Message::KeyUnclaimed(modifiers, physical_key, key, text.map(|t| t.to_string()))
+                } else {
+                    Message::Key(modifiers, physical_key, key)
+                }),
                 Event::Keyboard(KeyEvent::ModifiersChanged(modifiers)) => {
                     Some(Message::Modifiers(modifiers))
                 }
                 Event::Mouse(MouseEvent::ButtonReleased(MouseButton::Left)) => {
                     Some(Message::CopyPrimary(None))
                 }
+                Event::Mouse(MouseEvent::WheelScrolled { delta }) => Some(Message::Wheel(_window_id, delta)),
                 // How a tab dragged from this window was dropped
                 Event::Dnd(DndEvent::Source(SourceEvent::Finished)) => {
                     Some(Message::TabDragEnded(true))

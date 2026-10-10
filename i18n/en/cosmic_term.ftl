@@ -222,6 +222,7 @@ host-setup-supervisor = installing the session supervisor
 host-setup-transfer = installing the transfer helper
 host-setup-sudo = installing sudo support
 host-setup-zellij = checking Zellij
+host-setup-chartgen = installing the chart checker
 host-setup-waiting = No setup step completed in 15 seconds. Still waiting for this host…
 color-scheme-importing = Importing colour schemes…
 color-scheme-exporting = Exporting colour scheme…
@@ -445,3 +446,68 @@ remote-files-help = Help set up
 remote-files-connect-failed = Remote file access to {$machine} isn't ready.
 
 remote-files-pending = Installation is ready for your next boot.
+
+## Agent threads
+threads = Threads
+thread-paper = Maths typesetting
+thread-paper-description = Set threads as a paper: serif text, justified, in a column, with LaTeX set as in print
+thread-match-colours = Images match the colours
+thread-match-colours-description = Ask Claude to draw its plots and diagrams in the thread's colour scheme
+thread-paper-font = Paper font
+thread-font-libertinus = Libertinus Serif (Typst)
+thread-font-new-computer-modern = New Computer Modern (LaTeX)
+thread-font-serif = System serif
+thread-font-sans = System sans-serif
+thread-paper-size = Paper text size
+thread-paper-line-height = Paper line spacing
+thread-paper-measure = Paper text width
+thread-ems = {$n} ems
+thread-paper-justify = Justify paper text
+thread-paper-tone = Paper colours
+thread-tone-theme = Follow the theme
+thread-tone-white = White paper
+thread-tone-sepia = Sepia
+thread-math-scale = Formula size
+thread-math-scale-description = Against the text around it; KaTeX uses 121%
+thread-text-size = Thread text size
+thread-idle = Stop idle agents after
+thread-idle-description = A stopped agent frees its memory, and resumes its conversation when you next send a message
+thread-minutes = {$n ->
+    [one] 1 minute
+   *[other] {$n} minutes
+}
+thread-live-agents = Agents running at once, at most
+thread-loaded = Threads kept in memory while hidden
+thread-memory = Now {$loaded} loaded, {$agents} agents running, about {$size} MB of thread text and formulas
+dark-mode = Dark mode
+light-mode = Light mode
+thread-working = Working…
+thread-context = {$tokens} tokens in context
+thread-loading = Reading the conversation…
+thread-load-failed = The conversation could not be read: {$error}
+thread-load-earlier = {$count ->
+    [one] Show the earlier turn
+   *[other] Show {$count} earlier turns
+}
+thread-empty-title = Ask Claude
+thread-empty-body = Claude runs through its own command-line tool, so it uses your Claude subscription. LaTeX in replies is typeset.
+thread-you = You
+thread-thinking = Thinking…
+thread-thought = Thought
+thread-thought-tokens = Thought for about {$tokens} tokens
+thread-permission = Claude wants to use {$tool}
+thread-allow = Allow
+thread-allow-always = Always allow
+thread-deny = Deny
+thread-placeholder = Message Claude — Enter sends, Shift+Enter adds a line
+thread-attach = Attach images
+thread-stop = Stop
+thread-send = Send
+image = Image
+image-fit = Fit
+image-actual = Actual size
+image-zoom-in = Zoom in
+image-zoom-out = Zoom out
+image-copy-path = Copy file path
+image-open-externally = Open in another app
+profile-thread = Open as rich-text thread

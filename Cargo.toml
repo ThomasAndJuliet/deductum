@@ -43,6 +43,18 @@ i18n-embed-fl = "0.10"
 icu = { version = "2.1.1", features = ["compiled_data"] }
 rust-embed = "8"
 url = "2.5"
+# Agent threads: assistant markdown, and its LaTeX set as KaTeX does
+pulldown-cmark = { version = "0.13", default-features = false }
+ratex-parser = "=0.1.14"
+ratex-layout = "=0.1.14"
+ratex-types = "=0.1.14"
+ratex-svg = { version = "=0.1.14", features = ["embed-fonts"] }
+# Decoders for the images threads show; iced's own build has none
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "gif"] }
+# The size of an SVG image, which iced draws with resvg
+usvg = { version = "0.45", default-features = false }
+# Charts in threads, drawn natively; from the shared diagrams repository
+chartgen = { path = "chartgen-src/crates/chartgen" }
 secret-service = { version = "5.1.0", features = [
     "rt-tokio-crypto-rust",
 ], optional = true }

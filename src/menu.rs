@@ -51,6 +51,23 @@ impl MenuAction for TabAction {
     }
 }
 
+/// A thread's right-click menu
+pub fn thread_context_menu(has_selection: bool, paper: bool) -> Vec<widget::menu::Tree<Message>> {
+    let copy = if has_selection {
+        MenuItem::Button(fl!("copy"), None, Action::ThreadCopy)
+    } else {
+        MenuItem::ButtonDisabled(fl!("copy"), None, Action::ThreadCopy)
+    };
+    let items = vec![
+        copy,
+        MenuItem::Button(fl!("select-all"), None, Action::ThreadSelectAll),
+        MenuItem::Divider,
+        MenuItem::CheckBox(fl!("thread-paper"), None, paper, Action::ThreadPaper),
+        MenuItem::CheckBox(fl!("dark-mode"), None, cosmic::theme::is_dark(), Action::DarkModeToggle),
+    ];
+    widget::menu::items(&HashMap::<KeyBind, Action>::new(), items)
+}
+
 pub fn context_menu(
     config: &Config,
     key_binds: &HashMap<KeyBind, Action>,
@@ -322,6 +339,10 @@ pub fn menu_bar<'a>(
                     fl!("view"),
                     vec![
                         MenuItem::Button(fl!("menu-sidebar"), None, Action::SidebarToggle),
+                        MenuItem::Divider,
+                        MenuItem::CheckBox(fl!("thread-paper"), None, config.thread_paper, Action::ThreadPaper),
+                        MenuItem::CheckBox(fl!("dark-mode"), None, cosmic::theme::is_dark(), Action::DarkModeToggle),
+                        MenuItem::CheckBox(fl!("thread-match-colours"), None, config.thread_match_colours, Action::ThreadMatchColours),
                         MenuItem::Divider,
                         MenuItem::Button(fl!("zoom-in"), None, Action::ZoomIn),
                         MenuItem::Button(fl!("zoom-reset"), None, Action::ZoomReset),

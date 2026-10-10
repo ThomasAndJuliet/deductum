@@ -11726,6 +11726,240 @@
         "dest-filename": ".cargo-checksum.json"
     },
     {
+        "type": "archive",
+        "archive-type": "tar-gzip",
+        "url": "https://static.crates.io/crates/fancy-regex/fancy-regex-0.14.0.crate",
+        "sha256": "6e24cb5a94bcae1e5408b0effca5cd7172ea3c5755049c5f3af4cd283a165298",
+        "dest": "cargo/vendor/fancy-regex-0.14.0"
+    },
+    {
+        "type": "inline",
+        "contents": "{\"package\": \"6e24cb5a94bcae1e5408b0effca5cd7172ea3c5755049c5f3af4cd283a165298\", \"files\": {}}",
+        "dest": "cargo/vendor/fancy-regex-0.14.0",
+        "dest-filename": ".cargo-checksum.json"
+    },
+    {
+        "type": "archive",
+        "archive-type": "tar-gzip",
+        "url": "https://static.crates.io/crates/phf/phf-0.11.3.crate",
+        "sha256": "1fd6780a80ae0c52cc120a26a1a42c1ae51b247a253e4e06113d23d2c2edd078",
+        "dest": "cargo/vendor/phf-0.11.3"
+    },
+    {
+        "type": "inline",
+        "contents": "{\"package\": \"1fd6780a80ae0c52cc120a26a1a42c1ae51b247a253e4e06113d23d2c2edd078\", \"files\": {}}",
+        "dest": "cargo/vendor/phf-0.11.3",
+        "dest-filename": ".cargo-checksum.json"
+    },
+    {
+        "type": "archive",
+        "archive-type": "tar-gzip",
+        "url": "https://static.crates.io/crates/phf_generator/phf_generator-0.11.3.crate",
+        "sha256": "3c80231409c20246a13fddb31776fb942c38553c51e871f8cbd687a4cfb5843d",
+        "dest": "cargo/vendor/phf_generator-0.11.3"
+    },
+    {
+        "type": "inline",
+        "contents": "{\"package\": \"3c80231409c20246a13fddb31776fb942c38553c51e871f8cbd687a4cfb5843d\", \"files\": {}}",
+        "dest": "cargo/vendor/phf_generator-0.11.3",
+        "dest-filename": ".cargo-checksum.json"
+    },
+    {
+        "type": "archive",
+        "archive-type": "tar-gzip",
+        "url": "https://static.crates.io/crates/phf_macros/phf_macros-0.11.3.crate",
+        "sha256": "f84ac04429c13a7ff43785d75ad27569f2951ce0ffd30a3321230db2fc727216",
+        "dest": "cargo/vendor/phf_macros-0.11.3"
+    },
+    {
+        "type": "inline",
+        "contents": "{\"package\": \"f84ac04429c13a7ff43785d75ad27569f2951ce0ffd30a3321230db2fc727216\", \"files\": {}}",
+        "dest": "cargo/vendor/phf_macros-0.11.3",
+        "dest-filename": ".cargo-checksum.json"
+    },
+    {
+        "type": "archive",
+        "archive-type": "tar-gzip",
+        "url": "https://static.crates.io/crates/phf_shared/phf_shared-0.11.3.crate",
+        "sha256": "67eabc2ef2a60eb7faa00097bd1ffdb5bd28e62bf39990626a582201b7a754e5",
+        "dest": "cargo/vendor/phf_shared-0.11.3"
+    },
+    {
+        "type": "inline",
+        "contents": "{\"package\": \"67eabc2ef2a60eb7faa00097bd1ffdb5bd28e62bf39990626a582201b7a754e5\", \"files\": {}}",
+        "dest": "cargo/vendor/phf_shared-0.11.3",
+        "dest-filename": ".cargo-checksum.json"
+    },
+    {
+        "type": "archive",
+        "archive-type": "tar-gzip",
+        "url": "https://static.crates.io/crates/pulldown-cmark/pulldown-cmark-0.13.4.crate",
+        "sha256": "e9f068eba8e7071c5f9511831b44f32c740d5adf574e990f946ddb53db2f314e",
+        "dest": "cargo/vendor/pulldown-cmark-0.13.4"
+    },
+    {
+        "type": "inline",
+        "contents": "{\"package\": \"e9f068eba8e7071c5f9511831b44f32c740d5adf574e990f946ddb53db2f314e\", \"files\": {}}",
+        "dest": "cargo/vendor/pulldown-cmark-0.13.4",
+        "dest-filename": ".cargo-checksum.json"
+    },
+    {
+        "type": "archive",
+        "archive-type": "tar-gzip",
+        "url": "https://static.crates.io/crates/ratex-font/ratex-font-0.1.14.crate",
+        "sha256": "6a7b73531dabe934a3e725ed5c90d18dacf43778b7a208381390943a9a8c24db",
+        "dest": "cargo/vendor/ratex-font-0.1.14"
+    },
+    {
+        "type": "inline",
+        "contents": "{\"package\": \"6a7b73531dabe934a3e725ed5c90d18dacf43778b7a208381390943a9a8c24db\", \"files\": {}}",
+        "dest": "cargo/vendor/ratex-font-0.1.14",
+        "dest-filename": ".cargo-checksum.json"
+    },
+    {
+        "type": "archive",
+        "archive-type": "tar-gzip",
+        "url": "https://static.crates.io/crates/ratex-font-loader/ratex-font-loader-0.1.14.crate",
+        "sha256": "6542b55c6273b2ca3eb66021da061dfc84bc8303b434e1332218b63728742b7e",
+        "dest": "cargo/vendor/ratex-font-loader-0.1.14"
+    },
+    {
+        "type": "inline",
+        "contents": "{\"package\": \"6542b55c6273b2ca3eb66021da061dfc84bc8303b434e1332218b63728742b7e\", \"files\": {}}",
+        "dest": "cargo/vendor/ratex-font-loader-0.1.14",
+        "dest-filename": ".cargo-checksum.json"
+    },
+    {
+        "type": "archive",
+        "archive-type": "tar-gzip",
+        "url": "https://static.crates.io/crates/ratex-katex-fonts/ratex-katex-fonts-0.1.14.crate",
+        "sha256": "c915a17fd71c41374d1ec19651a26ca352e757e1342391c2cbc5b825dacaa64b",
+        "dest": "cargo/vendor/ratex-katex-fonts-0.1.14"
+    },
+    {
+        "type": "inline",
+        "contents": "{\"package\": \"c915a17fd71c41374d1ec19651a26ca352e757e1342391c2cbc5b825dacaa64b\", \"files\": {}}",
+        "dest": "cargo/vendor/ratex-katex-fonts-0.1.14",
+        "dest-filename": ".cargo-checksum.json"
+    },
+    {
+        "type": "archive",
+        "archive-type": "tar-gzip",
+        "url": "https://static.crates.io/crates/ratex-layout/ratex-layout-0.1.14.crate",
+        "sha256": "1792738e2e36683cd20de742296a5233759565efc8cd03831064a0ccfb1fe0f7",
+        "dest": "cargo/vendor/ratex-layout-0.1.14"
+    },
+    {
+        "type": "inline",
+        "contents": "{\"package\": \"1792738e2e36683cd20de742296a5233759565efc8cd03831064a0ccfb1fe0f7\", \"files\": {}}",
+        "dest": "cargo/vendor/ratex-layout-0.1.14",
+        "dest-filename": ".cargo-checksum.json"
+    },
+    {
+        "type": "archive",
+        "archive-type": "tar-gzip",
+        "url": "https://static.crates.io/crates/ratex-lexer/ratex-lexer-0.1.14.crate",
+        "sha256": "f704add86d7bf4c4ecc7767f45ab38a44f1bbfa4b49725b2ae53c32e83b8a61e",
+        "dest": "cargo/vendor/ratex-lexer-0.1.14"
+    },
+    {
+        "type": "inline",
+        "contents": "{\"package\": \"f704add86d7bf4c4ecc7767f45ab38a44f1bbfa4b49725b2ae53c32e83b8a61e\", \"files\": {}}",
+        "dest": "cargo/vendor/ratex-lexer-0.1.14",
+        "dest-filename": ".cargo-checksum.json"
+    },
+    {
+        "type": "archive",
+        "archive-type": "tar-gzip",
+        "url": "https://static.crates.io/crates/ratex-parser/ratex-parser-0.1.14.crate",
+        "sha256": "079ec2e7ac6bc76137a6de093a173d1f901139a51318589ab9ce17139c21a6f0",
+        "dest": "cargo/vendor/ratex-parser-0.1.14"
+    },
+    {
+        "type": "inline",
+        "contents": "{\"package\": \"079ec2e7ac6bc76137a6de093a173d1f901139a51318589ab9ce17139c21a6f0\", \"files\": {}}",
+        "dest": "cargo/vendor/ratex-parser-0.1.14",
+        "dest-filename": ".cargo-checksum.json"
+    },
+    {
+        "type": "archive",
+        "archive-type": "tar-gzip",
+        "url": "https://static.crates.io/crates/ratex-svg/ratex-svg-0.1.14.crate",
+        "sha256": "5a0948b4d4926858332fe04471e861f54103e655a64f74cc1b3eac0c59bf67bb",
+        "dest": "cargo/vendor/ratex-svg-0.1.14"
+    },
+    {
+        "type": "inline",
+        "contents": "{\"package\": \"5a0948b4d4926858332fe04471e861f54103e655a64f74cc1b3eac0c59bf67bb\", \"files\": {}}",
+        "dest": "cargo/vendor/ratex-svg-0.1.14",
+        "dest-filename": ".cargo-checksum.json"
+    },
+    {
+        "type": "archive",
+        "archive-type": "tar-gzip",
+        "url": "https://static.crates.io/crates/ratex-types/ratex-types-0.1.14.crate",
+        "sha256": "0cf0be3d050525f0f7d37af55a443d7648c222ccc617639950e3de1f8e6f9900",
+        "dest": "cargo/vendor/ratex-types-0.1.14"
+    },
+    {
+        "type": "inline",
+        "contents": "{\"package\": \"0cf0be3d050525f0f7d37af55a443d7648c222ccc617639950e3de1f8e6f9900\", \"files\": {}}",
+        "dest": "cargo/vendor/ratex-types-0.1.14",
+        "dest-filename": ".cargo-checksum.json"
+    },
+    {
+        "type": "archive",
+        "archive-type": "tar-gzip",
+        "url": "https://static.crates.io/crates/ratex-unicode-font/ratex-unicode-font-0.1.14.crate",
+        "sha256": "8c460464b7fba27343b2b391179ac6c86fcffac5116455158e2b08ce80866fd8",
+        "dest": "cargo/vendor/ratex-unicode-font-0.1.14"
+    },
+    {
+        "type": "inline",
+        "contents": "{\"package\": \"8c460464b7fba27343b2b391179ac6c86fcffac5116455158e2b08ce80866fd8\", \"files\": {}}",
+        "dest": "cargo/vendor/ratex-unicode-font-0.1.14",
+        "dest-filename": ".cargo-checksum.json"
+    },
+    {
+        "type": "archive",
+        "archive-type": "tar-gzip",
+        "url": "https://static.crates.io/crates/regex-lite/regex-lite-0.1.9.crate",
+        "sha256": "cab834c73d247e67f4fae452806d17d3c7501756d98c8808d7c9c7aa7d18f973",
+        "dest": "cargo/vendor/regex-lite-0.1.9"
+    },
+    {
+        "type": "inline",
+        "contents": "{\"package\": \"cab834c73d247e67f4fae452806d17d3c7501756d98c8808d7c9c7aa7d18f973\", \"files\": {}}",
+        "dest": "cargo/vendor/regex-lite-0.1.9",
+        "dest-filename": ".cargo-checksum.json"
+    },
+    {
+        "type": "archive",
+        "archive-type": "tar-gzip",
+        "url": "https://static.crates.io/crates/system-fonts/system-fonts-0.1.2.crate",
+        "sha256": "46ba78ea149d4bb0626dacad10aa789eedc83395889890a0e6e7ec69a4577442",
+        "dest": "cargo/vendor/system-fonts-0.1.2"
+    },
+    {
+        "type": "inline",
+        "contents": "{\"package\": \"46ba78ea149d4bb0626dacad10aa789eedc83395889890a0e6e7ec69a4577442\", \"files\": {}}",
+        "dest": "cargo/vendor/system-fonts-0.1.2",
+        "dest-filename": ".cargo-checksum.json"
+    },
+    {
+        "type": "archive",
+        "archive-type": "tar-gzip",
+        "url": "https://static.crates.io/crates/unicode-normalization/unicode-normalization-0.1.25.crate",
+        "sha256": "5fd4f6878c9cb28d874b009da9e8d183b5abc80117c40bbd187a1fde336be6e8",
+        "dest": "cargo/vendor/unicode-normalization-0.1.25"
+    },
+    {
+        "type": "inline",
+        "contents": "{\"package\": \"5fd4f6878c9cb28d874b009da9e8d183b5abc80117c40bbd187a1fde336be6e8\", \"files\": {}}",
+        "dest": "cargo/vendor/unicode-normalization-0.1.25",
+        "dest-filename": ".cargo-checksum.json"
+    },
+    {
         "type": "inline",
         "contents": "[source.vendored-sources]\ndirectory = \"cargo/vendor\"\n\n[source.crates-io]\nreplace-with = \"vendored-sources\"\n\n[source.\"https://github.com/wash2/accesskit\"]\ngit = \"https://github.com/wash2/accesskit\"\nreplace-with = \"vendored-sources\"\nrev = \"6c20249\"\n\n[source.\"https://github.com/jackpot51/rust-atomicwrites\"]\ngit = \"https://github.com/jackpot51/rust-atomicwrites\"\nreplace-with = \"vendored-sources\"\n\n[source.\"https://github.com/pop-os/window_clipboard\"]\ngit = \"https://github.com/pop-os/window_clipboard\"\nreplace-with = \"vendored-sources\"\ntag = \"sctk-0.20\"\n\n[source.\"https://github.com/pop-os/cosmic-protocols\"]\ngit = \"https://github.com/pop-os/cosmic-protocols\"\nreplace-with = \"vendored-sources\"\nrev = \"c0cff4d\"\n\n[source.\"https://github.com/pop-os/cosmic-files\"]\ngit = \"https://github.com/pop-os/cosmic-files\"\nreplace-with = \"vendored-sources\"\n\n[source.\"https://github.com/pop-os/freedesktop-icons\"]\ngit = \"https://github.com/pop-os/freedesktop-icons\"\nreplace-with = \"vendored-sources\"\n\n[source.\"https://github.com/pop-os/dbus-settings-bindings\"]\ngit = \"https://github.com/pop-os/dbus-settings-bindings\"\nreplace-with = \"vendored-sources\"\n\n[source.\"https://github.com/iced-rs/cryoglyph\"]\ngit = \"https://github.com/iced-rs/cryoglyph\"\nreplace-with = \"vendored-sources\"\nrev = \"e429a025df36ab8145708acb309080ae3deec17a\"\n\n[source.\"https://github.com/pop-os/winit\"]\ngit = \"https://github.com/pop-os/winit\"\nreplace-with = \"vendored-sources\"\nrev = \"9567503\"\n\n[source.\"https://github.com/pop-os/smithay-clipboard\"]\ngit = \"https://github.com/pop-os/smithay-clipboard\"\nreplace-with = \"vendored-sources\"\ntag = \"sctk-0.20\"\n\n[source.\"https://github.com/pop-os/softbuffer\"]\ngit = \"https://github.com/pop-os/softbuffer\"\nreplace-with = \"vendored-sources\"\ntag = \"cosmic-4.0\"\n\n[source.\"https://github.com/ebassi/xdg-mime-rs\"]\ngit = \"https://github.com/ebassi/xdg-mime-rs\"\nreplace-with = \"vendored-sources\"\n",
         "dest": "cargo",

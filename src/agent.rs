@@ -45,7 +45,7 @@ const LAUNCHER: &str = include_str!("agent/launcher.py");
 
 /// Rounds of built-in profiles. Each round is added once, so deleting one of
 /// its profiles is permanent
-const PROFILE_SEED_VERSION: u32 = 3;
+const PROFILE_SEED_VERSION: u32 = 4;
 
 /// Codex's full access mode: no approval prompts and no sandbox
 pub const CODEX_FULL_ACCESS: &str = "--dangerously-bypass-approvals-and-sandbox";
@@ -72,6 +72,10 @@ pub fn seed_profiles(config: &mut Config) -> bool {
     }
     if done < 2 {
         seeds.push(Profile::agent("Terminal", Agent::Shell, ""));
+    }
+    // Round 4: Claude in a rich-text thread
+    if done < 4 {
+        seeds.push(Profile { thread: true, ..Profile::agent("Claude thread", Agent::Claude, "") });
     }
     let mut changed = !seeds.is_empty();
     for mut profile in seeds {
@@ -446,7 +450,7 @@ fn session_shell(session: &Session, launch: Option<(PaneCommand, &str)>) -> Host
 
 /// A command running `script` on `host`, or on this computer if it is empty,
 /// without a terminal
-fn session_exec(host: &str, script: &str) -> tokio::process::Command {
+pub(crate) fn session_exec(host: &str, script: &str) -> tokio::process::Command {
     let script = format!("{PATH_EXPORT}{script}");
     if host.is_empty() {
         let mut command = host::command("sh");
@@ -852,11 +856,13 @@ pub enum Helper {
     SudoAgent,
     /// Zellij, for machines without their own
     Zellij,
+    /// `ct-chartgen`, with which agents in threads check their charts
+    Chartgen,
 }
 
 impl Helper {
     /// The helpers every host gets
-    pub const ALL: [Self; 4] = [Self::Supervise, Self::Transfer, Self::PamModule, Self::Zellij];
+    pub const ALL: [Self; 5] = [Self::Supervise, Self::Transfer, Self::PamModule, Self::Zellij, Self::Chartgen];
 
     fn program(self) -> &'static str {
         match self {
@@ -865,6 +871,7 @@ impl Helper {
             Self::PamModule => "pam_cosmic_term_sudo.so",
             Self::SudoAgent => "ct-sudo-agent",
             Self::Zellij => "zellij",
+            Self::Chartgen => "ct-chartgen",
         }
     }
 
@@ -886,6 +893,7 @@ impl Helper {
             Self::PamModule => "CT_PAM_MODULE",
             Self::SudoAgent => "CT_SUDO_AGENT",
             Self::Zellij => "CT_ZELLIJ",
+            Self::Chartgen => "CT_CHARTGEN",
         }
     }
 }
@@ -895,7 +903,8 @@ type Installable = Option<(String, Vec<u8>)>;
 
 /// A helper's file name on hosts and its contents, if this program has it
 fn helper(helper: Helper) -> Option<&'static (String, Vec<u8>)> {
-    static HELPERS: [std::sync::OnceLock<Installable>; 5] = [
+    static HELPERS: [std::sync::OnceLock<Installable>; 6] = [
+        std::sync::OnceLock::new(),
         std::sync::OnceLock::new(),
         std::sync::OnceLock::new(),
         std::sync::OnceLock::new(),
@@ -1061,6 +1070,13 @@ pub async fn ensure_helper(host: String, which: Helper) -> Result<(), String> {
              mkdir -p \"$d/bin\" && cat > \"$d\"/{name}.tmp && chmod 755 \"$d\"/{name}.tmp \
              && mv \"$d\"/{name}.tmp \"$d\"/{name} && ln -sfn ../{name} \"$d/bin/zellij\"\n"
         )
+    } else if which == Helper::Chartgen {
+        // Under its own name too, which agents are told
+        format!(
+            "d={CONFIG_DIR}\n\
+             [ -x \"$d\"/{name} ] || {{ mkdir -p \"$d\" && cat > \"$d\"/{name}.tmp && chmod 755 \"$d\"/{name}.tmp \
+             && mv \"$d\"/{name}.tmp \"$d\"/{name}; }} && ln -sfn {name} \"$d\"/ct-chartgen\n"
+        )
     } else {
         format!(
             "d={CONFIG_DIR}\n\
@@ -1192,7 +1208,7 @@ impl cosmic_term::transfer::Machine for HostMachine {
 }
 
 /// Like [`session_exec`], for code that blocks
-fn session_exec_std(host: &str, script: &str) -> std::process::Command {
+pub(crate) fn session_exec_std(host: &str, script: &str) -> std::process::Command {
     let script = format!("{PATH_EXPORT}{script}");
     if host.is_empty() {
         let mut command = host::std_command("sh");

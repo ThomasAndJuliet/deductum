@@ -60,6 +60,9 @@ modules:
         -C target-feature=+crt-static -L target/static-shim
       - cargo --offline --locked rustc --release --bin ct-transfer --
         -C target-feature=+crt-static -L target/static-shim
+      # Agents in threads check their charts with it, wherever they run
+      - cargo --offline --locked rustc --release --bin ct-chartgen --
+        -C target-feature=+crt-static -L target/static-shim
       # The sudo agent runs on the host, from systemd, so it is static too;
       # the PAM module is loaded by sudo, so it is a shared library
       - cargo --offline --locked rustc --release --bin ct-sudo-agent --
@@ -70,6 +73,7 @@ modules:
       - install -Dm644 target/release/libpam_cosmic_term_sudo.so /app/bin/pam_cosmic_term_sudo.so
       - install -Dm755 target/release/ct-supervise /app/bin/ct-supervise
       - install -Dm755 target/release/ct-transfer /app/bin/ct-transfer
+      - install -Dm755 target/release/ct-chartgen /app/bin/ct-chartgen
       # build.rs writes the desktop entry under upstream's id; install it
       # under this fork's, named apart from COSMIC Terminal
       - |
@@ -102,4 +106,12 @@ modules:
           - .git
           - .flatpak-builder
           - .local-design
+          - chartgen-src
+      # chartgen, from the diagrams repository shared with Juliet; a local
+      # checkout is linked as chartgen-src for development
+      - type: git
+        url: git@github.com:jcooke848/diagrams.git
+        branch: statistical-charts
+        commit: 50b5b9773dbcbd1e8c9975c9bc3e107f00496bb6
+        dest: chartgen-src
       - cargo-sources.json
