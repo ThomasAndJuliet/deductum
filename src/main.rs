@@ -8446,7 +8446,10 @@ impl Application for App {
                     opened.push(cosmic::task::message(Message::DebugStep(0)));
                     return Task::batch(opened);
                 }
-                return self.update(Message::TabNew);
+                let opened = self.update(Message::TabNew);
+                #[cfg(debug_assertions)]
+                let opened = Task::batch([opened, cosmic::task::message(Message::DebugStep(0))]);
+                return opened;
             }
             Message::ToggleContextPage(context_page) => {
                 if self.context_page == context_page {
