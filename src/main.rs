@@ -8249,19 +8249,15 @@ impl Application for App {
                         .find(|(_, p)| p.thread && p.agent == agent && !p.is_remote())
                         .map(|(id, _)| *id);
                     let id = self.next_thread;
-                    let mut opened = vec![self.open_thread(
+                    let mut opened = vec![self.open_thread_as(
                         self.pane_model.focused(),
                         profile_id,
                         start.dir,
                         start.resume,
                         None,
+                        Some(agent),
+                        start.host,
                     )];
-                    if let Some(tab) = self.thread_mut(id) {
-                        tab.agent = agent;
-                        if let Some(host) = start.host {
-                            tab.host = host;
-                        }
-                    }
                     if let Some(prompt) = start.prompt
                         && let Some(tab) = self.thread_mut(id)
                     {

@@ -223,10 +223,9 @@ impl crate::App {
                         .map(crate::config::ProfileId)
                         .filter(|id| self.config.profiles.contains_key(id));
                     let id = self.next_thread;
-                    tasks.push(self.open_thread(pane, profile_id, cwd, conversation, None));
+                    let agent = if agent == "codex" { crate::config::Agent::Codex } else { crate::config::Agent::Claude };
+                    tasks.push(self.open_thread_as(pane, profile_id, cwd, conversation, None, Some(agent), Some(host)));
                     if let Some(tab) = self.thread_mut(id) {
-                        tab.agent = if agent == "codex" { crate::config::Agent::Codex } else { crate::config::Agent::Claude };
-                        tab.host = host;
                         if !model.is_empty() {
                             tab.model = model;
                         }

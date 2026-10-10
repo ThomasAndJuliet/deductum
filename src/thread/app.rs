@@ -57,11 +57,9 @@ impl App {
     /// a thread, a launcher or a terminal, as the default profile says
     pub(crate) fn new_tab_in(&mut self, pane: pane_grid::Pane, from: Option<ThreadOrigin>) -> Task<Message> {
         if let Some(from) = from {
-            let open = self.open_thread(pane, from.profile_id, from.cwd.clone(), None, None);
+            let open = self.open_thread_as(pane, from.profile_id, from.cwd.clone(), None, None, Some(from.agent), Some(from.host));
             if let Some(tab) = self.thread_mut(self.next_thread - 1) {
-                tab.host = from.host;
                 tab.args = from.args;
-                tab.agent = from.agent;
             }
             return open;
         }
@@ -162,7 +160,7 @@ impl App {
         self.active_thread().map(|t| t.id)
     }
 
-    /// Open a thread tab for a Claude profile, in place of `replace` if
+    /// Open a thread tab for an agent profile, in place of `replace` if
     /// given: in `cwd`, continuing conversation `resume` if given
     pub(crate) fn open_thread(
         &mut self,
@@ -172,24 +170,44 @@ impl App {
         resume: Option<String>,
         replace: Option<segmented_button::Entity>,
     ) -> Task<Message> {
+        self.open_thread_as(pane, profile_id, cwd, resume, replace, None, None)
+    }
+
+    /// [`Self::open_thread`], with another agent or machine than the
+    /// profile's, as a thread restored or opened beside another has
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn open_thread_as(
+        &mut self,
+        pane: pane_grid::Pane,
+        profile_id: Option<ProfileId>,
+        cwd: String,
+        resume: Option<String>,
+        replace: Option<segmented_button::Entity>,
+        agent: Option<crate::config::Agent>,
+        host: Option<String>,
+    ) -> Task<Message> {
         let mut profile = profile_id.and_then(|id| self.config.profiles.get(&id)).cloned().unwrap_or_default();
+        if let Some(agent) = agent {
+            profile.agent = agent;
+        }
         // Without one, a Claude thread, marked as Claude's are
         if profile.agent == crate::config::Agent::Shell {
             profile.agent = crate::config::Agent::Claude;
         }
-        let host = profile.host.trim().to_string();
+        let host = host.unwrap_or_else(|| profile.host.trim().to_string());
         let mark = TabMark { color: profile.tab_color(), remote: profile.is_remote(), disconnected: false };
         let id = self.next_thread;
         self.next_thread += 1;
         let turns = usize::from(self.config.threads.history_turns.max(1));
         let (mut tab, load) = match resume {
-            Some(session) => ThreadTab::resuming(id, profile_id, host, cwd, profile.args.clone(), session, turns),
-            None => (ThreadTab::new(id, profile_id, host, cwd, profile.args.clone()), Task::none()),
+            Some(session) => ThreadTab::resuming(id, profile_id, profile.agent, host, cwd, profile.args.clone(), session, turns),
+            None => {
+                let mut tab = ThreadTab::new(id, profile_id, host, cwd, profile.args.clone());
+                tab.set_agent(profile.agent);
+                (tab, Task::none())
+            }
         };
         tab.turns = turns;
-        if profile.agent == crate::config::Agent::Codex {
-            tab.agent = crate::config::Agent::Codex;
-        }
         tab.colours = self.thread_colours();
         let title = tab.title.clone();
         let composer_id = tab.composer_id.clone();

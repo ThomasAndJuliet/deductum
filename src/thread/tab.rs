@@ -199,9 +199,11 @@ impl ThreadTab {
     }
 
     /// A thread of an existing conversation, read back from its transcript
+    #[allow(clippy::too_many_arguments)]
     pub fn resuming(
         id: ThreadId,
         profile_id: Option<ProfileId>,
+        agent: Agent,
         host: String,
         cwd: String,
         args: String,
@@ -209,6 +211,7 @@ impl ThreadTab {
         turns: usize,
     ) -> (Self, Task<Message>) {
         let mut tab = Self::new(id, profile_id, host, cwd, args);
+        tab.set_agent(agent);
         tab.session_id = Some(session_id);
         tab.turns = turns;
         tab.entries = None;
