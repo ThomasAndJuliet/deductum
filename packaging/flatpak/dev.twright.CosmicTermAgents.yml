@@ -60,9 +60,6 @@ modules:
         -C target-feature=+crt-static -L target/static-shim
       - cargo --offline --locked rustc --release --bin ct-transfer --
         -C target-feature=+crt-static -L target/static-shim
-      # Agents in threads check their charts with it, wherever they run
-      - cargo --offline --locked rustc --release --bin ct-chartgen --
-        -C target-feature=+crt-static -L target/static-shim
       # The sudo agent runs on the host, from systemd, so it is static too;
       # the PAM module is loaded by sudo, so it is a shared library
       - cargo --offline --locked rustc --release --bin ct-sudo-agent --
@@ -73,6 +70,9 @@ modules:
       - install -Dm644 target/release/libpam_cosmic_term_sudo.so /app/bin/pam_cosmic_term_sudo.so
       - install -Dm755 target/release/ct-supervise /app/bin/ct-supervise
       - install -Dm755 target/release/ct-transfer /app/bin/ct-transfer
+      # Agents in threads check their charts with it. chartgen needs libm,
+      # which the SDK has no static build of, so it is the dynamic build
+      # from the first command, for machines with as new a glibc
       - install -Dm755 target/release/ct-chartgen /app/bin/ct-chartgen
       # build.rs writes the desktop entry under upstream's id; install it
       # under this fork's, named apart from COSMIC Terminal
