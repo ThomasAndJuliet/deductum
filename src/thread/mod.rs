@@ -6,6 +6,7 @@
 pub mod chart;
 pub mod claude;
 pub mod codex;
+pub mod diagram;
 pub mod images;
 pub mod markdown;
 pub mod math;

@@ -56,6 +56,9 @@ pub enum Block {
     Image { url: String, alt: String, indent: u16 },
     /// A chart: a `chartgen` code block's specification
     Chart { spec: String, indent: u16, quote: u16 },
+    /// A Mermaid diagram: a closed `mermaid` code block's source. One whose
+    /// fence is still open, as while it streams in, stays code
+    Diagram { source: String, indent: u16, quote: u16 },
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -112,7 +115,10 @@ pub fn parse(markdown: &str) -> Doc {
         | Options::ENABLE_TASKLISTS
         | Options::ENABLE_GFM;
     let mut builder = Builder::default();
-    for event in Parser::new_ext(&source, options) {
+    for (event, range) in Parser::new_ext(&source, options).into_offset_iter() {
+        if let Event::Start(Tag::CodeBlock(CodeBlockKind::Fenced(_))) = &event {
+            builder.fence_closed = fence_closed(&source[range]);
+        }
         builder.event(event);
     }
     builder.flush();
@@ -133,6 +139,8 @@ struct Builder {
     code: Option<(String, String)>,
     table: Option<Vec<Vec<Vec<Run>>>>,
     image: Option<(String, String)>,
+    /// Whether the fenced code block being built has its closing fence
+    fence_closed: bool,
 }
 
 impl Builder {
@@ -260,6 +268,8 @@ impl Builder {
                         let (indent, quote) = (self.indent(), self.quote);
                         self.blocks.push(if lang == "chartgen" {
                             Block::Chart { spec: text, indent, quote }
+                        } else if lang == "mermaid" && self.fence_closed {
+                            Block::Diagram { source: text, indent, quote }
                         } else {
                             Block::Code { lang, text, indent, quote }
                         });
@@ -341,6 +351,19 @@ impl Builder {
             Event::FootnoteReference(name) => self.push_text(&format!("[{name}]"), self.style),
         }
     }
+}
+
+/// Whether a fenced code block, as its source runs, ends with a closing
+/// fence: pulldown-cmark ends an unclosed one at the end of the document
+fn fence_closed(block: &str) -> bool {
+    let strip = |line: &str| line.trim_start_matches(|c: char| c.is_whitespace() || c == '>').to_string();
+    let mut lines = block.trim_end().lines();
+    let Some(open) = lines.next().map(strip) else { return false };
+    let fence: String = open.chars().take_while(|c| *c == '`' || *c == '~').collect();
+    let Some(close) = lines.last().map(strip) else { return false };
+    !fence.is_empty()
+        && close.starts_with(&fence)
+        && close.trim_end().chars().all(|c| fence.starts_with(c))
 }
 
 /// Rewrite `\(…\)` as `$…$`, `\[…\]` as `$$…$$`, and wrap bare display
@@ -472,6 +495,23 @@ mod tests {
         let doc = parse("Before $$x$$ after");
         assert_eq!(doc.blocks.len(), 3, "{doc:#?}");
         assert!(matches!(doc.blocks[1], Block::Math { .. }));
+    }
+
+    #[test]
+    fn closed_mermaid_fences_are_diagrams_and_open_ones_code() {
+        let source = "flowchart TD\n    A --> B";
+        let doc = parse(&format!("See:\n\n```mermaid\n{source}\n```\n\nDone."));
+        assert!(matches!(&doc.blocks[1], Block::Diagram { source: s, .. } if s == source), "{doc:#?}");
+        // Still streaming: the fence is open
+        let doc = parse(&format!("See:\n\n```mermaid\n{source}\n"));
+        assert!(matches!(&doc.blocks[1], Block::Code { lang, .. } if lang == "mermaid"), "{doc:#?}");
+        // In a list and a quote, and with a longer fence
+        let doc = parse(&format!("- item\n\n  ````mermaid\n  {source}\n  ````\n\n> ```mermaid\n> graph LR\n> ```\n"));
+        assert!(matches!(&doc.blocks[1], Block::Diagram { indent: 1, .. }), "{doc:#?}");
+        assert!(matches!(&doc.blocks[2], Block::Diagram { quote: 1, .. }), "{doc:#?}");
+        // A shorter fence does not close a longer one
+        let doc = parse("````mermaid\ngraph LR\n```\n");
+        assert!(matches!(&doc.blocks[0], Block::Code { .. }), "{doc:#?}");
     }
 
     #[test]

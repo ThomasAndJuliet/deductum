@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! Selectable rich text: a parsed markdown [`Doc`] laid out with cosmic-text,
-//! with LaTeX set by [`super::math`].
+//! with LaTeX set by [`super::math`], charts laid out by [`super::chart`]
+//! and Mermaid diagrams drawn by [`super::diagram`].
 //!
 //! Each block is shaped into cosmic-text buffers the widget owns and draws
 //! itself, as the terminal draws its grid, so that every glyph can be hit
@@ -36,7 +37,7 @@ use cosmic::iced::{Background, Border, Color, Element, Event, Length, Point, Rec
 use cosmic_text::{Align, Attrs, Buffer, Cursor, Family, Metrics, Shaping, Style as FontStyle, Weight, Wrap};
 
 use super::markdown::{Block, Doc, Run, Style, TextKind};
-use super::{chart, math};
+use super::{chart, diagram, math};
 
 /// A place in a [`Doc`]: a block, and a byte offset into its linear text
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -115,6 +116,26 @@ impl Typography {
             color.into_rgba8().hash(&mut hasher);
         }
         hasher.finish()
+    }
+
+    /// The colours a diagram is drawn in on this page
+    pub fn diagram_palette(&self) -> diagram::Palette {
+        // Translucent colours as they show on the page
+        let over = |color: Color| Color {
+            r: self.page.r + (color.r - self.page.r) * color.a,
+            g: self.page.g + (color.g - self.page.g) * color.a,
+            b: self.page.b + (color.b - self.page.b) * color.a,
+            a: 1.0,
+        };
+        diagram::Palette {
+            page: Color { a: 1.0, ..self.page },
+            surface: over(self.code_background),
+            text: over(self.text),
+            muted: over(self.muted),
+            rule: over(self.rule),
+            accent: over(self.link),
+            error: over(self.error),
+        }
     }
 
     fn family(&self) -> Family<'_> {
@@ -250,6 +271,7 @@ fn block_cells(block: &Block) -> Vec<(usize, Cell)> {
         Block::Text(text) => vec![(0, cell_from_runs(&text.runs))],
         Block::Code { lang, text, .. } => vec![(0, code_cell(lang, text))],
         Block::Chart { spec, .. } => chart_cells(spec),
+        Block::Diagram { source, .. } => diagram_cells(source),
         Block::Table { rows } => {
             let mut out = Vec::new();
             let mut at = 0;
@@ -279,7 +301,9 @@ fn block_len(block: &Block) -> usize {
         Block::Math { .. } | Block::Image { .. } => 1,
         Block::Rule => 0,
         // Its labels once it has been drawn, else one unit, as a formula
-        Block::Chart { .. } => block_cells(block).last().map_or(1, |(start, cell)| start + cell.text.len()),
+        Block::Chart { .. } | Block::Diagram { .. } => {
+            block_cells(block).last().map_or(1, |(start, cell)| start + cell.text.len())
+        }
         _ => block_cells(block).last().map_or(0, |(start, cell)| start + cell.text.len()),
     }
 }
@@ -324,6 +348,10 @@ fn block_copy(block: &Block, start: usize, end: usize) -> String {
         Block::Rule => String::new(),
         // The whole chart copies as its specification
         Block::Chart { spec, .. } if start == 0 && end >= block_len(block) => format!("```chartgen\n{spec}\n```"),
+        // And a diagram as its source
+        Block::Diagram { source, .. } if start == 0 && end >= block_len(block) => {
+            format!("```mermaid\n{source}\n```")
+        }
         _ => {
             let cells = block_cells(block);
             let mut out = String::new();
@@ -354,8 +382,8 @@ fn block_copy(block: &Block, start: usize, end: usize) -> String {
 
 /// Whether table cell `i` starts a row
 fn is_row_break(block: &Block, i: usize) -> bool {
-    // A chart's labels are a line each
-    if let Block::Chart { .. } = block {
+    // A chart's or a diagram's labels are a line each
+    if let Block::Chart { .. } | Block::Diagram { .. } = block {
         return true;
     }
     let Block::Table { rows } = block else { return false };
@@ -464,6 +492,20 @@ fn chart_cells(spec: &str) -> Vec<(usize, Cell)> {
         .collect()
 }
 
+/// A diagram's lines of text as cells, a line each
+fn diagram_cells(source: &str) -> Vec<(usize, Cell)> {
+    let Some(labels) = diagram::labels_of(source) else { return Vec::new() };
+    let mut at = 0;
+    labels
+        .iter()
+        .map(|text| {
+            let start = at;
+            at += text.len() + 1;
+            (start, plain_cell(text))
+        })
+        .collect()
+}
+
 fn plain_cell(text: &str) -> Cell {
     Cell {
         text: text.to_string(),
@@ -524,6 +566,15 @@ enum Laid {
     Rule(Rectangle),
 }
 
+/// What a block draws under its cells
+#[derive(Clone)]
+enum Figure {
+    /// A chart's shapes
+    Chart(Arc<chart::Chart>),
+    /// A diagram's, and its source
+    Diagram(Arc<diagram::Diagram>, Arc<str>),
+}
+
 #[derive(Clone)]
 struct BlockLayout {
     top: f32,
@@ -533,8 +584,8 @@ struct BlockLayout {
     panels: Vec<(Rectangle, Color, f32)>,
     /// A list item's bullet or number
     marker: Option<Shaped>,
-    /// A chart's shapes, under its labels
-    figure: Option<(Arc<chart::Chart>, Rectangle)>,
+    /// A chart's or a diagram's shapes, under its labels
+    figure: Option<(Figure, Rectangle)>,
     len: usize,
 }
 
@@ -563,6 +614,7 @@ pub struct RichText<'a, Message> {
     on_select: Option<Box<dyn Fn(Select) -> Message + 'a>>,
     on_link: Option<Box<dyn Fn(String) -> Message + 'a>>,
     on_image: Option<Box<dyn Fn(PathBuf) -> Message + 'a>>,
+    on_diagram: Option<Box<dyn Fn(String) -> Message + 'a>>,
 }
 
 pub fn rich_text<'a, Message>(doc: Arc<Doc>, typography: Arc<Typography>) -> RichText<'a, Message> {
@@ -575,6 +627,7 @@ pub fn rich_text<'a, Message>(doc: Arc<Doc>, typography: Arc<Typography>) -> Ric
         on_select: None,
         on_link: None,
         on_image: None,
+        on_diagram: None,
     }
 }
 
@@ -609,6 +662,12 @@ impl<'a, Message> RichText<'a, Message> {
 
     pub fn on_image(mut self, f: impl Fn(PathBuf) -> Message + 'a) -> Self {
         self.on_image = Some(Box::new(f));
+        self
+    }
+
+    /// Told a diagram's source when it is clicked, to open it on its own
+    pub fn on_diagram(mut self, f: impl Fn(String) -> Message + 'a) -> Self {
+        self.on_diagram = Some(Box::new(f));
         self
     }
 
@@ -677,7 +736,7 @@ impl<'a, Message> RichText<'a, Message> {
                 Block::Code { indent, quote, .. } => (*indent, *quote, None),
                 Block::Math { indent, quote, marker, .. } => (*indent, *quote, marker.as_deref()),
                 Block::Image { indent, .. } => (*indent, 0, None),
-                Block::Chart { indent, quote, .. } => (*indent, *quote, None),
+                Block::Chart { indent, quote, .. } | Block::Diagram { indent, quote, .. } => (*indent, *quote, None),
                 _ => (0, 0, None),
             };
             let x0 = f32::from(indent) * size * 1.5 + f32::from(quote) * size * 1.1;
@@ -829,13 +888,74 @@ impl<'a, Message> RichText<'a, Message> {
                             labels.insert(spec_key(spec), Arc::new(drawn.labels.iter().map(|l| l.text.clone()).collect()));
                             drop(labels);
                             y = rect.y + rect.height + size * 0.4;
-                            figure = Some((Arc::new(drawn), rect));
+                            figure = Some((Figure::Chart(Arc::new(drawn)), rect));
                             Laid::Cells(cells)
                         }
                         Err(err) => {
                             // Why it could not be drawn, and its source
                             let pad = size * 0.5;
                             let text = format!("chartgen: {err}\n\n{spec}");
+                            let shaped = shape(
+                                font_system,
+                                t,
+                                code_cell("", &text),
+                                0,
+                                Point::new(x0 + pad, y + pad),
+                                available - 2.0 * pad,
+                                size * 0.88,
+                                false,
+                                t.error,
+                                false,
+                            );
+                            let rect = Rectangle::new(Point::new(x0, y), Size::new(available, shaped.size.height + 2.0 * pad));
+                            panels.push((rect, t.code_background, size * 0.3));
+                            y += rect.height;
+                            Laid::Math(Err(shaped), rect)
+                        }
+                    }
+                }
+                Block::Diagram { source, .. } => {
+                    diagram::prepare(font_system);
+                    match diagram::render(source, &t.diagram_palette()) {
+                        Ok(drawn) => {
+                            // Scaled down to fit the column, and to about
+                            // two thirds of a window's height
+                            let scale = (available / drawn.width).min(size * 40.0 / drawn.height).min(1.0);
+                            let (w, h) = (drawn.width * scale, drawn.height * scale);
+                            let x = x0 + ((available - w) / 2.0).max(0.0);
+                            let rect = Rectangle::new(Point::new(x, y + size * 0.4), Size::new(w, h));
+                            let lt = Typography { body: drawn.family.clone(), italic: false, line_height: 1.2, justify: false, ..t.clone() };
+                            let mut cells = Vec::with_capacity(drawn.labels.len());
+                            let mut start = 0;
+                            for l in &drawn.labels {
+                                let mut lt = lt.clone();
+                                lt.italic = l.italic;
+                                let mut shaped = shape(
+                                    font_system,
+                                    &lt,
+                                    plain_cell(&l.text),
+                                    0,
+                                    Point::ORIGIN,
+                                    f32::MAX / 4.0,
+                                    l.size * scale,
+                                    l.bold,
+                                    l.color,
+                                    false,
+                                );
+                                let line_y = shaped.buffer.layout_runs().next().map_or(0.0, |run| run.line_y);
+                                shaped.origin = Vector::new(rect.x + l.x * scale, rect.y + l.baseline * scale - line_y);
+                                shaped.start = start;
+                                start += l.text.len() + 1;
+                                cells.push(shaped);
+                            }
+                            y = rect.y + rect.height + size * 0.4;
+                            figure = Some((Figure::Diagram(drawn, source.as_str().into()), rect));
+                            Laid::Cells(cells)
+                        }
+                        Err(err) => {
+                            // Why it could not be drawn, and its source
+                            let pad = size * 0.5;
+                            let text = format!("mermaid: {err}\n\n{source}");
                             let shaped = shape(
                                 font_system,
                                 t,
@@ -1295,6 +1415,24 @@ impl State {
             .and_then(|cell| cell.link_at(pos.offset))
     }
 
+    /// The source of the diagram under `point`
+    fn diagram_at(&self, point: Point) -> Option<&str> {
+        self.blocks.iter().find_map(|block| match &block.figure {
+            Some((Figure::Diagram(_, source), rect)) if rect.contains(point) => Some(&**source),
+            _ => None,
+        })
+    }
+
+    /// Whether `point` is on a diagram but off its text
+    fn on_diagram_ground(&self, point: Point) -> bool {
+        self.blocks.iter().any(|block| match (&block.figure, &block.laid) {
+            (Some((Figure::Diagram(..), rect)), Laid::Cells(cells)) => {
+                rect.contains(point) && !cells.iter().any(|cell| cell.rect().contains(point))
+            }
+            _ => false,
+        })
+    }
+
     fn image_at(&self, point: Point) -> Option<&Path> {
         self.blocks.iter().find_map(|block| match &block.laid {
             Laid::Image(path, rect) if rect.contains(point) => Some(path.as_path()),
@@ -1406,6 +1544,10 @@ impl<'a, Message> Widget<Message, cosmic::Theme, Renderer> for RichText<'a, Mess
                     && let Some(on_image) = &self.on_image
                 {
                     shell.publish(on_image(path.to_path_buf()));
+                } else if let Some(source) = state.diagram_at(point)
+                    && let Some(on_diagram) = &self.on_diagram
+                {
+                    shell.publish(on_diagram(source.to_string()));
                 }
             }
             _ => {}
@@ -1424,7 +1566,10 @@ impl<'a, Message> Widget<Message, cosmic::Theme, Renderer> for RichText<'a, Mess
         let Some(point) = cursor.position_in(layout.bounds()) else {
             return mouse::Interaction::default();
         };
-        if state.link_at(point).is_some() || state.image_at(point).is_some() {
+        if state.link_at(point).is_some()
+            || state.image_at(point).is_some()
+            || (self.on_diagram.is_some() && state.on_diagram_ground(point))
+        {
             mouse::Interaction::Pointer
         } else if self.on_select.is_some() {
             mouse::Interaction::Text
@@ -1472,20 +1617,38 @@ impl<'a, Message> Widget<Message, cosmic::Theme, Renderer> for RichText<'a, Mess
                 let to = if index == end.block { end.offset.min(block.len) } else { block.len };
                 (from < to || (index != end.block && block.len == 0)).then_some(from..to)
             });
-            if let Some((figure, rect)) = &block.figure {
-                use cosmic::iced::advanced::graphics::geometry::Renderer as _;
-                let geometry = figure.geometry(renderer);
-                renderer.with_translation(Vector::new(at.x + rect.x, at.y + rect.y), |renderer| {
-                    renderer.draw_geometry(geometry);
-                });
+            match &block.figure {
+                Some((Figure::Chart(chart), rect)) => {
+                    use cosmic::iced::advanced::graphics::geometry::Renderer as _;
+                    let geometry = chart.geometry(renderer);
+                    renderer.with_translation(Vector::new(at.x + rect.x, at.y + rect.y), |renderer| {
+                        renderer.draw_geometry(geometry);
+                    });
+                }
+                Some((Figure::Diagram(diagram, _), rect)) => {
+                    renderer.draw_svg(adv_svg::Svg::new(diagram.handle.clone()), *rect + at, visible);
+                }
+                None => {}
             }
             match &block.laid {
                 Laid::Cells(cells) => {
-                    for cell in cells {
-                        if let Some(range) = &selected {
-                            cell.draw_selection(renderer, at, range.clone(), t.selection);
+                    let draw_cells = |renderer: &mut Renderer| {
+                        for cell in cells {
+                            if let Some(range) = &selected {
+                                cell.draw_selection(renderer, at, range.clone(), t.selection);
+                            }
+                            draw_cell(renderer, cell, at, visible);
                         }
-                        draw_cell(renderer, cell, at, visible);
+                    };
+                    // Over a diagram, whose SVG would hide the highlight,
+                    // as quads go under images in a layer
+                    if let Some((Figure::Diagram(..), rect)) = &block.figure {
+                        match (*rect + at).intersection(&visible) {
+                            Some(clip) => renderer.with_layer(clip, draw_cells),
+                            None => {}
+                        }
+                    } else {
+                        draw_cells(renderer);
                     }
                 }
                 Laid::Math(result, rect) => {

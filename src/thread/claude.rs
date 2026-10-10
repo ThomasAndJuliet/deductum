@@ -94,7 +94,16 @@ impl Launch {
              write a code block whose language is chartgen holding one chartgen specification (JSON): \
              the view draws it natively, in its colours. Read `~/.config/cosmic-term-agents/ct-chartgen \
              guide` before writing your first, and check each with `~/.config/cosmic-term-agents/ct-chartgen \
-             check FILE` before showing it.",
+             check FILE` before showing it. To show an architecture, a flow, a sequence of \
+             messages, a data model or a plan, write a Mermaid diagram in a code block whose \
+             language is mermaid: the view draws it inline, and the user can click it to open it \
+             in a window of its own, at full screen. The diagram types drawn are flowchart (or \
+             graph), sequenceDiagram, classDiagram, stateDiagram-v2, erDiagram, architecture-beta, \
+             C4Context and C4Container, mindmap, timeline, gantt and pie; architecture-beta's icons \
+             are cloud, database, disk, internet and server only. Its colours follow the view's \
+             theme, so do not set any: no %%{init}%% directives, classDef, style or hex colours. \
+             Keep labels short and plain, with no HTML in them, and prefer top-down layouts, \
+             which fit the column.",
         );
         // The view finds images on its own computer: a remote thread's
         // paths would name files it doesn't have
