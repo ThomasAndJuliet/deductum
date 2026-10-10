@@ -160,6 +160,16 @@ impl App {
         Task::batch([opened, attach])
     }
 
+    /// Tell every thread what the view shows of thinking and tool calls
+    pub(crate) fn sync_thread_shown(&mut self) {
+        let shown = super::tab::Shown { thinking: self.config.thread_show_thinking, tools: self.config.thread_show_tools };
+        for id in self.thread_ids() {
+            if let Some(tab) = self.thread_mut(id) {
+                tab.shown = shown;
+            }
+        }
+    }
+
     /// Every thread, by id
     pub(crate) fn thread_ids(&self) -> Vec<ThreadId> {
         self.pane_model
@@ -261,6 +271,7 @@ impl App {
         };
         tab.turns = turns;
         tab.colours = self.thread_colours();
+        tab.shown = super::tab::Shown { thinking: self.config.thread_show_thinking, tools: self.config.thread_show_tools };
         let title = tab.title.clone();
         let composer_id = tab.composer_id.clone();
         self.pane_model.set_focus(pane);

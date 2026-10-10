@@ -682,6 +682,10 @@ running, and roughly how much memory their text and formulas take.
   act on it.
 - Keys no widget takes go to the composer, as in the CLI; Escape stops a
   working agent.
+- **View → Show thinking** and **Show tool calls** keep those among the
+  replies. Off, they are left out, and copying and finding skip them: the
+  current thought or tool call shows only while the agent works, in a bar
+  above the composer that opens to its details.
 - A thread profile with a working directory opens straight into a thread.
 - **New tab** from a thread opens another thread in the same place.
 - `cosmic-term --thread DIR [--agent claude|codex] [--host DEST] [--resume

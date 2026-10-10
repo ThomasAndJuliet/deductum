@@ -9,7 +9,8 @@
 //! `wait 2; shot plain; paper on; shot paper; scroll 0.5; selectall; copy;
 //! dark; shot dark; image; wait 1; quit`
 //!
-//! `mode NAME` sets the permission mode; `choose ANSWER` answers the first
+//! `details on|off` shows or hides thinking and tool calls; `activity`
+//! opens or closes the current activity. `mode NAME` sets the permission mode; `choose ANSWER` answers the first
 //! open question the agent asked. `split`, `find TEXT`, `findnext` and `zoomin` act as their menu items;
 //! `diagram SOURCE` opens a Mermaid diagram's window (`\n` for new lines).
 //! `type TEXT` types keys no widget took, and `composer` prints the
@@ -204,6 +205,17 @@ impl App {
                     None => cosmic::task::message(next()),
                 }
             }
+            "details" => {
+                let on = rest == "on";
+                then(Task::batch([
+                    self.update(Message::ThreadShowThinking(Some(on))),
+                    self.update(Message::ThreadShowTools(Some(on))),
+                ]))
+            }
+            "activity" => match self.active_thread().map(|t| t.id) {
+                Some(id) => then(self.thread_message(id, super::tab::Msg::ToggleActivity)),
+                None => cosmic::task::message(next()),
+            },
             "split" => then(self.update(Message::PaneSplit(cosmic::widget::pane_grid::Axis::Vertical))),
             "find" => then(Task::batch([
                 self.update(Message::Find(true)),

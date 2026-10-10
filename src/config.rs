@@ -466,6 +466,14 @@ pub struct Config {
     /// to match them
     #[serde(default = "default_true")]
     pub thread_match_colours: bool,
+    /// Threads show the agent's thinking among its replies; else only
+    /// while it thinks, above the composer
+    #[serde(default = "default_true")]
+    pub thread_show_thinking: bool,
+    /// Threads show each tool call among the replies; else only the one
+    /// running, above the composer
+    #[serde(default = "default_true")]
+    pub thread_show_tools: bool,
     #[serde(default)]
     pub threads: ThreadSettings,
 }
@@ -599,6 +607,8 @@ impl Default for Config {
             accent_follows_tab: true,
             thread_paper: true,
             thread_match_colours: true,
+            thread_show_thinking: true,
+            thread_show_tools: true,
             threads: ThreadSettings::default(),
         }
     }

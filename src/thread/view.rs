@@ -39,6 +39,10 @@ pub struct ThreadStyle {
     pub page: Option<Color>,
     /// The theme the thread is set in, when it is not the app's
     pub chrome: Option<cosmic::Theme>,
+    /// Thinking and tool calls among the replies; those not are shown only
+    /// while current, above the composer
+    pub show_thinking: bool,
+    pub show_tools: bool,
 }
 
 impl ThreadStyle {
@@ -120,6 +124,8 @@ impl ThreadStyle {
         Self {
             paper,
             chrome,
+            show_thinking: config.thread_show_thinking,
+            show_tools: config.thread_show_tools,
             body: Arc::new(base),
             thinking: Arc::new(thinking),
             small: Arc::new(small),
@@ -153,6 +159,80 @@ fn status_icon(status: ToolStatus) -> (&'static str, bool) {
 
 /// Tools whose changes are shown open, so nothing that changed the code is
 /// hidden
+/// Whether an item is left out of the replies, as the view's options say
+fn hidden(item: &super::model::Item, style: &ThreadStyle) -> bool {
+    !super::tab::Shown { thinking: style.show_thinking, tools: style.show_tools }.shows(item)
+}
+
+/// What the agent is doing now, when the replies leave it out: its thought
+/// or the tool it runs, above the composer, opened to read on demand
+fn activity<'a>(tab: &'a ThreadTab, style: &ThreadStyle) -> Option<Element<'a, Message>> {
+    if !tab.is_working() {
+        return None;
+    }
+    let entries = tab.entries.as_ref()?;
+    // The latest of this turn, if it is one left out
+    let item = entries.items.iter().rev().take_while(|i| !matches!(i.kind, ItemKind::User { .. })).next()?;
+    if !hidden(item, style) {
+        return None;
+    }
+    let id = tab.id;
+    let spacing = theme::active().cosmic().spacing;
+    let (status, label, parts) = match &item.kind {
+        ItemKind::Thinking { done, .. } => (
+            "view-more-symbolic",
+            if *done { fl!("thread-thought") } else { fl!("thread-thinking") },
+            vec![(BODY, style.thinking.clone())],
+        ),
+        ItemKind::Tool(tool) => (
+            status_icon(tool.status).0,
+            relative_title(&tool.title(), &tab.cwd),
+            vec![(INPUT, style.small.clone()), (OUTPUT, style.small.clone())],
+        ),
+        _ => return None,
+    };
+    let open = tab.activity_open;
+    let header = widget::mouse_area(
+        widget::row::with_children(vec![
+            icon(status).into(),
+            widget::text::body(ellipsize(&label, 160)).width(Length::Fill).into(),
+            icon(if open { "pan-down-symbolic" } else { "pan-end-symbolic" }).into(),
+        ])
+        .spacing(spacing.space_xs)
+        .align_y(Alignment::Center),
+    )
+    .on_press(Message::Thread(id, Msg::ToggleActivity));
+    let mut column = vec![header.into()];
+    if open {
+        let docs: Vec<Element<'a, Message>> = parts
+            .into_iter()
+            .filter_map(|(part, typography)| Some(rich_text::<Message>(tab.doc(item, part)?, typography).into()))
+            .collect();
+        if !docs.is_empty() {
+            column.push(
+                widget::container(
+                    widget::scrollable(widget::column::with_children(docs).spacing(spacing.space_xs))
+                        .anchor_bottom()
+                        .height(Length::Shrink),
+                )
+                .max_height(240.0)
+                .into(),
+            );
+        }
+    }
+    let card = widget::container(widget::column::with_children(column).spacing(spacing.space_xs))
+        .class(theme::Container::Card)
+        .padding([spacing.space_xxs, spacing.space_s])
+        .width(Length::Fill)
+        .max_width(style.measure + 2.0 * f32::from(spacing.space_m));
+    Some(
+        widget::container(card)
+            .center_x(Length::Fill)
+            .padding(Padding::from([spacing.space_xxs, spacing.space_m]))
+            .into(),
+    )
+}
+
 fn open_by_default(name: &str, status: ToolStatus) -> bool {
     // A question is asked in its own card, not as its input
     matches!(name, "Edit" | "MultiEdit" | "Write" | "TodoWrite") || (status == ToolStatus::Asking && name != "AskUserQuestion")
@@ -239,6 +319,9 @@ pub fn view<'a>(tab: &'a ThreadTab, style: &ThreadStyle, dark: bool) -> Element<
         );
     }
     for (index, item) in entries.map(|e| e.items.as_slice()).unwrap_or_default().iter().enumerate() {
+        if hidden(item, style) {
+            continue;
+        }
         let item_id = item.id;
         let rich = |part, typography: &Arc<Typography>| -> Option<Element<'a, Message>> {
             let doc = tab.doc(item, part)?;
@@ -363,6 +446,9 @@ pub fn view<'a>(tab: &'a ThreadTab, style: &ThreadStyle, dark: bool) -> Element<
     let scroll = widget::context_menu(scroll, Some(crate::menu::thread_context_menu(tab.has_selection(), style.paper)));
 
     let mut column = vec![header.into(), widget::divider::horizontal::default().into(), scroll.into()];
+    if let Some(bar) = activity(tab, style) {
+        column.push(bar);
+    }
     if let Some(entries) = entries
         && let Some(request) = entries.permissions.first()
     {

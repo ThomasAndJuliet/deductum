@@ -361,6 +361,8 @@ pub fn menu_bar<'a>(
                         MenuItem::CheckBox(fl!("thread-paper"), None, config.thread_paper, Action::ThreadPaper),
                         MenuItem::CheckBox(fl!("dark-mode"), None, cosmic::theme::is_dark(), Action::DarkModeToggle),
                         MenuItem::CheckBox(fl!("thread-match-colours"), None, config.thread_match_colours, Action::ThreadMatchColours),
+                        MenuItem::CheckBox(fl!("thread-show-thinking"), None, config.thread_show_thinking, Action::ThreadShowThinking),
+                        MenuItem::CheckBox(fl!("thread-show-tools"), None, config.thread_show_tools, Action::ThreadShowTools),
                         MenuItem::Divider,
                         MenuItem::Button(fl!("zoom-in"), None, Action::ZoomIn),
                         MenuItem::Button(fl!("zoom-reset"), None, Action::ZoomReset),

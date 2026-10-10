@@ -16,7 +16,7 @@ use cosmic::iced::advanced::renderer::{Headless, Style};
 use cosmic::iced::runtime::user_interface::{Cache, UserInterface};
 use cosmic::iced::{Event, Font, Pixels, Point, Size, mouse};
 
-use super::tab::{Msg, ThreadTab};
+use super::tab::{Msg, Shown, ThreadTab};
 use super::view::{ThreadStyle, view};
 use crate::Message;
 use crate::config::Config;
@@ -462,6 +462,21 @@ mod tests {
         let frame = harness.draw(view_with(&window, on), "diagram-window-actual", Size::new(900.0, 700.0));
         let first = &frame[..4];
         assert!(frame.chunks(4).filter(|px| *px != first).count() > 10_000);
+    }
+
+    #[test]
+    fn hidden_thinking_and_tools_are_not_copied() {
+        let mut harness = harness();
+        harness.tab.select_all();
+        let all = harness.tab.selected_text().unwrap();
+        assert!(all.contains("1.7724538509055159") && all.contains("polar-coordinates proof"), "{all}");
+        harness.config.thread_show_thinking = false;
+        harness.config.thread_show_tools = false;
+        harness.tab.shown = Shown { thinking: false, tools: false };
+        harness.snapshot("hidden-details");
+        let shown = harness.tab.selected_text().unwrap();
+        assert!(shown.contains("The numeric check agrees"), "{shown}");
+        assert!(!shown.contains("1.7724538509055159") && !shown.contains("polar-coordinates proof"), "{shown}");
     }
 
     #[test]

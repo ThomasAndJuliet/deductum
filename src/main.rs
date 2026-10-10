@@ -611,6 +611,8 @@ pub enum Action {
     About,
     DarkModeToggle,
     ThreadMatchColours,
+    ThreadShowThinking,
+    ThreadShowTools,
     ThreadCopy,
     ThreadPaper,
     ThreadSelectAll,
@@ -683,6 +685,8 @@ impl Action {
             Self::About => Message::ToggleContextPage(ContextPage::About),
             Self::DarkModeToggle => Message::ToggleDarkMode,
             Self::ThreadMatchColours => Message::ThreadMatchColours(None),
+            Self::ThreadShowThinking => Message::ThreadShowThinking(None),
+            Self::ThreadShowTools => Message::ThreadShowTools(None),
             Self::ThreadCopy => Message::ThreadCopy,
             Self::ThreadPaper => Message::ThreadPaperToggle,
             Self::ThreadSelectAll => Message::ThreadSelectAll,
@@ -784,6 +788,10 @@ pub enum Message {
     ThreadPaperToggle,
     /// Set, or with `None` toggle, whether images match the view's colours
     ThreadMatchColours(Option<bool>),
+    /// Set, or with `None` toggle, whether threads show thinking
+    ThreadShowThinking(Option<bool>),
+    /// Set, or with `None` toggle, whether threads show each tool call
+    ThreadShowTools(Option<bool>),
     ThreadCopy,
     ThreadSelectAll,
     /// A thread setting changed
@@ -2825,6 +2833,16 @@ impl App {
                 widget::settings::item::builder(fl!("thread-paper"))
                     .description(fl!("thread-paper-description"))
                     .toggler(self.config.thread_paper, Message::ThreadPaper),
+            )
+            .add(
+                widget::settings::item::builder(fl!("thread-show-thinking"))
+                    .description(fl!("thread-show-thinking-description"))
+                    .toggler(self.config.thread_show_thinking, |on| Message::ThreadShowThinking(Some(on))),
+            )
+            .add(
+                widget::settings::item::builder(fl!("thread-show-tools"))
+                    .description(fl!("thread-show-tools-description"))
+                    .toggler(self.config.thread_show_tools, |on| Message::ThreadShowTools(Some(on))),
             )
             .add(
                 widget::settings::item::builder(fl!("thread-match-colours"))
@@ -5011,6 +5029,14 @@ impl Application for App {
             Message::ThreadPaperToggle => self.set_thread_paper(!self.config.thread_paper),
             Message::ThreadMatchColours(on) => {
                 config_set!(thread_match_colours, on.unwrap_or(!self.config.thread_match_colours));
+            }
+            Message::ThreadShowThinking(on) => {
+                config_set!(thread_show_thinking, on.unwrap_or(!self.config.thread_show_thinking));
+                self.sync_thread_shown();
+            }
+            Message::ThreadShowTools(on) => {
+                config_set!(thread_show_tools, on.unwrap_or(!self.config.thread_show_tools));
+                self.sync_thread_shown();
             }
             Message::ThreadCopy => {
                 if let Some(task) = self.thread_copy() {

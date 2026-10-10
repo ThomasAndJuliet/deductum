@@ -71,6 +71,8 @@ pub enum Msg {
     CopyItem(u64),
     /// The thread's last relay has ended: start another for what waits
     Relaunch,
+    /// Open or close the current activity above the composer
+    ToggleActivity,
 }
 
 /// What a thread asks of the app
@@ -102,6 +104,29 @@ pub const MODES: [(&str, &str); 5] = [
     ("plan", "Plan"),
     ("bypassPermissions", "Bypass"),
 ];
+
+/// What a thread's view shows of the agent's thinking and tool calls
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Shown {
+    pub thinking: bool,
+    pub tools: bool,
+}
+
+impl Default for Shown {
+    fn default() -> Self {
+        Self { thinking: true, tools: true }
+    }
+}
+
+impl Shown {
+    pub fn shows(self, item: &super::model::Item) -> bool {
+        match &item.kind {
+            super::model::ItemKind::Thinking { .. } => self.thinking,
+            super::model::ItemKind::Tool(_) => self.tools,
+            _ => true,
+        }
+    }
+}
 
 pub struct ThreadTab {
     pub id: ThreadId,
@@ -156,6 +181,11 @@ pub struct ThreadTab {
     pub conversation_title: Option<String>,
     /// Answers given so far to the agent's questions, by question key
     pub answers: HashMap<String, String>,
+    /// The current activity above the composer is open
+    pub activity_open: bool,
+    /// What the view shows of thinking and tool calls, for copying and
+    /// finding only what is shown
+    pub shown: Shown,
     /// More for the agent's system prompt; see [`Launch::note`]
     pub note: Option<String>,
     /// The session whose relay runs its CLI, when it has one: it outlives
@@ -213,6 +243,8 @@ impl ThreadTab {
             named: false,
             conversation_title: None,
             answers: HashMap::new(),
+            activity_open: false,
+            shown: Shown::default(),
             note: None,
             relay: None,
             relay_live: false,
@@ -702,6 +734,7 @@ impl ThreadTab {
                     }
                 }
             }
+            Msg::ToggleActivity => self.activity_open = !self.activity_open,
             Msg::Relaunch => {
                 if !self.pending.is_empty() && matches!(self.cli, Cli::Stopped) {
                     return self.start_cli();
@@ -762,6 +795,9 @@ impl ThreadTab {
         let mut parts = Vec::new();
         for index in start.0..=end.0 {
             let item = entries.items.get(index)?;
+            if !self.shown.shows(item) {
+                continue;
+            }
             for part in [BODY, INPUT, OUTPUT] {
                 let Some((from, to)) = self.selection_in(index, part) else { continue };
                 if let Some(doc) = self.doc(item, part) {
@@ -784,7 +820,7 @@ impl ThreadTab {
         // height is roughly in proportion
         let mut matches = Vec::new();
         let mut weight = 0usize;
-        for (index, item) in entries.items.iter().enumerate() {
+        for (index, item) in entries.items.iter().enumerate().filter(|(_, item)| self.shown.shows(item)) {
             for part in [BODY, INPUT, OUTPUT] {
                 if let Some(doc) = self.doc(item, part) {
                     for (start, end) in rich::find(&doc, needle) {
