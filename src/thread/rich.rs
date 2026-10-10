@@ -420,6 +420,27 @@ fn linear_text(block: &Block) -> String {
     }
 }
 
+/// How tall `doc` is, and how much of it comes before `pos`, roughly: in
+/// characters, each line break counting as a line's worth, and each block
+/// as two
+pub fn text_before(doc: &Doc, pos: Pos) -> (usize, usize) {
+    const LINE: usize = 60;
+    let weigh = |text: &str| text.len() + text.matches('\n').count() * LINE;
+    let mut total = 0;
+    let mut before = 0;
+    for (index, block) in doc.blocks.iter().enumerate() {
+        let text = linear_text(block);
+        let len = weigh(&text) + 2 * LINE;
+        if index < pos.block {
+            before += len;
+        } else if index == pos.block {
+            before += weigh(text.get(..pos.offset.min(text.len())).unwrap_or(&text)) + LINE;
+        }
+        total += len;
+    }
+    (total, before)
+}
+
 /// Where `needle` appears in `doc`, ignoring ASCII case, as ranges of
 /// positions; a match never spans blocks
 pub fn find(doc: &Doc, needle: &str) -> Vec<(Pos, Pos)> {
@@ -921,7 +942,9 @@ impl<'a, Message> RichText<'a, Message> {
                             // Scaled down to fit the column, and to about
                             // two thirds of a window's height
                             let scale = (available / drawn.width).min(size * 40.0 / drawn.height).min(1.0);
-                            let (w, h) = (drawn.width * scale, drawn.height * scale);
+                            // In whole pixels: drawn at a fractional size, the
+                            // GPU renderer loses its thinnest lines
+                            let (w, h) = ((drawn.width * scale).floor(), (drawn.height * scale).floor());
                             let x = x0 + ((available - w) / 2.0).max(0.0);
                             let rect = Rectangle::new(Point::new(x, y + size * 0.4), Size::new(w, h));
                             let lt = Typography { body: drawn.family.clone(), italic: false, line_height: 1.2, justify: false, ..t.clone() };

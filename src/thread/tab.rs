@@ -139,6 +139,8 @@ pub struct ThreadTab {
     pub follow: bool,
     /// The height of the scrolled view, for paging
     pub page_height: f32,
+    /// The height of what it scrolls, for finding
+    pub content_height: f32,
     pub model: String,
     pub mode: String,
     /// Models the CLI offers, as value and name
@@ -201,6 +203,7 @@ impl ThreadTab {
             scroll_id: widget::Id::unique(),
             follow: true,
             page_height: 0.0,
+            content_height: 0.0,
             model: String::new(),
             // The CLI approves what is safe and asks about the rest
             mode: "auto".to_string(),
@@ -676,6 +679,7 @@ impl ThreadTab {
                 let offset = viewport.absolute_offset();
                 self.follow = offset.y + bounds.height >= content.height - 24.0;
                 self.page_height = bounds.height;
+                self.content_height = content.height;
             }
             Msg::Page(pages) => {
                 // A little of the last page stays in sight, to read on from
@@ -776,18 +780,20 @@ impl ThreadTab {
     /// it is, from 0 to 1, to scroll to
     pub fn find(&mut self, needle: &str, forward: bool) -> Option<f32> {
         let entries = self.entries.as_ref()?;
+        // Each match, and how much text comes before it: the thread's
+        // height is roughly in proportion
         let mut matches = Vec::new();
         let mut weight = 0usize;
-        let mut weights = Vec::with_capacity(entries.items.len());
         for (index, item) in entries.items.iter().enumerate() {
-            weights.push(weight);
             for part in [BODY, INPUT, OUTPUT] {
                 if let Some(doc) = self.doc(item, part) {
-                    weight += doc.blocks.len().max(1);
                     for (start, end) in rich::find(&doc, needle) {
-                        matches.push(((index, part, start), (index, part, end), item.id));
+                        let (_, before) = rich::text_before(&doc, start);
+                        matches.push(((index, part, start), (index, part, end), item.id, weight + before));
                     }
+                    weight += rich::text_before(&doc, rich::Pos::END).0;
                 }
+                weight += 40;
             }
         }
         let here = self.ordered().map(|(start, _)| start);
@@ -797,10 +803,10 @@ impl ThreadTab {
             (None, true) => matches.first(),
             (None, false) => matches.last(),
         }?;
-        let ((index, part, start), (_, _, end), id) = *next;
+        let ((_, part, start), (_, _, end), id, at) = *next;
         self.selection = Some((Anchor { item: id, part, pos: start }, Anchor { item: id, part, pos: end }));
         self.follow = false;
-        Some(weights[index] as f32 / weight.max(1) as f32)
+        Some(at as f32 / weight.max(1) as f32)
     }
 
     pub fn select_all(&mut self) {

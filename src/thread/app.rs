@@ -537,6 +537,15 @@ impl App {
             }
         }
         let Some(at) = tab.find(&needle, forward) else { return Task::none() };
+        // The match in the middle of the view, once the thread's height is
+        // known
+        if tab.content_height > tab.page_height && tab.page_height > 0.0 {
+            let y = (at * tab.content_height - tab.page_height / 2.0).clamp(0.0, tab.content_height - tab.page_height);
+            return cosmic::iced::widget::scrollable::scroll_to(
+                tab.scroll_id.clone(),
+                cosmic::iced::widget::scrollable::AbsoluteOffset { x: None, y: Some(y) },
+            );
+        }
         cosmic::iced::widget::scrollable::snap_to(
             tab.scroll_id.clone(),
             cosmic::iced::widget::scrollable::RelativeOffset { x: None, y: Some(at) },
@@ -576,7 +585,7 @@ impl App {
         let diagram = ImageWindow::diagram(source, paper);
         let (id, open) = window::open(window::Settings {
             size: diagram.initial_size(),
-            min_size: Some(cosmic::iced::Size::new(320.0, 200.0)),
+            min_size: Some(cosmic::iced::Size::new(560.0, 240.0)),
             decorations: true,
             ..Default::default()
         });
@@ -589,7 +598,7 @@ impl App {
         let image = ImageWindow::new(path);
         let (id, open) = window::open(window::Settings {
             size: image.initial_size(),
-            min_size: Some(cosmic::iced::Size::new(320.0, 200.0)),
+            min_size: Some(cosmic::iced::Size::new(560.0, 240.0)),
             decorations: true,
             ..Default::default()
         });

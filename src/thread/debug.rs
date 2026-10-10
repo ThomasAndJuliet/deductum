@@ -9,6 +9,8 @@
 //! `wait 2; shot plain; paper on; shot paper; scroll 0.5; selectall; copy;
 //! dark; shot dark; image; wait 1; quit`
 //!
+//! `split`, `find TEXT`, `findnext` and `zoomin` act as their menu items;
+//! `diagram SOURCE` opens a Mermaid diagram's window (`\n` for new lines).
 //! `type TEXT` types keys no widget took, and `composer` prints the
 //! composer's text; `page up` and `page down` press those keys; `paneclick` sends the click a pane reports for any click inside it, and
 //! `focused` prints whether the thread's composer has the keys
@@ -181,6 +183,14 @@ impl App {
                 eprintln!("composer: {:?}", text.trim_end());
                 cosmic::task::message(next())
             }
+            "split" => then(self.update(Message::PaneSplit(cosmic::widget::pane_grid::Axis::Vertical))),
+            "find" => then(Task::batch([
+                self.update(Message::Find(true)),
+                self.update(Message::FindSearchValueChanged(rest.to_string())),
+            ])),
+            "findnext" => then(self.update(Message::FindNext)),
+            "zoomin" => then(self.update(Message::ZoomIn)),
+            "diagram" => then(self.open_diagram(rest.replace("\\n", "\n"))),
             "save" => {
                 self.save_tabs();
                 cosmic::task::message(next())

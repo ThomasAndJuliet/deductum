@@ -111,7 +111,8 @@ impl ImageWindow {
     pub fn initial_size(&self) -> cosmic::iced::Size {
         let (w, h) = self.size.unwrap_or((800, 600));
         let scale = (1400.0 / w as f32).min(1000.0 / h as f32).min(1.0);
-        cosmic::iced::Size::new((w as f32 * scale).max(360.0), (h as f32 * scale + 56.0).max(240.0))
+        // Wide enough for the toolbar, whatever the picture
+        cosmic::iced::Size::new((w as f32 * scale).max(640.0), (h as f32 * scale + 56.0).max(360.0))
     }
 
     pub fn title(&self) -> String {
@@ -260,7 +261,7 @@ pub fn view_with<'a>(
     let drawn = window.drawn(&active);
     // An image at `size`, or filling the space; a drawing stays sharp at
     // any zoom
-    let picture = |size: Option<(f32, f32)>, smooth: bool| -> Element<'a, Message> {
+    let picture = move |size: Option<(f32, f32)>, smooth: bool| -> Element<'a, Message> {
         let (width, height, fit) = match size {
             Some((w, h)) => (Length::Fixed(w), Length::Fixed(h), ContentFit::Fill),
             None => (Length::Fill, Length::Fill, ContentFit::Contain),
@@ -297,7 +298,7 @@ pub fn view_with<'a>(
             editor.into()
         }
         (None, Some(zoom), Some((w, h))) => widget::scrollable(
-            widget::container(picture(Some((w as f32 * zoom, h as f32 * zoom)), zoom < 2.0))
+            widget::container(picture(Some(((w as f32 * zoom).floor(), (h as f32 * zoom).floor())), zoom < 2.0))
                 .center(Length::Shrink)
                 .padding(spacing.space_s),
         )
@@ -308,6 +309,19 @@ pub fn view_with<'a>(
         .width(Length::Fill)
         .height(Length::Fill)
         .into(),
+        // A drawing fitted at its fitting size, as zoomed ones are: drawn
+        // fitted by the GPU renderer, its thinnest lines are lost
+        (_, _, Some((w, h))) if window.diagram.is_some() || super::images::is_svg(&window.path) => {
+            let pad = f32::from(spacing.space_s);
+            widget::responsive(move |space| {
+                let scale = ((space.width - 2.0 * pad) / w as f32).min((space.height - 2.0 * pad) / h as f32).max(0.01);
+                // In whole pixels, as the zoomed sizes are
+                widget::container(picture(Some(((w as f32 * scale).floor(), (h as f32 * scale).floor())), true))
+                    .center(Length::Fill)
+                    .into()
+            })
+            .into()
+        }
         _ => widget::container(picture(None, true)).padding(spacing.space_s).into(),
     };
     let column = widget::column::with_children(vec![
