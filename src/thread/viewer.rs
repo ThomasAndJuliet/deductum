@@ -188,6 +188,8 @@ impl ImageWindow {
     }
 }
 
+/// The window: its image or diagram and the toolbar, whose controls `on`
+/// turns into the app's messages
 pub fn view_with<'a>(
     window: &'a ImageWindow,
     on: impl Fn(Action) -> Option<Message> + Clone + 'a,
