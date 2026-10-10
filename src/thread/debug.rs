@@ -181,6 +181,10 @@ impl App {
                 eprintln!("composer: {:?}", text.trim_end());
                 cosmic::task::message(next())
             }
+            "save" => {
+                self.save_tabs();
+                cosmic::task::message(next())
+            }
             "paneclick" => then(self.update(Message::PaneClicked(self.pane_model.focused()))),
             "focus" => match self.active_thread().map(|t| t.composer_id.clone()) {
                 Some(id) => then(cosmic::widget::text_input::focus(id)),

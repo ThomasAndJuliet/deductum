@@ -51,6 +51,7 @@ use config::{
     Profile, ProfileId, TabColor,
 };
 mod agent;
+mod restore;
 mod thread;
 mod host;
 mod launcher_forms;
@@ -540,7 +541,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     settings = settings.size_limits(Limits::NONE.min_width(360.0).min_height(180.0));
 
     // Flags
+    // Started plainly, a window reopens the tabs a closed one left
+    let restore = std::env::args().skip(1).all(|arg| arg == "--no-daemon");
     let flags = Flags {
+        restore,
         config_handler,
         config,
         shortcuts_config,
@@ -590,6 +594,8 @@ pub struct StartupThread {
 
 #[derive(Clone, Debug)]
 pub struct Flags {
+    /// Reopen a closed window's tabs
+    restore: bool,
     config_handler: Option<cosmic_config::Config>,
     config: Config,
     shortcuts_config: shortcuts::ShortcutsConfig,
@@ -757,6 +763,8 @@ impl MenuAction for Action {
 #[derive(Clone, Debug)]
 pub enum Message {
     AppTheme(AppTheme),
+    /// The sessions of a reopened window that still run, to attach again
+    RestoreSessions(Vec<agent::Session>),
     /// A thread tab's own message
     Thread(thread::tab::ThreadId, thread::tab::Msg),
     /// Images chosen to attach to a thread's next message
@@ -1246,6 +1254,10 @@ pub struct App {
     rename: Option<(agent::Session, String)>,
     /// The thread being renamed, when [`Self::rename`] is a thread's
     rename_thread: Option<thread::tab::ThreadId>,
+    /// Whether to reopen a closed window's tabs at startup
+    restore_wanted: bool,
+    /// This window's record of its tabs, for reopening them
+    restore: Option<restore::Claim>,
     rename_id: widget::Id,
     /// The tab colour the theme's accent is set to, if any
     accent: Option<TabColor>,
@@ -4784,6 +4796,8 @@ impl Application for App {
             startup_command: flags.startup_command,
             startup_attach: flags.startup_attach,
             startup_thread: flags.startup_thread,
+            restore_wanted: flags.restore,
+            restore: None,
             tab_drag: None,
             reconnecting: BTreeMap::new(),
             tab_drag_left_window: false,
@@ -4935,6 +4949,10 @@ impl Application for App {
                 return self.update_config();
             }
             Message::Thread(id, msg) => return self.thread_message(id, msg),
+            Message::RestoreSessions(sessions) => {
+                let tasks: Vec<_> = sessions.into_iter().map(|s| self.update(Message::RemoteAttach(s))).collect();
+                return Task::batch(tasks);
+            }
             #[cfg(debug_assertions)]
             Message::DebugStep(index) => return self.debug_step(index),
             #[cfg(debug_assertions)]
@@ -4952,7 +4970,10 @@ impl Application for App {
             }
             Message::ThreadSelectAll => self.thread_select_all(),
             Message::ThreadSetting(setting) => return self.thread_setting(setting),
-            Message::ThreadTick => return self.enforce_thread_limits(),
+            Message::ThreadTick => {
+                self.save_tabs();
+                return self.enforce_thread_limits();
+            }
             Message::ToggleDarkMode => {
                 let dark = cosmic::theme::is_dark();
                 config_set!(app_theme, if dark { AppTheme::Light } else { AppTheme::Dark });
@@ -8197,7 +8218,23 @@ impl Application for App {
                 // Set new terminal event channel
                 self.term_event_tx_opt = Some(term_event_tx);
 
-                // Spawn first tab
+                // Spawn first tab: a closed window's, when started plainly
+                if self.restore_wanted
+                    && let Some((claim, record)) = restore::Claim::previous()
+                {
+                    self.restore = Some(claim);
+                    let reopened = self.reopen(record);
+                    #[cfg(debug_assertions)]
+                    let reopened = Task::batch([reopened, cosmic::task::message(Message::DebugStep(0))]);
+                    if self.pane_model.active().is_some_and(|tabs| tabs.iter().next().is_some()) {
+                        return reopened;
+                    }
+                    // Only sessions, which attach once found running
+                    return Task::batch([reopened, self.update(Message::TabNew)]);
+                }
+                if self.restore.is_none() {
+                    self.restore = restore::Claim::new();
+                }
                 if let Some(session) = self.startup_attach.take() {
                     return self.update(Message::RemoteAttach(session));
                 }
@@ -8302,6 +8339,7 @@ impl Application for App {
                 config_set!(default_profile, default.then_some(profile_id));
             }
             Message::WindowClose => {
+                self.save_tabs();
                 if let Some(window_id) = self.core.main_window_id() {
                     return window::close(window_id);
                 }
