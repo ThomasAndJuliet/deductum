@@ -41,6 +41,8 @@ pub enum Event {
     Assistant { message_id: String, content: Value, parent: Option<String> },
     /// A user message: text from the user, or tool results
     User { content: Value, parent: Option<String> },
+    /// More of a running tool's output
+    ToolOutput { id: String, text: String },
     Permission(PermissionRequest),
     PermissionCancelled(String),
     TurnDone { error: bool, message: String, duration_ms: u64, context_tokens: Option<u64> },
@@ -147,6 +149,33 @@ impl ToolCall {
                 .unwrap_or_default(),
             _ => Vec::new(),
         }
+    }
+
+    /// A Codex patch's changes as one diff, each file under an `@@` line of
+    /// its name when there are several
+    pub fn patch(&self) -> Option<String> {
+        let changes = self.input.get("changes")?.as_array()?;
+        let mut out = String::new();
+        for change in changes {
+            let field = |name: &str| change.get(name).and_then(Value::as_str).unwrap_or_default();
+            if changes.len() > 1 {
+                out.push_str(&format!("@@ {}\n", field("path")));
+            }
+            let diff = field("diff");
+            match change.pointer("/kind/type").and_then(Value::as_str) {
+                Some("add") => diff.lines().for_each(|line| out.push_str(&format!("+{line}\n"))),
+                Some("delete") => diff.lines().for_each(|line| out.push_str(&format!("-{line}\n"))),
+                _ => {
+                    // Hunks only: file headers would read as removed and added lines
+                    let start = diff.find("@@").unwrap_or(0);
+                    out.push_str(&diff[start..]);
+                    if !out.ends_with('\n') {
+                        out.push('\n');
+                    }
+                }
+            }
+        }
+        Some(out.trim_end().to_string())
     }
 
     /// The todo list a `TodoWrite` sets: each item's text and status
@@ -445,6 +474,16 @@ impl Entries {
                 }
                 if !text.is_empty() || !images.is_empty() {
                     self.push(ItemKind::User { text, images });
+                }
+            }
+            Event::ToolOutput { id, text } => {
+                if let Some(&at) = self.tools.get(&id)
+                    && let ItemKind::Tool(tool) = &mut self.items[at].kind
+                {
+                    tool.output.push_str(&text);
+                    if tool.output.len() > TOOL_TEXT_LIMIT * 2 {
+                        tool.output = cut(&tool.output, TOOL_TEXT_LIMIT);
+                    }
                 }
             }
             Event::Permission(request) => {

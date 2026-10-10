@@ -161,7 +161,7 @@ impl ThreadTab {
             agent: Agent::Claude,
             profile_id,
             host,
-            title: title_for(&cwd),
+            title: title_for(Agent::Claude, &cwd),
             cwd,
             args,
             entries: Some(Entries::default()),
@@ -216,6 +216,14 @@ impl ThreadTab {
         (tab, task)
     }
 
+    /// Whose agent it is, before its CLI starts or its history is read
+    pub fn set_agent(&mut self, agent: Agent) {
+        if self.title == title_for(self.agent, &self.cwd) {
+            self.title = title_for(agent, &self.cwd);
+        }
+        self.agent = agent;
+    }
+
     pub fn is_loaded(&self) -> bool {
         self.entries.is_some()
     }
@@ -243,9 +251,9 @@ impl ThreadTab {
             return Task::none();
         };
         self.load = Load::Loading;
-        let (host, turns, id, generation) = (self.host.clone(), self.turns, self.id, self.generation);
+        let (agent, host, turns, id, generation) = (self.agent, self.host.clone(), self.turns, self.id, self.generation);
         cosmic::task::future(async move {
-            let result = tokio::task::spawn_blocking(move || session::load(&host, &session_id, turns))
+            let result = tokio::task::spawn_blocking(move || session::load(agent, &host, &session_id, turns))
                 .await
                 .unwrap_or_else(|err| Err(err.to_string()));
             Message::Thread(id, Msg::Loaded(generation, Arc::new(result)))
@@ -406,9 +414,13 @@ impl ThreadTab {
                                 let detail = stderr.trim();
                                 entries.notice(
                                     if detail.is_empty() {
-                                        format!("Claude stopped (exit status {})", code.map_or("unknown".into(), |c| c.to_string()))
+                                        format!(
+                                            "{} stopped (exit status {})",
+                                            self.agent.label(),
+                                            code.map_or("unknown".into(), |c| c.to_string())
+                                        )
                                     } else {
-                                        format!("Claude stopped: {detail}")
+                                        format!("{} stopped: {detail}", self.agent.label())
                                     },
                                     true,
                                 );
@@ -688,10 +700,11 @@ fn scroll_to_end(id: &widget::Id) -> Task<Message> {
     scrollable::snap_to(id.clone(), scrollable::RelativeOffset { x: None, y: Some(1.0) })
 }
 
-/// A thread's title before the agent names it: its directory's name
-fn title_for(cwd: &str) -> String {
+/// A thread's title before the agent names it: the agent and its
+/// directory's name
+fn title_for(agent: Agent, cwd: &str) -> String {
     let name = cwd.trim_end_matches('/').rsplit('/').next().unwrap_or_default();
-    if name.is_empty() { "Claude".to_string() } else { format!("Claude · {name}") }
+    if name.is_empty() { agent.label() } else { format!("{} · {name}", agent.label()) }
 }
 
 /// What a tool was asked to do, as rich text: a command, a diff, a list
@@ -703,6 +716,9 @@ fn tool_input_doc(tool: &ToolCall) -> Doc {
     };
     if !tool.partial_input.is_empty() {
         return markdown::parse(&fenced("json", &tool.partial_input));
+    }
+    if let Some(patch) = tool.patch() {
+        return markdown::parse(&fenced("diff", &patch));
     }
     let source = match tool.name.as_str() {
         "Bash" => {
