@@ -496,9 +496,12 @@ this.
 
 ## Threads
 
-A Claude profile marked **Open as rich-text thread** (the built-in "Claude thread"
-profile is one) shows its conversation as rich text in the tab, rather than
-running the Claude TUI in a terminal. The code is `src/thread/`.
+A Claude or Codex profile marked **Open as rich-text thread** (the built-in
+"Claude thread" and "Codex thread" profiles are) shows its conversation as
+rich text in the tab, rather than running the agent's TUI in a terminal. The
+code is `src/thread/`. A thread sends `protocol::Command`s; a `Protocol`
+turns them into its CLI's lines, and the lines into `model::Event`s, so the
+view and the transport are the same for both agents.
 
 ### Talking to Claude
 
@@ -524,6 +527,46 @@ The protocol is one JSON object per line (`thread::claude`):
   thread answers allow (echoing the input), allow with the CLI's suggested
   rule for the session, or deny. Any other control request gets an error
   reply.
+
+### Talking to Codex
+
+`thread::codex` runs `codex app-server -c forced_login_method="chatgpt"`,
+with `OPENAI_API_KEY` and `CODEX_API_KEY` unset, and speaks its JSON-RPC
+over stdio: `initialize`, `thread/start` or `thread/resume` (the system
+prompt as `developerInstructions`, `approvalsReviewer` always sent, as the
+user's config may name the automatic reviewer), `model/list`, then a
+`turn/start` per message. Agent messages, reasoning summaries, commands
+(with live output), file changes, MCP calls, web searches and plans become
+the same entries as Claude's; command and file-change approvals are prompts.
+The composer's modes map to approval policy, sandbox and reviewer: Ask is
+`untrusted`, Accept edits `on-request`, Auto `on-request` with
+`auto_review`, Plan the plan collaboration mode, read-only, and Bypass
+`never` with full access. History is read from the rollout file in
+`~/.codex/sessions`.
+
+### Relays
+
+A thread's CLI runs in a relay (`ct-supervise --relay`, `src/relay.rs`)
+inside a Zellij session of its own, `ct-thread-<agent>-…`, so that it
+outlives the window, as a terminal's agent does. The relay appends the CLI's
+output to a log in `~/.local/state/cosmic-term/threads/<session>/` and
+serves it over a Unix socket from any offset; inputs carry ids and are
+applied once, however often a reconnecting client resends them. A window
+joins from the turn in progress, follows it live, and detaches by closing
+its connection: closing a tab, unloading a thread or quitting leaves the
+turn running. **End session** stops the CLI for good. An idle relay with no
+window ends itself after an hour; a transfer ends the relays working in its
+worktree first. Thread relays are listed in the sidebar beside terminal
+sessions, open as threads, and are offered to the PAM module and mounts as
+sessions are.
+
+### Restoring windows
+
+Each window keeps a record of its threads and sessions in
+`~/.local/state/cosmic-term/windows/`, locked while it runs. A window
+started without arguments claims the record of one no longer running and
+reopens its tabs: threads continue their conversations and join their
+relays, sessions are attached again if their hosts still list them.
 
 ### The thread
 
@@ -617,10 +660,11 @@ Memory goes where the user is looking:
   recently shown first: their entries are dropped, and read back from the
   transcript when the tab is shown again. A thread mid-turn is never
   unloaded.
-- **Idle agents are stopped.** Each CLI is a Node process of a few hundred
-  megabytes. One idle for `idle_minutes` (10), or beyond `live_agents` (3)
-  running at once, is stopped by closing its input; the next message starts
-  it again with `--resume`.
+- **Idle agents are let go.** Each CLI is a process of a few hundred
+  megabytes. A window detaches from one idle for `idle_minutes` (10), or
+  beyond `live_agents` (3) running at once; its relay ends it after an hour
+  without a window, and the next message joins it again or starts it with
+  `--resume`.
 - **Layout is cached per block, and drawing is culled** to the blocks on
   screen; formulas and images live in bounded caches.
 
@@ -629,13 +673,32 @@ running, and roughly how much memory their text and formulas take.
 
 ### Opening threads
 
-- A thread profile's launcher opens a thread in the chosen folder, or
-  resumes a chosen Claude conversation as a thread. Its other choices
-  (attaching, moving, continuing with the other agent) open terminals.
+- A thread profile's launcher opens a thread in the chosen folder, resumes a
+  chosen conversation, continues one with the other agent or from another
+  computer, or receives a transfer, all as threads.
+- A thread moves or forks to another computer, renames, pops out into its
+  own window and moves between panes as a session does; Find, Paste, file
+  drops (images attach), zoom (its text size) and Ctrl+C (copy, else stop)
+  act on it.
+- Keys no widget takes go to the composer, as in the CLI; Escape stops a
+  working agent.
 - A thread profile with a working directory opens straight into a thread.
 - **New tab** from a thread opens another thread in the same place.
-- `cosmic-term --thread DIR [--resume ID] [--prompt TEXT]` opens one at
-  startup.
+- `cosmic-term --thread DIR [--agent claude|codex] [--host DEST] [--resume
+  ID] [--prompt TEXT]` opens one at startup.
+
+### Charts and diagrams
+
+A `chartgen` code block is drawn by chartgen (the shared diagrams
+repository, `../chartgen-src` beside the source) as native geometry
+(`thread::chart`): chartgen asks for its text to be measured, and the answer
+comes from the same cosmic-text shaping the labels are drawn with, so the
+labels are selectable cells in their place. Neutral colours are set between
+the page and the text colour. Agents check specifications with
+`ct-chartgen check`, installed with the other helpers. A `mermaid` block is
+laid out by `merman`, as Zed does, themed from the thread's colours, its
+labels laid over the drawing as cells (`thread::diagram`); clicking it opens
+a window with zoom, its source and full screen.
 
 ### Testing
 
@@ -649,10 +712,8 @@ streams math, and a permission prompt answered with Allow. In debug builds,
 
 ### Not yet done
 
-- Codex threads: Codex profiles still run in a terminal. `codex app-server`
-  speaks a similar JSON-RPC protocol and would fit the same model.
-- Closing a thread's tab mid-turn ends the turn, as its CLI is a child of the
-  window. The conversation itself is kept by the CLI and resumes.
+- Codex's questions to the user (`item/tool/requestUserInput`) and MCP
+  elicitations are refused rather than asked.
 - Pasting images into the composer; images are attached from files.
 - Syntax highlighting in code blocks.
 

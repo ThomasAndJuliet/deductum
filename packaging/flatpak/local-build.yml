@@ -1,0 +1,120 @@
+app-id: dev.twright.CosmicTermAgents
+runtime: org.freedesktop.Platform
+runtime-version: "25.08"
+sdk: org.freedesktop.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.rust-stable
+command: cosmic-term
+# Compose in the module itself so cached/module-only rebuilds retain the Store
+# catalog too, even when they do not run flatpak-builder's finishing phase.
+appstream-compose: false
+
+finish-args:
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --share=ipc
+  - --device=dri
+  # Every shell, agent, ssh connection and helper runs on the host through
+  # flatpak-spawn --host, since the runtime has none of the user's tools.
+  # This makes the sandbox nominal, as it is for any terminal.
+  - --talk-name=org.freedesktop.Flatpak
+  # The colour scheme import and export dialogs read and write anywhere.
+  - --filesystem=host
+  # The password manager.
+  - --talk-name=org.freedesktop.secrets
+  # The desktop's theme and toolkit settings, granted per directory so that
+  # this application's own settings directory stays writable.
+  - --filesystem=xdg-config/cosmic/com.system76.CosmicTheme.Mode:ro
+  - --filesystem=xdg-config/cosmic/com.system76.CosmicTheme.Dark:ro
+  - --filesystem=xdg-config/cosmic/com.system76.CosmicTheme.Light:ro
+  - --filesystem=xdg-config/cosmic/com.system76.CosmicTk:ro
+
+build-options:
+  append-path: /usr/lib/sdk/rust-stable/bin
+  env:
+    CARGO_HOME: /run/build/cosmic-term/cargo
+
+modules:
+  # Zellij, copied to machines that have none, beside the terminal so that it
+  # is found as the helpers are; the static release runs on any x86-64 Linux
+  - name: zellij
+    buildsystem: simple
+    build-commands:
+      - install -Dm755 zellij /app/bin/zellij
+    sources:
+      - type: archive
+        url: https://github.com/zellij-org/zellij/releases/download/v0.45.1/zellij-x86_64-unknown-linux-musl.tar.gz
+        sha256: 40bcc2e03f5d5ae8e054e39f676081fe12ab70871506996ba595834c3718eefc
+        strip-components: 0
+
+  - name: cosmic-term
+    buildsystem: simple
+    build-commands:
+      - cargo --offline --locked build --release
+      # The session supervisor and the transfer helper are copied to every
+      # host the terminal works with, so they are linked statically. The SDK
+      # has no static libm, which Rust's standard library asks for but they
+      # do not use, so an empty one stands in
+      - mkdir -p target/static-shim && ar rcs target/static-shim/libm.a
+      - cargo --offline --locked rustc --release --bin ct-supervise --
+        -C target-feature=+crt-static -L target/static-shim
+      - cargo --offline --locked rustc --release --bin ct-transfer --
+        -C target-feature=+crt-static -L target/static-shim
+      # Agents in threads check their charts with it, wherever they run
+      - cargo --offline --locked rustc --release --bin ct-chartgen --
+        -C target-feature=+crt-static -L target/static-shim
+      # The sudo agent runs on the host, from systemd, so it is static too;
+      # the PAM module is loaded by sudo, so it is a shared library
+      - cargo --offline --locked rustc --release --bin ct-sudo-agent --
+        -C target-feature=+crt-static -L target/static-shim
+      - cargo --offline --locked build --release -p pam_cosmic_term_sudo
+      - install -Dm755 target/release/cosmic-term /app/bin/cosmic-term
+      - install -Dm755 target/release/ct-sudo-agent /app/bin/ct-sudo-agent
+      - install -Dm644 target/release/libpam_cosmic_term_sudo.so /app/bin/pam_cosmic_term_sudo.so
+      - install -Dm755 target/release/ct-supervise /app/bin/ct-supervise
+      - install -Dm755 target/release/ct-transfer /app/bin/ct-transfer
+      - install -Dm755 target/release/ct-chartgen /app/bin/ct-chartgen
+      # build.rs writes the desktop entry under upstream's id; install it
+      # under this fork's, named apart from COSMIC Terminal
+      - |
+        sed -e 's/^Icon=.*/Icon=dev.twright.CosmicTermAgents/' \
+            -e '/^Name\[/d' -e 's/^Name=.*/Name=COSMIC Agent Terminal/' \
+            target/xdgen/com.system76.CosmicTerm.desktop > desktop
+        install -Dm644 desktop /app/share/applications/dev.twright.CosmicTermAgents.desktop
+      - |
+        for icon in res/icons/hicolor/*/apps/com.system76.CosmicTerm.svg; do
+          size=$(basename "$(dirname "$(dirname "$icon")")")
+          install -Dm644 "$icon" \
+            "/app/share/icons/hicolor/$size/apps/dev.twright.CosmicTermAgents.svg"
+        done
+      # Without it the repository's catalogue, and so COSMIC Store, leaves
+      # the app out
+      - install -Dm644 packaging/flatpak/dev.twright.CosmicTermAgents.metainfo.xml
+        /app/share/metainfo/dev.twright.CosmicTermAgents.metainfo.xml
+      - >-
+        appstreamcli compose --no-net --prefix=/
+        --origin=dev.twright.CosmicTermAgents --result-root=/app
+        --data-dir=/app/share/app-info/xmls
+        --icons-dir=/app/share/app-info/icons/flatpak
+        --components=dev.twright.CosmicTermAgents /app
+    # The terminal's source in cosmic-term/, beside chartgen's, which it
+    # depends on by path
+    subdir: cosmic-term
+    sources:
+      - type: dir
+        path: ../..
+        dest: cosmic-term
+        skip:
+          - target
+          - build-flatpak
+          - .git
+          - .flatpak-builder
+          - .local-design
+      # chartgen, from the diagrams repository shared with Juliet; a local
+      # checkout is linked as ../chartgen-src for development
+      - type: git
+        url: file:///home/twright/diagrams
+        branch: statistical-charts
+        commit: 50b5b9773dbcbd1e8c9975c9bc3e107f00496bb6
+        dest: chartgen-src
+      - cargo-sources.json
