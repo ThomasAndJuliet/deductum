@@ -2039,7 +2039,8 @@ fn block_editor_in<'a>(ws: Option<&'a Workspace>, t: &'a Theory, window: bool, i
     }
     // Prose has no proof state
     if !window && !floated && be.kind == Kind::Formal && let Some(g) = inline_goal(inline, table) {
-        col = col.push(g);
+        // (part of the cell: the space below it is the space between cells)
+        col = col.push(widget::container(g).padding(Padding { bottom: spacing().space_s as f32, ..Padding::ZERO }));
     }
     if let Some(doc) = &be.preview {
         let mut typo = typography(&theme::active());
@@ -2156,6 +2157,15 @@ pub fn prose_format(hl: &super::editor::Hl, theme: &cosmic::Theme) -> iced::adva
             f.font = f.font.or(Some(cosmic::font::mono()));
             f
         }
+        // Rendered markup: bold and emphasis in the prose's own font
+        Hl::Bold | Hl::Emph => iced::advanced::text::highlighter::Format {
+            color: None,
+            font: Some(cosmic::iced::Font {
+                weight: if *hl == Hl::Bold { cosmic::iced::font::Weight::Bold } else { cosmic::iced::font::Weight::Normal },
+                style: if *hl == Hl::Emph { cosmic::iced::font::Style::Italic } else { cosmic::iced::font::Style::Normal },
+                ..cosmic::iced::Font::with_name("NewComputerModern")
+            }),
+        },
         _ => highlight_format(hl, theme),
     }
 }
@@ -2506,9 +2516,21 @@ const PROSE_TEMPLATES: &[(&str, &str, &str)] = &[
     ("url", "\\<^url>‹", "›"),
     ("citation", "\\cite{", "}"),
     ("footnote", "\\footnote{", "}"),
-    ("list item", "\\<^item> ", ""),
-    ("numbered item", "\\<^enum> ", ""),
 ];
+
+/// Whether the caret's line is an item of a list (`\<^item>` or `\<^enum>`, as the symbols show
+/// them): which marker, with the line's indent
+pub fn list_item_at(t: &Theory, table: &super::symbols::Table) -> Option<(String, String)> {
+    let be = t.block_editor.as_ref().filter(|be| be.wrap.is_some())?;
+    let before: String = be.decoded.text.chars().take(be.caret()).collect();
+    let line = before.rsplit('\n').next().unwrap_or("");
+    let indent: String = line.chars().take_while(|c| *c == ' ').collect();
+    let rest = line.trim_start();
+    ["\\<^item>", "\\<^enum>"].into_iter().find_map(|m| {
+        let shown = table.decode(m).text;
+        (rest.starts_with(m) || rest.starts_with(shown.as_str())).then(|| (m.to_string(), indent.clone()))
+    })
+}
 
 const PROOF_TEMPLATES: &[(&str, &str, &str)] = &[
     ("have", "have \"", "\"\n  "),
@@ -2552,6 +2574,20 @@ fn insert_palette<'a>(ws: &'a Workspace, t: &'a Theory, table: &super::symbols::
             }
         }
         InsertContext::Prose | InsertContext::Proof => {
+            // Lists: in one, its next item (and a nested one); elsewhere, a list to begin
+            if context == InsertContext::Prose {
+                let lists: Vec<(String, String, String)> = match list_item_at(t, table) {
+                    Some((marker, indent)) => vec![
+                        ("next item".into(), format!("\n{indent}{marker} "), String::new()),
+                        ("nested item".into(), format!("\n{indent}  {marker} "), String::new()),
+                    ],
+                    None => vec![
+                        ("bullet list".into(), "\n\\<^item> ".into(), String::new()),
+                        ("numbered list".into(), "\n\\<^enum> ".into(), String::new()),
+                    ],
+                };
+                items.extend(lists.into_iter().filter(|(l, _, _)| query.is_empty() || l.contains(&query)));
+            }
             let list = if context == InsertContext::Prose { PROSE_TEMPLATES } else { PROOF_TEMPLATES };
             for (label, before, after) in list.iter().filter(|(l, _, _)| query.is_empty() || l.contains(&query)) {
                 items.push((label.to_string(), before.to_string(), after.to_string()));

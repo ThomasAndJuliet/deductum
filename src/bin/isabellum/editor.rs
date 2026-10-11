@@ -147,7 +147,7 @@ impl BlockEditor {
     /// The text as shown for a caret at `caret` (decoded); if it changed, the editor gets it, the
     /// caret where it was. True if it changed
     pub fn reshow(&mut self, caret: Option<usize>, table: &Table) -> bool {
-        let shown = shown_text_at(&self.decoded.text, self.wrap.is_some(), caret, table);
+        let shown = shown_with_markup(&self.decoded, self.wrap.is_some(), caret, table);
         if shown == self.shown_text {
             return false;
         }
@@ -194,6 +194,143 @@ pub fn shown_text_at(text: &str, prose: bool, caret: Option<usize>, table: &Tabl
 }
 
 const ZERO_WIDTH: char = '\u{200B}';
+
+/// Markup in a paragraph of prose, rendered where the caret is not inside it: the characters it
+/// hides (its delimiters, shown zero-width) and how what it holds is set
+pub struct Markup {
+    pub hide: Vec<usize>,
+    pub style: (usize, usize, Hl),
+}
+
+/// The markup of a paragraph's decoded text: `\<^bold>‹…›` (decoded as a bold `‹`),
+/// `\<^emph>‹…›` (a control glyph and a cartouche), `\<^verbatim>‹…›`, and antiquotations
+/// (`@{name …}`, shown as what they hold, as code); none the caret is inside
+pub fn prose_markup(decoded: &super::symbols::Decoded, caret: Option<usize>) -> Vec<Markup> {
+    let cs: Vec<char> = decoded.text.chars().collect();
+    let n = cs.len();
+    let style_at: HashMap<usize, super::symbols::Style> = decoded.styles.iter().map(|(i, st)| (*i, *st)).collect();
+    let inside = |s: usize, e: usize| caret.is_some_and(|c| s <= c && c <= e);
+    // the cartouche opened at `i`: where it closes
+    let close = |i: usize| -> Option<usize> {
+        let mut depth = 0;
+        for (k, c) in cs.iter().enumerate().skip(i) {
+            match c {
+                '‹' => depth += 1,
+                '›' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return Some(k);
+                    }
+                }
+                '\n' if cs.get(k + 1) == Some(&'\n') => return None,
+                _ => {}
+            }
+        }
+        None
+    };
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < n {
+        // \<^bold>‹…›: the bold `‹` stands for both
+        if cs[i] == '‹' && style_at.get(&i) == Some(&super::symbols::Style::Bold)
+            && let Some(j) = close(i)
+        {
+            if !inside(i, j + 1) {
+                out.push(Markup { hide: vec![i, j], style: (i + 1, j, Hl::Bold) });
+            }
+            i = j + 1;
+            continue;
+        }
+        // \<^emph>‹…›: its control glyph, then the cartouche
+        if cs[i] == '\u{2223}' && style_at.get(&i) == Some(&super::symbols::Style::Control) && cs.get(i + 1) == Some(&'‹')
+            && let Some(j) = close(i + 1)
+        {
+            if !inside(i, j + 1) {
+                out.push(Markup { hide: vec![i, i + 1, j], style: (i + 2, j, Hl::Emph) });
+            }
+            i = j + 1;
+            continue;
+        }
+        // \<^verbatim>‹…› (and the like, written out)
+        if cs[i] == '\\' && cs[i..].iter().collect::<String>().starts_with("\\<^verbatim>‹") {
+            let open = i + "\\<^verbatim>".chars().count();
+            if let Some(j) = close(open) {
+                if !inside(i, j + 1) {
+                    out.push(Markup { hide: (i..=open).chain([j]).collect(), style: (open + 1, j, Hl::Sem(Sem::Free)) });
+                }
+                i = j + 1;
+                continue;
+            }
+        }
+        // @{name arguments}: shown as the arguments, as code
+        if cs[i] == '@' && cs.get(i + 1) == Some(&'{') {
+            let mut j = i + 2;
+            while j < n && (cs[j].is_alphanumeric() || cs[j] == '_') {
+                j += 1;
+            }
+            while j < n && cs[j] == ' ' {
+                j += 1;
+            }
+            let body = j;
+            let (mut depth, mut quoted, mut k) = (0usize, false, j);
+            let mut end = None;
+            while k < n {
+                let c = cs[k];
+                if quoted {
+                    quoted = c != '"';
+                } else if c == '"' {
+                    quoted = true;
+                } else if c == '‹' {
+                    depth += 1;
+                } else if c == '›' {
+                    depth = depth.saturating_sub(1);
+                } else if c == '}' && depth == 0 {
+                    end = Some(k);
+                    break;
+                } else if c == '\n' && cs.get(k + 1) == Some(&'\n') {
+                    break;
+                }
+                k += 1;
+            }
+            if let Some(e) = end {
+                if !inside(i, e + 1) && e > body {
+                    // (its quotes or cartouche around the argument hidden too)
+                    let (mut s0, mut e0) = (body, e);
+                    let mut hide: Vec<usize> = (i..body).chain([e]).collect();
+                    if (cs[s0] == '"' && cs[e0 - 1] == '"' && e0 - 1 > s0) || (cs[s0] == '‹' && cs[e0 - 1] == '›' && e0 - 1 > s0) {
+                        hide.push(s0);
+                        hide.push(e0 - 1);
+                        s0 += 1;
+                        e0 -= 1;
+                    }
+                    out.push(Markup { hide, style: (s0, e0, Hl::Sem(Sem::Free)) });
+                }
+                i = e + 1;
+                continue;
+            }
+        }
+        i += 1;
+    }
+    out
+}
+
+/// The text the editor shows, maths and markup rendered where the caret is not in them (see
+/// [`shown_text_at`] and [`prose_markup`])
+pub fn shown_with_markup(decoded: &super::symbols::Decoded, prose: bool, caret: Option<usize>, table: &Table) -> String {
+    let shown = shown_text_at(&decoded.text, prose, caret, table);
+    if !prose {
+        return shown;
+    }
+    let mut chars: Vec<char> = shown.chars().collect();
+    for m in prose_markup(decoded, caret) {
+        for k in m.hide {
+            if let Some(c) = chars.get_mut(k) {
+                *c = ZERO_WIDTH;
+            }
+        }
+    }
+    chars.into_iter().collect()
+}
 
 /// A LaTeX command's Unicode character, through Isabelle's symbols (`le` is `\<le>`, `≤`)
 fn latex_char(name: &str, table: &Table) -> Option<char> {
@@ -475,6 +612,8 @@ pub enum Hl {
     /// A sub- or superscript glyph, drawn in the scripts font, in its class's colour
     Script(Option<Sem>),
     Bold,
+    /// Emphasis in prose (`\<^emph>‹…›` set as it reads)
+    Emph,
     Control,
     Keyword,
     Error,
@@ -619,6 +758,7 @@ pub fn highlight_format(hl: &Hl, theme: &cosmic::Theme) -> highlighter::Format<c
             Sem::Raw => (k.operator, false, false),
         },
         Hl::Bold => (text, true, false),
+        Hl::Emph => (text, false, true),
         Hl::Script(_) => (text, false, false),
         Hl::Control => (Color { a: 0.45, ..text }, false, false),
         Hl::Keyword => (k.keyword, true, false),
@@ -752,12 +892,14 @@ pub struct Theory {
     pub last_edit: Instant,
     /// Undo steps that ended before the one being typed, not yet sent: each goes to the host
     /// as its own edit, so that Ctrl+Z takes back one step (its transaction, the text then)
-    steps: std::collections::VecDeque<(String, String)>,
+    pub steps: std::collections::VecDeque<(String, String)>,
     /// What the last edit was, and where it left the caret, to tell where a step ends
     last_kind: EditKind,
     last_caret: usize,
     /// Start a new step at the next edit
     force_step: bool,
+    /// While set, edits join the step under way (a palette click's several insertions are one)
+    group: bool,
     /// Vim keys: a whole insert session is one step, as in vim
     pub vim_session: bool,
     /// Undo and redo wait until the edits before them have reached the host
@@ -1197,6 +1339,7 @@ impl Theory {
             last_kind: EditKind::Other,
             last_caret: 0,
             force_step: false,
+            group: false,
             vim_session: false,
             queued: Default::default(),
             lines: LineIndex::new(&decoded.text),
@@ -1312,7 +1455,7 @@ impl Theory {
                 let src = self.local.chars().skip(be.start).take(be.end - be.start).collect::<String>();
                 be.decoded = table.decode(&src);
                 // (what the editor shows now, for the next edit to be taken against)
-                let shown = shown_text_at(&be.decoded.text, be.wrap.is_some(), Some(caret_after), table);
+                let shown = shown_with_markup(&be.decoded, be.wrap.is_some(), Some(caret_after), table);
                 if shown != new {
                     let li = LineIndex::new(&shown);
                     be.content = text_editor::Content::with_text(&shown);
@@ -1347,6 +1490,15 @@ impl Theory {
         // source, LaTeX commands), where the prover has not coloured it (yet)
         let shown = be.shown();
         let prose = be.wrap.as_ref().map(|_| prose_code_classes(&shown));
+        // (markup rendered where the caret is not in it: set bold, emphasised, or as code)
+        let mut rendered: Vec<Option<Hl>> = vec![None; shown.chars().count()];
+        if be.wrap.is_some() {
+            for m in prose_markup(&be.decoded, Some(be.caret())) {
+                for c in rendered.iter_mut().take(m.style.1).skip(m.style.0) {
+                    *c = Some(m.style.2);
+                }
+            }
+        }
         let prose_class = |h: Option<Hl>| matches!(h, None | Some(Hl::Comment | Hl::Unprocessed | Hl::Running | Hl::Sem(Sem::Comment | Sem::Raw | Sem::Inner)));
         for (k, c) in shown.chars().enumerate() {
             let mut hl = self.classes.get(ds + k).copied().flatten();
@@ -1354,6 +1506,9 @@ impl Theory {
                 && prose_class(hl)
             {
                 hl = Some(code);
+            }
+            if let Some(r) = rendered.get(k).copied().flatten() {
+                hl = Some(r);
             }
             if c == '\n' {
                 if let Some((s, h)) = current.take() {
@@ -1545,7 +1700,7 @@ impl Theory {
             Some(Hl::Comment) => 2,
             Some(Hl::Sem(_)) => 3,
             Some(Hl::Keyword) => 4,
-            Some(Hl::Bold | Hl::Control | Hl::Script(_)) => 5,
+            Some(Hl::Bold | Hl::Emph | Hl::Control | Hl::Script(_)) => 5,
             Some(Hl::Warning) => 6,
             Some(Hl::Error) => 7,
         };
@@ -1759,7 +1914,7 @@ impl Theory {
             || !adjacent
             || (kind == EditKind::Delete) != (last == EditKind::Delete)
             || (!self.vim_session && (last == EditKind::Newline || (last == EditKind::Space && kind == EditKind::Word)));
-        if boundary {
+        if boundary && !self.group {
             self.begin_step();
         }
         self.force_step = false;
@@ -1870,7 +2025,7 @@ impl Theory {
             let src = self.local.chars().skip(be.start).take(be.end - be.start).collect::<String>();
             let dec = table.decode(&src);
             let caret = dec.to_decoded(caret_src.saturating_sub(be.start));
-            let shown = shown_text_at(&dec.text, be.wrap.is_some(), Some(caret), table);
+            let shown = shown_with_markup(&dec, be.wrap.is_some(), Some(caret), table);
             if shown != new {
                 let li = LineIndex::new(&shown);
                 be.content = text_editor::Content::with_text(&shown);
@@ -1910,7 +2065,7 @@ impl Theory {
         };
         let src = self.source_text(start, end);
         let decoded = table.decode(&src);
-        let shown_text = shown_text_at(&decoded.text, wrap.is_some(), Some(decoded.text.chars().count()), table);
+        let shown_text = shown_with_markup(&decoded, wrap.is_some(), Some(decoded.text.chars().count()), table);
         let content = text_editor::Content::with_text(&shown_text);
         self.cursor = end;
         self.block_editor = Some(BlockEditor { start, end, decoded, content, preview, kind, wrap, shown_text });
@@ -1966,7 +2121,7 @@ impl Theory {
         let wrap = Some((self.source_text(block.start, s), self.source_text(e, block.end)));
         let decoded = table.decode(&self.source_text(s, e));
         let caret = decoded.to_decoded(at.clamp(s, e) - s);
-        let shown = shown_text_at(&decoded.text, true, Some(caret), table);
+        let shown = shown_with_markup(&decoded, true, Some(caret), table);
         let mut content = text_editor::Content::with_text(&shown);
         let pos = LineIndex::new(&shown).position(&shown, caret);
         place(&mut content, pos);
@@ -2036,6 +2191,18 @@ impl Theory {
     /// End the undo step being typed: the next edit starts another (and anything other than
     /// typing is a step of its own)
     pub fn break_step(&mut self) {
+        self.force_step = true;
+    }
+
+    /// Begin a step whose every edit, until [`Self::end_group`], is one entry of the history
+    pub fn begin_group(&mut self) {
+        self.begin_step();
+        self.group = true;
+    }
+
+    /// End it: the next edit begins another step
+    pub fn end_group(&mut self) {
+        self.group = false;
         self.force_step = true;
     }
 

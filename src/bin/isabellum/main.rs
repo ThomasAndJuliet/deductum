@@ -2597,6 +2597,10 @@ impl cosmic::Application for App {
                 let li = editor::LineIndex::new(&text);
                 let range = editor::selection_range(content);
                 let mut tasks = Vec::new();
+                // (one click, one entry of the history: what goes before and after together)
+                if let Some(t) = self.workspace.as_mut().and_then(|w| w.theory.as_mut()) {
+                    t.begin_group();
+                }
                 match range {
                     // Around the selection: what goes after first, then what goes before, each
                     // an insertion of its own (the selected text is left as it is)
@@ -2631,6 +2635,9 @@ impl cosmic::Application for App {
                             tasks.push(self.update(act(A::Move(M::Left))));
                         }
                     }
+                }
+                if let Some(t) = self.workspace.as_mut().and_then(|w| w.theory.as_mut()) {
+                    t.end_group();
                 }
                 tasks.push(widget::text_input::focus(focus));
                 return Task::batch(tasks);
@@ -3148,7 +3155,10 @@ impl cosmic::Application for App {
                 }
             }
             Message::InsertSymbol(text) => {
-                // Into the editor in use, at its caret
+                // Into the editor in use, at its caret, as an entry of the history of its own
+                if let Some(t) = self.workspace.as_mut().and_then(|w| w.theory.as_mut()) {
+                    t.break_step();
+                }
                 let Some(t) = self.workspace.as_ref().and_then(|w| w.theory.as_ref()) else { return Task::none() };
                 let paste = cosmic::widget::text_editor::Action::Edit(cosmic::widget::text_editor::Edit::Paste(Arc::new(text)));
                 if t.block_editor.is_some() && t.mode == Mode::Literate {

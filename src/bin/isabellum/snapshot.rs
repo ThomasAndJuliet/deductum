@@ -1812,3 +1812,90 @@ fn the_palette_wraps_the_selection() {
         assert!(local(&app).contains(&format!("\\<^bold>\\<open>{}\\<close>", sel.unwrap().trim())), "{:?}", local(&app));
     }
 }
+
+
+/// Each click in the palette is one entry of the history: a wrap's two insertions (after, then
+/// before the selection) are one step, apart from the typing around it
+#[test]
+fn a_palette_click_is_one_history_entry() {
+    use cosmic::widget::text_editor::{Action as A, Cursor, Edit as E};
+    let text = "theory W imports Main begin\n\ntext \\<open>We prove that addition with zero is the identity.\\<close>\n\nend\n";
+    let mut app = demo_app(Mode::Literate);
+    let doc = json!({"text": text, "revision": 1, "prover": {}});
+    app.workspace.as_mut().unwrap().theory = Some(Theory::new("/tmp/W.thy".into(), &doc, &Arc::new(Table::fallback()), Arc::new(HashMap::new()), Mode::Literate));
+    let ti = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.kind == super::theory::Kind::Text).unwrap();
+    let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(ti));
+    {
+        let be = app.workspace.as_mut().unwrap().theory.as_mut().unwrap().block_editor.as_mut().unwrap();
+        let t = be.content.text();
+        let s = t[..t.find("addition").unwrap()].chars().count();
+        let li = super::editor::LineIndex::new(&t);
+        be.content.move_to(Cursor { position: li.position(&t, s + 8), selection: Some(li.position(&t, s)) });
+    }
+    let _ = cosmic::Application::update(&mut app, super::Message::Wrap("\\<^emph>‹".into(), "›".into()));
+    // then a typed character, which begins the next step
+    let _ = cosmic::Application::update(&mut app, super::Message::BlockAction(A::Edit(E::Insert('!'))));
+    let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+    let texts: Vec<&String> = t.steps.iter().map(|(_, text)| text).collect();
+    // no step holds only half the wrap
+    for text in &texts {
+        let after = text.contains("addition\\<close>");
+        let before = text.contains("\\<^emph>\\<open>addition");
+        assert_eq!(after, before, "a step with half the wrap: {text:?}");
+    }
+    assert!(texts.iter().any(|text| text.contains("\\<^emph>\\<open>addition\\<close>") && !text.contains('!')), "the wrap, a step of its own: {texts:?}");
+}
+
+/// In the paragraph being edited, markup reads as it renders (bold, emphasis, an antiquotation
+/// as what it holds) unless the caret is inside it, where it is source again
+#[test]
+fn markup_renders_unless_the_caret_is_in_it() {
+    let table = Table::fallback();
+    let src = "The \\<^bold>\\<open>finite\\<close> case and \\<^emph>\\<open>this\\<close> one, @{term \"x + y\"} too.";
+    let d = table.decode(src);
+    let text: Vec<char> = d.text.chars().collect();
+    let far = Some(0);
+    let shown: Vec<char> = super::editor::shown_with_markup(&d, true, far, &table).chars().collect();
+    assert_eq!(shown.len(), text.len(), "one shown character for each");
+    let visible: String = shown.iter().filter(|c| **c != '\u{200B}').collect();
+    assert!(visible.contains("The finite case and this one, x + y too."), "rendered: {visible:?}");
+    let marks = super::editor::prose_markup(&d, far);
+    assert!(marks.iter().any(|m| m.style.2 == super::editor::Hl::Bold), "bold");
+    assert!(marks.iter().any(|m| m.style.2 == super::editor::Hl::Emph), "emphasis");
+    // the caret inside the bold: that one is source again, the others still rendered
+    let at = d.text.find("finite").map(|b| d.text[..b].chars().count() + 2);
+    let inside: String = super::editor::shown_with_markup(&d, true, at, &table).chars().filter(|c| *c != '\u{200B}').collect();
+    assert!(inside.contains("‹finite›") && inside.contains("and this one"), "source where the caret is: {inside:?}");
+}
+
+/// Lists are contextual: on an item's line the palette offers the next item, elsewhere a list
+#[test]
+fn list_items_are_offered_in_a_list() {
+    let text = "theory L imports Main begin\n\ntext \\<open>Some prose.\n\n\\<^item> one\n\\<^item> two\\<close>\n\nend\n";
+    let mut app = demo_app(Mode::Literate);
+    let doc = json!({"text": text, "revision": 1, "prover": {}});
+    app.workspace.as_mut().unwrap().theory = Some(Theory::new("/tmp/L.thy".into(), &doc, &Arc::new(Table::fallback()), Arc::new(HashMap::new()), Mode::Literate));
+    let ti = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.kind == super::theory::Kind::Text).unwrap();
+    let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(ti));
+    let table = Table::fallback();
+    let at = |app: &mut App, line: usize| {
+        let be = app.workspace.as_mut().unwrap().theory.as_mut().unwrap().block_editor.as_mut().unwrap();
+        let shown = be.content.text();
+        eprintln!("line {line}: {:?}", shown.split('\n').nth(line));
+        super::editor::place(&mut be.content, cosmic::widget::text_editor::Position { line, column: 3 });
+        super::view::list_item_at(app.workspace.as_ref().unwrap().theory.as_ref().unwrap(), &table)
+    };
+    let end = |app: &mut App| {
+        let be = app.workspace.as_mut().unwrap().theory.as_mut().unwrap().block_editor.as_mut().unwrap();
+        be.content.perform(cosmic::widget::text_editor::Action::Move(cosmic::widget::text_editor::Motion::DocumentEnd));
+        super::view::list_item_at(app.workspace.as_ref().unwrap().theory.as_ref().unwrap(), &table)
+    };
+    let _ = at;
+    // (the block opens on its last paragraph, the items)
+    let second = end(&mut app);
+    let _ = app.workspace.as_mut().unwrap().theory.as_mut().unwrap().adjacent_paragraph(false, &table);
+    let first = end(&mut app);
+    eprintln!("first {first:?}, second {second:?}");
+    assert!(first.is_none(), "prose is not a list");
+    assert!(second.is_some_and(|(m, _)| m == "\\<^item>"), "an item's line is in a list");
+}
