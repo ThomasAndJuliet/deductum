@@ -2491,32 +2491,37 @@ const COMMON_SYMBOLS: &[&str] = &[
     "β", "γ", "δ", "σ", "τ", "φ", "ψ", "ω", "⦇", "⦈", "⟦", "⟧", "‹", "›", "⇩", "⇧",
 ];
 
-const PROSE_TEMPLATES: &[(&str, &str)] = &[
-    ("term", "@{term \"\"}"),
-    ("theorem", "@{thm }"),
-    ("constant", "@{const }"),
-    ("type", "@{typ \"\"}"),
-    ("maths", "$ $"),
-    ("emphasis", "\\<^emph>‹›"),
-    ("bold", "\\<^bold>‹›"),
-    ("citation", "\\cite{}"),
-    ("list item", "\\<^item> "),
-    ("cartouche", "‹›"),
-    ("footnote", "\\footnote{}"),
+/// What text editing can add around the selection (or at the caret, the caret then between):
+/// a label, what goes before, what goes after
+const PROSE_TEMPLATES: &[(&str, &str, &str)] = &[
+    ("emphasis", "\\<^emph>‹", "›"),
+    ("bold", "\\<^bold>‹", "›"),
+    ("code", "\\<^verbatim>‹", "›"),
+    ("term", "@{term \"", "\"}"),
+    ("theorem", "@{thm ", "}"),
+    ("constant", "@{const ", "}"),
+    ("type", "@{typ \"", "\"}"),
+    ("maths", "$", "$"),
+    ("cartouche", "‹", "›"),
+    ("url", "\\<^url>‹", "›"),
+    ("citation", "\\cite{", "}"),
+    ("footnote", "\\footnote{", "}"),
+    ("list item", "\\<^item> ", ""),
+    ("numbered item", "\\<^enum> ", ""),
 ];
 
-const PROOF_TEMPLATES: &[(&str, &str)] = &[
-    ("have", "have \"\"\n  "),
-    ("show ?thesis", "show ?thesis\n  "),
-    ("proof … qed", "proof -\n  \nqed"),
-    ("using", "using "),
-    ("unfolding", "unfolding "),
-    ("by simp", "by simp"),
-    ("by auto", "by auto"),
-    ("sledgehammer", "sledgehammer"),
-    ("claude", "claude"),
-    ("nitpick", "nitpick"),
-    ("quickcheck", "quickcheck"),
+const PROOF_TEMPLATES: &[(&str, &str, &str)] = &[
+    ("have", "have \"", "\"\n  "),
+    ("show ?thesis", "show ?thesis\n  ", ""),
+    ("proof … qed", "proof -\n  ", "\nqed"),
+    ("using", "using ", ""),
+    ("unfolding", "unfolding ", ""),
+    ("by simp", "by simp", ""),
+    ("by auto", "by auto", ""),
+    ("sledgehammer", "sledgehammer", ""),
+    ("claude", "claude", ""),
+    ("nitpick", "nitpick", ""),
+    ("quickcheck", "quickcheck", ""),
 ];
 
 /// Beside the block being edited, when there is no goal: what can be inserted at the caret, by
@@ -2532,33 +2537,41 @@ fn insert_palette<'a>(ws: &'a Workspace, t: &'a Theory, table: &super::symbols::
         InsertContext::Proof => "Insert in the proof",
     }));
     col = col.push(widget::text_input("Search", &ws.palette_query).on_input(Message::PaletteQuery));
-    let mut items: Vec<(String, String)> = Vec::new();
+    // (each: its label, and what it puts before and after the selection or the caret)
+    let mut items: Vec<(String, String, String)> = Vec::new();
+    let symbol = |c: char, label: String| (label, c.to_string(), String::new());
     match context {
         InsertContext::Symbols if !query.is_empty() => {
             for (c, sym, how) in table.search(&query, 40) {
-                items.push((format!("{c}  {}", if how.is_empty() { sym.clone() } else { format!("{sym} {how}") }), c.to_string()));
+                items.push(symbol(c, format!("{c}  {}", if how.is_empty() { sym.clone() } else { format!("{sym} {how}") })));
             }
         }
         InsertContext::Symbols => {
             for c in COMMON_SYMBOLS {
-                items.push((c.to_string(), c.to_string()));
+                items.push((c.to_string(), c.to_string(), String::new()));
             }
         }
         InsertContext::Prose | InsertContext::Proof => {
             let list = if context == InsertContext::Prose { PROSE_TEMPLATES } else { PROOF_TEMPLATES };
-            for (label, text) in list.iter().filter(|(l, _)| query.is_empty() || l.contains(&query)) {
-                items.push((label.to_string(), text.to_string()));
+            for (label, before, after) in list.iter().filter(|(l, _, _)| query.is_empty() || l.contains(&query)) {
+                items.push((label.to_string(), before.to_string(), after.to_string()));
             }
             // (and symbols matching the search)
             if !query.is_empty() {
                 for (c, sym, _) in table.search(&query, 12) {
-                    items.push((format!("{c}  {sym}"), c.to_string()));
+                    items.push(symbol(c, format!("{c}  {sym}")));
                 }
             }
         }
     }
-    let buttons: Vec<Element<'a, Message>> =
-        items.into_iter().map(|(label, text)| widget::button::text(label).class(theme::Button::Standard).on_press(Message::InsertSymbol(text)).into()).collect();
+    let selected = t.block_editor.as_ref().and_then(|be| be.content.selection()).is_some_and(|s| !s.trim().is_empty());
+    if selected && context != InsertContext::Symbols {
+        col = col.push(widget::text::caption("Wraps the selection"));
+    }
+    let buttons: Vec<Element<'a, Message>> = items
+        .into_iter()
+        .map(|(label, before, after)| widget::button::text(label).class(theme::Button::Standard).on_press(Message::Wrap(before, after)).into())
+        .collect();
     col = col.push(widget::flex_row(buttons).row_spacing(sp.space_xxs).column_spacing(sp.space_xxs));
     widget::container(col)
         .padding(sp.space_s)
