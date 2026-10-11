@@ -310,6 +310,43 @@ class DriverTests(unittest.IsolatedAsyncioTestCase):
         await s.stop()
         self.host.check_memory_budget()
 
+    async def test_project_files_stay_out_of_the_prover(self):
+        d = self.folder("FAKEROOT", "A.fk")
+        s = self.host.create_session({"folder": str(d), "backend": "fake"})
+        for _ in range(50):
+            if s.lifecycle == "Running":
+                break
+            await asyncio.sleep(0.05)
+        app = App()
+        self.host.clients.append(app)
+        root = s.get_doc(str(d / "FAKEROOT"))
+        app.open_docs.add((s.id, root.path))
+        self.assertEqual(FakeDriver.sent, [], "a project file is the host's buffer only")
+        s.get_doc(str(d / "A.fk"))
+        self.assertEqual([o["op"] for o in FakeDriver.sent], ["open"])
+
+    async def test_the_apps_settings_decide_its_keyword_lines(self):
+        d = self.folder("FAKEROOT", "A.fk")
+        (d / "A.fk").write_text("lemma x\n  claude\n  codex[astra]\n")
+        s = self.host.create_session({"folder": str(d), "backend": "fake"})
+        for _ in range(50):
+            if s.lifecycle == "Running":
+                break
+            await asyncio.sleep(0.05)
+        doc = s.get_doc(str(d / "A.fk"))
+        asked = []
+        s.fill_hole = lambda client, path, start, rev, agent, hint, **kw: asked.append((agent, kw.get("model"))) or {"job": str(len(asked))}
+        app = App()
+        app.settings = {}
+        await self.host.handle(app, {"op": "client_settings", "keywords": False, "models": {"claude": "opus"}, "other": 1})
+        self.assertEqual(app.settings, {"keywords": False, "models": {"claude": "opus"}})
+        line = doc.text.index("  claude")
+        self.assertFalse(s.keyword_line(app, doc, line, app.author(), "t1"), "keyword lines are off")
+        app.settings["keywords"] = True
+        self.assertTrue(s.keyword_line(app, doc, line, app.author(), "t2"))
+        self.assertTrue(s.keyword_line(app, doc, doc.text.index("  codex"), app.author(), "t3"))
+        self.assertEqual(asked, [("claude", "opus"), ("codex", "astra")], "the line's own model wins")
+
     async def test_project_action_is_unknown_for_isabelle(self):
         s = H.Session(self.host, "i1", json.loads(json.dumps(OLD_META)))
         self.host.sessions["i1"] = s
