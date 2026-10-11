@@ -220,8 +220,15 @@ fn layout(app: &App, width: f32) -> Element<'_, Message> {
         row.into()
     };
     let mut col = widget::column::with_capacity(2).push(row);
-    if let Some(status) = &app.status {
-        col = col.push(widget::container(widget::text::caption(status.clone())).padding([sp.space_xxs, sp.space_s]));
+    // The status bar, always there with a theory open (so the page's height never changes for
+    // it): what editing the open block means, and the app's last word
+    let editing = editing_status(app);
+    if editing.is_some() || app.status.is_some() || app.workspace.as_ref().is_some_and(|w| w.theory.is_some()) {
+        let bar = widget::row::with_capacity(2)
+            .spacing(sp.space_m)
+            .push(widget::text::caption(editing.unwrap_or_default()).width(Length::Fill))
+            .push(widget::text::caption(app.status.clone().unwrap_or_default()));
+        col = col.push(widget::container(bar).padding([sp.space_xxs, sp.space_s]).width(Length::Fill));
     }
     // An opaque background of the theme's colour (with no inset content card, the window itself
     // would show through to the desktop)
@@ -1580,6 +1587,7 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
         }
     };
     let mut anchor: Option<(usize, f32)> = None;
+    let mut open_item: Option<usize> = None;
     let side = |el: Element<'a, Message>, goal: bool| side_at(el, goal, 0.0);
     let mut typo = typography(&theme::active());
     typo.size = z(17.0);
@@ -1621,7 +1629,19 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
                     if formal && beside.is_some() {
                         anchor = Some((i, top));
                     }
+                    open_item = Some(i);
                     item = item.push(side_at(widget::container(block_editor_in(app.workspace.as_ref(), t, false, inline, &table)).id(selected_block_id()).into(), formal, top));
+                }
+            }
+            // (its notes stay under it while it is open: nothing after it moves)
+            if opens_here && let Some(ws) = app.workspace.as_ref() {
+                for n in ws.notes.iter().filter(|n| {
+                    n["start"].as_u64().is_some_and(|s| {
+                        let s = super::App::local_offset_pub(t, s as usize);
+                        block.start <= s && s < block.end.max(block.start + 1)
+                    })
+                }) {
+                    item = item.push(side(note_card(ws, n), false));
                 }
             }
             col = col.push(item);
@@ -1725,7 +1745,17 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
     // (with the goal under the proof, the readable text column alone, centred)
     let page_width = beside.map_or(text_width, |(_, w, tw)| tw + w + GOAL_GAP) + 2.0 * gutter as f32;
     // A click no block takes (between them, beside them, below the end) finishes editing
+    // With no goal to show beside the block being edited (prose, or a proof with no state yet),
+    // that room holds what can be inserted there
+    let palette = match (beside, open_item) {
+        (Some((ws, width, _)), Some(i)) if anchor.is_none() || inline_goal(Some(ws), &table).is_none() => {
+            anchor = Some((i, 0.0));
+            Some(insert_palette(ws, t, &table, width))
+        }
+        _ => None,
+    };
     let goal: Element<'a, Message> = match (beside, anchor) {
+        _ if palette.is_some() => palette.unwrap_or_else(|| widget::Space::new().into()),
         (Some((ws, width, _)), Some(_)) => match inline_goal(Some(ws), &table) {
             Some(g) => widget::container(g)
                 .width(Length::Fixed(width))
@@ -1857,6 +1887,25 @@ pub fn centre_selected() -> cosmic::app::Task<Message> {
         let offset = offset.clamp(0.0, (content.height - view.height).max(0.0));
         iced::widget::scrollable::scroll_to(literate_scroll_id(), iced::widget::scrollable::AbsoluteOffset { x: None, y: Some(offset) })
     })
+}
+
+/// What editing the open block means, for the status bar: vim's mode, the block's checking, how
+/// to finish
+fn editing_status(app: &App) -> Option<String> {
+    let t = app.workspace.as_ref()?.theory.as_ref()?;
+    let be = t.block_editor.as_ref().filter(|_| t.mode == Mode::Literate)?;
+    let mut parts = Vec::new();
+    if let Some(m) = vim_mode_now() {
+        parts.push(format!("-- {} --", m.label()));
+    }
+    if be.wrap.is_none() {
+        parts.push(status_caption(t.status_in(be.start, be.end)).to_string());
+    }
+    if be.preview.is_some() {
+        parts.push("preview follows".to_string());
+    }
+    parts.push("Esc or click outside to finish".to_string());
+    Some(parts.join(" · "))
 }
 
 fn status_caption(status: Option<Status>) -> &'static str {
@@ -2003,9 +2052,13 @@ fn block_editor_in<'a>(ws: Option<&'a Workspace>, t: &'a Theory, window: bool, i
         .push(widget::text::caption(vim_mode.map(|m| format!("-- {} --", m.label())).unwrap_or_default()))
         .push(widget::text::caption(status_caption(status)))
         .push(widget::text::caption(if be.preview.is_some() { "· preview follows · Esc or click outside to finish" } else { "· Esc or click outside to finish" }).width(Length::Fill));
-    // As wide as the block, controls and all
-    let col = col.push(controls);
-    if window { col.into() } else { col.width(Length::Fixed(block_code_width(t.code_columns.max(columns)) + 8.0)).into() }
+    // (on the page, what the controls say is in the status bar at the window's foot: a row
+    // under the open block would move everything after it as the open block changes)
+    if window {
+        return col.push(controls).into();
+    }
+    let _ = controls;
+    col.width(Length::Fixed(block_code_width(t.code_columns.max(columns)) + 8.0)).into()
 }
 
 /// A heading or text being edited: its text alone, set in the font, size and width it reads in,
@@ -2083,11 +2136,7 @@ fn prose_editor<'a>(t: &'a Theory, be: &'a super::editor::BlockEditor, vim_mode:
                 })),
         );
     }
-    let _ = sp;
-    col = col.push(widget::text::caption(match vim_mode {
-        Some(m) => format!("-- {} -- · Esc or click outside to finish", m.label()),
-        None => "Esc or click outside to finish".to_string(),
-    }));
+    let _ = (sp, vim_mode);
     col.into()
 }
 
@@ -2408,6 +2457,118 @@ pub fn goal_placement(wide: bool, proof_lines: usize) -> GoalPlacement {
         false if height <= view_height() * 0.35 => GoalPlacement::UnderProof,
         false => GoalPlacement::AfterConstruct,
     }
+}
+
+/// What the caret is in, for the insert palette: maths or a term (symbols), prose (text
+/// templates), or a proof (Isar)
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum InsertContext {
+    Symbols,
+    Prose,
+    Proof,
+}
+
+pub fn insert_context(t: &Theory) -> Option<InsertContext> {
+    let be = t.block_editor.as_ref()?;
+    // (the source as decoded, which the editor shows one character for one: maths shown set
+    // still has its `$` here)
+    let before: String = be.decoded.text.chars().take(be.caret()).collect();
+    if be.wrap.is_some() {
+        // (an unclosed `$` or `\(` before the caret: inside maths)
+        let dollars = before.matches('$').count() - before.matches("\\$").count();
+        let parens = before.matches("\\(").count() > before.matches("\\)").count();
+        return Some(if dollars % 2 == 1 || parens { InsertContext::Symbols } else { InsertContext::Prose });
+    }
+    if be.kind != Kind::Formal {
+        return None;
+    }
+    // (inside a quoted term)
+    Some(if before.matches('"').count() % 2 == 1 { InsertContext::Symbols } else { InsertContext::Proof })
+}
+
+const COMMON_SYMBOLS: &[&str] = &[
+    "∧", "∨", "¬", "⟶", "⟷", "∀", "∃", "⟹", "⇒", "→", "↦", "∈", "∉", "⊆", "⊂", "∪", "∩", "∅", "≤", "≥", "≠", "≡", "×", "∘", "λ", "α",
+    "β", "γ", "δ", "σ", "τ", "φ", "ψ", "ω", "⦇", "⦈", "⟦", "⟧", "‹", "›", "⇩", "⇧",
+];
+
+const PROSE_TEMPLATES: &[(&str, &str)] = &[
+    ("term", "@{term \"\"}"),
+    ("theorem", "@{thm }"),
+    ("constant", "@{const }"),
+    ("type", "@{typ \"\"}"),
+    ("maths", "$ $"),
+    ("emphasis", "\\<^emph>‹›"),
+    ("bold", "\\<^bold>‹›"),
+    ("citation", "\\cite{}"),
+    ("list item", "\\<^item> "),
+    ("cartouche", "‹›"),
+    ("footnote", "\\footnote{}"),
+];
+
+const PROOF_TEMPLATES: &[(&str, &str)] = &[
+    ("have", "have \"\"\n  "),
+    ("show ?thesis", "show ?thesis\n  "),
+    ("proof … qed", "proof -\n  \nqed"),
+    ("using", "using "),
+    ("unfolding", "unfolding "),
+    ("by simp", "by simp"),
+    ("by auto", "by auto"),
+    ("sledgehammer", "sledgehammer"),
+    ("claude", "claude"),
+    ("nitpick", "nitpick"),
+    ("quickcheck", "quickcheck"),
+];
+
+/// Beside the block being edited, when there is no goal: what can be inserted at the caret, by
+/// context (symbols in maths or a term, templates in prose, Isar in a proof), searchable
+fn insert_palette<'a>(ws: &'a Workspace, t: &'a Theory, table: &super::symbols::Table, width: f32) -> Element<'a, Message> {
+    let sp = spacing();
+    let context = insert_context(t).unwrap_or(InsertContext::Prose);
+    let query = ws.palette_query.trim().to_lowercase();
+    let mut col = widget::column::with_capacity(4).spacing(sp.space_xs);
+    col = col.push(widget::text::caption(match context {
+        InsertContext::Symbols => "Insert a symbol",
+        InsertContext::Prose => "Insert in the text",
+        InsertContext::Proof => "Insert in the proof",
+    }));
+    col = col.push(widget::text_input("Search", &ws.palette_query).on_input(Message::PaletteQuery));
+    let mut items: Vec<(String, String)> = Vec::new();
+    match context {
+        InsertContext::Symbols if !query.is_empty() => {
+            for (c, sym, how) in table.search(&query, 40) {
+                items.push((format!("{c}  {}", if how.is_empty() { sym.clone() } else { format!("{sym} {how}") }), c.to_string()));
+            }
+        }
+        InsertContext::Symbols => {
+            for c in COMMON_SYMBOLS {
+                items.push((c.to_string(), c.to_string()));
+            }
+        }
+        InsertContext::Prose | InsertContext::Proof => {
+            let list = if context == InsertContext::Prose { PROSE_TEMPLATES } else { PROOF_TEMPLATES };
+            for (label, text) in list.iter().filter(|(l, _)| query.is_empty() || l.contains(&query)) {
+                items.push((label.to_string(), text.to_string()));
+            }
+            // (and symbols matching the search)
+            if !query.is_empty() {
+                for (c, sym, _) in table.search(&query, 12) {
+                    items.push((format!("{c}  {sym}"), c.to_string()));
+                }
+            }
+        }
+    }
+    let buttons: Vec<Element<'a, Message>> =
+        items.into_iter().map(|(label, text)| widget::button::text(label).class(theme::Button::Standard).on_press(Message::InsertSymbol(text)).into()).collect();
+    col = col.push(widget::flex_row(buttons).row_spacing(sp.space_xxs).column_spacing(sp.space_xxs));
+    widget::container(col)
+        .padding(sp.space_s)
+        .width(Length::Fixed(width))
+        .class(theme::Container::custom(|theme| iced::widget::container::Style {
+            background: Some(Color { a: 0.05, ..Color::from(theme.cosmic().accent_color()) }.into()),
+            border: Border { radius: 6.0.into(), ..Default::default() },
+            ..Default::default()
+        }))
+        .into()
 }
 
 /// Between a block and the goal beside it

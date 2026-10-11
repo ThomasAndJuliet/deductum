@@ -150,6 +150,7 @@ pub fn demo_app(mode: Mode) -> App {
             tool_started: None,
             gap_hover: None,
             tools_stopping: false,
+            palette_query: String::new(),
             find: QueryState { operation: "find_theorems", ..Default::default() },
             find_input: String::new(),
             cex: QueryState { operation: "isabellum_command", ..Default::default() },
@@ -356,7 +357,7 @@ fn clicking_blocks_opens_their_source() {
     let pos = be.content.cursor().position;
     assert!(pos.line >= 1 && pos.column > 0, "caret at {pos:?}");
     // Between blocks: finishes editing
-    let outside = click(&app, cosmic::iced::Point::new(900.0, 880.0), Size::new(1400.0, 900.0));
+    let outside = click(&app, cosmic::iced::Point::new(900.0, 820.0), Size::new(1400.0, 900.0));
     assert!(outside.iter().any(|m| matches!(m, super::Message::CloseBlock)), "{outside:?}");
 }
 
@@ -1637,4 +1638,63 @@ fn the_layout_keeps_its_place_and_the_centred_column_is_wide_enough() {
     let _ = cosmic::Application::update(&mut app, super::Message::ToggleGoalBeside);
     eprintln!("with goal {with_goal:?}, without {without:?}, centred {centred:?}");
     assert!(centred.1 - centred.0 >= 540, "the centred column is wide enough ({centred:?})");
+}
+
+/// Beside the block being edited, with no goal: what can be inserted there, by context
+#[test]
+fn the_insert_palette_follows_the_context() {
+    let mut app = demo_app(Mode::Literate);
+    app.show_right = false;
+    app.show_sidebar = false;
+    let ti = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.kind == super::theory::Kind::Text).unwrap();
+    let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(ti));
+    let ctx = |app: &App| super::view::insert_context(app.workspace.as_ref().unwrap().theory.as_ref().unwrap());
+    assert_eq!(ctx(&app), Some(super::view::InsertContext::Prose));
+    let mut h = Harness::new(Size::new(1320.0, 800.0));
+    h.draw(&app, "palette-prose");
+    // the caret inside the maths
+    {
+        let be = app.workspace.as_mut().unwrap().theory.as_mut().unwrap().block_editor.as_mut().unwrap();
+        let src = be.decoded.text.clone();
+        let at = src[..src.find('$').expect("maths in the demo's prose") + 2].chars().count();
+        let text = be.content.text();
+        let li = super::editor::LineIndex::new(&text);
+        super::editor::place(&mut be.content, li.position(&text, at));
+    }
+    assert_eq!(ctx(&app), Some(super::view::InsertContext::Symbols), "inside $…$: symbols");
+    let _ = cosmic::Application::update(&mut app, super::Message::PaletteQuery("forall".into()));
+    h.draw(&app, "palette-symbols");
+    // a template, inserted at the caret, in the source
+    let before = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().local.clone();
+    let _ = cosmic::Application::update(&mut app, super::Message::InsertSymbol("@{term \"\"}".into()));
+    let after = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().local.clone();
+    assert!(after.contains("@{term \"\"}") && after.len() > before.len(), "inserted in the source");
+}
+
+/// The lemma's top, with the text before it open, then with the lemma itself open (moving down
+/// from the text into it): no jump (the editing hints are in the status bar, not under the
+/// open block, and notes stay under an open block)
+#[test]
+fn opening_the_next_block_does_not_move_it() {
+    let mut app = demo_app(Mode::Literate);
+    app.show_right = false;
+    app.show_sidebar = false;
+    let blocks = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.clone();
+    let ti = blocks.iter().position(|b| b.kind == super::theory::Kind::Text).unwrap();
+    let li = blocks.iter().position(|b| b.name == "lemma").unwrap();
+    let mut h = Harness::new(Size::new(1320.0, 900.0));
+    // the lemma's strip: the first row, at the strip's x, that is the strip's colour, below the text
+    let strip_top = |png: Vec<u8>| -> Option<u32> {
+        let img = image::RgbaImage::from_raw(1320, 900, png).unwrap();
+        let bg = *img.get_pixel(12, 400);
+        // the strips are at the column's left edge: find it on the lemma's row
+        (200..880).find(|&y| (100..700).any(|x| { let p = img.get_pixel(x, y); p != &bg && p[1] > 90 && p[0] < 90 && p[2] < 110 }))
+    };
+    let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(ti));
+    let with_text = strip_top(h.draw(&app, "jump-text-open"));
+    let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(li));
+    let with_lemma = strip_top(h.draw(&app, "jump-lemma-open"));
+    eprintln!("lemma strip top: text open {with_text:?}, lemma open {with_lemma:?}");
+    let (a, b) = (with_text.expect("the lemma drawn"), with_lemma.expect("the lemma drawn"));
+    assert!(a.abs_diff(b) <= 3, "the lemma stays where it was as it opens ({a} then {b})");
 }

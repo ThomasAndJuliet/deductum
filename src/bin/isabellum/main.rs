@@ -239,6 +239,8 @@ pub enum Message {
     LineMove(bool),
     /// The goal beside the text, or under the proof with the page centred
     ToggleGoalBeside,
+    /// The insert palette's search
+    PaletteQuery(String),
     /// Where `claude` and `codex` queries go: helper, fresh, or agent:KEY
     QueryRoute(String),
     /// Start the helper conversation again
@@ -436,6 +438,8 @@ pub struct Workspace {
     pub gap_hover: Option<usize>,
     /// Stop was pressed for the proof tools: asked again until they have stopped
     pub tools_stopping: bool,
+    /// What the insert palette (beside the text, when there is no goal) is searched for
+    pub palette_query: String,
     pub find: QueryState,
     pub find_input: String,
     pub cex: QueryState,
@@ -2015,6 +2019,7 @@ impl cosmic::Application for App {
                     tool_started: None,
                     gap_hover: None,
                     tools_stopping: false,
+                    palette_query: String::new(),
                     find: QueryState { operation: "find_theorems", ..Default::default() },
                     find_input: String::new(),
                     cex: QueryState { operation: "isabellum_command", ..Default::default() },
@@ -2564,6 +2569,11 @@ impl cosmic::Application for App {
                 };
                 view::set_zoom(z);
                 self.save_settings();
+            }
+            Message::PaletteQuery(q) => {
+                if let Some(ws) = &mut self.workspace {
+                    ws.palette_query = q;
+                }
             }
             Message::ToggleGoalBeside => {
                 view::set_goal_beside(!view::goal_beside_on());
