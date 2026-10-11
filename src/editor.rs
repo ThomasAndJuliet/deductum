@@ -1152,6 +1152,80 @@ impl Theory {
         Some(start + self.prose_maps.get(i)?.as_ref()?.source_char(md))
     }
 
+    /// The source offset under a pointer over the rendered prose of block `i`: its Markdown block
+    /// `block` and the byte `offset` in that block's text, as the renderer reports them. Found by
+    /// matching the text under the pointer, in order, against the Markdown the block renders from
+    /// (so only for profiles with a prose map). Nearest the start of its block when the pointer
+    /// is on something that is not a word
+    pub fn source_of_hit(&self, i: usize, block: usize, offset: usize) -> Option<usize> {
+        use prose_render::markdown::Block as B;
+        let doc = self.docs.get(i)?.as_ref()?;
+        let map = self.prose_maps.get(i)?.as_ref()?;
+        let (body_start, _) = self.blocks.get(i)?.body?;
+        let linear = |b: &B| -> Option<String> {
+            match b {
+                B::Text(t) => Some(t.runs.iter().map(|r| r.text.as_str()).collect()),
+                B::Code { text, .. } => Some(text.clone()),
+                B::Math { latex, .. } => Some(latex.clone()),
+                _ => None,
+            }
+        };
+        let word = |s: &str| -> Option<String> {
+            let w: String = s.chars().skip_while(|c| !c.is_alphanumeric()).take_while(|c| c.is_alphanumeric()).collect();
+            (w.chars().count() >= 3).then_some(w)
+        };
+        // Where each block's text starts in the Markdown: its first word, after the last block's
+        let md = &map.markdown;
+        let mut from = 0;
+        let mut start = None;
+        for (k, b) in doc.blocks.iter().enumerate().take(block + 1) {
+            let Some(text) = linear(b) else { continue };
+            let Some(key) = word(&text) else { continue };
+            match md[from..].find(&key) {
+                Some(p) => {
+                    if k == block {
+                        start = Some(from + p);
+                    }
+                    from += p + key.len();
+                }
+                None if k == block => return None,
+                None => {}
+            }
+        }
+        let start = start?;
+        let text = linear(doc.blocks.get(block)?)?;
+        // The word under the pointer: the n-th of its kind in the block, the n-th after the start
+        let at = offset.min(text.len());
+        let at = (0..=at).rev().find(|&k| text.is_char_boundary(k)).unwrap_or(0);
+        let (ws, we) = {
+            let b: Vec<(usize, char)> = text.char_indices().collect();
+            let mut s = at;
+            while let Some(&(p, c)) = b.iter().rev().find(|(p, _)| *p < s) {
+                if c.is_alphanumeric() { s = p } else { break }
+            }
+            let e = text[at..].char_indices().find(|(_, c)| !c.is_alphanumeric()).map_or(text.len(), |(p, _)| at + p);
+            (s, e)
+        };
+        let w = &text[ws..we];
+        let md_at = if w.is_empty() {
+            start
+        } else {
+            let nth = text[..ws].matches(w).count();
+            md[start..].match_indices(w).nth(nth).map_or(start, |(p, _)| start + p) + (at - ws).min(w.len())
+        };
+        Some(body_start + map.source_char(md_at))
+    }
+
+    /// Open prose block `index` with the caret at source offset `at`, as the paragraph there
+    pub fn open_prose_at(&mut self, index: usize, at: usize, table: &dyn Symbols) {
+        self.open_block(index, table);
+        let Some((block, body)) = self.prose_block() else { return };
+        let at = at.clamp(body.0, body.1);
+        let paras = self.paragraphs(body);
+        let (ps, pe) = paras.iter().copied().find(|(s, e)| *s <= at && at <= *e).or_else(|| paras.iter().rev().copied().find(|(s, _)| *s <= at)).unwrap_or(body);
+        self.open_range(&block, ps, pe, at, table);
+    }
+
     /// Recompute blocks, rendered prose and highlighting after the text or the prover changed
     pub fn refresh(&mut self, table: &dyn Symbols) {
         let prover = self.local_prover();
