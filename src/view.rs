@@ -2813,7 +2813,7 @@ fn state_view<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Eleme
         .push(toggle("Goals", !ws.state_text, Message::StateText(false)))
         .push(toggle("Text", ws.state_text, Message::StateText(true)))
         .push(widget::Space::new().width(Length::Fill))
-        .push(widget::checkbox(ws.show_types).label("Types").on_toggle(Message::ShowTypes));
+        .push_maybe(ws.profile.goal_types_option().then(|| widget::checkbox(ws.show_types).label("Types").on_toggle(Message::ShowTypes)));
     // On a proof tool typed in the text (sledgehammer, nitpick, …): its findings, as they come,
     // in place of the state, with its settings
     let tool = ws.output.as_ref().and_then(|o| o["command"]["name"].as_str()).and_then(|n| ws.caps.typed_tool(n));
@@ -2900,9 +2900,9 @@ fn state_view<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Eleme
     let headline = if g.nogoal {
         "No goal: stating facts (forward mode)".to_string()
     } else if n == 0 {
-        "No subgoals left: the proof can be finished".to_string()
+        format!("No {}s left: the proof can be finished", ws.profile.goal_noun())
     } else {
-        format!("{n} subgoal{}", if n == 1 { "" } else { "s" })
+        format!("{n} {}{}", ws.profile.goal_noun(), if n == 1 { "" } else { "s" })
     };
     // The command's own output (a theorem it proved, a value, a warning) comes first: it is
     // what the step did
@@ -3090,7 +3090,7 @@ fn labelled<'a>(label: &'static str, body: Element<'a, Message>) -> Element<'a, 
         .push(
             widget::container(widget::text(label).font(cosmic::font::mono()).size(z(12.0)).class(theme::Text::Accent))
                 .padding(Padding { top: 3.0, ..Padding::ZERO })
-                .width(Length::Fixed(z(52.0))),
+                .width(Length::Fixed(z(if label.chars().count() <= 1 { 20.0 } else { 52.0 }))),
         )
         .push(widget::container(body).width(Length::Fill))
         .into()
@@ -3100,7 +3100,7 @@ fn labelled<'a>(label: &'static str, body: Element<'a, Message>) -> Element<'a, 
 /// fixes, what it assumes, what it shows)
 fn subgoal_card<'a>(ws: &'a Workspace, sg: &super::goals::Subgoal, first: bool, new: bool, table: &dyn super::codec::Symbols) -> Element<'a, Message> {
     let sp = spacing();
-    let mut head = widget::row::with_capacity(2).spacing(sp.space_xs).push(widget::text::caption(format!("Subgoal {}", sg.n)));
+    let mut head = widget::row::with_capacity(2).spacing(sp.space_xs).push(widget::text::caption(format!("{}{}", if ws.profile.goal_noun() == "goal" { "Goal " } else { "Subgoal " }, sg.n)));
     if new {
         head = head.push(widget::text::caption("· new").class(theme::Text::Accent));
     }

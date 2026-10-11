@@ -286,6 +286,22 @@ pub trait Profile: Send + Sync {
     /// How a subgoal reads: labels and layout
     fn present_goal<'a>(&self, subgoal: &'a Subgoal) -> GoalPresentation<'a>;
 
+    /// What a goal of the state is called in its panel (`subgoal`; Lean says `goal`)
+    fn goal_noun(&self) -> &'static str {
+        "subgoal"
+    }
+
+    /// Whether the first word of each command is a keyword to colour (Isabelle). Lean's commands
+    /// include every tactic, whose words are coloured by the lexer where they are keywords
+    fn commands_are_keywords(&self) -> bool {
+        true
+    }
+
+    /// Whether the goal panel offers the prover's `show types` option (Isabelle's)
+    fn goal_types_option(&self) -> bool {
+        true
+    }
+
     /// The label of the chained facts above the subgoals
     fn facts_label(&self) -> &'static str;
 
