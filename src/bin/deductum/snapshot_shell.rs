@@ -237,8 +237,13 @@ fn the_header_and_status_bar_in_their_states() {
     app.sessions.get_mut(&("local".to_string(), "s1".to_string())).unwrap()["lifecycle"] = json!("Running");
 
     // The status bar: nothing open, a block open without and with vim, a message and a lost machine
+    // (on the page, as the window draws it)
     fn bar(app: &App) -> Element<'_, Message> {
-        shell::status_bar(app).unwrap_or_else(|| widget::Space::new().into())
+        widget::container(shell::status_bar(app).unwrap_or_else(|| widget::Space::new().into()))
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .class(cosmic::theme::Container::custom(|t| cosmic::iced::widget::container::Style { background: Some(super::view::page_color(t).into()), ..Default::default() }))
+            .into()
     }
     draw_in(false, || bar(&app), "shell-status-idle", Size::new(1400.0, 28.0));
     let lemma = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.name == "lemma").unwrap();
@@ -395,3 +400,84 @@ fn a_card_picks_its_backend_and_start_sends_it() {
     assert!(ns.reason.as_deref().is_some_and(|r| r.contains("Scratch.lean is a Lean document")), "{:?}", ns.reason);
 }
 
+
+/// The sidebar, the status bar and the settings read a machine's connection from one place, so
+/// they never disagree in one frame
+#[test]
+fn every_part_of_the_window_says_the_same_about_a_connection() {
+    let mut l = connected("au-laptop", "local", None);
+    assert_eq!(shell::connection(&l), shell::Conn::Connected);
+    l.sender = None;
+    assert_eq!(shell::connection(&l), shell::Conn::Connected, "the status says connected");
+    l.status = "starting".into();
+    assert_eq!(shell::connection(&l).word(), "connecting…");
+    assert_eq!(shell::connection(&l).detail(), None, "nothing to add while starting");
+    l.status = "disconnected: broken pipe".into();
+    assert_eq!(shell::connection(&l), shell::Conn::Offline("broken pipe".into()));
+    // the open session's machine: said in the status bar only when it is not connected
+    let mut app = demo_app(Mode::Literate);
+    app.links[0].status = "connected".into();
+    assert!(shell::status_bar(&app).is_some(), "a document is open");
+    let _ = cosmic::Application::update(&mut app, Message::Save);
+    assert_eq!(app.status, None, "no \"Not connected to local\" for the machine the bar speaks for");
+}
+
+/// `CT_SNAPSHOTS`: whole windows (the header over the view) where the shell meets the document:
+/// the settings page narrow, the new-session form at 1000 px, both sidebars round a Lean document
+/// at 1100 px, and the header with a running tool at 1000 px, in both themes
+#[test]
+fn shell_frame_matrix() {
+    if std::env::var("CT_SNAPSHOTS").is_err() {
+        return;
+    }
+    for (light, theme) in [(true, "light"), (false, "dark")] {
+        // the settings page at 800 px, alone and beside the sidebar
+        let mut app = mixed_app();
+        app.shell.settings_open = true;
+        app.window_width = 800.0;
+        app.show_sidebar = false;
+        draw_in(light, || window(&app), &format!("matrix-shell-{theme}-800-settings"), Size::new(800.0, 860.0));
+        app.show_sidebar = true;
+        app.left_width = 260.0;
+        draw_in(light, || window(&app), &format!("matrix-shell-{theme}-800-settings-sidebar"), Size::new(800.0, 860.0));
+        // the new-session form at 1000 px
+        let mut app = new_session_app(Some("isabelle"), both());
+        app.window_width = 1000.0;
+        draw_in(light, || window(&app), &format!("matrix-shell-{theme}-1000-new-session"), Size::new(1000.0, 1200.0));
+        // a Lean document between both sidebars at 1100 px, a theorem open
+        let mut app = super::snapshot_lean::lean_app(Mode::Literate);
+        app.show_sidebar = true;
+        app.show_right = true;
+        app.window_width = 1100.0;
+        app.left_width = 240.0;
+        app.right_width = 300.0;
+        {
+            let s = app.sessions.get_mut(&("local".to_string(), "s1".to_string())).unwrap();
+            s["toolchain"] = json!({"id": "leanprover/lean4:v4.19.0", "label": "Lean v4.19.0"});
+            s["documents"] = json!([".lean"]);
+        }
+        app.workspace.as_mut().unwrap().activity = Some(json!({"prover": {"cpu": 120, "rss_mb": 1840}, "running": [], "theories": []}));
+        let i = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.name == "theorem").unwrap();
+        let _ = cosmic::Application::update(&mut app, Message::EditBlock(i));
+        draw_in(light, || window(&app), &format!("matrix-shell-{theme}-1100-lean-sidebars"), Size::new(1100.0, 860.0));
+        // a document with the sidebars at narrow widths: the left one at 800 px, both at 1000 px
+        for (width, right) in [(800.0, false), (1000.0, true)] {
+            let mut app = mixed_app();
+            app.window_width = width;
+            app.left_width = 240.0;
+            app.right_width = 300.0;
+            app.show_right = right;
+            let i = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.name == "lemma").unwrap();
+            let _ = cosmic::Application::update(&mut app, Message::EditBlock(i));
+            draw_in(light, || window(&app), &format!("matrix-shell-{theme}-{}-sidebars", width as u32), Size::new(width, 760.0));
+        }
+        // the header with a running tool at 1000 px
+        let mut app = mixed_app();
+        app.window_width = 1000.0;
+        app.show_sidebar = false;
+        app.show_right = false;
+        app.workspace.as_mut().unwrap().activity = Some(json!({"prover": {"cpu": 390, "rss_mb": 3200},
+            "running": [{"name": "sledgehammer", "seconds": 12, "line": 9}, {"name": "by", "seconds": 7, "line": 12}], "theories": []}));
+        draw_in(light, || window(&app), &format!("matrix-shell-{theme}-1000-tool"), Size::new(1000.0, 700.0));
+    }
+}
