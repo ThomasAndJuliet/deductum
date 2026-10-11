@@ -320,8 +320,8 @@ pub fn badge<'a>(text: String, tint: fn(&cosmic::Theme) -> Color) -> Element<'a,
 /// A colour's own hue, deep enough to read on the theme's page (lighter in a dark theme, darker
 /// in a light one)
 pub fn readable_on(theme: &cosmic::Theme, c: Color) -> Color {
-    let page: Color = theme.cosmic().on_bg_color().into();
-    if theme.cosmic().is_dark { blend(c, page, 0.35) } else { blend(c, Color::BLACK, 0.3) }
+    let text: Color = theme.cosmic().on_bg_color().into();
+    if theme.cosmic().is_dark { blend(c, Color { a: c.a, ..text }, 0.35) } else { blend(c, Color { a: c.a, ..Color::BLACK }, 0.3) }
 }
 
 pub fn blend(a: Color, b: Color, t: f32) -> Color {
@@ -344,13 +344,28 @@ pub fn accent(theme: &cosmic::Theme) -> Color {
     theme.cosmic().accent_color().into()
 }
 
-/// An icon drawn in a colour of the theme
+/// An icon drawn in a colour of the theme. An icon's tint has no transparency of its own (only
+/// its colour is taken), so a faint colour is mixed with the page here
 pub fn tinted_icon<'a>(name: &'static str, size: u16, tint: fn(&cosmic::Theme) -> Color) -> Element<'a, Message> {
     widget::icon::from_name(name)
         .size(size)
         .icon()
-        .class(theme::Svg::custom(move |theme| iced::widget::svg::Style { color: Some(readable_on(theme, tint(theme))) }))
+        .class(theme::Svg::custom(move |theme| {
+            let c = readable_on(theme, tint(theme));
+            let page: Color = theme.cosmic().bg_color().into();
+            iced::widget::svg::Style { color: Some(Color { a: 1.0, ..blend(page, Color { a: 1.0, ..c }, c.a) }) }
+        }))
         .into()
+}
+
+/// The text's colour, faded towards the page (for icons that go with secondary text)
+pub fn muted(theme: &cosmic::Theme) -> Color {
+    Color { a: 0.7, ..Color::from(theme.cosmic().on_bg_color()) }
+}
+
+/// The text's colour, faded further (for what cannot be used yet)
+pub fn dimmed(theme: &cosmic::Theme) -> Color {
+    Color { a: 0.35, ..Color::from(theme.cosmic().on_bg_color()) }
 }
 
 /// A backend's mark: a small rounded square with its initial, in its colour

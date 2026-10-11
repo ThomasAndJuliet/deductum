@@ -61,12 +61,20 @@ pub fn sidebar(app: &App) -> Element<'_, Message> {
     let mut bar = widget::row::with_capacity(tabs.len()).spacing(2).align_y(Alignment::Center);
     for (mode, icon_name, label) in &tabs {
         let enabled = matches!(mode, LeftMode::Sessions | LeftMode::Project) || theory.is_some();
-        let b = button::custom(widget::container(widget::icon::from_name(*icon_name).size(16).icon()).center_x(Length::Fill))
-            .width(Length::Fill)
-            .height(Length::Fixed(32.0))
-            .padding([8, 0])
-            .class(shell::segment_style(current == *mode))
-            .on_press_maybe(enabled.then_some(Message::LeftMode(*mode)));
+        // (a section with nothing to show yet is dimmed, as well as not pressable)
+        let icon: Element<'_, Message> = if enabled { widget::icon::from_name(*icon_name).size(16).icon().into() } else { tinted_icon(icon_name, 16, shell::dimmed) };
+        let b: Element<'_, Message> = if enabled {
+            button::custom(widget::container(icon).center_x(Length::Fill))
+                .width(Length::Fill)
+                .height(Length::Fixed(32.0))
+                .padding([8, 0])
+                .class(shell::segment_style(current == *mode))
+                .on_press(Message::LeftMode(*mode))
+                .into()
+        } else {
+            // (a disabled button draws its icon in the button's colour, whatever the icon's own)
+            widget::container(icon).center_x(Length::Fill).center_y(Length::Fixed(32.0)).width(Length::Fill).height(Length::Fixed(32.0)).into()
+        };
         let tip = if enabled { label.to_string() } else { format!("{label} (open a document first)") };
         bar = bar.push(widget::tooltip(b, widget::text(tip), widget::tooltip::Position::Bottom));
     }
@@ -188,7 +196,7 @@ fn sessions(app: &App) -> Element<'_, Message> {
                     widget::row::with_capacity(2)
                         .spacing(6)
                         .align_y(Alignment::Center)
-                        .push(tinted_icon("folder-symbolic", 14, |t| Color { a: 0.75, ..Color::from(t.cosmic().on_bg_color()) }))
+                        .push(tinted_icon("folder-symbolic", 14, shell::muted))
                         .push(widget::text::caption(short_folder(&folder, link.hello.as_ref().and_then(|h| h["home"].as_str()))).wrapping(iced::widget::text::Wrapping::None)),
                 )
                 .padding(Padding { top: 4.0, bottom: 2.0, left: 10.0, right: 4.0 }),
@@ -281,7 +289,7 @@ fn session_row<'a>(app: &'a App, machine: &str, sid: &str, v: &'a Value, indent:
                 .font(if current { cosmic::font::semibold() } else { cosmic::font::default() })
                 .wrapping(iced::widget::text::Wrapping::None),
         )
-        .push(widget::text::caption(detail.join("  ·  ")).wrapping(iced::widget::text::Wrapping::None))
+        .push(widget::text::caption(detail.join("  ·  ")).wrapping(iced::widget::text::Wrapping::Word))
         .width(Length::Fill)
         .clip(true);
     // Its lifecycle: an icon (a spinner while it checks), a word unless it is simply running, and
@@ -295,7 +303,7 @@ fn session_row<'a>(app: &'a App, machine: &str, sid: &str, v: &'a Value, indent:
         }
         "Running" => state = state.push(tinted_icon("media-playback-start-symbolic", 14, success)),
         "Paused" => state = state.push(tinted_icon("media-playback-pause-symbolic", 14, warning)),
-        "Stopped" => state = state.push(tinted_icon("media-playback-stop-symbolic", 14, |t| Color { a: 0.7, ..Color::from(t.cosmic().on_bg_color()) })),
+        "Stopped" => state = state.push(tinted_icon("media-playback-stop-symbolic", 14, shell::muted)),
         "Failed" => state = state.push(tinted_icon("dialog-error-symbolic", 14, destructive)),
         other => state = state.push(widget::text::caption(other.to_string())),
     }
@@ -395,7 +403,7 @@ fn documents<'a>(app: &'a App, ws: &'a Workspace) -> Element<'a, Message> {
         let row = widget::row::with_capacity(2)
             .spacing(6)
             .align_y(Alignment::Center)
-            .push(tinted_icon("text-x-generic-symbolic", 14, |t| Color { a: 0.75, ..Color::from(t.cosmic().on_bg_color()) }))
+            .push(tinted_icon("text-x-generic-symbolic", 14, shell::muted))
             .push(widget::text(rel.to_string()).size(13.0).wrapping(iced::widget::text::Wrapping::None));
         col = col.push(widget::tooltip(
             button::custom(row).width(Length::Fill).padding([2, 6]).class(nav_style(open == Some(p.as_str()))).on_press(Message::OpenTheory(p.clone())),
@@ -529,7 +537,7 @@ fn project<'a>(app: &'a App, ws: &'a Workspace) -> Element<'a, Message> {
             let row = widget::row::with_capacity(2)
                 .spacing(6)
                 .align_y(Alignment::Center)
-                .push(tinted_icon("text-x-generic-symbolic", 14, |t| Color { a: 0.75, ..Color::from(t.cosmic().on_bg_color()) }))
+                .push(tinted_icon("text-x-generic-symbolic", 14, shell::muted))
                 .push(widget::text(file_name(&p).to_string()).size(13.0).wrapping(iced::widget::text::Wrapping::None));
             col = col.push(button::custom(row).width(Length::Fill).padding([3, 6]).class(nav_style(open == Some(p.as_str()))).on_press(Message::OpenTheory(p.clone())));
         }
