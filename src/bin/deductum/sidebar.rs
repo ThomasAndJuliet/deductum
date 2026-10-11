@@ -270,16 +270,25 @@ fn session_row<'a>(app: &'a App, machine: &str, sid: &str, v: &'a Value, indent:
     if let Some(mb) = memory_mb(app, machine, sid, v).filter(|_| app.left_width >= 280.0) {
         detail.push(gigabytes(mb));
     }
-    let text = widget::column::with_capacity(2)
-        .push(
-            widget::text(format!("{name}{owner}"))
-                .size(14.0)
-                .font(if current { cosmic::font::semibold() } else { cosmic::font::default() })
-                .wrapping(iced::widget::text::Wrapping::None),
-        )
-        .push(widget::text::caption(detail.join("  ·  ")).wrapping(iced::widget::text::Wrapping::Word))
-        .width(Length::Fill)
-        .clip(true);
+    let mut text = widget::column::with_capacity(3).push(
+        widget::text(format!("{name}{owner}"))
+            .size(14.0)
+            .font(if current { cosmic::font::semibold() } else { cosmic::font::default() })
+            .wrapping(iced::widget::text::Wrapping::None),
+    );
+    // The details on one line where they fit (about 6.5 px a character of a caption, in the room
+    // left beside the mark and the state), else the toolchain on a line of its own: a wrapped line
+    // never begins or ends with a separator
+    let room = app.left_width - 130.0 - indent;
+    let joined = detail.join("  ·  ");
+    if joined.chars().count() as f32 * 6.5 <= room || detail.len() < 2 {
+        text = text.push(widget::text::caption(joined).wrapping(iced::widget::text::Wrapping::None));
+    } else {
+        text = text
+            .push(widget::text::caption(detail[0].clone()).wrapping(iced::widget::text::Wrapping::None))
+            .push(widget::text::caption(detail[1..].join("  ·  ")).wrapping(iced::widget::text::Wrapping::None));
+    }
+    let text = text.width(Length::Fill).clip(true);
     // Its lifecycle: an icon (a spinner while it checks), a word unless it is simply running, and
     // what fails
     let mut state = widget::row::with_capacity(3).spacing(4).align_y(Alignment::Center);
