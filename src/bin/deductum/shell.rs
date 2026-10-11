@@ -715,7 +715,7 @@ fn prover_status<'a>(ws: &'a Workspace, t: &'a super::editor::Theory, backend: &
             if ws.caps.typed_tool(&name).is_some_and(|t| t.stop) {
                 trow = trow.push(
                     widget::tooltip(
-                        button::icon(widget::icon::from_name("media-playback-stop-symbolic")).extra_small().on_press(Message::StopTools),
+                        button::text("Stop").on_press(Message::StopTools),
                         widget::text(format!("Stop {name} (as if its time ran out)")),
                         widget::tooltip::Position::Bottom,
                     ),
