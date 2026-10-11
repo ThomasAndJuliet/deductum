@@ -717,3 +717,39 @@ linked or run on either system. Generic code added for this extension must not
 add Linux-only dependencies. Platform-specific pieces stay behind small
 interfaces: the single-instance socket, Flatpak spawning, sshfs paths, and in
 the host `/proc` sampling, `fcntl` locks and `AF_UNIX`.
+
+## 14. Implemented (2026-10-11)
+
+What was built for Isabelle and Lean, and where the implementation chose differently from the
+plan above.
+
+- **The driver interface is the backend protocol** (chosen, refining §4.1). Rather than a new set
+  of Python calls, a driver answers the JSON operations the Isabelle backend already served
+  (`deductum/host/drivers/__init__.py` documents them). The Isabelle driver passes them to
+  `isabelle deductum_backend`; the Lean driver (`drivers/lean.py`, with `drivers/lsp.py`) answers
+  them itself over LSP to `lake serve`. The host core and the app needed only additive changes.
+- **Goal parts are the neutral goal model** (refining §9.1). Every driver answers the
+  `deductum_goals` query with `#deductum:KIND N` parts; Lean adds a `case` kind and sends each
+  hypothesis bundle as a `param` (`h : P n`). Each app profile chooses the presentation (C17d).
+- **Host** (`deductum_host.py`, `drivers/isabelle.py`, `prompts.py`): sessions record `backend`,
+  `toolchain` and `project`, with old records migrated in place; `hello` lists backends and
+  toolchains; `suggest` returns detections; `project_action`; a memory budget across backends;
+  the `viewed` open policy for Lean; `migrate-from-isabellum`.
+- **Lean driver**: goals through the infoview's RPC (`Lean.Widget.getInteractiveGoals`);
+  candidates and `deductum_command` checked in a scratch document never written to disk; Try-this
+  suggestions as sendbacks (Insert); stale imports reported and rebuilt by reopening; Pause closes
+  the documents. Verified facts for Lean v4.19.0 are in the driver's tests and commit messages
+  (for instance, `$/lean/staleDependency` is not sent to clients in 4.19; the client sees a sticky
+  diagnostic instead).
+- **App**: `prover/mod.rs` (the `Profile` trait), `prover/capabilities.rs`, `prover/isabelle/`,
+  `prover/lean/`; generic `codec.rs` and `input.rs`. The Isabelle refactor was checked
+  pixel-identical on all 67 frames.
+- **MCP**: `proof_*` tools with `isabelle_*` aliases; `proof_run_tool`, `proof_search`,
+  `proof_command`, `proof_capabilities`.
+- **prose-render**: `highlight::register` lets the app colour Lean and Isabelle code in prose (to
+  be upstreamed to Cerea's `prose/`).
+
+Evidence so far: 125 host unit tests; the Lean integration script passes on a generated project,
+on a copy of DSRVLean and through the real host core; the Isabelle integration script passes
+44/45 checks on au-laptop (the remaining check was stale and is fixed); the app's 8 live tests
+against Isabelle2025 on au-laptop pass, including tock-Circus.
