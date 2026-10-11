@@ -143,8 +143,34 @@ pub fn header_end(app: &App) -> Vec<Element<'_, Message>> {
         )
         .into(),
     );
+    // The goal beside the text when there is room (off: under the construct, the page centred)
+    items.push(
+        widget::tooltip(
+            widget::button::icon(widget::icon::from_name(if goal_beside_on() { "view-dual-symbolic" } else { "view-paged-symbolic" }))
+                .class(if goal_beside_on() { theme::Button::Suggested } else { theme::Button::Icon })
+                .on_press(Message::ToggleGoalBeside),
+            widget::text(if goal_beside_on() {
+                "The goal beside the text when there is room: click to keep it under the proof, the page centred"
+            } else {
+                "The goal under the proof, the page centred: click to put it beside the text when there is room"
+            }),
+            widget::tooltip::Position::Bottom,
+        )
+        .into(),
+    );
     items.push(icon_button("sidebar-show-right-symbolic", "Show or hide proof output and tools", Some(Message::ToggleRight)));
     items
+}
+
+/// Whether the goal goes beside the text when there is room (a toolbar toggle)
+static GOAL_BESIDE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+
+pub fn goal_beside_on() -> bool {
+    GOAL_BESIDE.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+pub fn set_goal_beside(on: bool) {
+    GOAL_BESIDE.store(on, std::sync::atomic::Ordering::Relaxed);
 }
 
 // ----- the window
@@ -662,7 +688,7 @@ fn workspace<'a>(app: &'a App, ws: &'a Workspace, right: bool, main_width: f32) 
             // (room for the scroll bar kept); the side margins go first, before the goal goes under
             let room = main_width - SCROLLBAR_ROOM - text_width - GOAL_GAP;
             let goal_width = preferred_goal.min(room).max(z(320.0));
-            let fits = room >= z(320.0);
+            let fits = room >= z(320.0) && goal_beside_on();
             let gutter = ((room - goal_width) / 2.0).clamp(0.0, sp.space_l as f32);
             PAGE_GUTTER.store(gutter.to_bits(), std::sync::atomic::Ordering::Relaxed);
             let beside = (ws.output.is_some() || fill_here(ws)) && fits;
@@ -678,11 +704,11 @@ fn workspace<'a>(app: &'a App, ws: &'a Workspace, right: bool, main_width: f32) 
                     };
                     widget::row::with_capacity(2)
                         .spacing(sp.space_m)
-                        .push(widget::container(literate(app, t, None, None)).width(Length::Fill).height(Length::Fill))
+                        .push(widget::container(literate(app, t, None, None, text_width)).width(Length::Fill).height(Length::Fill))
                         .push(goal)
                         .into()
                 }
-                Mode::Literate => literate(app, t, inline, beside.then_some((ws, goal_width, text_width))),
+                Mode::Literate => literate(app, t, inline, beside.then_some((ws, goal_width, text_width)), text_width),
                 Mode::Source => {
                     // The source as wide as its lines (up to a readable measure), the goal beside the
                     // caret's line when there is room for both
@@ -690,7 +716,7 @@ fn workspace<'a>(app: &'a App, ws: &'a Workspace, right: bool, main_width: f32) 
                     let source_width = source_width(columns);
                     // (the goal column narrows to the room there is, down to a readable width)
                     let room = (main_width - source_width - z(70.0)).min(goal_width);
-                    let fits = (ws.output.is_some() || fill_here(ws)) && room >= z(320.0);
+                    let fits = (ws.output.is_some() || fill_here(ws)) && room >= z(320.0) && goal_beside_on();
                     source(ws, t, if fits { None } else { Some(ws) }, &app.table(&ws.machine), fits.then_some((room, source_width)), source_width.min(main_width - z(24.0)))
                 }
             };
@@ -1208,6 +1234,13 @@ fn hoverable_press<'a>(ws: Option<&'a Workspace>, target: super::HoverTarget, pa
         .into()
 }
 
+/// The keys a read-only view (the goal, a tool's output) takes: copying and selecting, so that
+/// every other key goes on to the page's block navigation even when a click left it focused
+pub fn read_only_binding(press: text_editor::KeyPress) -> Option<text_editor::Binding<Message>> {
+    use text_editor::Binding as B;
+    B::from_key_press(press).filter(|b| matches!(b, B::Copy | B::Select(_) | B::SelectWord | B::SelectLine | B::SelectAll | B::Unfocus))
+}
+
 /// An error or warning without the goal Isabelle lists after it (the goal view shows that) or
 /// its position marker
 pub fn message_summary_pub(text: &str) -> String {
@@ -1515,7 +1548,7 @@ fn inline_goal_text<'a>(ws: Option<&'a Workspace>, table: &super::symbols::Table
     )
 }
 
-fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, beside: Option<(&'a Workspace, f32, f32)>) -> Element<'a, Message> {
+fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, beside: Option<(&'a Workspace, f32, f32)>, text_width: f32) -> Element<'a, Message> {
     let sp = spacing();
     let table = app.table(&app.workspace.as_ref().map(|w| w.machine.clone()).unwrap_or_default());
     // With room, the goal sits beside the block it belongs to, level with it; the text keeps
@@ -1676,7 +1709,8 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
     col = col.push(widget::Space::new().height(Length::Fixed(if beside.is_some() { view_height() * 0.5 } else { 0.0 })));
     // Clicking outside every block finishes the one being edited
     // (its side margins included, so that the page is centred, the same room on either side)
-    let page_width = beside.map_or(z(980.0), |(_, w, tw)| tw + w + GOAL_GAP) + 2.0 * gutter as f32;
+    // (with the goal under the proof, the readable text column alone, centred)
+    let page_width = beside.map_or(text_width, |(_, w, tw)| tw + w + GOAL_GAP) + 2.0 * gutter as f32;
     // A click no block takes (between them, beside them, below the end) finishes editing
     let goal: Element<'a, Message> = match (beside, anchor) {
         (Some((ws, width, _)), Some(_)) => match inline_goal(Some(ws), &table) {
@@ -2570,13 +2604,10 @@ fn message_view<'a>(ws: &'a Workspace, m: &Value, table: &super::symbols::Table)
                 .size(z(13.0))
                 .padding(2)
                 .on_action(move |a| Message::ViewAction(key, a))
-                .key_binding(|press| {
-                    use cosmic::iced::keyboard::Key;
-                    if press.modifiers.command() && matches!(press.key.as_ref(), Key::Character("=" | "+" | "-" | "0")) {
-                        return None;
-                    }
-                    text_editor::Binding::from_key_press(press)
-                })
+                // Read-only: copying and selecting only, so that every other key (j, k, the
+                // arrows, d, Enter) goes on to the page's block navigation even when a click
+                // has left this view focused
+                .key_binding(read_only_binding)
                 .style(|theme: &cosmic::Theme, _status| {
                     let c = theme.cosmic();
                     iced::widget::text_editor::Style {

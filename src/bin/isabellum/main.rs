@@ -237,6 +237,8 @@ pub enum Message {
     /// Show the definition in its window in the main window; its window closed
     /// Up or down a line (true: down), past a block's ends into its neighbours
     LineMove(bool),
+    /// The goal beside the text, or under the proof with the page centred
+    ToggleGoalBeside,
     /// Where `claude` and `codex` queries go: helper, fresh, or agent:KEY
     QueryRoute(String),
     /// Start the helper conversation again
@@ -529,6 +531,9 @@ struct UiSettings {
     show_left: Option<bool>,
     #[serde(default)]
     show_right: Option<bool>,
+    /// Whether the goal goes beside the text when there is room
+    #[serde(default)]
+    goal_beside: Option<bool>,
 }
 
 fn settings_path() -> std::path::PathBuf {
@@ -549,6 +554,7 @@ impl App {
             right_width: Some(self.right_width),
             show_left: Some(self.show_sidebar),
             show_right: Some(self.show_right),
+            goal_beside: Some(view::goal_beside_on()),
         };
         let path = settings_path();
         if let Some(dir) = path.parent() {
@@ -1883,6 +1889,7 @@ impl cosmic::Application for App {
         app.right_width = settings.right_width.unwrap_or(app.right_width);
         app.show_sidebar = settings.show_left.unwrap_or(false);
         app.show_right = settings.show_right.unwrap_or(false);
+        view::set_goal_beside(settings.goal_beside.unwrap_or(true));
         load_fonts();
         let title = app.retitle();
         (app, Task::batch([title, cli::listen()]))
@@ -2556,6 +2563,10 @@ impl cosmic::Application for App {
                     _ => view::zoom() / 1.1,
                 };
                 view::set_zoom(z);
+                self.save_settings();
+            }
+            Message::ToggleGoalBeside => {
+                view::set_goal_beside(!view::goal_beside_on());
                 self.save_settings();
             }
             Message::ToggleRight => {
