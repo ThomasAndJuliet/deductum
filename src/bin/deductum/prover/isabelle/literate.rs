@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Isabelle document text, as the literate view shows it (design C4): the
-//! body of a `text` or `section` turned into the Markdown the thread view's
-//! renderer sets, LaTeX maths included. This is a presentation only; edits
+//! Isabelle document text, as the literate view shows it (design C4, provers
+//! §8.1): the body of a `text` or `section` turned into the Markdown that
+//! prose-render sets, LaTeX maths included. This is a presentation only; edits
 //! always go to the source span (`theory::Block`), never back through it.
 //!
 //! Formal antiquotations (`@{term …}`, `\<^const>‹…›`) are shown as code with
 //! their symbols decoded; literal LaTeX maths is passed through for RaTeX;
 //! common LaTeX text commands become Markdown emphasis.
 
-use super::symbols::Table;
+use crate::codec::Codec;
 
 fn starts(chars: &[char], i: usize, s: &str) -> bool {
     let mut j = i;
@@ -105,9 +105,19 @@ fn strip_quotes(s: &str) -> String {
     t.to_string()
 }
 
-fn code(table: &Table, s: &str) -> String {
+fn code(table: &dyn Codec, s: &str) -> String {
     let text = table.decode(s.trim()).text.replace('`', "'").replace('\n', " ");
     if text.is_empty() { String::new() } else { format!("`{text}`") }
+}
+
+/// The character a symbol (`\<forall>`) stands for, if the codec knows it
+fn char_of(table: &dyn Codec, symbol: &str) -> Option<char> {
+    let decoded = table.decode(symbol).text;
+    let mut chars = decoded.chars();
+    match (chars.next(), chars.next()) {
+        (Some(c), None) if c != '\\' => Some(c),
+        _ => None,
+    }
 }
 
 fn escape(c: char, out: &mut String) {
@@ -118,7 +128,7 @@ fn escape(c: char, out: &mut String) {
 }
 
 /// Markdown for the source of a document text
-pub fn to_markdown(source: &str, table: &Table) -> String {
+pub fn to_markdown(source: &str, table: &dyn Codec) -> String {
     let chars: Vec<char> = source.chars().collect();
     let mut out = String::with_capacity(source.len() + 16);
     convert(&chars, table, &mut out);
@@ -212,7 +222,7 @@ fn join_lines(md: &str) -> String {
     out
 }
 
-fn convert(chars: &[char], table: &Table, out: &mut String) {
+fn convert(chars: &[char], table: &dyn Codec, out: &mut String) {
     let n = chars.len();
     let mut i = 0;
     while i < n {
@@ -449,7 +459,7 @@ fn convert(chars: &[char], table: &Table, out: &mut String) {
                     i = j + 2;
                     continue;
                 }
-                if let Some(ch) = table.char_of(&sym) {
+                if let Some(ch) = char_of(table, &sym) {
                     escape(ch, out);
                     i = j + 1;
                     continue;
@@ -461,7 +471,7 @@ fn convert(chars: &[char], table: &Table, out: &mut String) {
     }
 }
 
-fn antiquotation(name: &str, arg: &str, table: &Table) -> String {
+fn antiquotation(name: &str, arg: &str, table: &dyn Codec) -> String {
     match name {
         "cite" => format!("[{}]", arg.trim()),
         "url" | "doc" | "file" | "path" | "dir" => format!("`{}`", arg.trim()),
@@ -520,6 +530,7 @@ fn math_symbols(body: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use super::super::symbols::Table;
     use super::*;
 
     #[test]
