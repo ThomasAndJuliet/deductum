@@ -490,5 +490,117 @@ class Discovery(unittest.TestCase):
         self.assertEqual(body[lo:], "#check @t\n")
 
 
+class Loogle(unittest.TestCase):
+    ANSWER = {"header": "Found 2 declarations", "count": 2, "hits": [
+        {"name": "Nat.add_comm", "type": "∀ (n m : ℕ), n + m = m + n", "module": "Init.Core", "doc": None},
+        {"name": "Nat.add_comm'", "type": "∀ (n m : ℕ), m + n = n + m", "module": "Init.Core"}]}
+
+    def test_hits_become_messages_with_the_name_to_insert(self):
+        msgs = lean.loogle_messages(self.ANSWER, "public")
+        self.assertEqual(msgs[0]["text"], "2 declarations from loogle.lean-lang.org")
+        self.assertEqual(msgs[1]["name"], "Nat.add_comm")
+        self.assertEqual(msgs[1]["module"], "Init.Core")
+        self.assertEqual(msgs[1]["sendbacks"], ["Nat.add_comm"])
+        self.assertEqual(msgs[1]["text"], "Nat.add_comm : ∀ (n m : ℕ), n + m = m + n\nInit.Core")
+        self.assertEqual(len(msgs), 3)
+
+    def test_an_error_answer_is_an_error_message(self):
+        msgs = lean.loogle_messages({"error": "Unknown identifier 'foo'", "suggestions": ["Foo.bar"]}, "public")
+        self.assertEqual([m["kind"] for m in msgs], ["error", "writeln"])
+        self.assertIn("Foo.bar", msgs[1]["text"])
+
+    def test_the_limit_is_said(self):
+        hits = [{"name": f"n{i}", "type": "t", "module": "M"} for i in range(60)]
+        msgs = lean.loogle_messages({"count": 600, "hits": hits}, "local")
+        self.assertEqual(len(msgs), lean.LOOGLE_LIMIT + 1)
+        self.assertIn("showing 40", msgs[0]["text"])
+        self.assertIn("local loogle", msgs[0]["text"])
+
+    def test_off_and_unknown_sources_and_empty_queries_fail_clearly(self):
+        from drivers import HostError
+        for query, source, fragment in [("x", "off", "off in the settings"), ("", "public", "Type a name"),
+                                       ("x", "bogus", "Unknown search source")]:
+            with self.assertRaises(HostError) as cm:
+                lean.loogle_fetch(query, source)
+            self.assertIn(fragment, str(cm.exception))
+
+    def test_local_needs_a_binary_on_the_path(self):
+        from drivers import HostError
+        saved = os.environ.get("PATH")
+        os.environ["PATH"] = "/nonexistent"
+        try:
+            with self.assertRaises(HostError) as cm:
+                lean.loogle_fetch("Nat.add_comm", "local")
+            self.assertIn("no loogle program", str(cm.exception))
+        finally:
+            os.environ["PATH"] = saved or ""
+
+    def test_local_runs_the_binary(self):
+        import json, stat, tempfile
+        with tempfile.TemporaryDirectory() as d:
+            exe = os.path.join(d, "loogle")
+            with open(exe, "w") as f:
+                f.write("#!/bin/sh\ncat " + os.path.join(d, "answer.json") + "\n")
+            with open(os.path.join(d, "answer.json"), "w") as f:
+                json.dump(self.ANSWER, f)
+            os.chmod(exe, os.stat(exe).st_mode | stat.S_IXUSR)
+            saved = os.environ.get("PATH", "")
+            os.environ["PATH"] = d + os.pathsep + saved
+            try:
+                res = lean.loogle_fetch("Nat.add_comm", "local")
+            finally:
+                os.environ["PATH"] = saved
+            self.assertEqual(res["count"], 2)
+
+    def test_public_asks_the_json_endpoint(self):
+        import io, json
+        seen = {}
+
+        class Res(io.BytesIO):
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+
+        def fake(req, timeout=None):
+            seen["url"], seen["timeout"] = req.full_url, timeout
+            return Res(json.dumps(self.ANSWER).encode())
+
+        real = lean.urllib.request.urlopen
+        lean.urllib.request.urlopen = fake
+        try:
+            res = lean.loogle_fetch("?a + ?b = ?b + ?a", "public")
+        finally:
+            lean.urllib.request.urlopen = real
+        self.assertEqual(seen["url"], "https://loogle.lean-lang.org/json?q=%3Fa+%2B+%3Fb+%3D+%3Fb+%2B+%3Fa")
+        self.assertLessEqual(seen["timeout"], 30)
+        self.assertEqual(res["hits"][0]["name"], "Nat.add_comm")
+
+    def test_an_unreachable_server_is_a_clear_error(self):
+        from drivers import HostError
+        real = lean.urllib.request.urlopen
+
+        def down(req, timeout=None):
+            raise lean.urllib.error.URLError("no route")
+
+        lean.urllib.request.urlopen = down
+        try:
+            with self.assertRaises(HostError) as cm:
+                lean.loogle_fetch("x", "public")
+        finally:
+            lean.urllib.request.urlopen = real
+        self.assertIn("could not be reached", str(cm.exception))
+
+
+class Hover(unittest.TestCase):
+    def test_a_signature_and_its_docstring_are_two_items_without_fences(self):
+        md = "```lean\nNat.add_comm (n m : Nat) : n + m = m + n\n```\n***\nAddition is commutative.\n\nSee `Nat.add_assoc`."
+        self.assertEqual(lean.tooltip_items(md), ["Nat.add_comm (n m : Nat) : n + m = m + n",
+                                                 "Addition is commutative.\n\nSee `Nat.add_assoc`."])
+
+    def test_plain_and_empty_hovers(self):
+        self.assertEqual(lean.tooltip_items("just text"), ["just text"])
+        self.assertEqual(lean.tooltip_items("  \n"), [])
+        self.assertEqual(lean.tooltip_items("```lean\nx : Nat\n```"), ["x : Nat"])
+
+
 if __name__ == "__main__":
     unittest.main()

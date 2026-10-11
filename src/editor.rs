@@ -731,10 +731,10 @@ pub fn complete(profile: &dyn Profile, before: &str, table: &dyn Symbols, kinds:
     }
     // \<name or \name: symbols by name
     let mut i = n;
-    while i > 0 && (chars[i - 1].is_ascii_alphanumeric() || chars[i - 1] == '^') {
+    while i > 0 && profile.symbol_query_char(chars[i - 1]) {
         i -= 1;
     }
-    let lt = i >= 2 && chars[i - 1] == '<' && chars[i - 2] == '\\';
+    let lt = profile.angle_escapes() && i >= 2 && chars[i - 1] == '<' && chars[i - 2] == '\\';
     let bs = i >= 1 && chars[i - 1] == '\\';
     if lt || bs {
         let prefix: String = chars[i..].iter().collect();
@@ -1250,6 +1250,10 @@ impl Theory {
                 }
             }
         };
+        // What the characters alone show, under the prover's colours
+        for (s, e, hl) in self.profile.lexical_colours(&self.local) {
+            paint(&mut class, s, e, hl, &[]);
+        }
         for (s, e, sem) in prover.colours.iter().chain(&self.profile.derived_colours(&self.local, &prover.colours)) {
             paint(&mut class, *s, *e, Hl::Sem(*sem), &[]);
         }
@@ -1266,11 +1270,11 @@ impl Theory {
                 _ => {}
             }
             let kw_end = cmd.start + cmd.name.chars().count();
-            if prover.colours.is_empty() {
+            if prover.colours.is_empty() && self.profile.commands_are_keywords() {
                 paint(&mut class, cmd.start, kw_end, Hl::Keyword, &[Hl::Unprocessed, Hl::Running]);
             }
         }
-        if prover.commands.is_empty() {
+        if prover.commands.is_empty() && self.profile.commands_are_keywords() {
             for cmd in self.profile.lexical_commands(&self.local, &self.kinds) {
                 paint(&mut class, cmd.start, cmd.start + cmd.name.chars().count(), Hl::Keyword, &[]);
             }

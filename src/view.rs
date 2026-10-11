@@ -2360,7 +2360,7 @@ fn state_view<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Eleme
         .push(toggle("Goals", !ws.state_text, Message::StateText(false)))
         .push(toggle("Text", ws.state_text, Message::StateText(true)))
         .push(widget::Space::new().width(Length::Fill))
-        .push(widget::checkbox(ws.show_types).label("Types").on_toggle(Message::ShowTypes));
+        .push_maybe(ws.profile.goal_types_option().then(|| widget::checkbox(ws.show_types).label("Types").on_toggle(Message::ShowTypes)));
     // On a proof tool typed in the text (sledgehammer, nitpick, …): its findings, as they come,
     // in place of the state, with its settings
     let tool = ws.output.as_ref().and_then(|o| o["command"]["name"].as_str()).and_then(|n| ws.caps.typed_tool(n));
@@ -2448,9 +2448,9 @@ fn state_view<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Eleme
     let headline = if g.nogoal {
         "No goal: stating facts (forward mode)".to_string()
     } else if n == 0 {
-        "No subgoals left: the proof can be finished".to_string()
+        format!("No {}s left: the proof can be finished", ws.profile.goal_noun())
     } else {
-        format!("{n} subgoal{}", if n == 1 { "" } else { "s" })
+        format!("{n} {}{}", ws.profile.goal_noun(), if n == 1 { "" } else { "s" })
     };
     // The command's own output (a theorem it proved, a value, a warning) comes first: it is
     // what the step did
@@ -2638,7 +2638,7 @@ fn labelled<'a>(label: &'static str, body: Element<'a, Message>) -> Element<'a, 
         .push(
             widget::container(widget::text(label).font(cosmic::font::mono()).size(z(12.0)).class(theme::Text::Accent))
                 .padding(Padding { top: 3.0, ..Padding::ZERO })
-                .width(Length::Fixed(z(52.0))),
+                .width(Length::Fixed(z(if label.chars().count() <= 1 { 20.0 } else { 52.0 }))),
         )
         .push(widget::container(body).width(Length::Fill))
         .into()
@@ -2648,7 +2648,7 @@ fn labelled<'a>(label: &'static str, body: Element<'a, Message>) -> Element<'a, 
 /// fixes, what it assumes, what it shows)
 fn subgoal_card<'a>(ws: &'a Workspace, sg: &super::goals::Subgoal, first: bool, new: bool, table: &dyn super::codec::Symbols) -> Element<'a, Message> {
     let sp = spacing();
-    let mut head = widget::row::with_capacity(2).spacing(sp.space_xs).push(widget::text::caption(format!("Subgoal {}", sg.n)));
+    let mut head = widget::row::with_capacity(2).spacing(sp.space_xs).push(widget::text::caption(format!("{}{}", if ws.profile.goal_noun() == "goal" { "Goal " } else { "Subgoal " }, sg.n)));
     if new {
         head = head.push(widget::text::caption("· new").class(theme::Text::Accent));
     }
@@ -2924,10 +2924,53 @@ fn find_panel<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Eleme
     if q.status == "running" || q.status == "waiting" || q.status == "starting" {
         col = col.push(widget::text::caption("Searching…"));
     }
+    // (ways to search the panel offers besides its query: tactics that search at the caret, typed
+    // into the proof)
+    let tactics: Vec<&String> = search.sources.iter().filter(|s| s.ends_with('?')).collect();
+    if !tactics.is_empty() {
+        let mut row = widget::row::with_capacity(tactics.len() + 1).spacing(sp.space_xs).align_y(Alignment::Center);
+        row = row.push(widget::text::caption("At the caret:"));
+        for t in tactics {
+            row = row.push(widget::button::standard(t.as_str()).on_press(Message::Wrap(t.clone(), String::new())));
+        }
+        col = col.push(row);
+    }
+    if let Some(err) = &q.error {
+        col = col.push(tinted("error".into(), widget::text(err.clone()).size(z(13.0)).into()));
+    }
     for m in &q.messages {
-        col = col.push(message_text(m, table));
+        col = col.push(if m["name"].is_string() { search_hit(m) } else { message_text(m, table) });
     }
     widget::scrollable(col).height(Length::Fill).into()
+}
+
+/// A search result: the name to insert, its type, and the module it is in
+fn search_hit<'a>(m: &Value) -> Element<'a, Message> {
+    let sp = spacing();
+    let name = m["name"].as_str().unwrap_or("").to_string();
+    let mono = |t: String, size: f32| widget::text(t).font(cosmic::font::mono()).size(z(size));
+    let bold = cosmic::iced::Font { weight: cosmic::iced::font::Weight::Bold, ..cosmic::font::mono() };
+    let mut body = widget::column::with_capacity(3).spacing(1).width(Length::Fill);
+    body = body.push(widget::text(name.clone()).font(bold).size(z(13.0)));
+    body = body.push(mono(m["type"].as_str().unwrap_or("").to_string(), 12.0));
+    if let Some(module) = m["module"].as_str().filter(|s| !s.is_empty()) {
+        body = body.push(widget::text::caption(module.to_string()));
+    }
+    widget::container(
+        widget::row::with_capacity(2)
+            .spacing(sp.space_xs)
+            .align_y(Alignment::Center)
+            .push(body)
+            .push(widget::button::suggested("Insert").on_press(Message::Wrap(name, String::new()))),
+    )
+    .padding([sp.space_xxs, sp.space_xs])
+    .width(Length::Fill)
+    .class(theme::Container::custom(|theme| iced::widget::container::Style {
+        background: Some(Color { a: 0.05, ..Color::from(theme.cosmic().accent_color()) }.into()),
+        border: Border { radius: 6.0.into(), ..Default::default() },
+        ..Default::default()
+    }))
+    .into()
 }
 
 /// Isabelle symbols to insert, by group or by search (name, LaTeX name or abbreviation)
