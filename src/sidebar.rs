@@ -125,8 +125,9 @@ fn memory_mb(app: &App, machine: &str, sid: &str, s: &Value) -> Option<u64> {
     s["memory_mb"].as_u64().or_else(|| s["activity"]["rss_mb"].as_u64())
 }
 
+/// (with a no-break space, so that a wrapped line never parts the number from its unit)
 fn gigabytes(mb: u64) -> String {
-    format!("{:.1} GB", mb as f64 / 1000.0)
+    format!("{:.1}\u{a0}GB", mb as f64 / 1000.0)
 }
 
 /// A folder as a heading: under the machine's home as `~/…`, and no more than its last two parts
@@ -158,7 +159,7 @@ fn sessions(app: &App) -> Element<'_, Message> {
         // (its name, and under it whether it is connected and what its provers use: a line that
         // still fits a narrow sidebar)
         let memory = (total > 0).then(|| match budget {
-            Some(b) => format!("{} of {b:.0} GB", gigabytes(total).trim_end_matches(" GB")),
+            Some(b) => format!("{} of {b:.0}\u{a0}GB", gigabytes(total).trim_end_matches("\u{a0}GB")),
             None => gigabytes(total),
         });
         let head = widget::row::with_capacity(2)
@@ -276,7 +277,7 @@ fn session_row<'a>(app: &'a App, machine: &str, sid: &str, v: &'a Value, indent:
         }
     }
     if agents > 0 {
-        detail.push(format!("{agents} agent{}", if agents == 1 { "" } else { "s" }));
+        detail.push(format!("{agents}\u{a0}agent{}", if agents == 1 { "" } else { "s" }));
     }
     if let Some(mb) = memory_mb(app, machine, sid, v) {
         detail.push(gigabytes(mb));
