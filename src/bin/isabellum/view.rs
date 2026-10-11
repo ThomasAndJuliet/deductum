@@ -1912,7 +1912,7 @@ fn block_editor_in<'a>(ws: Option<&'a Workspace>, t: &'a Theory, window: bool, i
         } else {
             widget::Space::new().width(Length::Fixed(0.0)).height(Length::Fixed(0.0)).into()
         };
-        let code: Element<'_, Message> = super::gap::Beside::new(code, pop, iced::Vector::new(4.0, 0.0)).right().into();
+        let code: Element<'_, Message> = super::gap::Beside::new(code, pop, iced::Vector::new(4.0, 0.0)).right().fixed().into();
         framed(code, t.shown_status(be.start, be.end, t.status_in(be.start, be.end).unwrap_or(Status::Finished)), true)
     };
     let mut col = widget::column::with_capacity(6).spacing(4).push(editor);
@@ -2452,7 +2452,7 @@ fn source<'a>(ws: &'a Workspace, t: &'a Theory, inline: Option<&'a Workspace>, t
         ),
         None => (widget::Space::new().width(Length::Fixed(0.0)).height(Length::Fixed(0.0)).into(), iced::Vector::ZERO),
     };
-    let page = widget::container(super::gap::Beside::new(super::gap::Beside::new(row, goal, at), pop, pop_at)).center_x(Length::Fill);
+    let page = widget::container(super::gap::Beside::new(super::gap::Beside::new(row, goal, at), pop, pop_at).fixed()).center_x(Length::Fill);
     col = col.push(widget::scrollable(page).id(source_scroll_id()).height(Length::Fill));
     if let Some(m) = vim_mode_now() {
         col = col.push(widget::text::caption(format!("-- {} --", m.label())));

@@ -1312,8 +1312,9 @@ fn the_margins_collapse_before_the_goal_goes_under() {
         let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(i));
         let mut h = Harness::new(Size::new(w, 900.0));
         h.draw(&app, &format!("collapse-{}", w as u32));
-        drop(h);
+        // (read while this test has the UI's turn: other tests' views set it too)
         assert_eq!(super::view::last_wide(), beside, "{w} px: goal beside = {beside}");
+        drop(h);
     }
 }
 
@@ -1394,3 +1395,128 @@ fn a_block_opened_by_a_click_has_vim_block_cursor() {
     let be = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().block_editor.as_ref().unwrap();
     assert_eq!(be.content.selection().map(|s| s.chars().count()), Some(1), "and after the click is placed in the open block");
 }
+
+/// Down from a text block into the code block after it, and up back again: with vim's j/k, and
+/// with the arrow keys
+#[test]
+fn moving_from_a_text_block_into_a_code_block() {
+    for vim in [true, false] {
+        let mut app = demo_app(Mode::Literate);
+        app.vim_enabled = vim;
+        app.vim.mode = super::vim::Mode::Normal;
+        let blocks = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.clone();
+        let text = blocks.iter().position(|b| b.kind == super::theory::Kind::Text).unwrap();
+        let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(text));
+        let open = |app: &App| {
+            let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+            t.block_editor.as_ref().and_then(|be| t.blocks.iter().position(|b| b.start <= be.start && be.start <= b.end))
+        };
+        let down = |app: &mut App| {
+            let m = if vim { super::Message::Vim("j".into(), false) } else { super::Message::LineMove(true) };
+            let _ = cosmic::Application::update(app, m);
+        };
+        let mut reached = None;
+        for n in 0..12 {
+            down(&mut app);
+            eprintln!("vim {vim}: after {} down: open block {:?}", n + 1, open(&app));
+            if open(&app).is_some_and(|i| i > text) {
+                reached = open(&app);
+                break;
+            }
+        }
+        assert!(reached.is_some_and(|i| blocks[i].kind == super::theory::Kind::Formal), "vim {vim}: down from the text block reaches the code block ({reached:?})");
+    }
+}
+
+/// As the window does it: a long paragraph that wraps, drawn, and the keys pressed
+#[test]
+fn moving_from_a_wrapped_text_block_into_a_code_block_with_keys() {
+    use cosmic::iced::keyboard::{Key, key::Named};
+    let para = "A is the reactive assumption, Q the intermediate commitment, and R the final commitment. The intended well-formed inputs satisfy the existing RC/RR conditions, and Q must not constrain the final program state. These requirements are recorded separately rather than silently normalising the supplied predicates.";
+    let text = format!("theory P imports Main begin\n\nlemma before: \"True\"\n  by simp\n\ntext \\<open>{para}\\<close>\n\nlemma after: \"(a::nat) + b = b + a\"\n  by simp\n\nend\n");
+    for (vim, up) in [(false, false), (true, false), (false, true), (true, true)] {
+        let mut app = demo_app(Mode::Literate);
+        let doc = json!({"text": text, "revision": 1, "prover": prover_json(&text)});
+        app.workspace.as_mut().unwrap().theory = Some(Theory::new("/tmp/P.thy".into(), &doc, &Arc::new(Table::fallback()), Arc::new(HashMap::new()), Mode::Literate));
+        app.show_right = false;
+        app.show_sidebar = false;
+        app.vim_enabled = vim;
+        app.vim.mode = super::vim::Mode::Normal;
+        let ti = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.kind == super::theory::Kind::Text).unwrap();
+        let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(ti));
+        let mut h = Harness::new(Size::new(900.0, 800.0));
+        h.focus(&app, super::view::block_editor_id());
+        let open = |app: &App| {
+            let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+            t.block_editor.as_ref().and_then(|be| t.blocks.iter().position(|b| b.start <= be.start && be.start <= b.end))
+        };
+        let mut reached = false;
+        for n in 0..14 {
+            let msgs = match (vim, up) {
+                (true, false) => h.key(&app, Key::Character("j".into()), Some("j")),
+                (true, true) => h.key(&app, Key::Character("k".into()), Some("k")),
+                (false, false) => h.key(&app, Key::Named(Named::ArrowDown), None),
+                (false, true) => h.key(&app, Key::Named(Named::ArrowUp), None),
+            };
+            let names: Vec<String> = msgs.iter().map(|m| format!("{m:?}").chars().take(40).collect()).collect();
+            for m in msgs {
+                let _ = cosmic::Application::update(&mut app, m);
+            }
+            h.draw(&app, "wrapped-move");
+            let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+            let caret = t.block_editor.as_ref().map(|be| be.content.cursor().position);
+            eprintln!("vim {vim} up {up}: {}: {names:?} -> block {:?} caret {caret:?}", n + 1, open(&app));
+            if open(&app).is_some_and(|i| if up { i < ti } else { i > ti }) {
+                reached = true;
+                break;
+            }
+        }
+        assert!(reached, "vim {vim} up {up}: from the wrapped paragraph to the lemma");
+    }
+}
+
+/// A text block of two paragraphs, opened by a click on its first (so narrowed to it): down
+/// goes through the second paragraph and on into the lemma after the block
+#[test]
+fn moving_from_a_paragraph_through_the_next_into_a_code_block() {
+    use cosmic::iced::keyboard::{Key, key::Named};
+    let para = "A is the reactive assumption, Q the intermediate commitment, and R the final commitment. The intended well-formed inputs satisfy the existing RC/RR conditions.";
+    let text = format!("theory P imports Main begin\n\ntext \\<open>{para}\n\n{para}\\<close>\n\nlemma after: \"(a::nat) + b = b + a\"\n  by simp\n\nend\n");
+    for vim in [false, true] {
+        let mut app = demo_app(Mode::Literate);
+        let doc = json!({"text": text, "revision": 1, "prover": prover_json(&text)});
+        app.workspace.as_mut().unwrap().theory = Some(Theory::new("/tmp/P.thy".into(), &doc, &Arc::new(Table::fallback()), Arc::new(HashMap::new()), Mode::Literate));
+        app.show_right = false;
+        app.show_sidebar = false;
+        app.vim_enabled = vim;
+        app.vim.mode = super::vim::Mode::Normal;
+        let ti = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.kind == super::theory::Kind::Text).unwrap();
+        let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(ti));
+        let _ = cosmic::Application::update(&mut app, super::Message::BlockClickAt(cosmic::iced::Point::new(5.0, 2.0)));
+        let wrap = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().block_editor.as_ref().unwrap().wrap.is_some();
+        eprintln!("vim {vim}: narrowed to a paragraph: {wrap}");
+        let mut h = Harness::new(Size::new(900.0, 800.0));
+        h.focus(&app, super::view::block_editor_id());
+        let open = |app: &App| {
+            let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+            t.block_editor.as_ref().and_then(|be| t.blocks.iter().position(|b| b.start <= be.start && be.start <= b.end))
+        };
+        let mut reached = false;
+        for n in 0..16 {
+            let msgs = if vim { h.key(&app, Key::Character("j".into()), Some("j")) } else { h.key(&app, Key::Named(Named::ArrowDown), None) };
+            for m in msgs {
+                let _ = cosmic::Application::update(&mut app, m);
+            }
+            h.draw(&app, "para-move");
+            let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+            let be = t.block_editor.as_ref();
+            eprintln!("vim {vim}: {}: block {:?} start {:?} caret {:?}", n + 1, open(&app), be.map(|b| b.start), be.map(|b| b.content.cursor().position));
+            if open(&app).is_some_and(|i| i > ti) {
+                reached = true;
+                break;
+            }
+        }
+        assert!(reached, "vim {vim}: through the paragraphs into the lemma");
+    }
+}
+

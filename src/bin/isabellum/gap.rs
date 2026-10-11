@@ -216,16 +216,24 @@ pub struct Beside<'a, Message, Theme, Renderer> {
     at: Vector,
     /// `at.x` from the main element's right edge, inward, rather than from its left
     right: bool,
+    /// Whether it moves to stay in sight (a goal does; a button on a block stays on it)
+    follow: bool,
 }
 
 impl<'a, Message, Theme, Renderer> Beside<'a, Message, Theme, Renderer> {
     pub fn new(main: impl Into<Element<'a, Message, Theme, Renderer>>, side: impl Into<Element<'a, Message, Theme, Renderer>>, at: Vector) -> Self {
-        Self { main: main.into(), side: side.into(), at, right: false }
+        Self { main: main.into(), side: side.into(), at, right: false, follow: true }
     }
 
     /// Placed from the main element's top right corner (inward by `at.x`), as laid out
     pub fn right(mut self) -> Self {
         self.right = true;
+        self
+    }
+
+    /// Where it is put, scrolling with the main element (not moving to stay in sight)
+    pub fn fixed(mut self) -> Self {
+        self.follow = false;
         self
     }
 }
@@ -272,7 +280,7 @@ where
         let mut children = layout.children();
         let (Some(main), Some(side)) = (children.next(), children.next()) else { return };
         self.main.as_widget().draw(&tree.children[0], renderer, theme, style, main, cursor, viewport);
-        let dy = nudge(main.bounds(), side.bounds(), viewport);
+        let dy = if self.follow { nudge(main.bounds(), side.bounds(), viewport) } else { 0.0 };
         let cursor = match cursor.position() {
             Some(p) => mouse::Cursor::Available(p - Vector::new(0.0, dy)),
             None => cursor,
@@ -298,7 +306,7 @@ where
     ) {
         let mut children = layout.children();
         let (Some(main), Some(side)) = (children.next(), children.next()) else { return };
-        let dy = nudge(main.bounds(), side.bounds(), viewport);
+        let dy = if self.follow { nudge(main.bounds(), side.bounds(), viewport) } else { 0.0 };
         let moved = |c: mouse::Cursor| match c.position() {
             Some(p) => mouse::Cursor::Available(p - Vector::new(0.0, dy)),
             None => c,
@@ -318,7 +326,7 @@ where
     fn mouse_interaction(&self, tree: &Tree, layout: Layout<'_>, cursor: mouse::Cursor, viewport: &Rectangle, renderer: &Renderer) -> mouse::Interaction {
         let mut children = layout.children();
         let (Some(main), Some(side)) = (children.next(), children.next()) else { return mouse::Interaction::None };
-        let dy = nudge(main.bounds(), side.bounds(), viewport);
+        let dy = if self.follow { nudge(main.bounds(), side.bounds(), viewport) } else { 0.0 };
         match cursor.position().map(|p| p - Vector::new(0.0, dy)) {
             Some(p) if side.bounds().contains(p) => {
                 self.side.as_widget().mouse_interaction(&tree.children[1], side, mouse::Cursor::Available(p), viewport, renderer)
