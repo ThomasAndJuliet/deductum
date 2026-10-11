@@ -26,7 +26,10 @@ import re
 import shutil
 import sys
 import time
+import subprocess
+import urllib.error
 import urllib.parse
+import urllib.request
 import uuid
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -718,6 +721,75 @@ def goal_parts(goals: List[Dict[str, Any]], nogoal: bool = False) -> List[Dict[s
 
 
 # ---------------------------------------------------------------------------
+# Loogle: searching Lean and Mathlib by name or type pattern
+
+LOOGLE_URL = "https://loogle.lean-lang.org/json"
+LOOGLE_TIMEOUT = 15.0
+LOOGLE_LIMIT = 40
+
+
+def loogle_fetch(query: str, source: str, timeout: float = LOOGLE_TIMEOUT) -> Dict[str, Any]:
+    """Loogle's answer for ``query`` (blocking): ``public`` asks loogle.lean-lang.org, ``local`` runs
+    a ``loogle`` binary on the PATH. Raises ``HostError`` with a message fit for the human."""
+    query = query.strip()
+    if not query:
+        raise HostError("Type a name, a pattern of the type (such as ?a + ?b = ?b + ?a) or a word of the name")
+    if source == "off":
+        raise HostError("Search is off in the settings")
+    if source == "local":
+        binary = shutil.which("loogle")
+        if not binary:
+            raise HostError("There is no loogle program on the PATH of this machine "
+                            "(github.com/nomeata/loogle); choose the public Loogle in the settings, or install it")
+        try:
+            run = subprocess.run([binary, "--json", query], capture_output=True, text=True, timeout=timeout)
+        except subprocess.TimeoutExpired:
+            raise HostError(f"The local loogle did not answer within {timeout:g} seconds")
+        if run.returncode != 0 and not run.stdout.strip():
+            raise HostError("loogle failed: " + (run.stderr.strip().splitlines() or ["no output"])[-1])
+        raw = run.stdout
+    elif source == "public":
+        url = LOOGLE_URL + "?" + urllib.parse.urlencode({"q": query})
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "deductum", "Accept": "application/json"})
+            with urllib.request.urlopen(req, timeout=timeout) as res:
+                raw = res.read().decode("utf-8", "replace")
+        except urllib.error.HTTPError as exn:
+            raise HostError(f"loogle.lean-lang.org answered {exn.code}")
+        except (urllib.error.URLError, TimeoutError, OSError) as exn:
+            raise HostError(f"loogle.lean-lang.org could not be reached ({getattr(exn, 'reason', exn)})")
+    else:
+        raise HostError(f"Unknown search source: {source}")
+    try:
+        result = json.loads(raw)
+    except ValueError:
+        raise HostError("loogle answered something that is not JSON")
+    if not isinstance(result, dict):
+        raise HostError("loogle answered something unexpected")
+    return result
+
+
+def loogle_messages(result: Dict[str, Any], source: str, limit: int = LOOGLE_LIMIT) -> List[Dict[str, Any]]:
+    """The messages the app lists for Loogle's answer: a heading naming the source, then one per hit
+    (``name``, ``type``, ``module``; Insert puts the name at the caret)"""
+    where = {"public": "loogle.lean-lang.org", "local": "local loogle"}.get(source, source)
+    if result.get("error"):
+        out = [message("error", f"{result['error']}")]
+        for s in (result.get("suggestions") or [])[:5]:
+            out.append(message("writeln", f"Did you mean: {s}"))
+        return out
+    hits = result.get("hits") or []
+    count = result.get("count", len(hits))
+    head = f"{count} declaration{'s' if count != 1 else ''} from {where}" + (f" (showing {limit})" if count > limit else "")
+    out = [message("writeln", head)]
+    for h in hits[:limit]:
+        name, ty, mod = h.get("name", ""), h.get("type", ""), h.get("module", "")
+        out.append(message("writeln", f"{name} : {ty}\n{mod}".rstrip(), name=name, type=ty, module=mod,
+                           doc=h.get("doc") or "", sendbacks=[name]))
+    return out
+
+
+# ---------------------------------------------------------------------------
 # Discovery without a session
 
 
@@ -994,7 +1066,10 @@ class LeanDriver(Driver):
             "hover": True, "definition": True, "spans": "lexical",
             "tools": [{"name": t, "typed": t, "kind": "prove", "stop": False} for t in tools],
             "counterexamples": ["plausible"] if mathlib or "plausible" in packages else [],
-            "search": {"label": "Search", "syntax": "loogle", "sources": ["exact?", "loogle"]},
+            "search": {"label": "Search", "tab": "Search", "syntax": "loogle", "operation": "loogle", "args": [],
+                       "sources": ["exact?", "apply?", "loogle"],
+                       "placeholder": "Nat.add_comm   or   ?a + ?b = ?b + ?a   or   \"comm\"",
+                       "note": "Loogle: by name, by a pattern of the type (?a, ?b stand for anything), or by a word of the name. Its source is a setting."},
             "command": ["#check", "#eval", "#print", "#reduce"],
             "check_candidates": "scratch", "project_actions": actions, "semantic_colours": True,
             "documents": list(self.documents), "project_files": list(self.project_files),
@@ -1635,6 +1710,8 @@ class LeanDriver(Driver):
         qid, op = obj["query"], obj.get("operation")
         try:
             doc = self.docs.get(obj.get("file", ""))
+            if op == "loogle":
+                return await self._query_loogle(qid, obj.get("args") or [])
             if op not in ("deductum_goals", "deductum_command"):
                 return self._query_event(qid, "failed", error=f"Unknown query operation: {op}")
             if doc is None:
@@ -1651,6 +1728,19 @@ class LeanDriver(Driver):
             self._query_event(qid, "failed", error=f"Lean server: {getattr(exn, 'message', exn)}")
         except Exception as exn:  # a bug here must not leave the query waiting
             self._query_event(qid, "failed", error=f"{type(exn).__name__}: {exn}")
+
+    async def _query_loogle(self, qid: str, args: List[str]) -> None:
+        """Search by name or type pattern: ``args`` are the query and the source (``public``, ``local``
+        or ``off``; public when left out). Needs no open file."""
+        query = args[0] if args else ""
+        source = (args[1] if len(args) > 1 else "public") or "public"
+        self._query_event(qid, "waiting")
+        self._query_event(qid, "running")
+        try:
+            result = await asyncio.get_running_loop().run_in_executor(None, loogle_fetch, query, source)
+        except HostError as exn:
+            return self._query_event(qid, "failed", error=str(exn))
+        self._query_event(qid, "finished", loogle_messages(result, source), source=source)
 
     def _command_fields(self, doc: LDoc, offset: int) -> Dict[str, Any]:
         cmd = self.command_at(doc, offset)
