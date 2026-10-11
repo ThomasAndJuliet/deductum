@@ -1899,3 +1899,32 @@ fn list_items_are_offered_in_a_list() {
     assert!(first.is_none(), "prose is not a list");
     assert!(second.is_some_and(|(m, _)| m == "\\<^item>"), "an item's line is in a list");
 }
+
+/// The last block selected: its own actions add a block after it, and the page's closing row of
+/// the same actions is not drawn as well
+#[test]
+fn no_duplicate_actions_after_the_last_block() {
+    use cosmic::iced::Point;
+    let text = "theory One imports Main begin\n\ntext \\<open>Only prose here.\\<close>\n\nend\n";
+    let mut app = demo_app(Mode::Literate);
+    let doc = json!({"text": text, "revision": 1, "prover": {}});
+    app.workspace.as_mut().unwrap().theory = Some(Theory::new("/tmp/One.thy".into(), &doc, &Arc::new(Table::fallback()), Arc::new(HashMap::new()), Mode::Literate));
+    app.show_right = false;
+    app.show_sidebar = false;
+    let ti = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.kind == super::theory::Kind::Text).unwrap();
+    app.workspace.as_mut().unwrap().theory.as_mut().unwrap().selected = Some(ti);
+    let mut h = Harness::new(Size::new(900.0, 600.0));
+    h.draw(&app, "last-selected");
+    // the "+ Text" actions: count the rows that offer them, down the page
+    let mut ys = Vec::new();
+    for y in (40..590).step_by(4) {
+        if (20..400).step_by(12).any(|x| h.click(&app, Point::new(x as f32, y as f32)).iter().any(|m| matches!(m, super::Message::InsertBlock(_, "text")))) {
+            ys.push(y);
+        }
+    }
+    drop(h);
+    // (rows: runs of heights a row apart at most)
+    let rows = ys.windows(2).filter(|w| w[1] - w[0] > 12).count() + usize::from(!ys.is_empty());
+    eprintln!("heights offering + Text: {ys:?} ({rows} rows)");
+    assert_eq!(rows, 1, "one row of actions after the last block ({ys:?})");
+}
