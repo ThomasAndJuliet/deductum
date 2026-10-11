@@ -3376,10 +3376,53 @@ fn find_panel<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Eleme
     if q.status == "running" || q.status == "waiting" || q.status == "starting" {
         col = col.push(widget::text::caption("Searching…"));
     }
+    // (ways to search the panel offers besides its query: tactics that search at the caret, typed
+    // into the proof)
+    let tactics: Vec<&String> = search.sources.iter().filter(|s| s.ends_with('?')).collect();
+    if !tactics.is_empty() {
+        let mut row = widget::row::with_capacity(tactics.len() + 1).spacing(sp.space_xs).align_y(Alignment::Center);
+        row = row.push(widget::text::caption("At the caret:"));
+        for t in tactics {
+            row = row.push(widget::button::standard(t.as_str()).on_press(Message::Wrap(t.clone(), String::new())));
+        }
+        col = col.push(row);
+    }
+    if let Some(err) = &q.error {
+        col = col.push(tinted("error".into(), widget::text(err.clone()).size(z(13.0)).into()));
+    }
     for m in &q.messages {
-        col = col.push(message_text(m, table));
+        col = col.push(if m["name"].is_string() { search_hit(m) } else { message_text(m, table) });
     }
     widget::scrollable(col).height(Length::Fill).into()
+}
+
+/// A search result: the name to insert, its type, and the module it is in
+fn search_hit<'a>(m: &Value) -> Element<'a, Message> {
+    let sp = spacing();
+    let name = m["name"].as_str().unwrap_or("").to_string();
+    let mono = |t: String, size: f32| widget::text(t).font(cosmic::font::mono()).size(z(size));
+    let bold = cosmic::iced::Font { weight: cosmic::iced::font::Weight::Bold, ..cosmic::font::mono() };
+    let mut body = widget::column::with_capacity(3).spacing(1).width(Length::Fill);
+    body = body.push(widget::text(name.clone()).font(bold).size(z(13.0)));
+    body = body.push(mono(m["type"].as_str().unwrap_or("").to_string(), 12.0));
+    if let Some(module) = m["module"].as_str().filter(|s| !s.is_empty()) {
+        body = body.push(widget::text::caption(module.to_string()));
+    }
+    widget::container(
+        widget::row::with_capacity(2)
+            .spacing(sp.space_xs)
+            .align_y(Alignment::Center)
+            .push(body)
+            .push(widget::button::suggested("Insert").on_press(Message::Wrap(name, String::new()))),
+    )
+    .padding([sp.space_xxs, sp.space_xs])
+    .width(Length::Fill)
+    .class(theme::Container::custom(|theme| iced::widget::container::Style {
+        background: Some(Color { a: 0.05, ..Color::from(theme.cosmic().accent_color()) }.into()),
+        border: Border { radius: 6.0.into(), ..Default::default() },
+        ..Default::default()
+    }))
+    .into()
 }
 
 /// Isabelle symbols to insert, by group or by search (name, LaTeX name or abbreviation)
