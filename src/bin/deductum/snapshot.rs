@@ -200,7 +200,8 @@ pub fn demo_app(mode: Mode) -> App {
 }
 
 pub fn draw(app: &App, name: &str, size: Size) -> Vec<u8> {
-    draw_element(super::view::view(app), name, size)
+    let turn = ui_turn();
+    draw_locked(super::view::view(app), name, size, turn)
 }
 
 /// Views publish process-wide state as they are built (vim's mode, the zoom): tests that draw or
@@ -212,7 +213,12 @@ pub fn ui_turn() -> std::sync::MutexGuard<'static, ()> {
 }
 
 pub fn draw_element(element: cosmic::Element<'_, super::Message>, name: &str, size: Size) -> Vec<u8> {
-    let _turn = ui_turn();
+    draw_locked(element, name, size, ui_turn())
+}
+
+/// As [`draw_element`], with the UI's turn already taken (before the element was built, which
+/// may publish process-wide state too)
+fn draw_locked(element: cosmic::Element<'_, super::Message>, name: &str, size: Size, _turn: std::sync::MutexGuard<'static, ()>) -> Vec<u8> {
     render(element, name, size)
 }
 
@@ -625,8 +631,11 @@ impl Harness {
     pub fn draw(&mut self, app: &App, name: &str) -> Vec<u8> {
         let theme = cosmic::theme::active();
         let mut ui = UserInterface::build(super::view::view(app), self.size, self.cache.take().unwrap_or_default(), &mut self.renderer);
+        // (a moment before any editor took focus: its caret is in the visible half of its blink
+        // whatever the time, so a busy machine does not change the frame)
+        let earlier = std::time::Instant::now().checked_sub(std::time::Duration::from_secs(3600)).unwrap_or_else(std::time::Instant::now);
         let _ = ui.update(
-            &[Event::Window(cosmic::iced::window::Event::RedrawRequested(std::time::Instant::now()))],
+            &[Event::Window(cosmic::iced::window::Event::RedrawRequested(earlier))],
             self.cursor,
             &mut self.renderer,
             &mut clipboard::Null,
@@ -663,6 +672,8 @@ fn vim_visual_mode_selects_through_the_widgets() {
         h.draw(app, "vim-visual");
     };
     feed(&mut app, &mut h, "0vll");
+    // (the selection itself, kept: its text keeps its syntax colours under the selection's tint)
+    h.draw(&app, "vim-visual-1-selected");
     let be = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().block_editor.as_ref().unwrap();
     let sel = be.content.selection();
     eprintln!("mode {:?} cursor {:?} selection {sel:?}", app.vim.mode, be.content.cursor());
@@ -1281,8 +1292,10 @@ fn nothing_on_the_page_runs_into_the_goal_beside_it() {
         // the goal card: left of its accent "Goals" button (the leftmost accent pixel in the
         // right half), less its padding
         let accent = |p: &image::Rgba<u8>| p[2] > 170 && p[1] > 150 && p[0] < 150;
-        let button = (w / 2..w - 40).find(|&x| (0..h).any(|y| accent(img.get_pixel(x, y)))).expect("the goal beside");
-        let by = (0..h).find(|&y| accent(img.get_pixel(button, y))).unwrap();
+        // (the pill filled with the accent, not accent-coloured text such as a note's Resolve)
+        let pill = |x: u32, y: u32| (x..x + 20).all(|xx| accent(img.get_pixel(xx, y)));
+        let button = (w / 2..w - 40).find(|&x| (0..h).any(|y| pill(x, y))).expect("the goal beside");
+        let by = (0..h).find(|&y| pill(button, y)).unwrap();
         // (left from the button, to where the card's background ends)
         let card = (0..button).rev().find(|&x| img.get_pixel(x, by) == &bg).map_or(button, |x| x + 1);
         // the gap before it: background on every row
@@ -1641,9 +1654,12 @@ fn the_layout_keeps_its_place_and_the_centred_column_is_wide_enough() {
     app.workspace.as_mut().unwrap().output = output;
     let _ = cosmic::Application::update(&mut app, super::Message::ToggleGoalBeside);
     let centred = edges(h.draw(&app, "keep-centred"));
+    // (the column as laid out: what is drawn in it need not reach its edge, a ragged paragraph
+    // or a note as wide as its cell)
+    let column = super::view::last_column();
     let _ = cosmic::Application::update(&mut app, super::Message::ToggleGoalBeside);
-    eprintln!("with goal {with_goal:?}, without {without:?}, centred {centred:?}");
-    assert!(centred.1 - centred.0 >= 540, "the centred column is wide enough ({centred:?})");
+    eprintln!("with goal {with_goal:?}, without {without:?}, centred {centred:?}, column {column}");
+    assert!(column >= 540.0, "the centred column is wide enough ({column}, drawn {centred:?})");
 }
 
 /// Beside the block being edited, with no goal: what can be inserted there, by context
@@ -1933,4 +1949,87 @@ fn no_duplicate_actions_after_the_last_block() {
     let rows = ys.windows(2).filter(|w| w[1] - w[0] > 12).count() + usize::from(!ys.is_empty());
     eprintln!("heights offering + Text: {ys:?} ({rows} rows)");
     assert_eq!(rows, 1, "one row of actions after the last block ({ys:?})");
+}
+
+
+/// `CT_SNAPSHOTS`: the window across its modes, for looking at: the literate and source views,
+/// dark and light, the goal beside on and off, widths from a laptop's half screen to a wide
+/// monitor, the sidebars open and closed, vim on and off, with a paragraph open and with a proof
+/// open (its goal shown), the demo's note and error present throughout. Named
+/// `matrix-<view>-<theme>-<width>-<open>[-sidebars][-under][-vim]`
+#[test]
+fn frame_matrix() {
+    if std::env::var("CT_SNAPSHOTS").is_err() {
+        return;
+    }
+    #[derive(Clone, Copy, PartialEq)]
+    enum Open {
+        Proof,
+        Prose,
+    }
+    struct Case {
+        mode: Mode,
+        dark: bool,
+        width: f32,
+        open: Open,
+        sidebars: bool,
+        beside: bool,
+        vim: bool,
+    }
+    let case = |mode, dark, width, open| Case { mode, dark, width, open, sidebars: false, beside: true, vim: false };
+    let mut cases = Vec::new();
+    for dark in [true, false] {
+        for width in [800.0, 1000.0, 1100.0, 1400.0, 1800.0] {
+            cases.push(case(Mode::Literate, dark, width, Open::Proof));
+        }
+        for width in [1100.0, 1400.0] {
+            cases.push(case(Mode::Literate, dark, width, Open::Prose));
+        }
+        for width in [1400.0, 1800.0] {
+            cases.push(Case { sidebars: true, ..case(Mode::Literate, dark, width, Open::Proof) });
+        }
+        cases.push(Case { beside: false, ..case(Mode::Literate, dark, 1400.0, Open::Proof) });
+        for width in [1000.0, 1400.0] {
+            cases.push(case(Mode::Source, dark, width, Open::Proof));
+        }
+        cases.push(Case { sidebars: true, ..case(Mode::Source, dark, 1800.0, Open::Proof) });
+    }
+    cases.push(Case { vim: true, ..case(Mode::Literate, true, 1400.0, Open::Proof) });
+    cases.push(Case { vim: true, ..case(Mode::Literate, true, 1400.0, Open::Prose) });
+    for c in cases {
+        let mut app = demo_app(Mode::Literate);
+        app.show_sidebar = c.sidebars;
+        app.show_right = c.sidebars;
+        app.window_width = c.width;
+        app.vim_enabled = c.vim;
+        let blocks = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.clone();
+        let i = match c.open {
+            Open::Proof => blocks.iter().position(|b| b.name == "lemma").unwrap(),
+            Open::Prose => blocks.iter().position(|b| b.kind == super::theory::Kind::Text).unwrap(),
+        };
+        if c.mode == Mode::Source {
+            let _ = cosmic::Application::update(&mut app, super::Message::SetMode(Mode::Source));
+        } else {
+            let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(i));
+        }
+        let mut h = Harness::new(Size::new(c.width, 860.0));
+        cosmic::theme::set_active(if c.dark { cosmic::theme::ThemeType::Dark } else { cosmic::theme::ThemeType::Light });
+        super::view::set_goal_beside(c.beside);
+        if c.mode == Mode::Literate {
+            h.focus(&app, super::view::block_editor_id());
+        }
+        let name = format!(
+            "matrix-{}-{}-{}-{}{}{}{}",
+            if c.mode == Mode::Source { "source" } else { "literate" },
+            if c.dark { "dark" } else { "light" },
+            c.width as u32,
+            if c.open == Open::Proof { "proof" } else { "prose" },
+            if c.sidebars { "-sidebars" } else { "" },
+            if c.beside { "" } else { "-under" },
+            if c.vim { "-vim" } else { "" },
+        );
+        h.draw(&app, &name);
+        super::view::set_goal_beside(true);
+        cosmic::theme::set_active(cosmic::theme::ThemeType::Dark);
+    }
 }
