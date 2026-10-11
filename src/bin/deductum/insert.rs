@@ -204,30 +204,54 @@ fn quick_items(ws: &Workspace, t: &Theory, table: &dyn Symbols, context: InsertC
 /// its name
 pub fn chip<'a>(item: Item, compact: bool) -> Element<'a, Message> {
     let wrap = Message::Wrap(item.entry.before, item.entry.after);
-    // A symbol on its own: its character, large enough to read, on a chip of one width so that
-    // a row of them is even
+    // A symbol on its own: its character as large as the Symbols panel sets it (the code font's
+    // arrows and connectives are small for their size, and at 16 px → and ↔ were hard to tell
+    // apart), on a squarish chip of one width so that a row of them is even. 30 px high, it is
+    // no taller than the search field, so the bar stays one row and the goals do not move
     let glyph = item.symbol && (compact || item.detail.is_empty());
     let button = if glyph {
         widget::button::custom(
             widget::text(item.entry.label.clone())
-                .size(z(16.0))
+                .size(z(19.0))
                 .font(cosmic::font::mono())
                 .wrapping(iced::widget::text::Wrapping::None)
                 .width(Length::Fill)
-                .align_x(Alignment::Center),
+                .height(Length::Fill)
+                .align_x(Alignment::Center)
+                .align_y(Alignment::Center),
         )
-        .padding([z(3.0), z(2.0)])
-        .width(Length::Fixed(z(if item.entry.label.chars().count() > 1 { 36.0 } else { 28.0 })))
+        .padding(0)
+        .width(Length::Fixed(z(if item.entry.label.chars().count() > 1 { 42.0 } else { 32.0 })))
+        .height(Length::Fixed(z(30.0)))
+        .class(squarish())
     } else {
         let label = if compact || item.detail.is_empty() { item.entry.label.clone() } else { format!("{}  {}", item.entry.label, item.detail) };
-        widget::button::custom(widget::text(label).size(z(13.0)).font(if item.symbol { cosmic::font::mono() } else { cosmic::font::default() }).wrapping(iced::widget::text::Wrapping::None)).padding([z(4.0), z(9.0)])
+        widget::button::custom(widget::text(label).size(z(13.0)).font(if item.symbol { cosmic::font::mono() } else { cosmic::font::default() }).wrapping(iced::widget::text::Wrapping::None))
+            .padding([z(4.0), z(9.0)])
+            .class(theme::Button::Standard)
     };
-    let button = button.class(theme::Button::Standard).on_press(wrap);
+    let button = button.on_press(wrap);
     // (its name, when only its character shows, in a tooltip)
     if glyph && !item.detail.is_empty() {
         widget::tooltip(button, widget::text(item.detail).font(cosmic::font::mono()).size(z(13.0)), widget::tooltip::Position::Bottom).into()
     } else {
         button.into()
+    }
+}
+
+/// A standard button's look with small rounded corners: a symbol chip is a key to press, and
+/// the pill shape of a 32 px button is a circle that crowds its glyph
+fn squarish() -> theme::Button {
+    use cosmic::widget::button::Catalog;
+    fn corners(mut s: cosmic::widget::button::Style) -> cosmic::widget::button::Style {
+        s.border_radius = z(6.0).into();
+        s
+    }
+    theme::Button::Custom {
+        active: Box::new(|focused, t: &cosmic::Theme| corners(t.active(focused, false, &theme::Button::Standard))),
+        disabled: Box::new(|t: &cosmic::Theme| corners(t.disabled(&theme::Button::Standard))),
+        hovered: Box::new(|focused, t: &cosmic::Theme| corners(t.hovered(focused, false, &theme::Button::Standard))),
+        pressed: Box::new(|focused, t: &cosmic::Theme| corners(t.pressed(focused, false, &theme::Button::Standard))),
     }
 }
 
