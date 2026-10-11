@@ -312,30 +312,37 @@ fn typing_a_backslash_abbreviation_offers_the_character() {
 
 #[test]
 fn clicking_a_lean_paragraph_puts_the_caret_there() {
-    let mut app = lean_app(Mode::Literate);
-    app.show_sidebar = false;
-    app.show_right = false;
     let size = Size::new(1400.0, 900.0);
-    // down the page until a click lands on the module doc's text (not its maths or the heading)
-    let mut found = None;
-    for y in (140..300).step_by(8) {
-        let msgs = super::snapshot::click(&app, cosmic::iced::Point::new(700.0, y as f32), size);
-        let pointer = msgs.iter().rev().find(|m| matches!(m, super::Message::ProsePointer(..))).cloned();
-        let open = msgs.iter().find(|m| matches!(m, super::Message::EditBlock(_))).cloned();
-        if let (Some(p), Some(o)) = (pointer, open) {
-            found = Some((p, o));
-            break;
+    let click_at = |x: f32| {
+        let mut app = lean_app(Mode::Literate);
+        app.show_sidebar = false;
+        app.show_right = false;
+        let mut h = Harness::new(size);
+        h.draw(&app, "lean-prose-click-0");
+        let msgs = h.click(&app, cosmic::iced::Point::new(x, 153.0));
+        let opened = msgs.iter().any(|m| matches!(m, super::Message::EditBlock(_)));
+        for m in msgs {
+            let _ = cosmic::Application::update(&mut app, m);
         }
+        (app, opened)
+    };
+    // The page's text column, by where a click opens the block
+    let probe: Vec<i32> = (200..1200).step_by(20).filter(|x| click_at(*x as f32).1).collect();
+    assert!(probe.len() > 6, "the paragraph is under the pointer somewhere: {probe:?}");
+    let (lo, hi) = (probe[1] as f32, probe[probe.len() - 2] as f32);
+    // Clicks along the module doc's first line of text: the caret goes to the word clicked
+    let mut results = Vec::new();
+    for x in [lo, lo + (hi - lo) / 3.0, lo + 2.0 * (hi - lo) / 3.0, hi] {
+        let (app, _) = click_at(x);
+        let be = theory(&app).block_editor.as_ref().expect("open");
+        let text = be.content.text();
+        let li = super::editor::LineIndex::new(&text);
+        let at = li.offset(&text, be.content.cursor().position);
+        assert!(text.starts_with("Every observation"), "the paragraph clicked: {text:?}");
+        let word: String = text.chars().skip(at).take_while(|c| c.is_alphanumeric()).collect();
+        results.push((x, at, word));
     }
-    let (pointer, open) = found.expect("a click on the module doc");
-    let _ = cosmic::Application::update(&mut app, pointer.clone());
-    let _ = cosmic::Application::update(&mut app, open);
-    super::snapshot::draw(&app, "lean-prose-click", size);
-    let super::Message::ProsePointer(_, p) = pointer else { unreachable!() };
-    let _ = cosmic::Application::update(&mut app, super::Message::BlockClickAt(cosmic::iced::Point::new(p.x, p.y - 2.0)));
-    let be = theory(&app).block_editor.as_ref().unwrap();
-    let text = be.content.text();
-    let li = super::editor::LineIndex::new(&text);
-    let at = li.offset(&text, be.content.cursor().position);
-    assert!(at > 5 && at + 5 < text.chars().count(), "the caret is where the click was, not at an end: {at} of {}", text.chars().count());
+    println!("{results:?}");
+    assert!(results.windows(2).all(|w| w[0].1 < w[1].1), "{results:?}");
+    assert!(results[0].1 < 12 && results[3].1 > 30, "{results:?}");
 }

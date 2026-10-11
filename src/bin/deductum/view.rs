@@ -1399,7 +1399,7 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
                     .into()
             }
             Kind::Heading(_) | Kind::Text => match t.docs.get(i).cloned().flatten() {
-                Some(doc) => rich_text(doc, typo.clone()).into(),
+                Some(doc) => rich_text(doc, typo.clone()).on_hover(move |p| Message::ProseHover(i, p)).into(),
                 None => mono_block(table.decode(&t.source_text(block.start, block.end)).text, block.status),
             },
             Kind::Formal => {
