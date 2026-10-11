@@ -108,6 +108,8 @@ where
                     });
                 }
             };
+            // (no further than the editor's own bottom)
+            let to = to.min(editor.height);
             tint(editor.y + from.min(at), editor.y + to.min(at));
             tint(editor.y + from.max(at) + gap, editor.y + to.max(at) + gap);
         }

@@ -1812,13 +1812,16 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
         let content: Element<'a, Message> = match block.kind {
             Kind::Header => {
                 let src = table.decode(&t.source_text(block.start, block.end)).text;
+                // The title and, under it, what it imports, however the header's lines break
+                // ("theory A imports B begin" on one line reads as the same title block)
+                let words: Vec<&str> = src.split_whitespace().collect();
+                let (title, rest) = match words.as_slice() {
+                    ["theory", name, rest @ ..] => (format!("Theory {name}"), rest.strip_suffix(&["begin"]).unwrap_or(rest).join(" ")),
+                    _ => (src.lines().next().unwrap_or("").to_string(), src.lines().skip(1).map(str::trim).collect::<Vec<_>>().join(" ")),
+                };
                 widget::column::with_capacity(2)
-                    .push(
-                        widget::text(src.lines().next().unwrap_or("").replacen("theory", "Theory", 1))
-                            .size(z(26.0))
-                            .font(cosmic::iced::Font { weight: cosmic::iced::font::Weight::Bold, ..cosmic::font::default() }),
-                    )
-                    .push(widget::text(src.lines().skip(1).map(str::trim).collect::<Vec<_>>().join(" ")).size(z(13.0)))
+                    .push(widget::text(title).size(z(26.0)).font(cosmic::iced::Font { weight: cosmic::iced::font::Weight::Bold, ..cosmic::font::default() }))
+                    .push(widget::text(rest).size(z(13.0)).class(theme::Text::Color(muted_text())))
                     .into()
             }
             Kind::Heading(_) | Kind::Text => match t.docs.get(i).cloned().flatten() {
@@ -2123,9 +2126,13 @@ fn block_editor_in<'a>(ws: Option<&'a Workspace>, t: &'a Theory, window: bool, i
         });
     let floated = after.is_some();
     // The construct the proof state is for, tinted
+    // (from the cell's very top when it starts on the first line, to its very bottom when it ends
+    // on the last, so that the tint and the cell's strip begin and end together)
     let band = (be.kind == Kind::Formal).then(|| t.construct_at(be.start, be.end)).flatten().map(|(cs, ce)| {
         let (l0, l1) = (block_line(be, cs), block_line(be, ce.saturating_sub(1).max(cs)));
-        (CODE_PADDING.top + l0 as f32 * code_line_height(), CODE_PADDING.top + (l1 + 1) as f32 * code_line_height())
+        let from = if l0 == 0 { 0.0 } else { CODE_PADDING.top + l0 as f32 * code_line_height() };
+        let to = if l1 + 1 >= lines { f32::INFINITY } else { CODE_PADDING.top + (l1 + 1) as f32 * code_line_height() };
+        (from, to)
     });
     let tint = construct_tint();
     let banded = move |g: super::gap::Gap<'a, Message, cosmic::Theme, cosmic::Renderer>| match band {
@@ -2762,7 +2769,9 @@ fn insert_palette<'a>(ws: &'a Workspace, t: &'a Theory, table: &dyn super::codec
     let sp = spacing();
     let context = insert_context(t).unwrap_or(InsertContext::Prose);
     let query = ws.palette_query.trim().to_lowercase();
-    let selected = t.block_editor.as_ref().and_then(|be| be.content.selection()).is_some_and(|s| !s.trim().is_empty());
+    // (vim's block cursor is a selection of the character under it, not text to wrap)
+    let block_cursor = vim_mode_now() == Some(super::vim::Mode::Normal);
+    let selected = !block_cursor && t.block_editor.as_ref().and_then(|be| be.content.selection()).is_some_and(|s| !s.trim().is_empty());
     let mut col = widget::column::with_capacity(8).spacing(sp.space_xxs);
     let (title, hint) = match context {
         InsertContext::Symbols => ("Insert a symbol", "Or type \\ and its name, then Tab"),
@@ -2900,7 +2909,9 @@ fn source<'a>(ws: &'a Workspace, t: &'a Theory, inline: Option<&'a Workspace>, t
         })).into()),
         None => (beside.map_or(0.0, |(w, _)| w), widget::Space::new().width(Length::Fixed(0.0)).height(Length::Fixed(0.0)).into()),
     };
-    let row = widget::row::with_capacity(2).spacing(spacing().space_m).push(editor).push(widget::Space::new().width(Length::Fixed(goal_width)));
+    // (the goal's column and the space before it only when the goal is beside: an empty column
+    // would put the page off centre)
+    let row = widget::row::with_capacity(2).spacing(if beside.is_some() { spacing().space_m } else { 0 }).push(editor).push(widget::Space::new().width(Length::Fixed(goal_width)));
     let at = iced::Vector::new(source_width + spacing().space_m as f32, top);
     // Pop out: a small button floating at the top right of the proof the caret is in
     let proof = t.blocks.iter().find(|b| b.start <= t.cursor && t.cursor <= b.end && b.kind == Kind::Formal);
@@ -2910,7 +2921,8 @@ fn source<'a>(ws: &'a Workspace, t: &'a Theory, inline: Option<&'a Workspace>, t
                 .tooltip("Pop out (the proof in a window of its own)")
                 .on_press(Message::PopOut)
                 .into(),
-            iced::Vector::new(source_width - z(40.0), row_top(t.lines.position(&t.decoded.text, t.decoded.to_decoded(b.start)).line)),
+            // (centred on the proof's first line: the button is taller than a line)
+            iced::Vector::new(source_width - z(40.0), row_top(t.lines.position(&t.decoded.text, t.decoded.to_decoded(b.start)).line) - (z(32.0) - source_line_height()) / 2.0),
         ),
         None => (widget::Space::new().width(Length::Fixed(0.0)).height(Length::Fixed(0.0)).into(), iced::Vector::ZERO),
     };
@@ -2922,9 +2934,11 @@ fn source<'a>(ws: &'a Workspace, t: &'a Theory, inline: Option<&'a Workspace>, t
     if let Some(bar) = completion_bar(t) {
         col = col.push(bar);
     }
-    // With no room beside it, the goal at the caret shows under the editor
+    // With no room beside it, the goal at the caret shows under the editor, apart from it by a
+    // rule, its scroll bar clear of its contents
     if let Some(g) = inline_goal(inline, table) {
-        col = col.push(widget::container(thin(g)).max_height(z(220.0)));
+        col = col.push(widget::divider::horizontal::default());
+        col = col.push(widget::container(thin(widget::container(g).padding(Padding { right: z(12.0), ..Padding::ZERO }))).max_height(z(240.0)).padding([z(8.0), z(12.0)]));
     }
     col.into()
 }
