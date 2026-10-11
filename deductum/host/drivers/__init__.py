@@ -152,6 +152,9 @@ class Driver:
     #: ``VIEWED_SECONDS`` (each open file costs a worker process); the host keeps buffer and log
     open_policy = "all"
     VIEWED_SECONDS = 600
+    #: How long a document stays open in the prover after the last client stops viewing it, so
+    #: that going back to it soon does not check it again from scratch
+    VIEW_GRACE_SECONDS = 120
     #: What the prover sees in place of a ``claude``/``codex`` keyword line (padded to its length),
     #: and the command names that mean "a gap to fill" in a ``node`` event's ``commands``
     placeholder = "sorry"

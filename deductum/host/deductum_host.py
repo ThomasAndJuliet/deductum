@@ -572,6 +572,9 @@ class Session:
         if self.driver_class.open_policy != "viewed":
             return True
         if any((self.id, doc.path) in c.open_docs for c in self.host.clients):
+            doc.viewed = now()  # type: ignore[attr-defined]
+            return True
+        if now() - getattr(doc, "viewed", 0.0) < self.driver_class.VIEW_GRACE_SECONDS:
             return True
         return now() - getattr(doc, "agent_query", 0.0) < self.driver_class.VIEWED_SECONDS
 
@@ -1401,7 +1404,9 @@ class Session:
         self.close_unviewed()
         changed = []
         for p in self.watch_list:
-            if p in self.docs:
+            # (a document the host holds but the prover has closed is read from disk by the
+            # prover again, like any other, when it changes there)
+            if p in self.docs and getattr(self.docs[p], "_sent_open", False):
                 continue
             sig = stat_sig(p)
             if sig != self.watch_sigs.get(p):
