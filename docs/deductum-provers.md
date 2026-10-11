@@ -749,7 +749,34 @@ plan above.
 - **prose-render**: `highlight::register` lets the app colour Lean and Isabelle code in prose (to
   be upstreamed to Cerea's `prose/`).
 
-Evidence so far: 125 host unit tests; the Lean integration script passes on a generated project,
-on a copy of DSRVLean and through the real host core; the Isabelle integration script passes
-44/45 checks on au-laptop (the remaining check was stale and is fixed); the app's 8 live tests
-against Isabelle2025 on au-laptop pass, including tock-Circus.
+- **Settings** (`settings.rs`, `settings_page.rs`): a typed, versioned settings file
+  (`~/.config/deductum/settings.json`) and a COSMIC settings page (Ctrl+,): theme, text size,
+  goal beside the text, **Vim keys** (no longer a header button), indent width, completion while
+  typing, keyword lines and their pause, types and step changes in the goal, the LLM route and
+  models, Loogle (Off/Local/Public, default Public, C17e), machines, about.
+- **Shell** (`shell.rs`, `sidebar.rs`, `new_session.rs`): header chip in parts with the backend
+  mark; a fixed footer with a vim badge; the Sessions sidebar grouped by machine and folder with
+  backend marks, lifecycle icons and memory; the new-session page with one card per detected
+  backend and its project form; a Project tab running `project_actions`.
+- **Lean in the app** (`prover/lean/`): blocks with docstrings and module docs as prose (a
+  source map puts the caret where a rendered paragraph is clicked), Lean colours, `\`
+  abbreviations (the 1865 of vscode-lean4, multi-character ones with the caret placed),
+  infoview-style goals, summaries of long Lean messages with the full text on hover, Loogle
+  search with Insert, `exact?`/`apply?` at the caret, Lean keyword lines and templates.
+- **UI review**: 26 of the 32 items from the review of the baseline frames were fixed, 6
+  rejected where they would undo a recorded decision (`.local-design/ui-review-baseline.md`).
+- **prose-render** gained `highlight::register` and `RichText::on_hover`. Both belong upstream in
+  Cerea's `prose/` and should be pushed there with `git subtree push` (or re-made there) before
+  the next `subtree pull`, or the pull will conflict.
+- **Updating a host**: every installed host file counts toward the bundle's version, and an
+  installed host that is running is stopped before new sources are unpacked, so it never keeps
+  serving old code (its running sessions resume, a new epoch, with the next client).
+
+Evidence (2026-10-11): `cargo test --bin deductum` 212 passed, 0 failed (headless frames across
+literate/source, dark/light, 800–1800 px, sidebars, vim, for both provers); the host's unit
+tests (lean driver 77, drivers 24, MCP, OT, keywords, undo) pass; the Lean integration script
+passes on a generated project, on a copy of DSRVLean and through the real host core; the
+Isabelle integration script passes on au-laptop; the live tests pass: 8 against Isabelle2025 on
+au-laptop (tock-Circus included), `live_lean` against `lake serve` on DSRVLean, and
+`live_mixed` with an Isabelle session on au-laptop and a Lean session on neo in one window,
+the Lean session created through the new-session page.

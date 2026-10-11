@@ -327,6 +327,20 @@ the backend jar with the runtime's `isabelle scala_build`.
 - **One Isabelle component list.** Each host registers its backend there and removes others. A host now checks its registration again before each start.
 - **Arrow keys** run on past a block's ends into the next block (and back), as j and k do.
 
+## Added with the Lean backend and the settings (C16, C17; 2026-10-11)
+
+- **Two provers.** A session is Isabelle or Lean (Rocq later). The app shows what the
+  session's prover can do: Isabelle's Sledgehammer, Find Theorems, counterexamples and symbols;
+  Lean's Search (Loogle), `exact?`-style suggestions and its goals as the VS Code infoview
+  shows them. Design and evidence: [deductum-provers.md](deductum-provers.md) §14.
+- **Settings.** A settings page (Ctrl+, or the header's gear) keeps the app's settings; Vim keys
+  moved there from the header.
+- **Sessions across provers.** Sessions are listed by machine and folder with the prover's mark;
+  a new session starts from the folder's detected projects (a ROOT, a Lake package).
+- **The window, reworked** after a review of every frame: notes and errors attached to their
+  cells, prose that does not jump when it opens, the COSMIC light palette, margins at every
+  width, the tool, symbols, agents and history panels, tab bars, footer and header.
+
 ## Not yet implemented
 
 - **Layout maths in the line being edited** (matrices, aligned displays) shows as source there; it renders in the rest of the block and beneath the line.
