@@ -327,6 +327,12 @@ impl Profile for Lean {
         docs::to_markdown(body).markdown
     }
 
+    fn prose_map(&self, body: &str) -> Option<super::ProseMap> {
+        let d = docs::to_markdown(body);
+        let runs = d.segments();
+        Some(super::ProseMap { markdown: d.markdown, runs })
+    }
+
     fn snippet_at(&self, text: &str, at: usize) -> Option<String> {
         docs::snippet_at(text, at)
     }
@@ -695,6 +701,34 @@ mod tests {
         assert_eq!(shown.chars().count(), text.chars().count());
         assert!(shown.starts_with("Some prose over two lines."), "{shown:?}");
         assert!(shown.contains("```lean\ndef a := 1\n  def b := 2\n```"), "{shown:?}");
+    }
+
+    #[test]
+    fn prose_offsets_map_back_to_the_source() {
+        let body = "\n  # Title\n\n  Some `code`, $x^2$ and ∀.\n";
+        let map = Lean.prose_map(body).unwrap();
+        assert_eq!(map.markdown, "# Title\n\nSome `code`, $x^2$ and ∀.");
+        for needle in ["Title", "x^2", "∀", "`code`"] {
+            let md = map.markdown.find(needle).unwrap();
+            let src = map.source_char(md);
+            assert_eq!(body.chars().skip(src).take(needle.chars().count()).collect::<String>(), needle);
+            assert_eq!(map.markdown_byte(src), md);
+        }
+        assert_eq!(map.source_char(map.markdown.len()), body.trim_end().chars().count());
+        // Isabelle's conversion rewrites too much to have a map
+        assert!(prover::ISABELLE.prose_map("x").is_none());
+    }
+
+    #[test]
+    fn a_theory_maps_a_rendered_offset_into_the_file() {
+        use crate::editor::{Mode, Theory};
+        let doc = json!({"text": DEMO, "revision": 1, "prover": {}});
+        let t = Theory::new("/x.lean".into(), &doc, &LeanSymbols, Arc::new(HashMap::new()), Mode::Literate, &Lean);
+        let i = t.blocks.iter().position(|b| b.kind == Kind::Text && t.prose_maps[t.blocks.iter().position(|x| x == b).unwrap()].as_ref().is_some_and(|m| m.markdown.contains("enabling"))).unwrap();
+        let md = t.prose_maps[i].as_ref().unwrap().markdown.find("enabling").unwrap();
+        let at = t.source_of_markdown(i, md).unwrap();
+        assert_eq!(t.local.chars().skip(at).take(8).collect::<String>(), "enabling");
+        assert_eq!(t.source_of_markdown(0, 0), None, "the imports are not prose");
     }
 
     #[test]

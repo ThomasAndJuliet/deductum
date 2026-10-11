@@ -123,6 +123,44 @@ pub enum GoalBody<'a> {
     Many(&'a [serde_json::Value]),
 }
 
+/// Where each piece of a prose block's Markdown came from: the Markdown, and verbatim runs of it
+/// that are copies of the source (Isabelle's conversion rewrites too much to have one; Lean's only
+/// deletes delimiters and indentation, so it does). Offsets in the Markdown are bytes, in the source
+/// (the block's body) code points
+#[derive(Clone, Debug, PartialEq)]
+pub struct ProseMap {
+    pub markdown: String,
+    /// (Markdown byte start, byte length, source code point start), in order
+    pub runs: Vec<(usize, usize, usize)>,
+}
+
+impl ProseMap {
+    /// The source offset standing for Markdown byte `at` (the end of the last run at the end)
+    pub fn source_char(&self, at: usize) -> usize {
+        let at = at.min(self.markdown.len());
+        let i = self.runs.partition_point(|r| r.0 <= at);
+        match i.checked_sub(1).map(|i| self.runs[i]) {
+            Some((md, len, src)) => src + self.markdown[md..(md + len).min(at)].chars().count(),
+            None => 0,
+        }
+    }
+
+    /// The Markdown byte offset of source offset `src`: in source the Markdown lacks, the next
+    /// Markdown character
+    pub fn markdown_byte(&self, src: usize) -> usize {
+        for &(md, len, s) in &self.runs {
+            let n = self.markdown[md..md + len].chars().count();
+            if src < s {
+                return md;
+            }
+            if src < s + n {
+                return md + self.markdown[md..md + len].char_indices().nth(src - s).map_or(len, |(b, _)| b);
+            }
+        }
+        self.markdown.len()
+    }
+}
+
 /// A backend's lexical and presentational knowledge (design §7.1). Offsets are code points of
 /// the source text unless a method says otherwise.
 pub trait Profile: Send + Sync {
@@ -176,6 +214,14 @@ pub trait Profile: Send + Sync {
 
     /// The Markdown for a prose block's text (inside its delimiters)
     fn prose(&self, body: &str, codec: &dyn Codec) -> String;
+
+    /// The Markdown of a prose block's text with the map back to the source, for backends whose
+    /// conversion keeps the text (so that an offset in the rendered Markdown, such as where a
+    /// click landed or a spelling mark, is an offset of the source). `None` where it cannot
+    fn prose_map(&self, body: &str) -> Option<ProseMap> {
+        let _ = body;
+        None
+    }
 
     /// The maths or markup around a character offset of prose being edited, if the offset is
     /// in some: what to show rendered beside the source

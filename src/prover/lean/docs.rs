@@ -171,6 +171,11 @@ impl Docs {
         }
     }
 
+    /// The verbatim pieces: (Markdown byte start, byte length, source code point start)
+    pub fn segments(&self) -> Vec<(usize, usize, usize)> {
+        self.segs.iter().map(|s| (s.md, s.len, s.ch)).collect()
+    }
+
     /// The source range of a Markdown byte range, in code points
     pub fn source_chars(&self, range: std::ops::Range<usize>) -> std::ops::Range<usize> {
         let start = self.source_char(range.start);
