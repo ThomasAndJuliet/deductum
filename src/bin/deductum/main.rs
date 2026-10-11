@@ -39,6 +39,8 @@ mod snapshot_lean;
 mod live;
 #[cfg(test)]
 mod live_lean;
+#[cfg(test)]
+mod live_mixed;
 
 /// LaTeX's fonts, New Computer Modern, for the literate view's prose; see `res/fonts/README`
 pub const FONTS: [&[u8]; 5] = [
