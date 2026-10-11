@@ -1373,3 +1373,24 @@ fn empty_blocks_go() {
     let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(j));
     assert_eq!(local(&app), "theory G imports Main begin\n\nlemma one: \"True\" by simp\n\nend\n");
 }
+
+
+/// Clicking a shown block opens it with the caret where the click was; in vim's normal mode that
+/// caret is the block cursor (placing it at the click used to leave an ordinary one)
+#[test]
+fn a_block_opened_by_a_click_has_vim_block_cursor() {
+    let mut app = demo_app(Mode::Literate);
+    app.vim_enabled = true;
+    app.vim.mode = super::vim::Mode::Normal;
+    let lemma = click(&app, cosmic::iced::Point::new(500.0, 300.0), Size::new(1400.0, 900.0));
+    for m in lemma.iter().filter(|m| matches!(m, super::Message::HoverMove(..))) {
+        let _ = cosmic::Application::update(&mut app, m.clone());
+    }
+    let Some(press) = lemma.iter().find(|m| matches!(m, super::Message::ViewPress(_))).cloned() else { panic!("{lemma:?}") };
+    let _ = cosmic::Application::update(&mut app, press);
+    let be = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().block_editor.as_ref().expect("the block opens");
+    assert_eq!(be.content.selection().map(|s| s.chars().count()), Some(1), "a block cursor where the click was");
+    let _ = cosmic::Application::update(&mut app, super::Message::BlockClickAt(cosmic::iced::Point::new(30.0, 4.0)));
+    let be = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().block_editor.as_ref().unwrap();
+    assert_eq!(be.content.selection().map(|s| s.chars().count()), Some(1), "and after the click is placed in the open block");
+}
