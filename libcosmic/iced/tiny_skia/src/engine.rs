@@ -485,8 +485,15 @@ impl Engine {
                     return;
                 }
 
-                let clip_mask = (!physical_bounds.is_within(&clip_bounds))
-                    .then_some(clip_mask as &_);
+                // The mask is shared: set it to these bounds, not whatever
+                // was drawn last (an editor sets it to its own)
+                let clip_mask = match physical_bounds.is_within(&clip_bounds) {
+                    true => None,
+                    false => {
+                        adjust_clip_mask(clip_mask, clip_bounds);
+                        Some(clip_mask as &_)
+                    }
+                };
 
                 self.text_pipeline.draw_raw(
                     &buffer,
@@ -525,8 +532,15 @@ impl Engine {
                     return;
                 }
 
-                let clip_mask = (!physical_bounds.is_within(&clip_bounds))
-                    .then_some(clip_mask as &_);
+                // The mask is shared: set it to these bounds, not whatever
+                // was drawn last (an editor sets it to its own)
+                let clip_mask = match physical_bounds.is_within(&clip_bounds) {
+                    true => None,
+                    false => {
+                        adjust_clip_mask(clip_mask, clip_bounds);
+                        Some(clip_mask as &_)
+                    }
+                };
 
                 pixels.fill_path(
                     path,
@@ -556,8 +570,15 @@ impl Engine {
                     return;
                 }
 
-                let clip_mask = (!physical_bounds.is_within(&clip_bounds))
-                    .then_some(clip_mask as &_);
+                // The mask is shared: set it to these bounds, not whatever
+                // was drawn last (an editor sets it to its own)
+                let clip_mask = match physical_bounds.is_within(&clip_bounds) {
+                    true => None,
+                    false => {
+                        adjust_clip_mask(clip_mask, clip_bounds);
+                        Some(clip_mask as &_)
+                    }
+                };
 
                 pixels.stroke_path(
                     path,

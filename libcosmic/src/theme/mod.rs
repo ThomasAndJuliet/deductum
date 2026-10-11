@@ -58,6 +58,13 @@ pub fn active() -> Theme {
     THEME.lock().unwrap().clone()
 }
 
+/// Set the active theme (as the runtime does when the system's theme changes): for drawing
+/// an application's views headless, in tests, in a given theme
+#[doc(hidden)]
+pub fn set_active(theme: ThemeType) {
+    THEME.lock().unwrap().set_theme(theme);
+}
+
 /// Currently-defined theme type.
 #[inline]
 #[allow(clippy::missing_panics_doc)]
