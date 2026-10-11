@@ -153,17 +153,32 @@ pub fn bundle() -> Option<PathBuf> {
 }
 
 fn bundle_version(bundle: &std::path::Path) -> String {
+    // Every file that is installed (as `install` packs them), so that a change to any of them,
+    // a driver or a prompt as much as the host itself, installs the new sources
+    fn walk(dir: &std::path::Path, rel: &str, out: &mut Vec<(String, std::path::PathBuf)>) {
+        let Ok(entries) = std::fs::read_dir(dir) else { return };
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if matches!(name.as_str(), "__pycache__" | "lib" | "tests") {
+                continue;
+            }
+            let path = entry.path();
+            let rel = format!("{rel}/{name}");
+            if path.is_dir() {
+                walk(&path, &rel, out);
+            } else {
+                out.push((rel, path));
+            }
+        }
+    }
+    let mut files = Vec::new();
+    walk(&bundle.join("host"), "host", &mut files);
+    walk(&bundle.join("backend"), "backend", &mut files);
+    files.sort();
     let mut hasher = std::hash::DefaultHasher::new();
-    for file in [
-        "host/deductum_host.py",
-        "host/deductum_ot.py",
-        "host/deductum_mcp.py",
-        "backend/Isabelle2025/src/backend.scala",
-        "backend/Isabelle2025/ML/deductum_prelude.ML",
-        "backend/Isabelle2025/etc/build.props",
-        "backend/Isabelle2025/etc/settings",
-    ] {
-        std::fs::read(bundle.join(file)).unwrap_or_default().hash(&mut hasher);
+    for (rel, path) in files {
+        rel.hash(&mut hasher);
+        std::fs::read(path).unwrap_or_default().hash(&mut hasher);
     }
     use std::hash::Hasher;
     format!("{:016x}", hasher.finish())
@@ -215,8 +230,11 @@ async fn install(target: &Target) -> Result<(), String> {
     if !archive.status.success() {
         return Err("could not pack the host sources".into());
     }
+    // A host already running there runs the old sources: it is asked to stop first (its sessions
+    // that were running start again, a new epoch, when the next client starts the new host)
+    let (_, env) = remote_root(target);
     let unpack = format!(
-        "mkdir -p {root} && tar -C {root} -xf - && echo {version} > {root}/VERSION"
+        "{{ [ -f {root}/host/deductum_host.py ] && {env}python3 {root}/host/deductum_host.py stop-host >/dev/null 2>&1; true; }} && mkdir -p {root} && tar -C {root} -xf - && echo {version} > {root}/VERSION"
     );
     let mut child = match &target.destination {
         None => host_command("sh", &["-c".into(), unpack]),
