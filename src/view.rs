@@ -14,7 +14,7 @@ use serde_json::Value;
 
 use super::editor::{Mode, Theory, highlight_format};
 use super::theory::{Block, Kind, Status};
-use super::thread::rich::{Typography, rich_text};
+use prose_render::rich::{Typography, rich_text};
 use super::{App, LeftMode, Message, Panel, Workspace, file_name, link};
 
 static BLOCK_EDITOR: LazyLock<widget::Id> = LazyLock::new(widget::Id::unique);
@@ -2110,7 +2110,7 @@ fn prose_editor<'a>(t: &'a Theory, be: &'a super::editor::BlockEditor, vim_mode:
             let mut typo = typography(&theme::active());
             typo.size = z(17.0);
             let md = super::literate::to_markdown(src.trim(), &super::symbols::Table::fallback());
-            rich_text(Arc::new(super::markdown::parse(&md)), Arc::new(typo)).into()
+            rich_text(Arc::new(prose_render::markdown::parse(&md)), Arc::new(typo)).into()
         })
     };
     // (both places always there, empty or not: the editor keeps its place, and so its focus)
@@ -2130,7 +2130,7 @@ fn prose_editor<'a>(t: &'a Theory, be: &'a super::editor::BlockEditor, vim_mode:
         let mut typo = typography(&theme::active());
         typo.size = z(17.0);
         col = col.push(
-            widget::container(rich_text(Arc::new(super::markdown::parse(&md)), Arc::new(typo)))
+            widget::container(rich_text(Arc::new(prose_render::markdown::parse(&md)), Arc::new(typo)))
                 .padding([2, 8])
                 .class(theme::Container::custom(|theme| iced::widget::container::Style {
                     background: Some(Color { a: 0.05, ..Color::from(theme.cosmic().accent_color()) }.into()),

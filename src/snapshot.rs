@@ -298,21 +298,21 @@ fn draws_a_prose_preview_alone() {
     let i = t.blocks.iter().position(|b| b.kind == super::theory::Kind::Text).unwrap();
     let doc = t.docs[i].clone().unwrap();
     let typo = std::sync::Arc::new(super::view::typography(&cosmic::theme::active()));
-    let el: cosmic::Element<'_, super::Message> = super::thread::rich::rich_text(doc.clone(), typo.clone()).into();
+    let el: cosmic::Element<'_, super::Message> = prose_render::rich::rich_text(doc.clone(), typo.clone()).into();
     draw_element(el, "isabellum-preview-alone", Size::new(700.0, 200.0));
     let el2: cosmic::Element<'_, super::Message> = cosmic::widget::column::with_capacity(2)
         .push(cosmic::widget::text_editor::text_editor(&t.source).height(cosmic::iced::Length::Fixed(80.0)))
-        .push(super::thread::rich::rich_text(doc, typo))
+        .push(prose_render::rich::rich_text(doc, typo))
         .into();
     draw_element(el2, "isabellum-preview-under-editor", Size::new(700.0, 300.0));
     let el3: cosmic::Element<'_, super::Message> = cosmic::widget::column::with_capacity(2)
         .push(cosmic::iced::widget::stack![cosmic::widget::Space::new(), cosmic::widget::text_editor::text_editor(&t.source).height(cosmic::iced::Length::Fixed(80.0))])
-        .push(super::thread::rich::rich_text(t.docs[i].clone().unwrap(), std::sync::Arc::new(super::view::typography(&cosmic::theme::active()))))
+        .push(prose_render::rich::rich_text(t.docs[i].clone().unwrap(), std::sync::Arc::new(super::view::typography(&cosmic::theme::active()))))
         .into();
     draw_element(el3, "isabellum-preview-editor-layered", Size::new(700.0, 300.0));
     let el4: cosmic::Element<'_, super::Message> = cosmic::widget::column::with_capacity(2)
         .push(cosmic::iced::widget::text_editor(&t.source).height(cosmic::iced::Length::Fixed(80.0)))
-        .push(super::thread::rich::rich_text(t.docs[i].clone().unwrap(), std::sync::Arc::new(super::view::typography(&cosmic::theme::active()))))
+        .push(prose_render::rich::rich_text(t.docs[i].clone().unwrap(), std::sync::Arc::new(super::view::typography(&cosmic::theme::active()))))
         .into();
     draw_element(el4, "isabellum-preview-iced-editor", Size::new(700.0, 300.0));
 }
