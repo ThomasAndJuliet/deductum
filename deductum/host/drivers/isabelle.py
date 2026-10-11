@@ -11,6 +11,7 @@ import asyncio
 import contextlib
 import json
 import os
+import time
 import re
 import shutil
 import subprocess
@@ -106,6 +107,10 @@ def known_sessions(runtime: Optional[str]) -> List[str]:
         except (OSError, subprocess.TimeoutExpired):
             _known_sessions[runtime] = []
     return _known_sessions[runtime]
+
+
+#: How long detection looks through a folder for theories
+DETECT_SECONDS = 1.5
 
 
 def suggest_logic(folder: str, runtime: Optional[str] = None) -> Dict[str, Any]:
@@ -294,7 +299,12 @@ class IsabelleDriver(Driver):
             if evidence or d == Path.home() or d == d.parent:
                 break
         thys = 0
+        # (a huge folder, a home directory, is not walked for long: what it holds is "many")
+        deadline = time.monotonic() + DETECT_SECONDS
         for dirpath, dirnames, filenames in os.walk(f):
+            if time.monotonic() > deadline:
+                thys = max(thys, 50) if thys else thys
+                break
             dirnames[:] = [x for x in dirnames if not x.startswith(".") and x not in ("output", "node_modules")]
             if len(Path(dirpath).relative_to(f).parts) >= 3:
                 dirnames[:] = []

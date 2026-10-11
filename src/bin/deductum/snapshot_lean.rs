@@ -276,7 +276,7 @@ fn the_search_panel_lists_hits_with_insert() {
 
 #[test]
 fn a_sorry_warns_and_an_error_is_shown_under_its_proof() {
-    let mut app = lean_app(Mode::Literate);
+    let mut app = lean_app_with(Mode::Literate, &proofs_only());
     app.show_sidebar = false;
     app.show_right = false;
     select(&mut app, "theorem broken", "omega");
@@ -373,4 +373,29 @@ fn a_bracket_abbreviation_puts_the_caret_between() {
     let caret = t.source.cursor().position;
     let line: String = t.decoded.text.lines().nth(caret.line).unwrap().to_string();
     assert_eq!(&line[..caret.column].chars().last(), &Some('⟨'), "the caret sits after ⟨: {line:?} col {}", caret.column);
+}
+
+#[test]
+fn unsolved_goals_are_summarised_under_the_proof() {
+    let mut app = lean_app_with(Mode::Literate, &proofs_only());
+    app.show_sidebar = false;
+    app.show_right = false;
+    {
+        let symbols = super::prover::LEAN.symbols(None);
+        let t = app.workspace.as_mut().unwrap().theory.as_mut().unwrap();
+        let at = t.local.find("constructor").map(|b| t.local[..b].chars().count()).unwrap();
+        t.prover.messages.push(super::editor::ProverMessage {
+            start: at,
+            end: at + 11,
+            kind: "error".into(),
+            text: "unsolved goals\ncase left\np q : Prop\nhp : p\nhq : q\n⊢ q\n\ncase right\np q : Prop\nhp : p\nhq : q\n⊢ p".into(),
+        });
+        t.refresh(&*symbols);
+    }
+    let t = theory(&app);
+    let strip = t.profile.message_summary(&t.prover.messages.last().unwrap().text);
+    assert_eq!(strip, "unsolved goals (2 goals: case left, case right)");
+    let mut h = Harness::new(Size::new(1100.0, 760.0));
+    let png = h.draw(&app, "lean-unsolved-summary");
+    assert!(ink(&png, 1100, 760, 100..1000, 200..400) > 1000);
 }

@@ -3073,7 +3073,9 @@ fn subgoal_card<'a>(ws: &'a Workspace, sg: &super::goals::Subgoal, first: bool, 
             let c = theme.cosmic();
             let base = cell_color(theme);
             iced::widget::container::Style {
-                background: Some(if first { blend(base, Color::from(c.accent_color()), 0.08) } else { base }.into()),
+                // (a later card is a little lighter (darker) than what is round it, so that it reads as a card
+                // in either theme; the first, the one the next step works on, is tinted)
+                background: Some(if first { blend(base, Color::from(c.accent_color()), 0.08) } else { blend(base, Color::from(c.on_bg_color()), 0.06) }.into()),
                 border: Border { radius: 6.0.into(), ..Default::default() },
                 ..Default::default()
             }

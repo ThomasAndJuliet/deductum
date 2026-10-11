@@ -129,9 +129,10 @@ fn live_mixed() {
         let _ = app.update(Message::NewSession(true));
         let _ = app.update(Message::NewMachine(1));
         assert!(pump(&mut app, &mut stream, 60, |a| a.new_session.as_ref().is_some_and(|ns| ns.listing.is_some())).await, "the host lists its folder");
+        // (the first look at a folder on a fresh host asks Isabelle for its sessions, which takes a while)
+        assert!(pump(&mut app, &mut stream, 400, |a| a.new_session.as_ref().is_some_and(|ns| ns.detections.is_some())).await, "the first detection, of the home folder");
         let _ = app.update(Message::NewBrowse(project.clone()));
-        let _ = app.update(Message::NewFolder(project.clone()));
-        assert!(pump(&mut app, &mut stream, 60, |a| a.new_session.as_ref().is_some_and(|ns| ns.detections.is_some())).await, "the host detects what is in the folder");
+        assert!(pump(&mut app, &mut stream, 120, |a| a.new_session.as_ref().is_some_and(|ns| ns.folder == project && ns.detections.is_some())).await, "the host detects what is in the folder");
         let ns = app.new_session.as_ref().unwrap();
         let found: Vec<String> = ns.detections.iter().flatten().filter_map(|d| d["backend"].as_str().map(str::to_string)).collect();
         println!("detections: {found:?}");
