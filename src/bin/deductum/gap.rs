@@ -669,3 +669,142 @@ where
         Element::new(h)
     }
 }
+
+/// Elements left to right on one row, as many as fit its width (with `spacing` between them);
+/// those that do not fit are left out: not drawn and given no events, so that nothing hidden
+/// can be clicked. The insert bar's chips, which must stay one row whatever the panel's width
+pub struct OneRow<'a, Message, Theme, Renderer> {
+    children: Vec<Element<'a, Message, Theme, Renderer>>,
+    spacing: f32,
+    /// How many fit, as last laid out: the first so many children
+    shown: usize,
+}
+
+impl<'a, Message, Theme, Renderer> OneRow<'a, Message, Theme, Renderer> {
+    pub fn new(children: Vec<Element<'a, Message, Theme, Renderer>>, spacing: f32) -> Self {
+        Self { children, spacing, shown: 0 }
+    }
+}
+
+impl<Message, Theme, Renderer> Widget<Message, Theme, Renderer> for OneRow<'_, Message, Theme, Renderer>
+where
+    Renderer: renderer::Renderer,
+{
+    fn children(&self) -> Vec<Tree> {
+        self.children.iter().map(Tree::new).collect()
+    }
+
+    fn diff(&mut self, tree: &mut Tree) {
+        tree.diff_children(&mut self.children);
+    }
+
+    fn size(&self) -> Size<Length> {
+        Size::new(Length::Fill, Length::Shrink)
+    }
+
+    fn layout(&mut self, tree: &mut Tree, renderer: &Renderer, limits: &layout::Limits) -> layout::Node {
+        let width = limits.max().width;
+        let free = layout::Limits::new(Size::ZERO, Size::new(f32::INFINITY, limits.max().height));
+        let mut x = 0.0;
+        let mut height: f32 = 0.0;
+        self.shown = 0;
+        let mut nodes = Vec::with_capacity(self.children.len());
+        for (child, tree) in self.children.iter_mut().zip(tree.children.iter_mut()) {
+            let node = child.as_widget_mut().layout(tree, renderer, &free);
+            let w = node.size().width;
+            // (once one does not fit, none after it is shown: the row keeps its order. Those
+            // left out keep their layout, unused, for their widgets' sake)
+            if self.shown == nodes.len() && x + w <= width {
+                self.shown += 1;
+                height = height.max(node.size().height);
+                nodes.push(node.move_to((x, 0.0)));
+                x += w + self.spacing;
+            } else {
+                nodes.push(node);
+            }
+        }
+        // (centred on the row's height)
+        let nodes = nodes
+            .into_iter()
+            .enumerate()
+            .map(|(i, n)| {
+                let dy = (height - n.size().height) / 2.0;
+                let at = n.bounds().position();
+                if i < self.shown { n.move_to((at.x, at.y + dy)) } else { n }
+            })
+            .collect();
+        layout::Node::with_children(Size::new(width, height), nodes)
+    }
+
+    fn draw(&self, tree: &Tree, renderer: &mut Renderer, theme: &Theme, style: &renderer::Style, layout: Layout<'_>, cursor: mouse::Cursor, viewport: &Rectangle) {
+        for ((child, tree), layout) in self.children.iter().zip(&tree.children).zip(layout.children()).take(self.shown) {
+            child.as_widget().draw(tree, renderer, theme, style, layout, cursor, viewport);
+        }
+    }
+
+    fn update(
+        &mut self,
+        tree: &mut Tree,
+        event: &Event,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        renderer: &Renderer,
+        clipboard: &mut dyn Clipboard,
+        shell: &mut Shell<'_, Message>,
+        viewport: &Rectangle,
+    ) {
+        for ((child, tree), layout) in self.children.iter_mut().zip(&mut tree.children).zip(layout.children()).take(self.shown) {
+            child.as_widget_mut().update(tree, event, layout, cursor, renderer, clipboard, shell, viewport);
+        }
+    }
+
+    fn mouse_interaction(&self, tree: &Tree, layout: Layout<'_>, cursor: mouse::Cursor, viewport: &Rectangle, renderer: &Renderer) -> mouse::Interaction {
+        self.children
+            .iter()
+            .zip(&tree.children)
+            .zip(layout.children())
+            .take(self.shown)
+            .map(|((child, tree), layout)| child.as_widget().mouse_interaction(tree, layout, cursor, viewport, renderer))
+            .max()
+            .unwrap_or_default()
+    }
+
+    fn operate(&mut self, tree: &mut Tree, layout: Layout<'_>, renderer: &Renderer, operation: &mut dyn Operation) {
+        operation.traverse(&mut |operation| {
+            for ((child, tree), layout) in self.children.iter_mut().zip(&mut tree.children).zip(layout.children()) {
+                child.as_widget_mut().operate(tree, layout, renderer, operation);
+            }
+        });
+    }
+
+    fn overlay<'b>(
+        &'b mut self,
+        tree: &'b mut Tree,
+        layout: Layout<'b>,
+        renderer: &Renderer,
+        viewport: &Rectangle,
+        translation: Vector,
+    ) -> Option<overlay::Element<'b, Message, Theme, Renderer>> {
+        let shown = self.shown;
+        let overlays: Vec<_> = self
+            .children
+            .iter_mut()
+            .zip(&mut tree.children)
+            .zip(layout.children())
+            .take(shown)
+            .filter_map(|((child, tree), layout)| child.as_widget_mut().overlay(tree, layout, renderer, viewport, translation))
+            .collect();
+        (!overlays.is_empty()).then(|| overlay::Group::with_children(overlays).into())
+    }
+}
+
+impl<'a, Message, Theme, Renderer> From<OneRow<'a, Message, Theme, Renderer>> for Element<'a, Message, Theme, Renderer>
+where
+    Message: 'a,
+    Theme: 'a,
+    Renderer: renderer::Renderer + 'a,
+{
+    fn from(r: OneRow<'a, Message, Theme, Renderer>) -> Self {
+        Element::new(r)
+    }
+}
