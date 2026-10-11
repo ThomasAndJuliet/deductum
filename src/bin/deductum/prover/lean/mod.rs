@@ -70,13 +70,20 @@ impl Codec for LeanSymbols {
 
 /// The groups of the Symbols panel: a name and the abbreviations of its characters
 const GROUPS: &[(&str, &[&str])] = &[
-    ("logic", &["forall", "exists", "and", "or", "not", "iff", "to", "ne", "top", "bot", "vdash", "models", "neg", "nexists"]),
-    ("greek", &["a", "b", "g", "d", "e", "z", "h", "th", "i", "k", "l", "m", "n", "x", "o", "p", "r", "s", "t", "u", "f", "ch", "psi", "w", "G", "D", "Th", "L", "Xi", "Pi", "S", "Phi", "Psi", "W"]),
-    ("relations", &["le", "ge", "ne", "equiv", "approx", "sim", "simeq", "cong", "prec", "succ", "<", ">"]),
-    ("sets", &["in", "notin", "sub", "sup", "subeq", "supeq", "cup", "cap", "empty", "setminus", "union", "inter", "powerset"]),
-    ("arrows", &["r", "l", "lr", "r|", "mapsto", "=>", "<=>", "uparrow", "downarrow", "hookrightarrow"]),
-    ("numbers", &["N", "Z", "Q", "R", "C", "inf", "sqrt", "sum", "prod", "int"]),
-    ("operators", &["x", "o", "comp", "circ", ".", "cdot", "oplus", "otimes", "times", "pm", "dagger", "star", "bullet", "<>", "[[]]", "{{}}"]),
+    ("logic", &["forall", "exists", "and", "or", "not", "iff", "to", "ne", "top", "bot", "vdash", "models", "nexists"]),
+    (
+        "greek",
+        &[
+            "alpha", "beta", "gamma", "delta", "epsilon", "zeta", "eta", "theta", "iota", "kappa", "lambda", "mu", "nu", "xi", "pi", "rho", "sigma", "tau",
+            "upsilon", "phi", "chi", "psi", "omega", "Gamma", "Delta", "Theta", "Lambda", "Xi", "Pi", "Sigma", "Phi", "Psi", "Omega",
+        ],
+    ),
+    ("relations", &["le", "ge", "ne", "approx", "sim", "simeq", "cong", "prec", "succ", "in", "notin"]),
+    ("sets", &["in", "notin", "sub", "cup", "cap", "empty", "setminus", "powerset"]),
+    ("arrows", &["r", "l", "lr", "mapsto", "=>", "<=>", "uparrow", "downarrow", "hookrightarrow"]),
+    ("numbers", &["N", "Z", "Q", "R", "C", "sqrt", "sum", "prod"]),
+    ("operators", &["comp", ".", "oplus", "otimes", "times", "pm", "dagger", "star"]),
+    ("brackets", &["<", ">", "[[", "]]"]),
 ];
 
 impl Input for LeanSymbols {
@@ -464,6 +471,14 @@ impl Profile for Lean {
     }
 
     fn commands_are_keywords(&self) -> bool {
+        false
+    }
+
+    fn symbol_query_char(&self, c: char) -> bool {
+        c.is_ascii_alphanumeric() || matches!(c, '<' | '>' | '.' | '-' | '=' | '|' | ':' | '[' | ']' | '(' | ')' | '{' | '}' | '_' | '*' | '+' | '/' | '~' | '!' | '?' | '@' | '^' | '&' | '#' | '$' | '%' | '\'' | '"' | ',' | ';' | '`')
+    }
+
+    fn angle_escapes(&self) -> bool {
         false
     }
 

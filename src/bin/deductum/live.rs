@@ -20,7 +20,7 @@ use super::{App, Link, Message, Pending, link};
 
 const THY: &str = "theory Live\n  imports Main\nbegin\n\nlemma one: \"(a::nat) + b = b + a\"\n  sorry\n\nlemma two: \"\\<forall>x::nat. x + 0 = x\"\n  apply simp\n  done\n\nend\n";
 
-fn app(target: link::Target) -> App {
+pub(super) fn app(target: link::Target) -> App {
     App {
         core: cosmic::app::Core::default(),
         links: vec![Link { target, name: "live".into(), sender: None, status: String::new(), hello: None, client_id: None, symbols: None }],
@@ -256,7 +256,7 @@ fn live_types() {
 }
 
 /// Pump the host's events into the app until `done` holds
-async fn pump(
+pub(super) async fn pump(
     app: &mut App,
     stream: &mut std::pin::Pin<Box<impl cosmic::iced::futures::Stream<Item = (String, link::Event)>>>,
     secs: u64,
@@ -274,7 +274,7 @@ async fn pump(
     done(app)
 }
 
-fn settled(app: &App) -> bool {
+pub(super) fn settled(app: &App) -> bool {
     app.workspace.as_ref().and_then(|w| w.theory.as_ref()).is_some_and(|t| t.settled() && t.queued.is_empty())
 }
 
