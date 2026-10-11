@@ -1565,7 +1565,15 @@ fn the_goal_beside_can_be_turned_off() {
     let png = h.draw(&app, "beside-off");
     let off = super::view::last_wide();
     let _ = cosmic::Application::update(&mut app, super::Message::ToggleGoalBeside);
+    let on_png = h.draw(&app, "beside-on-again");
+    let again = super::view::last_wide();
     assert!(!off, "under the proof when turned off");
+    assert!(again, "beside again when turned back on");
+    // and drawn beside: something right of the text column
+    let img2 = image::RgbaImage::from_raw(1320, 800, on_png).unwrap();
+    let bg2 = *img2.get_pixel(12, 400);
+    let right_of_text = (1000..1290).any(|x| (60..780).step_by(4).any(|y| img2.get_pixel(x, y) != &bg2));
+    assert!(right_of_text, "the goal drawn beside the text again");
     // centred: as much room left of the page as right of it
     let img = image::RgbaImage::from_raw(1320, 800, png).unwrap();
     let bg = *img.get_pixel(12, 400);
@@ -1574,4 +1582,33 @@ fn the_goal_beside_can_be_turned_off() {
     let (l, r) = (cols[0], 1306 - cols[cols.len() - 1]);
     eprintln!("page from {} to {}: left {l}, right {r}", cols[0], cols[cols.len() - 1]);
     assert!((l as i32 - r as i32).abs() < 60, "centred (left {l}, right {r})");
+}
+
+
+/// With no block open, the goal is beside the selected proof (and comes back there when the
+/// toggle is turned on again)
+#[test]
+fn the_goal_is_beside_the_selected_block_with_none_open() {
+    let mut app = demo_app(Mode::Literate);
+    app.show_right = false;
+    app.show_sidebar = false;
+    let i = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.name == "lemma").unwrap();
+    {
+        let t = app.workspace.as_mut().unwrap().theory.as_mut().unwrap();
+        t.selected = Some(i);
+        t.cursor = t.blocks[i].start + 2;
+    }
+    let mut h = Harness::new(Size::new(1320.0, 800.0));
+    let has_goal_beside = |png: Vec<u8>| {
+        let img = image::RgbaImage::from_raw(1320, 800, png).unwrap();
+        let bg = *img.get_pixel(12, 400);
+        (1000..1290).any(|x| (60..780).step_by(4).any(|y| img.get_pixel(x, y) != &bg))
+    };
+    assert!(has_goal_beside(h.draw(&app, "selected-beside")), "the goal beside the selected proof");
+    let _ = cosmic::Application::update(&mut app, super::Message::ToggleGoalBeside);
+    let off = has_goal_beside(h.draw(&app, "selected-off"));
+    let _ = cosmic::Application::update(&mut app, super::Message::ToggleGoalBeside);
+    let again = has_goal_beside(h.draw(&app, "selected-again"));
+    assert!(!off, "nothing beside when turned off");
+    assert!(again, "beside again when turned back on");
 }

@@ -1666,6 +1666,10 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
         } else {
             content
         };
+        // The goal beside the selected proof when none is open (as beside the open one)
+        if marked && editing.is_none() && block.kind == Kind::Formal && beside.is_some() {
+            anchor = Some((i, 0.0));
+        }
         // Formal blocks take their own clicks (the caret goes where the click lands)
         if block.kind == Kind::Formal && t.block_views.get(i).is_some_and(Option::is_some) {
             item = item.push(side(content, marked && editing.is_none()));
