@@ -590,5 +590,17 @@ class Loogle(unittest.TestCase):
         self.assertIn("could not be reached", str(cm.exception))
 
 
+class Hover(unittest.TestCase):
+    def test_a_signature_and_its_docstring_are_two_items_without_fences(self):
+        md = "```lean\nNat.add_comm (n m : Nat) : n + m = m + n\n```\n***\nAddition is commutative.\n\nSee `Nat.add_assoc`."
+        self.assertEqual(lean.tooltip_items(md), ["Nat.add_comm (n m : Nat) : n + m = m + n",
+                                                 "Addition is commutative.\n\nSee `Nat.add_assoc`."])
+
+    def test_plain_and_empty_hovers(self):
+        self.assertEqual(lean.tooltip_items("just text"), ["just text"])
+        self.assertEqual(lean.tooltip_items("  \n"), [])
+        self.assertEqual(lean.tooltip_items("```lean\nx : Nat\n```"), ["x : Nat"])
+
+
 if __name__ == "__main__":
     unittest.main()

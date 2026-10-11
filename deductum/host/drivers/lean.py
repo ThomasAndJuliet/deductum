@@ -626,6 +626,22 @@ def lexical_colours(mask: bytearray) -> List[List[Any]]:
 # The proof state in parts
 
 
+_FENCE = re.compile(r"\A\s*```[A-Za-z0-9_-]*\n(.*?)\n?```\s*\Z", re.S)
+
+
+def tooltip_items(markdown: str) -> List[str]:
+    """The pieces of a Lean hover, which is Markdown: a signature in a code fence, then, after a
+    ``***`` line, the docstring. The fence is taken off (the app shows the item as code) and each
+    piece is an item of its own."""
+    out = []
+    for part in re.split(r"\n\s*\*\*\*\s*\n", markdown.strip()):
+        m = _FENCE.match(part)
+        text = (m.group(1) if m else part).strip("\n")
+        if text.strip():
+            out.append(text)
+    return out
+
+
 def tagged_text(tt: Any) -> str:
     """Plain text of a ``TaggedText`` (what the infoview renders)"""
     if tt is None:
@@ -1663,9 +1679,10 @@ class LeanDriver(Driver):
                     if isinstance(contents, list) else str(contents)
                 s, e = index.range_to_offsets(hover["range"]) if hover.get("range") else \
                     (int(obj.get("offset", 0)), int(obj.get("offset", 0)) + 1)
-                if value.strip():
+                items = tooltip_items(value)
+                if items:
                     tooltip = {"start": s, "end": e, "items": [
-                        {"kind": "writeln", "raw": value, "text": value, "spans": []}]}
+                        {"kind": "writeln", "raw": t, "text": t, "spans": []} for t in items]}
         with contextlib.suppress(LspError, asyncio.TimeoutError):
             locs = await self.client.request("textDocument/definition", params, timeout=30)
             definition = self._definition(locs)
