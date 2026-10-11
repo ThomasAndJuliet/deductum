@@ -94,8 +94,47 @@ import asyncio
 import contextlib
 import json
 import os
+import re
 import signal
-from typing import Any, Dict, List, Optional
+import sys
+import time
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, Tuple
+
+#: The host's install directory (``deductum/``): backend sources live under it
+SHARE_DIR = Path(__file__).resolve().parent.parent.parent
+
+
+class HostError(Exception):
+    """A refusal or failure the host reports to a client (here so that drivers can raise it
+    without importing the host, which may be running as ``__main__``)"""
+
+    def __init__(self, message: str, code: str = "error", **data: Any):
+        super().__init__(message)
+        self.code = code
+        self.data = data
+
+
+def log(*args: Any) -> None:
+    print(time.strftime("%H:%M:%S"), *args, file=sys.stderr, flush=True)
+
+
+def read_json(path: Any, default: Any = None) -> Any:
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return default
+
+
+def config_path() -> Path:
+    """``~/.config/deductum/host.json``, from the environment as it is now"""
+    return Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "deductum" / "host.json"
+
+
+def read_config() -> Dict[str, Any]:
+    cfg = read_json(config_path(), {})
+    return cfg if isinstance(cfg, dict) else {}
 
 
 class Driver:
@@ -108,6 +147,32 @@ class Driver:
     #: File extensions of this backend's documents, and its project files
     documents: tuple = ()
     project_files: tuple = ()
+    #: "all": every document the host has open is open in the prover. "viewed": a document is
+    #: open in the prover only while some client subscribes to it or an agent queried it within
+    #: ``VIEWED_SECONDS`` (each open file costs a worker process); the host keeps buffer and log
+    open_policy = "all"
+    VIEWED_SECONDS = 600
+    #: What the prover sees in place of a ``claude``/``codex`` keyword line (padded to its length),
+    #: and the command names that mean "a gap to fill" in a ``node`` event's ``commands``
+    placeholder = "sorry"
+    placeholder_commands: tuple = ("sorry",)
+    #: Commands that open a proof when the ``syntax`` kinds do not say (``thy_goal*``), and the
+    #: names that end theory-level structure
+    goal_commands: tuple = ("lemma", "theorem")
+    theory_end_commands: tuple = ("end",)
+    #: Proof tools typed in the text: deleting one cancels it (``cancel_tools``)
+    tool_names: tuple = ()
+    #: Prover options the ``prover_options`` operation may set
+    option_allowlist: tuple = ()
+    #: ``human_view``: a statement's start (groups: kind, name) and where its proof begins
+    statement_regex = re.compile(r"\s*(lemma|theorem|example)\b\s*([^\s:({\[]+)?")
+    proof_start_regex = re.compile(r"\n\s*(by|proof)\b|:=")
+    #: Relative paths of a project that a fork's worktree links to the parent's copy when they
+    #: exist (read-only dependencies that a fresh checkout lacks: Lake's packages)
+    fork_links: tuple = (".lake/packages",)
+    #: How suggested facts are written in a keyword line's proof (design §9.4)
+    facts_line = "{facts}"
+    facts_separator = " "
 
     def __init__(self, session: Any):
         self.session = session
@@ -132,6 +197,70 @@ class Driver:
     @classmethod
     def is_document(cls, path: str) -> bool:
         return path.endswith(cls.documents) or os.path.basename(path) in cls.project_files
+
+    @classmethod
+    def resolve_session(cls, params: Dict[str, Any], folder: str) -> Dict[str, Any]:
+        """The identity of a new session from the request: ``{toolchain, project, meta}``
+        (``meta``: extra top-level keys for ``meta.json``). The default takes the request's
+        ``toolchain`` and ``project``, else the first supported toolchain and the detected project."""
+        toolchain = params.get("toolchain")
+        if not toolchain:
+            usable = [t for t in cls.toolchains() if t.get("supported", True)]
+            if not usable:
+                raise HostError(f"No supported {cls.label} toolchain on this machine", "unsupported_toolchain")
+            toolchain = usable[0]["id"]
+        project = params.get("project")
+        if project is None:
+            project = (cls.detect(folder) or {}).get("project") or {}
+        return {"toolchain": toolchain, "project": dict(project), "meta": {}}
+
+    @classmethod
+    def migrate_meta(cls, meta: Dict[str, Any]) -> None:
+        """Fill the ``backend``-neutral keys of a session record that lacks them (idempotent)"""
+        meta.setdefault("project", {})
+        meta.setdefault("toolchain", "")
+
+    @classmethod
+    def sync_meta(cls, meta: Dict[str, Any], changed: Dict[str, Any]) -> None:
+        """After ``configure`` changed some keys: bring any legacy keys and ``project`` into line"""
+
+    @classmethod
+    def project_key(cls, project: Dict[str, Any]) -> str:
+        """What tells two projects of one folder and toolchain apart (``find_session``)"""
+        return json.dumps(project, sort_keys=True)
+
+    @classmethod
+    def relocate_project(cls, project: Dict[str, Any], moved: Callable[[str], str]) -> Dict[str, Any]:
+        """The project with its paths mapped by ``moved`` (a fork's worktree)"""
+        return dict(project)
+
+    @classmethod
+    def toolchain_label(cls, toolchain: str, meta: Dict[str, Any]) -> str:
+        return os.path.basename(toolchain.rstrip("/")) or toolchain
+
+    @classmethod
+    def symbol_table(cls, toolchain: Optional[str]) -> List[Dict[str, Any]]:
+        """Symbols with their abbreviations (Isabelle only)"""
+        return []
+
+    @classmethod
+    def fact_check_text(cls, facts: List[str]) -> Optional[str]:
+        """Text for ``deductum_command`` that errors when a fact does not exist (Isabelle:
+        ``thm f1 f2``; Lean: ``#check @f`` lines), or None when the facts cannot be checked
+        (they are then offered as the LLM named them)"""
+        return None
+
+    @classmethod
+    def header_of(cls, text: str) -> str:
+        """The part of a document that sets the context for a prompt (its imports and header)"""
+        return text[:400]
+
+    def building_message(self) -> str:
+        return "Building"
+
+    async def project_action(self, name: str, args: Dict[str, Any]) -> Dict[str, Any]:
+        """Run a project action of ``capabilities()['project_actions']`` (build ...)"""
+        raise HostError(f"unknown action {name}", "unknown_action")
 
     # ----- what the core asks of the backend
 
@@ -182,6 +311,19 @@ async def stop_process(proc: Optional[asyncio.subprocess.Process], close_stdin: 
                 os.killpg(proc.pid, signal.SIGKILL)
 
 
+_registered: Dict[str, type] = {}
+
+
+def register(cls: type) -> type:
+    """Add a driver class to the registry (tests; a driver outside this package)"""
+    _registered[cls.backend] = cls  # type: ignore[attr-defined]
+    return cls
+
+
+def unregister(name: str) -> None:
+    _registered.pop(name, None)
+
+
 def registry() -> Dict[str, type]:
     """The backends this host knows, by name"""
     out: Dict[str, type] = {}
@@ -191,6 +333,7 @@ def registry() -> Dict[str, type]:
     with contextlib.suppress(ImportError):
         from .lean import LeanDriver
         out["lean"] = LeanDriver
+    out.update(_registered)
     return out
 
 
