@@ -426,7 +426,7 @@ fn live_ui() {
         println!("typing reached the host");
 
         // Click outside: the block closes
-        for m in h.click(&app, cosmic::iced::Point::new(330.0, 880.0)) {
+        for m in h.click(&app, cosmic::iced::Point::new(600.0, 600.0)) {
             let _ = app.update(m);
         }
         assert!(app.workspace.as_ref().unwrap().theory.as_ref().unwrap().block_editor.is_none(), "closed by a click outside");
