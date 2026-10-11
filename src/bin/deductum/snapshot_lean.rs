@@ -222,7 +222,12 @@ fn the_palette_in_a_proof_and_in_prose() {
     app.show_right = false;
     let proof = block_named(&app, "theorem and_swap'");
     update(&mut app, super::Message::EditBlock(proof));
-    let ctx = |app: &App| super::view::insert_context(theory(app));
+    let ctx = |app: &App| super::insert::insert_context(theory(app));
+    // (at a tactic's start: the second line's indent, before `constructor`)
+    {
+        let be = app.workspace.as_mut().unwrap().theory.as_mut().unwrap().block_editor.as_mut().unwrap();
+        super::editor::place(&mut be.content, cosmic::widget::text_editor::Position { line: 1, column: 2 });
+    }
     assert_eq!(ctx(&app), Some(super::prover::InsertContext::Proof));
     // (the palette takes the goal's place while there is none)
     app.workspace.as_mut().unwrap().goals = QueryState { operation: "deductum_goals", ..Default::default() };
@@ -232,6 +237,8 @@ fn the_palette_in_a_proof_and_in_prose() {
         use cosmic::widget::text_editor::{Action, Motion};
         update(&mut app, super::Message::BlockAction(Action::Move(Motion::DocumentEnd)));
     }
+    // (just after the last tactic: a term, the tactic's argument being what may be typed there)
+    assert_eq!(ctx(&app), Some(super::prover::InsertContext::Symbols));
     h.draw(&app, "lean-palette-proof");
     update(&mut app, super::Message::Wrap("\n  exact?".into(), String::new()));
     assert!(theory(&app).local.contains("exact hp\n  exact?"), "inserted at the caret: {:?}", theory(&app).local);
@@ -668,4 +675,162 @@ fn the_pop_out_button_sits_in_the_corner_of_its_proof() {
         }
     }
     eprintln!("{}", report.join("\n"));
+}
+
+/// The insert bar above Lean's goal: symbols (⟨⟩ and → among them) in a `def`'s body where the
+/// goal is its expected type, tactics at a tactic's start, Markdown in a docstring, the whole
+/// palette when opened; dark and light, beside and under, 800 and 1400 px; in the source view and
+/// the proof window too
+#[test]
+fn the_insert_bar_sits_above_the_lean_goal() {
+    use super::prover::InsertContext;
+    use super::snapshot::{caret_in_block, insert_bar_bounds};
+    let ctx = |app: &App| super::insert::insert_context(theory(app));
+    let expected = |app: &mut App| {
+        app.workspace.as_mut().unwrap().goals.messages = goal_parts(&[("", &["left right : List Nat"], "List Nat")]);
+    };
+    for dark in [true, false] {
+        for (w, h, beside) in [(1400.0, 900.0, true), (1400.0, 900.0, false), (800.0, 760.0, true), (800.0, 760.0, false)] {
+            let mut harness = Harness::new(Size::new(w, h));
+            light(!dark);
+            super::view::set_goal_beside(beside);
+            let mut app = lean_app(Mode::Literate);
+            app.show_sidebar = false;
+            app.show_right = false;
+            app.window_width = w;
+            let name = |what: &str| format!("bar-lean-{what}-{}-{}{}", if dark { "dark" } else { "light" }, w as u32, if beside { "-beside" } else { "-under" });
+            // a def's body, its expected type in the goal panel: symbols
+            let i = block_named(&app, "def merge");
+            update(&mut app, super::Message::EditBlock(i));
+            // (the page scrolled to it)
+            harness.draw(&app, &name("opening"));
+            super::snapshot::scroll_to_open_block(&mut harness, &app);
+            expected(&mut app);
+            caret_in_block(&mut app, ":= left", 3);
+            assert_eq!(ctx(&app), Some(InsertContext::Symbols), "a def's body is a term");
+            harness.draw(&app, &name("def"));
+            assert!(insert_bar_bounds(&mut harness, &app).is_some(), "{}: a bar above the goal", name("def"));
+            let quick: Vec<String> = super::prover::LEAN.quick_entries(InsertContext::Symbols, &app.workspace.as_ref().unwrap().caps).into_iter().map(|e| e.label).collect();
+            assert!(quick.iter().take(10).any(|l| l == "⟨⟩") && quick.iter().take(4).any(|l| l == "→"), "{quick:?}");
+            update(&mut app, super::Message::InsertBar(true));
+            harness.draw(&app, &name("def-open"));
+            update(&mut app, super::Message::InsertBar(false));
+            // a tactic's start in a proof: tactics
+            let i = block_named(&app, "theorem and_swap'");
+            update(&mut app, super::Message::EditBlock(i));
+            // (the page scrolled to it)
+            harness.draw(&app, &name("opening"));
+            super::snapshot::scroll_to_open_block(&mut harness, &app);
+            app.workspace.as_mut().unwrap().goals.messages = goal_parts(&[("", &["p q : Prop", "hp : p", "hq : q"], "q ∧ p")]);
+            caret_in_block(&mut app, "constructor", 0);
+            assert_eq!(ctx(&app), Some(InsertContext::Proof), "a tactic's start");
+            harness.draw(&app, &name("tactic"));
+            update(&mut app, super::Message::InsertBar(true));
+            harness.draw(&app, &name("tactic-open"));
+            // a search for tactics by label
+            update(&mut app, super::Message::PaletteQuery("simp".into()));
+            harness.draw(&app, &name("tactic-search"));
+            update(&mut app, super::Message::PaletteQuery(String::new()));
+            update(&mut app, super::Message::InsertBar(false));
+            // in a tactic's argument (have's statement): symbols again
+            caret_in_block(&mut app, "exact hq", 6);
+            assert_eq!(ctx(&app), Some(InsertContext::Symbols), "exact's term");
+            light(false);
+            super::view::set_goal_beside(true);
+        }
+    }
+    // The source view's goal pane (a def's body), and the proof window (a tactic's start)
+    let mut app = lean_app(Mode::Source);
+    app.show_sidebar = false;
+    app.show_right = false;
+    expected(&mut app);
+    {
+        let t = app.workspace.as_mut().unwrap().theory.as_mut().unwrap();
+        let at = t.local.find(":= left").map(|b| t.local[..b].chars().count()).unwrap() + 3;
+        t.cursor = at;
+        let pos = t.lines.position(&t.decoded.text, at);
+        super::editor::place(&mut t.source, pos);
+    }
+    assert_eq!(ctx(&app), Some(InsertContext::Symbols), "the source view: a def's body");
+    let mut harness = Harness::new(Size::new(1400.0, 900.0));
+    harness.draw(&app, "bar-lean-source-1400");
+    assert!(insert_bar_bounds(&mut harness, &app).is_some(), "a bar above the source view's goal");
+    super::view::set_goal_beside(false);
+    harness.draw(&app, "bar-lean-source-1400-under");
+    super::view::set_goal_beside(true);
+    // a declaration's docstring (part of its block): Markdown
+    {
+        let t = app.workspace.as_mut().unwrap().theory.as_mut().unwrap();
+        let at = t.local.find("keeps the causes").map(|b| t.local[..b].chars().count()).unwrap();
+        t.cursor = at;
+        let pos = t.lines.position(&t.decoded.text, at);
+        super::editor::place(&mut t.source, pos);
+    }
+    assert_eq!(ctx(&app), Some(InsertContext::Prose), "a docstring is Markdown");
+    app.workspace.as_mut().unwrap().output = Some(json!({"command": {"name": "theorem", "status": "finished"}, "messages": []}));
+    harness.draw(&app, "bar-lean-source-docstring");
+    drop(harness);
+    {
+        let t = app.workspace.as_mut().unwrap().theory.as_mut().unwrap();
+        let at = t.local.find("  constructor").map(|b| t.local[..b].chars().count()).unwrap() + 2;
+        t.cursor = at;
+    }
+    update(&mut app, super::Message::PopOut);
+    assert!(app.popout.is_some());
+    caret_in_block(&mut app, "constructor", 0);
+    super::snapshot::draw_element(super::view::proof_window(&app), "bar-lean-proof-window", Size::new(1000.0, 600.0));
+    assert_eq!(ctx(&app), Some(InsertContext::Proof), "the proof window: a tactic's start");
+}
+
+/// In a Lean `def`'s body: → from the bar's row at the caret, then ⟨⟩ (found by its character)
+/// around a selection; each one entry of the history, Unicode in the source, the editor still
+/// focused with its caret after the insertion
+#[test]
+fn a_chip_on_the_lean_bar_inserts_unicode_and_wraps_the_selection() {
+    use super::snapshot::{caret_in_block, click_chip};
+    use cosmic::widget::text_editor::{Cursor, Position};
+    let mut app = lean_app(Mode::Literate);
+    app.show_sidebar = false;
+    app.show_right = false;
+    let mut h = Harness::new(Size::new(1400.0, 900.0));
+    super::view::set_goal_beside(true);
+    let i = block_named(&app, "def merge");
+            update(&mut app, super::Message::EditBlock(i));
+    h.focus(&app, super::view::block_editor_id());
+    caret_in_block(&mut app, ":= left", 3);
+    h.draw(&app, "lean-chip-0");
+    let local = |app: &App| theory(app).local.clone();
+    for m in click_chip(&mut h, &app, "→") {
+        let task = cosmic::Application::update(&mut app, m);
+        h.run_task(&app, task);
+    }
+    for m in h.type_text(&app, " ") {
+        update(&mut app, m);
+    }
+    assert!(local(&app).contains(":= → left ++ right"), "→ at the caret, typing after it: {:?}", local(&app));
+    h.draw(&app, "lean-chip-1-arrow");
+    // ⟨⟩ around `left`
+    {
+        let be = app.workspace.as_mut().unwrap().theory.as_mut().unwrap().block_editor.as_mut().unwrap();
+        let text = be.content.text();
+        let s = text[..text.find("left ++").unwrap()].chars().count();
+        let li = super::editor::LineIndex::new(&text);
+        let p = li.position(&text, s);
+        be.content.move_to(Cursor { position: Position { line: p.line, column: p.column + 4 }, selection: Some(p) });
+    }
+    update(&mut app, super::Message::PaletteQuery("⟨".into()));
+    h.draw(&app, "lean-chip-2-search");
+    for m in click_chip(&mut h, &app, "⟨") {
+        let task = cosmic::Application::update(&mut app, m);
+        h.run_task(&app, task);
+    }
+    for m in h.type_text(&app, "!") {
+        update(&mut app, m);
+    }
+    assert!(local(&app).contains(":= → ⟨left⟩! ++ right"), "the selection wrapped, the caret after it: {:?}", local(&app));
+    let t = theory(&app);
+    for (_, text) in &t.steps {
+        assert_eq!(text.contains("⟨left"), text.contains("left⟩"), "a step with half the wrap: {text:?}");
+    }
+    h.draw(&app, "lean-chip-3-wrapped");
 }

@@ -340,6 +340,32 @@ the backend jar with the runtime's `isabelle scala_build`.
 - **The window, reworked** after a review of every frame: notes and errors attached to their
   cells, prose that does not jump when it opens, the COSMIC light palette, margins at every
   width, the tool, symbols, agents and history panels, tab bars, footer and header.
+- **An insert bar above the goal.** Inside a proof, a definition's body or a theorem's statement
+  there is almost always a goal (or Lean's expected type) beside the text, so the palette that
+  takes the goal's place was never there when a symbol or a step was wanted. The goal panel
+  (beside, under, the source view's and the proof window's) now begins with one row: a search
+  field, as many of the entries most wanted at the caret as fit (the profile's
+  `quick_entries`: ∀ ∃ → ↔ ∧ ∨ ¬ ⟨⟩ … in a term, have/show/… or tactics at a step, markup in a
+  docstring), and a chevron that opens the whole palette under the row, pushing the goals down.
+  Closed, the goals stay where they were. The bar and the palette beside the text share their
+  entries and chips (`insert.rs`); a click is `Wrap`, so it wraps a selection, is one undo step
+  and gives the focus back to the editor with its caret after the insertion. Symbols show as
+  their characters (Isabelle's go into the source as `\<name>`, Lean's as Unicode), their names
+  in tooltips; a search finds them by name, abbreviation, LaTeX name or the character itself.
+- **What the caret is in** comes from the profile (`formal_context`). Isabelle: a term inside
+  quotes or cartouches (which nest), a step elsewhere in a proof. Lean, read lexically: a
+  docstring is Markdown; a tactic's start is a blank place after `by`, a line break in a `by`
+  block, `·`, `;`, `<;>` or a case's `=>`; everything else (a declaration's header or body,
+  `have h : _`, `exact _`, a bracket, the end of a tactic just typed) is a term. In the source
+  view the block at the caret is read the same way.
+- **The source view keeps the goal's column as the caret moves.** It kept the column only while
+  there was a goal, and a click in another declaration clears the goal until the prover's state
+  there comes, so each click switched the page to one column and back. It now keeps it whenever
+  it fits, as the literate view does; with no goal, prose has the palette there.
+- **The pop-out button** is one 20 px icon button in both views, centred on the proof's first
+  line and as far inside the right edge as from the top. It was a 32 px button flush with the
+  cell's top (its icon drawn about 10 px off centre) in the literate view and 6 px above the
+  proof's first line in the source view.
 
 ## Not yet implemented
 

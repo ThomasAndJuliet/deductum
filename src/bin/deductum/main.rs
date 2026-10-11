@@ -17,6 +17,7 @@ mod editor;
 mod gap;
 mod goals;
 mod input;
+mod insert;
 mod link;
 mod new_session;
 mod ot;
@@ -240,8 +241,10 @@ pub enum Message {
     LineMove(bool),
     /// The goal beside the text, or under the proof with the page centred
     ToggleGoalBeside,
-    /// The insert palette's search
+    /// The insert palette's search (the bar's above the goal too)
     PaletteQuery(String),
+    /// The insert bar above the goal: open (the whole palette under its row) or one row
+    InsertBar(bool),
     /// Put this before and this after the selection, or at the caret with the caret between
     Wrap(String, String),
     /// Where `claude` and `codex` queries go: helper, fresh, or agent:KEY
@@ -447,8 +450,11 @@ pub struct Workspace {
     pub gap_hover: Option<usize>,
     /// Stop was pressed for the proof tools: asked again until they have stopped
     pub tools_stopping: bool,
-    /// What the insert palette (beside the text, when there is no goal) is searched for
+    /// What the insert palette (beside the text, when there is no goal) and the insert bar
+    /// (above the goal) are searched for
     pub palette_query: String,
+    /// Whether the insert bar above the goal shows the whole palette, not just its row
+    pub insert_open: bool,
     pub find: QueryState,
     pub find_input: String,
     pub cex: QueryState,
@@ -2023,6 +2029,7 @@ impl cosmic::Application for App {
                     gap_hover: None,
                     tools_stopping: false,
                     palette_query: String::new(),
+                    insert_open: false,
                     find: QueryState { operation: "find_theorems", ..Default::default() },
                     find_input: String::new(),
                     cex: QueryState { operation: "deductum_command", ..Default::default() },
@@ -2582,7 +2589,8 @@ impl cosmic::Application for App {
             Message::Wrap(before, after) => {
                 use cosmic::widget::text_editor::{Action as A, Edit as E, Motion as M};
                 let Some(t) = self.workspace.as_ref().and_then(|w| w.theory.as_ref()) else { return Task::none() };
-                let in_block = t.block_editor.is_some() && t.mode == Mode::Literate;
+                // (the proof window's block, in either view, while it is open)
+                let in_block = insert::block_in_use(t, self.popout.is_some());
                 let (content, focus) = match &t.block_editor {
                     Some(be) if in_block => (&be.content, view::block_editor_id()),
                     _ => (&t.source, view::source_editor_id()),
@@ -2642,6 +2650,13 @@ impl cosmic::Application for App {
                 if let Some(ws) = &mut self.workspace {
                     ws.palette_query = q;
                 }
+            }
+            Message::InsertBar(open) => {
+                let Some(ws) = &mut self.workspace else { return Task::none() };
+                ws.insert_open = open;
+                // (the click took the focus from the editor: it goes back, the caret where it was)
+                let in_block = ws.theory.as_ref().is_some_and(|t| insert::block_in_use(t, self.popout.is_some()));
+                return widget::text_input::focus(if in_block { view::block_editor_id() } else { view::source_editor_id() });
             }
             Message::ToggleGoalBeside => {
                 view::set_goal_beside(!view::goal_beside_on());
