@@ -1,4 +1,4 @@
-# Isabellum with Isabelle, Lean and Rocq backends
+# Deductum (formerly Isabellum): Isabelle, Lean and Rocq backends
 
 Status: design, 2026-10-11 (Rocq deferred, C17c), on branch `multi-prover`
 (`~/Documents/cosmic-term-multi-prover`). No production code has changed for
@@ -643,7 +643,7 @@ unchanged.
   uses detection when the folder is unambiguous.
 - **Unchanged for every backend:** grants, access requests, notices, notes,
   `listen`/`propose`, independent sessions and merge preview.
-- **The MCP server's name** follows the new app name (C17a).
+- **The MCP server's name** is `deductum` (C17a).
 
 ## 11. Order of work and evidence
 
@@ -698,14 +698,14 @@ checking without editing, so the abstractions are tested against it early.
 
 | Id | Decision | Effect on the design |
 |---|---|---|
-| C17a | **A new name** for the app. | Pending the human's choice. Identifiers (binary, app ID, command, Flatpak, config and state directories, MCP server name) change together. The state and config directories are migrated, so existing sessions survive. |
+| C17a | **The new name is Deductum.** It was checked on 2026-10-11 and is free on crates.io, PyPI and npm. There is no Flathub app, no GitHub repository and no software of that name on the web. Trademarks and domains were not checked. | Everything follows the name: binary and command `deductum`, app ID `dev.twright.Deductum`, the Flatpak, `~/.config/deductum`, `~/.local/state/deductum`, `~/.local/share/deductum` (the installed host), the MCP server `deductum`, and independent-session branches `deductum/<id>`. Existing Isabellum state, config and sessions are migrated on the first run, and the `isabelle_*` MCP tools stay as aliases. Terminal Agents' "Open in Isabellum" becomes "Open in Deductum". The rename is the first part of step 1 (§11). These documents are renamed with it. |
 | C17b | **Testing runs headlessly on neo.** | Every test uses the snapshot harness (`snapshot::Harness`) or the host tests, never a window. Provers that live on au-laptop (CyPhyAssure Isabelle2025, Rocq) are reached from neo over ssh, as `live_*` tests already do with `ISABELLUM_LIVE=d59500`. |
 | C17c | **Rocq is future work.** (It may be installed on au-laptop when it is taken up.) | This round builds Isabelle and Lean only. The Rocq parts of this design stay as the plan for later. The generic layers (driver interface, capabilities, profiles, goal model, session identity) are kept general enough for it, so adding Rocq means adding a driver and a profile. |
 | C17d | **Use the notation users of each tool are used to.** | Each backend shows source and goals the way its usual editor does. Isabelle: as Isabelle/jEdit (symbols decoded). Lean: as the VS Code infoview (`case tag`, `x : T`, `⊢ goal`). Rocq: as CoqIDE and VsRocq (hypotheses above `============================`, source as written). The Rocq ASCII-to-Unicode display option is dropped. |
 | C17e | **Public Loogle is allowed, as a setting.** | A Lean search setting: Off, Local, or Public (loogle.lean-lang.org), default Public. The Search panel names the source it used. |
 | C17f | **The main Lean project is the formalisation of the causal semantics and DSRV**: `DSRVLean` (Lake package `dsrv`, library `DSRV`, toolchain v4.19.0, no Mathlib). | It is the real test for Lean, as tock-Circus is for Isabelle. The current copy is au-laptop's `~/Documents/Research/Repositories/DSRVLean` (3716 lines, including `CausalSemantics`, `CausalCorrectness`, `CausalPaperSemantics`). neo's `~/Documents/DSRVLean` is an older 757-line copy. Neither is a git repository, so independent sessions need the plain-copy fork (C8's "later extension"). Tests run on a fresh copy and never touch either original. |
 
-Still open: the new name (C17a), and Cerea's inline editor for
+Still open: Cerea's inline editor for
 Markdown-native prose (default: keep Isabellum's paragraph-at-a-time editing
 for every backend).
 
