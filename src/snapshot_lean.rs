@@ -421,3 +421,95 @@ fn long_hypotheses_wrap_inside_the_goal_card() {
     let mut h = Harness::new(Size::new(1400.0, 900.0));
     h.draw(&app, "lean-goal-long-lines");
 }
+
+/// Where the source view's text begins, between `y` rows: the leftmost column with text on it
+/// (far from the background, which a faint tint such as the construct's is not). It moves if
+/// the page changes between one column and two
+fn left_edge(png: &[u8], w: u32, h: u32, y: std::ops::Range<u32>) -> u32 {
+    let img = image::RgbaImage::from_raw(w, h, png.to_vec()).unwrap();
+    let bg = *img.get_pixel(w - 3, h - 3);
+    let far = |p: &image::Rgba<u8>| (0..3).map(|i| (p[i] as i32 - bg[i] as i32).abs()).sum::<i32>() > 150;
+    (0..w).find(|&x| y.clone().step_by(2).any(|yy| far(img.get_pixel(x, yy)))).unwrap_or(w)
+}
+
+/// "In two column mode source view for Lean every time I click the source it flicks in and out
+/// of single column mode": clicks in the source view (in a tactic, a def's body, a blank line, a
+/// docstring), each drawn before the prover's state there comes (a click in another block clears
+/// the goal) and after; the page's text stays where it was in every frame. The same for Isabelle,
+/// and for both literate views as blocks open
+#[test]
+fn the_layout_does_not_change_as_clicks_move_the_caret() {
+    let (w, h) = (1400u32, 900u32);
+    for lean in [true, false] {
+        for mode in [Mode::Source, Mode::Literate] {
+            let mut harness = Harness::new(Size::new(w as f32, h as f32));
+            super::view::set_goal_beside(true);
+            let mut app = if lean { lean_app(mode) } else { demo_app(mode) };
+            app.show_sidebar = false;
+            app.show_right = false;
+            app.window_width = w as f32;
+            let app_output = app.workspace.as_ref().unwrap().output.clone().unwrap();
+            // (the state for a command at `at`: a click in another block clears it, as the app
+            // does, until the prover's state there comes)
+            let output = |at: usize| {
+                let mut o = app_output.clone();
+                o["command"]["start"] = json!(at);
+                o["command"]["end"] = json!(at + 1);
+                o
+            };
+            app.workspace.as_mut().unwrap().output = Some(output(0));
+            let goals = app.workspace.as_ref().unwrap().goals.clone();
+            let name = |what: &str| format!("flicker-{}-{}-{what}", if lean { "lean" } else { "isabelle" }, if mode == Mode::Source { "source" } else { "literate" });
+            let first = harness.draw(&app, &name("0"));
+            // (the layout's own decision, two columns or one; and, in the source view, where its
+            // text is drawn: the literate view's open block has a marker reaching to its left)
+            let columns = || if mode == Mode::Source { super::view::last_source_beside() } else { super::view::last_wide() };
+            assert!(columns(), "{}: two columns to begin with", name(""));
+            let source = mode == Mode::Source;
+            let edge = left_edge(&first, w, h, 60..h - 60);
+            let spots: &[&str] = if lean { &["induction xs with", "left ++ right", "\n\ntheorem and_swap'", "A variable observation", "exact hq"] } else { &["apply simp", "(a::nat) + b", "\n\n(* the second", "We prove that", "by simp"] };
+            for (k, spot) in spots.iter().enumerate() {
+                // The spot's line, as the source view draws it (or its block, opened, in the
+                // literate view), clicked
+                let t = theory(&app);
+                let at = t.local.find(spot).map(|b| t.local[..b].chars().count()).unwrap() + if spot.starts_with('\n') { 1 } else { 2 };
+                if mode == Mode::Source {
+                    let line = t.lines.position(&t.decoded.text, t.decoded.to_decoded(at)).line;
+                    // (where line 0 is: calibrated by a click, whose line says)
+                    let probe = 300.0;
+                    for m in harness.click(&app, cosmic::iced::Point::new(500.0, probe)) {
+                        update(&mut app, m);
+                    }
+                    let probed = theory(&app).source.cursor().position.line as f32;
+                    let lh = super::view::source_line_height();
+                    let y = probe + (line as f32 - probed) * lh;
+                    let x = 300.0;
+                    for m in harness.click(&app, cosmic::iced::Point::new(x, y)) {
+                        update(&mut app, m);
+                    }
+                    let got = theory(&app).source.cursor().position.line;
+                    assert_eq!(got, line, "{}: the click at {y} lands on the line of {spot:?}", name(""));
+                } else {
+                    // (a blank line between blocks is no block to open: a click there closes the open one)
+                    match theory(&app).blocks.iter().position(|b| b.start <= at && at <= b.end) {
+                        Some(i) => update(&mut app, super::Message::EditBlock(i)),
+                        None => update(&mut app, super::Message::CloseBlock),
+                    }
+                }
+                // (a click in another block: the goal is gone until the prover answers)
+                let png = harness.draw(&app, &name(&format!("{}-clicked", k + 1)));
+                let now = left_edge(&png, w, h, 60..h - 60);
+                assert!(columns(), "{}: one column after a click at {spot:?}", name(""));
+                assert!(!source || now.abs_diff(edge) <= 2, "{}: the page's text moved from x {edge} to {now} after a click at {spot:?}", name(""));
+                // the state there arrives
+                let ws = app.workspace.as_mut().unwrap();
+                ws.output = Some(output(at));
+                ws.goals = goals.clone();
+                let png = harness.draw(&app, &name(&format!("{}-state", k + 1)));
+                let now = left_edge(&png, w, h, 60..h - 60);
+                assert!(columns(), "{}: one column when the state came at {spot:?}", name(""));
+                assert!(!source || now.abs_diff(edge) <= 2, "{}: the page's text moved from x {edge} to {now} when the state came at {spot:?}", name(""));
+            }
+        }
+    }
+}

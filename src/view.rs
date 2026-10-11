@@ -495,7 +495,11 @@ fn workspace<'a>(app: &'a App, ws: &'a Workspace, right: bool, main_width: f32) 
                     let source_width = source_width(columns);
                     // (the goal column narrows to the room there is, down to a readable width)
                     let room = (main_width - source_width - z(70.0)).min(goal_width);
-                    let fits = (ws.output.is_some() || fill_here(ws)) && room >= z(320.0) && goal_beside_on();
+                    // (whether or not there is a goal at the moment: a click elsewhere clears the
+                    // goal until the prover's state there comes, and the layout must not change
+                    // with it)
+                    let fits = room >= z(320.0) && goal_beside_on();
+                    SOURCE_BESIDE.store(fits, std::sync::atomic::Ordering::Relaxed);
                     source(ws, t, if fits { None } else { Some(ws) }, &*app.table(&ws.machine), fits.then_some((room, source_width)), source_width.min(main_width - z(24.0)))
                 }
             };
@@ -2251,6 +2255,13 @@ static WIDE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(
 /// Whether the last layout had room for the goal beside the text
 pub fn last_wide() -> bool {
     WIDE.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+static SOURCE_BESIDE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Whether the source view, as last laid out, had the goal's column beside the source
+pub fn last_source_beside() -> bool {
+    SOURCE_BESIDE.load(std::sync::atomic::Ordering::Relaxed)
 }
 
 /// The rule: a proof that fits comfortably in view keeps its goal with the whole proof (level
