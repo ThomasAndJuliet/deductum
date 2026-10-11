@@ -108,6 +108,8 @@ where
                     });
                 }
             };
+            // (no further than the editor's own bottom)
+            let to = to.min(editor.height);
             tint(editor.y + from.min(at), editor.y + to.min(at));
             tint(editor.y + from.max(at) + gap, editor.y + to.max(at) + gap);
         }
@@ -554,5 +556,116 @@ where
 {
     fn from(g: GoalLayer<'a, Message, Theme, Renderer>) -> Self {
         Element::new(g)
+    }
+}
+
+/// An element on a tinted, rounded region a little larger than itself, which takes no room: the
+/// paragraph being edited (or a selected one) is marked without its text moving at all
+pub struct Halo<'a, Message, Theme, Renderer> {
+    content: Element<'a, Message, Theme, Renderer>,
+    /// How far the region reaches past the content: left, right, and above and below
+    reach: (f32, f32, f32),
+    /// The region's colour and its bar's (down its left edge), from the theme it is drawn in
+    colors: Box<dyn Fn(&Theme) -> (cosmic::iced::Color, Option<cosmic::iced::Color>) + 'a>,
+}
+
+impl<'a, Message, Theme, Renderer> Halo<'a, Message, Theme, Renderer> {
+    pub fn new(
+        content: impl Into<Element<'a, Message, Theme, Renderer>>,
+        reach: (f32, f32, f32),
+        colors: impl Fn(&Theme) -> (cosmic::iced::Color, Option<cosmic::iced::Color>) + 'a,
+    ) -> Self {
+        Self { content: content.into(), reach, colors: Box::new(colors) }
+    }
+}
+
+impl<Message, Theme, Renderer> Widget<Message, Theme, Renderer> for Halo<'_, Message, Theme, Renderer>
+where
+    Renderer: renderer::Renderer,
+{
+    fn children(&self) -> Vec<Tree> {
+        vec![Tree::new(&self.content)]
+    }
+
+    fn diff(&mut self, tree: &mut Tree) {
+        tree.diff_children(std::slice::from_mut(&mut self.content));
+    }
+
+    fn size(&self) -> Size<Length> {
+        self.content.as_widget().size()
+    }
+
+    fn layout(&mut self, tree: &mut Tree, renderer: &Renderer, limits: &layout::Limits) -> layout::Node {
+        let content = self.content.as_widget_mut().layout(&mut tree.children[0], renderer, limits);
+        layout::Node::with_children(content.size(), vec![content])
+    }
+
+    fn draw(&self, tree: &Tree, renderer: &mut Renderer, theme: &Theme, style: &renderer::Style, layout: Layout<'_>, cursor: mouse::Cursor, viewport: &Rectangle) {
+        let Some(content) = layout.children().next() else { return };
+        let b = content.bounds();
+        let (left, right, down) = self.reach;
+        let region = Rectangle { x: b.x - left, y: b.y - down, width: b.width + left + right, height: b.height + 2.0 * down };
+        let (color, bar) = (self.colors)(theme);
+        renderer.fill_quad(
+            renderer::Quad { bounds: region, border: cosmic::iced::Border { radius: 6.0.into(), ..Default::default() }, ..Default::default() },
+            cosmic::iced::Background::Color(color),
+        );
+        if let Some(bar) = bar {
+            renderer.fill_quad(
+                renderer::Quad { bounds: Rectangle { width: 3.0, ..region }, border: cosmic::iced::Border { radius: 2.0.into(), ..Default::default() }, ..Default::default() },
+                cosmic::iced::Background::Color(bar),
+            );
+        }
+        self.content.as_widget().draw(&tree.children[0], renderer, theme, style, content, cursor, viewport);
+    }
+
+    fn update(
+        &mut self,
+        tree: &mut Tree,
+        event: &Event,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        renderer: &Renderer,
+        clipboard: &mut dyn Clipboard,
+        shell: &mut Shell<'_, Message>,
+        viewport: &Rectangle,
+    ) {
+        let Some(content) = layout.children().next() else { return };
+        self.content.as_widget_mut().update(&mut tree.children[0], event, content, cursor, renderer, clipboard, shell, viewport);
+    }
+
+    fn mouse_interaction(&self, tree: &Tree, layout: Layout<'_>, cursor: mouse::Cursor, viewport: &Rectangle, renderer: &Renderer) -> mouse::Interaction {
+        let Some(content) = layout.children().next() else { return mouse::Interaction::None };
+        self.content.as_widget().mouse_interaction(&tree.children[0], content, cursor, viewport, renderer)
+    }
+
+    fn operate(&mut self, tree: &mut Tree, layout: Layout<'_>, renderer: &Renderer, operation: &mut dyn Operation) {
+        let Some(content) = layout.children().next() else { return };
+        operation.traverse(&mut |operation| {
+            self.content.as_widget_mut().operate(&mut tree.children[0], content, renderer, operation);
+        });
+    }
+
+    fn overlay<'b>(
+        &'b mut self,
+        tree: &'b mut Tree,
+        layout: Layout<'b>,
+        renderer: &Renderer,
+        viewport: &Rectangle,
+        translation: Vector,
+    ) -> Option<overlay::Element<'b, Message, Theme, Renderer>> {
+        let content = layout.children().next()?;
+        self.content.as_widget_mut().overlay(&mut tree.children[0], content, renderer, viewport, translation)
+    }
+}
+
+impl<'a, Message, Theme, Renderer> From<Halo<'a, Message, Theme, Renderer>> for Element<'a, Message, Theme, Renderer>
+where
+    Message: 'a,
+    Theme: 'a,
+    Renderer: renderer::Renderer + 'a,
+{
+    fn from(h: Halo<'a, Message, Theme, Renderer>) -> Self {
+        Element::new(h)
     }
 }
