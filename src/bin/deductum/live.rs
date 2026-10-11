@@ -15,7 +15,7 @@ use cosmic::widget::text_editor::{Action, Edit};
 use serde_json::json;
 
 use super::editor::Mode;
-use super::symbols::Table;
+
 use super::{App, Link, Message, Pending, link};
 
 const THY: &str = "theory Live\n  imports Main\nbegin\n\nlemma one: \"(a::nat) + b = b + a\"\n  sorry\n\nlemma two: \"\\<forall>x::nat. x + 0 = x\"\n  apply simp\n  done\n\nend\n";
@@ -23,7 +23,7 @@ const THY: &str = "theory Live\n  imports Main\nbegin\n\nlemma one: \"(a::nat) +
 fn app(target: link::Target) -> App {
     App {
         core: cosmic::app::Core::default(),
-        links: vec![Link { target, name: "live".into(), sender: None, status: String::new(), hello: None, client_id: None, symbols: Arc::new(Table::fallback()) }],
+        links: vec![Link { target, name: "live".into(), sender: None, status: String::new(), hello: None, client_id: None, symbols: None }],
         ctrl: false,
         alt: false,
         back: Vec::new(),
@@ -169,11 +169,11 @@ PY"#));
                     println!("output: {}", app.workspace.as_ref().unwrap().output.as_ref().unwrap());
                     let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
                     let off = t.local.find("done").unwrap();
-                    let _ = app.update(Message::SledgehammerAt(off));
+                    let _ = app.update(Message::RunToolAt("sledgehammer".into(), off));
                     hammer = true;
                 }
                 if hammer {
-                    let q = &app.workspace.as_ref().unwrap().sledgehammer;
+                    let q = &app.workspace.as_ref().unwrap().tool_query;
                     if q.status == "finished" || q.status == "failed" {
                         println!("sledgehammer {}: {} messages, error {:?}", q.status, q.messages.len(), q.error);
                         break;

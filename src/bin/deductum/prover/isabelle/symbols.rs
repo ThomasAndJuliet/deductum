@@ -2,13 +2,16 @@
 
 //! Isabelle symbols: theory sources write `\<forall>`, both views show `∀`
 //! (design C14). The table comes from the runtime's `etc/symbols`, through the
-//! session host. Decoding keeps a map between the two texts' offsets, so an
-//! edit made in the decoded text lands on the right source characters and
-//! leaves every other escape as it was.
+//! session host; it is Isabelle's codec (`crate::codec`) and input table
+//! (`crate::input`). `\<^sub>` and `\<^sup>` are set with the scripts font.
 
 use std::collections::HashMap;
+use std::sync::{Arc, LazyLock};
 
 use serde::Deserialize;
+
+use crate::codec::{Codec, Decoded, Style, Symbols};
+use crate::input::{Input, fuzzy};
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct Entry {
@@ -105,57 +108,6 @@ pub fn script(superscript: bool, c: char) -> Option<char> {
     }
     let (table, shown) = if superscript { (SUPERSCRIPTS, SUP_SHOWN) } else { (SUBSCRIPTS, SUB_SHOWN) };
     table.iter().chain(shown.iter()).find(|(b, _)| *b == c).map(|(_, s)| *s)
-}
-
-/// How a decoded code point is set, beyond its character
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Style {
-    Bold,
-    /// A glyph of the scripts font, which must be drawn in it
-    Script,
-    /// A control symbol shown as a marker (⇩, ⇧, ❙ …) because the next character has no
-    /// subscript or superscript form
-    Control,
-}
-
-/// How well `query` matches `name`: prefix, then word starts, then a subsequence
-pub fn fuzzy(query: &str, name: &str) -> Option<i32> {
-    if query.is_empty() {
-        return Some(0);
-    }
-    let q = query.to_lowercase();
-    let n = name.to_lowercase();
-    if n == q {
-        return Some(10_000);
-    }
-    if name.starts_with(query) {
-        return Some(5000 - name.len() as i32);
-    }
-    if n.starts_with(&q) {
-        return Some(4500 - name.len() as i32);
-    }
-    if let Some(i) = n.find(&q) {
-        return Some(3000 - i as i32 * 10 - name.len() as i32);
-    }
-    // a subsequence, scored by its gaps
-    let mut gaps = 0;
-    let mut chars = n.chars();
-    let mut last = 0;
-    for (k, qc) in q.chars().enumerate() {
-        let mut pos = last;
-        loop {
-            match chars.next() {
-                Some(c) if c == qc => break,
-                Some(_) => pos += 1,
-                None => return None,
-            }
-        }
-        if k > 0 {
-            gaps += pos - last;
-        }
-        last = pos + 1;
-    }
-    Some(1000 - gaps as i32 * 20 - name.len() as i32)
 }
 
 #[derive(Clone, Debug, Default)]
@@ -280,10 +232,6 @@ impl Table {
             }
         }
         groups
-    }
-
-    pub fn char_of(&self, symbol: &str) -> Option<char> {
-        self.decode.get(symbol).copied()
     }
 
     /// The source for a character typed or pasted into a decoded view
@@ -441,39 +389,42 @@ fn symbol_len(chars: &[char]) -> Option<usize> {
     (j > start && chars.get(j) == Some(&'>')).then_some(j + 1)
 }
 
-/// A decoded text and, for each of its code points (and its end), where it
-/// starts in the source
-#[derive(Clone, Debug, Default)]
-pub struct Decoded {
-    pub text: String,
-    pub src_of: Vec<usize>,
-    /// Decoded offsets set bold, or shown as control markers
-    pub styles: Vec<(usize, Style)>,
+impl Codec for Table {
+    fn decode(&self, source: &str) -> Decoded {
+        Table::decode(self, source)
+    }
+
+    fn encode(&self, text: &str) -> String {
+        Table::encode(self, text)
+    }
 }
 
-impl Decoded {
-    pub fn to_source(&self, decoded: usize) -> usize {
-        self.src_of[decoded.min(self.src_of.len() - 1)]
+impl Input for Table {
+    fn search(&self, query: &str, limit: usize) -> Vec<(char, String, String)> {
+        Table::search(self, query, limit)
     }
 
-    /// The decoded offset at or before source offset `source`
-    pub fn to_decoded(&self, source: usize) -> usize {
-        match self.src_of.binary_search(&source) {
-            Ok(i) => i,
-            Err(i) => i.saturating_sub(1),
-        }
+    fn abbreviations(&self) -> Vec<(char, &str)> {
+        self.completions().flat_map(|(_, c, abbrevs)| abbrevs.iter().map(move |a| (c, a.as_str()))).collect()
     }
 
-    /// The source change for a change of the decoded text from `old` to the
-    /// edited text `new`: the source between the mapped ends of the edited
-    /// span is replaced by the encoded new text, everything else untouched
-    pub fn source_change(&self, table: &Table, new: &str) -> super::ot::Change {
-        let change = super::ot::diff(&self.text, new);
-        change
-            .into_iter()
-            .map(|(s, e, t)| (self.to_source(s), self.to_source(e), table.encode(&t)))
-            .collect()
+    fn groups(&self) -> Vec<(String, Vec<(char, String)>)> {
+        Table::groups(self)
     }
+}
+
+/// The table used until the runtime's arrives, built once
+static FALLBACK: LazyLock<Arc<Table>> = LazyLock::new(|| Arc::new(Table::fallback()));
+
+/// The symbols for a session: the runtime's table its host sent, else the fallback
+pub fn for_session(from_host: Option<&Arc<dyn Symbols>>) -> Arc<dyn Symbols> {
+    from_host.cloned().unwrap_or_else(|| FALLBACK.clone())
+}
+
+/// The runtime's table from the host's `symbol_table` reply, if it has entries
+pub fn from_host(symbols: &serde_json::Value) -> Option<Arc<dyn Symbols>> {
+    let entries: Vec<Entry> = serde_json::from_value(symbols.clone()).unwrap_or_default();
+    (!entries.is_empty()).then(|| Arc::new(Table::new(entries)) as Arc<dyn Symbols>)
 }
 
 #[cfg(test)]
@@ -507,7 +458,7 @@ mod tests {
         let d = table.decode(src);
         let edited = "∀x. P y ∧ Q";
         let change = d.source_change(&table, edited);
-        let out = super::super::ot::apply(src, &change);
+        let out = crate::ot::apply(src, &change);
         assert_eq!(out, "\\<forall>x. P y \\<and> Q");
     }
 
@@ -532,7 +483,7 @@ mod tests {
         assert!(d.styles.iter().any(|s| s.1 == Style::Control));
         // Editing around a subscript keeps its escape
         let change = d.source_change(&table, &format!("{} + w{}", d.text, sub('2')));
-        let out = super::super::ot::apply("x\\<^sub>1 + y\\<^sup>2 + \\<^bold>A + z\\<^sub>\\<forall>", &change);
+        let out = crate::ot::apply("x\\<^sub>1 + y\\<^sup>2 + \\<^bold>A + z\\<^sub>\\<forall>", &change);
         assert_eq!(out, "x\\<^sub>1 + y\\<^sup>2 + \\<^bold>A + z\\<^sub>\\<forall> + w\\<^sub>2");
     }
 
