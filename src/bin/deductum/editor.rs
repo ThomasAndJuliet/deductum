@@ -1260,11 +1260,11 @@ impl Theory {
                 _ => {}
             }
             let kw_end = cmd.start + cmd.name.chars().count();
-            if prover.colours.is_empty() {
+            if prover.colours.is_empty() && self.profile.commands_are_keywords() {
                 paint(&mut class, cmd.start, kw_end, Hl::Keyword, &[Hl::Unprocessed, Hl::Running]);
             }
         }
-        if prover.commands.is_empty() {
+        if prover.commands.is_empty() && self.profile.commands_are_keywords() {
             for cmd in self.profile.lexical_commands(&self.local, &self.kinds) {
                 paint(&mut class, cmd.start, cmd.start + cmd.name.chars().count(), Hl::Keyword, &[]);
             }

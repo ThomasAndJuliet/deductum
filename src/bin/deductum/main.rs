@@ -27,6 +27,8 @@ mod vim;
 #[cfg(test)]
 mod snapshot;
 #[cfg(test)]
+mod snapshot_lean;
+#[cfg(test)]
 mod live;
 
 /// LaTeX's fonts, New Computer Modern, for the literate view's prose; see `res/fonts/README`

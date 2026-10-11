@@ -234,6 +234,29 @@ fn parse_state(state: &str) -> Option<Goal> {
     Some(Goal { vars: g.hyps.iter().map(|(n, t)| format!("{n} : {t}")).collect(), premises: Vec::new(), conclusion: g.target })
 }
 
+/// Markdown as the paragraph editor shows it: line breaks as spaces (the paragraph wraps as the
+/// page does), except in fenced code, where every line break matters. One character for one
+fn shown_markdown(text: &str) -> String {
+    let shown: Vec<char> = crate::editor::shown_text(text, true).chars().collect();
+    let chars: Vec<char> = text.chars().collect();
+    let mut out = shown.clone();
+    let mut fence = false;
+    let mut at = 0;
+    for line in text.split_inclusive('\n') {
+        let n = line.chars().count();
+        let t = line.trim_start();
+        let marker = t.starts_with("```") || t.starts_with("~~~");
+        if fence || marker {
+            out[at..at + n].copy_from_slice(&chars[at..at + n]);
+        }
+        if marker {
+            fence = !fence;
+        }
+        at += n;
+    }
+    out.into_iter().collect()
+}
+
 fn name_at(text: &str, at: usize) -> Option<String> {
     let chars: Vec<char> = text.chars().collect();
     let is = |c: char| c.is_alphanumeric() || matches!(c, '_' | '\'' | '.' | '!' | '?') || ('\u{2080}'..='\u{209c}').contains(&c);
@@ -299,6 +322,10 @@ impl Profile for Lean {
 
     fn snippet_at(&self, text: &str, at: usize) -> Option<String> {
         docs::snippet_at(text, at)
+    }
+
+    fn shown_prose(&self, text: &str, _caret: Option<usize>, _symbols: &dyn Symbols) -> String {
+        shown_markdown(text)
     }
 
     fn prose_code_classes(&self, text: &str) -> Vec<Option<Hl>> {
@@ -434,6 +461,18 @@ impl Profile for Lean {
 
     fn facts_label(&self) -> &'static str {
         "facts"
+    }
+
+    fn commands_are_keywords(&self) -> bool {
+        false
+    }
+
+    fn goal_noun(&self) -> &'static str {
+        "goal"
+    }
+
+    fn goal_types_option(&self) -> bool {
+        false
     }
 
     fn default_capabilities(&self) -> Capabilities {
@@ -632,6 +671,15 @@ mod tests {
         assert_eq!(c[3], Some(Hl::Sem(Sem::Free)));
         assert_eq!(c[11], Some(Hl::Sem(Sem::Skolem)));
         assert_eq!(c[0], None);
+    }
+
+    #[test]
+    fn fenced_code_keeps_its_line_breaks_in_the_paragraph_editor() {
+        let text = "Some prose\nover two lines.\n\n```lean\ndef a := 1\n  def b := 2\n```\nafter";
+        let shown = Lean.shown_prose(text, None, &LeanSymbols);
+        assert_eq!(shown.chars().count(), text.chars().count());
+        assert!(shown.starts_with("Some prose over two lines."), "{shown:?}");
+        assert!(shown.contains("```lean\ndef a := 1\n  def b := 2\n```"), "{shown:?}");
     }
 
     #[test]
