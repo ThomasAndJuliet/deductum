@@ -1612,3 +1612,29 @@ fn the_goal_is_beside_the_selected_block_with_none_open() {
     assert!(!off, "nothing beside when turned off");
     assert!(again, "beside again when turned back on");
 }
+
+/// With the goal beside on, the page keeps the goal's column whether or not there is a goal
+/// (moving onto prose never changes the layout); off, the centred column is a readable width
+#[test]
+fn the_layout_keeps_its_place_and_the_centred_column_is_wide_enough() {
+    let edges = |png: Vec<u8>| {
+        let img = image::RgbaImage::from_raw(1320, 800, png).unwrap();
+        let bg = *img.get_pixel(12, 400);
+        let cols: Vec<u32> = (8..1290).filter(|&x| (40..780).step_by(2).any(|y| img.get_pixel(x, y) != &bg)).collect();
+        (cols[0], cols[cols.len() - 1])
+    };
+    let mut app = demo_app(Mode::Literate);
+    app.show_right = false;
+    app.show_sidebar = false;
+    let mut h = Harness::new(Size::new(1320.0, 800.0));
+    let with_goal = edges(h.draw(&app, "keep-with-goal"));
+    let output = app.workspace.as_mut().unwrap().output.take();
+    let without = edges(h.draw(&app, "keep-without-goal"));
+    assert_eq!(with_goal.0, without.0, "the page starts in the same place with and without a goal");
+    app.workspace.as_mut().unwrap().output = output;
+    let _ = cosmic::Application::update(&mut app, super::Message::ToggleGoalBeside);
+    let centred = edges(h.draw(&app, "keep-centred"));
+    let _ = cosmic::Application::update(&mut app, super::Message::ToggleGoalBeside);
+    eprintln!("with goal {with_goal:?}, without {without:?}, centred {centred:?}");
+    assert!(centred.1 - centred.0 >= 540, "the centred column is wide enough ({centred:?})");
+}

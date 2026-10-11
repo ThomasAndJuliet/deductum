@@ -683,15 +683,20 @@ fn workspace<'a>(app: &'a App, ws: &'a Workspace, right: bool, main_width: f32) 
             // The text column as wide as the code blocks (their code and status strip), within a
             // readable measure: long code lines wrap rather than push the goal underneath, and
             // the goal sits just past the blocks, a little apart
-            let text_width = (code_width(t.code_columns) + 8.0).clamp(z(440.0), z(680.0));
+            let beside_width = (code_width(t.code_columns) + 8.0).clamp(z(440.0), z(680.0));
             // Beside when the text column, the gap and a goal of at least its minimum width fit
             // (room for the scroll bar kept); the side margins go first, before the goal goes under
-            let room = main_width - SCROLLBAR_ROOM - text_width - GOAL_GAP;
+            let room = main_width - SCROLLBAR_ROOM - beside_width - GOAL_GAP;
             let goal_width = preferred_goal.min(room).max(z(320.0));
             let fits = room >= z(320.0) && goal_beside_on();
             let gutter = ((room - goal_width) / 2.0).clamp(0.0, sp.space_l as f32);
             PAGE_GUTTER.store(gutter.to_bits(), std::sync::atomic::Ordering::Relaxed);
-            let beside = (ws.output.is_some() || fill_here(ws)) && fits;
+            // The goal's column is kept whenever it fits, whether or not there is a goal now:
+            // moving between blocks never changes the layout. Without it, the page is a wider
+            // column, centred, the code blocks as wide as their lines allow
+            let beside = fits;
+            let text_width = if fits { beside_width } else { (code_width(t.code_columns) + 8.0).clamp(z(560.0), z(880.0)) };
+            COLUMN_CAP.store(text_width.to_bits(), std::sync::atomic::Ordering::Relaxed);
             WIDE.store(fits, std::sync::atomic::Ordering::Relaxed);
             let inline = if beside { None } else { Some(ws) };
             let _ = right;
@@ -1161,8 +1166,12 @@ pub fn code_width(columns: usize) -> f32 {
 /// column can be (its status strip beside it), so nothing on the page runs into the goal drawn
 /// past the column; longer lines wrap
 pub fn block_code_width(columns: usize) -> f32 {
-    code_width(columns).min(z(680.0) - 8.0)
+    let cap = f32::from_bits(COLUMN_CAP.load(std::sync::atomic::Ordering::Relaxed));
+    code_width(columns).min(if cap > 0.0 { cap } else { z(680.0) } - 8.0)
 }
+
+/// The text column's width as the layout last chose it (blocks are never wider)
+static COLUMN_CAP: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 
 /// How a block of code looks, shown or being edited: the current one outlined in the accent
 fn code_style(marked: bool) -> impl Fn(&cosmic::Theme, iced::widget::text_editor::Status) -> iced::widget::text_editor::Style {
