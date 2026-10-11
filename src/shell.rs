@@ -878,7 +878,12 @@ pub fn status_bar(app: &App) -> Option<Element<'_, Message>> {
         if be.preview.is_some() {
             fields.push(widget::text::caption("The preview follows your typing").into());
         }
-        fields.push(widget::text::caption("Esc or a click outside finishes").into());
+        // (what the keys do for the tool at the caret, when there is one: Esc stops it, Alt+Enter
+        // takes what it found)
+        let hint = app.workspace.as_ref().and_then(super::flow::key_hint).unwrap_or_else(|| "Esc or a click outside finishes".into());
+        fields.push(widget::text::caption(hint).into());
+    } else if let Some(hint) = theory.and(app.workspace.as_ref()).and_then(super::flow::key_hint) {
+        fields.push(widget::text::caption(hint).into());
     }
     let mut row = fields_row(fields).push(widget::Space::new().width(Length::Fill));
     if let Some(status) = &app.status {

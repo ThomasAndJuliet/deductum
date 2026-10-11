@@ -1486,6 +1486,30 @@ impl Theory {
         }
     }
 
+    /// The command the caret is in, where it is now (local offsets), with its name
+    pub fn caret_command(&self) -> Option<(usize, usize, String)> {
+        let at = self.cursor.saturating_sub(1);
+        self.local_prover().commands.iter().find(|c| c.start <= at && at < c.end).map(|c| (c.start, c.end, c.name.clone()))
+    }
+
+    /// Replace `start..end` with `text` as one undo step of its own, the caret just after it in
+    /// every editor showing it (the open block's too, which otherwise keeps its caret where it
+    /// was, in the middle of what came in)
+    pub fn replace_step(&mut self, start: usize, end: usize, text: &str, table: &dyn Symbols) {
+        self.break_step();
+        self.replace(start, end, text, table);
+        self.break_step();
+        let cursor = self.cursor;
+        if let Some(be) = &mut self.block_editor
+            && be.start <= cursor
+            && cursor <= be.end
+        {
+            let shown = be.shown();
+            let li = LineIndex::new(&shown);
+            place(&mut be.content, li.position(&shown, be.decoded.to_decoded(cursor - be.start)));
+        }
+    }
+
     pub fn source_text(&self, start: usize, end: usize) -> String {
         self.local.chars().skip(start).take(end.saturating_sub(start)).collect()
     }

@@ -2183,6 +2183,16 @@ fn key_binding(press: text_editor::KeyPress, completing: bool, vim: Option<super
     if m.command() && matches!(press.key.as_ref(), Key::Character(",")) {
         return Some(text_editor::Binding::Custom(Message::Shell(super::shell::Msg::ToggleSettings)));
     }
+    // A tool's offers, in any vim mode: Alt+Enter takes the highlighted one, Alt+Up and
+    // Alt+Down pick another (see `flow`)
+    if m.alt() && !m.control() && !m.logo() {
+        match press.key.as_ref() {
+            Key::Named(Named::Enter) => return Some(text_editor::Binding::Custom(Message::AcceptOffer)),
+            Key::Named(Named::ArrowDown) => return Some(text_editor::Binding::Custom(Message::PickOffer(true))),
+            Key::Named(Named::ArrowUp) => return Some(text_editor::Binding::Custom(Message::PickOffer(false))),
+            _ => {}
+        }
+    }
     // Vim: outside insert mode every key goes to the vim machine
     if let Some(mode) = vim {
         let custom = |k: &str, ctrl: bool| Some(text_editor::Binding::Custom(Message::Vim(k.to_string(), ctrl)));
@@ -2228,7 +2238,7 @@ fn key_binding(press: text_editor::KeyPress, completing: bool, vim: Option<super
         Key::Character("s") if m.command() => Some(text_editor::Binding::Custom(Message::Save)),
         // Zoom is the window's: decline it, so the window-wide shortcut sees it
         Key::Character("=" | "+" | "-" | "0") if m.command() => None,
-        Key::Named(Named::Escape) => Some(text_editor::Binding::Custom(Message::CloseBlock)),
+        Key::Named(Named::Escape) => Some(text_editor::Binding::Custom(Message::Escape)),
         // Up and down run on past a block's ends into its neighbours, as j and k do
         Key::Named(Named::ArrowUp) if !m.shift() && !m.control() && !m.alt() => Some(text_editor::Binding::Custom(Message::LineMove(false))),
         Key::Named(Named::ArrowDown) if !m.shift() && !m.control() && !m.alt() => Some(text_editor::Binding::Custom(Message::LineMove(true))),
@@ -2731,48 +2741,13 @@ fn state_body<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Eleme
         .push(switch)
         .push(widget::Space::new().width(Length::Fill))
         .push_maybe(ws.profile.goal_types_option().then(|| widget::checkbox(ws.show_types).label("Types").on_toggle(Message::ShowTypes)));
-    // On a proof tool typed in the text (sledgehammer, nitpick, …): its findings, as they come,
-    // in place of the state, with its settings
+    // On a proof tool typed in the text (sledgehammer, nitpick, …): what it is doing and what it
+    // found, as they come, above the goal it works on, with its settings
     let tool = ws.output.as_ref().and_then(|o| o["command"]["name"].as_str()).and_then(|n| ws.caps.typed_tool(n));
-    let mut tool_section: Option<Element<'a, Message>> = None;
-    if let Some(tool) = tool {
-        let name = tool.typed.as_str();
-        let running = ws.theory.as_ref().is_some_and(|t| t.caret_signature().2 == Status::Running);
-        let mut head = widget::row::with_capacity(2).spacing(sp.space_s).align_y(Alignment::Center).push(widget::text::heading(name.to_string()));
-        if running {
-            let secs = ws.tool_started.map_or(0, |s| s.elapsed().as_secs());
-            head = head.push(widget::text::caption(format!("running · {secs} s")).width(Length::Fill));
-            // (a tool that cannot be stopped on its own goes when its line is changed)
-            if tool.stop {
-                head = head.push(widget::button::text("Stop").on_press(Message::StopTools));
-            }
-        }
-        let stopped = !running
-            && ws.output.as_ref().and_then(|o| o["messages"].as_array()).is_some_and(|ms| ms.iter().any(|m| m["kind"] == "error" && m["text"].as_str().is_some_and(|t| ws.profile.interrupted(t))));
-        if stopped {
-            head = head.push(widget::text::caption("stopped (as if its time ran out)"));
-        }
-        let mut col = widget::column::with_capacity(4).spacing(sp.space_xs).push(head);
-        if running {
-            col = col.push(iced::widget::progress_bar(0.0..=1.0, ((ws.tool_started.map_or(0.0, |s| s.elapsed().as_secs_f32())) / tool.timeout(&ws.tool_settings)).min(1.0)).girth(4.0));
-        }
-        col = col.push(tool_output(ws, table));
-        if tool.settings.iter().any(|s| !s.option.is_empty()) {
-            col = col.push(tool_settings(ws, tool));
-        }
-        // (above the goal it works on, which shows as usual)
-        tool_section = Some(
-            widget::container(col)
-                .padding([sp.space_xxs, sp.space_xs])
-                .width(Length::Fill)
-                .class(theme::Container::custom(|theme| iced::widget::container::Style {
-                    background: Some(Color { a: 0.06, ..Color::from(theme.cosmic().accent_color()) }.into()),
-                    border: Border { radius: 6.0.into(), ..Default::default() },
-                    ..Default::default()
-                }))
-                .into(),
-        );
-    }
+    let tool_section: Option<Element<'a, Message>> = match (tool, super::flow::report(ws)) {
+        (Some(tool), Some(report)) => Some(tool_section(ws, tool, report, table)),
+        _ => None,
+    };
     // Only a message (no proof here, or the session stopped): just the message
     let only_message = !have_parts
         && tool_section.is_none()
@@ -2798,12 +2773,18 @@ fn state_body<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Eleme
     }
     if ws.state_text && let Some(text) = &g.text {
         // Isabelle's own text of the state, printed with the Types setting
-        col = col.push(tool_output(ws, table));
+        if !in_tool {
+            col = col.push(tool_output(ws, table));
+        }
         col = col.push(message_view(ws, text, table));
         return col.into();
     }
     if ws.state_text || !have_parts {
-        col = col.push(state_text(ws, table));
+        // (Text shows the command's output as it is; with no goal in parts, the tool's section
+        // has said it already)
+        if ws.state_text || !in_tool {
+            col = col.push(state_text(ws, table));
+        }
         if fill_here(ws) {
             col = col.push(fill_results(ws, table));
         }
@@ -2862,6 +2843,177 @@ fn state_body<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Eleme
         col = col.push(widget::button::text(format!("Show {} more", g.subgoals.len() - shown)).on_press(Message::AllGoals(true)));
     } else if ws.all_goals && g.subgoals.len() > 4 {
         col = col.push(widget::button::text("Show fewer").on_press(Message::AllGoals(false)));
+    }
+    col.into()
+}
+
+/// A typed tool's section above its goal: its name, what it is doing (how long it has been at
+/// it, with Stop, which Esc also does), then what it came to (see [`super::flow`]): the proofs it
+/// found, a counterexample as a table, or a plain sentence and what to do next. What else it said
+/// follows, then its settings, folded
+fn tool_section<'a>(ws: &'a Workspace, tool: &'a Tool, r: super::flow::Report, table: &dyn super::codec::Symbols) -> Element<'a, Message> {
+    use super::flow::Outcome;
+    let sp = spacing();
+    let secs = ws.tool_started.map_or(0, |s| s.elapsed().as_secs());
+    let found = r.offers.iter().filter(|o| matches!(o.act, super::flow::Act::Insert(_)) && o.ok == Some(true)).count();
+    let fitting = r.offers.iter().filter(|o| matches!(o.act, super::flow::Act::Insert(_)) && o.ok.is_none()).count();
+    let status = match &r.outcome {
+        Outcome::Waiting(_) => "waiting".to_string(),
+        _ if r.running => format!("running · {secs} s"),
+        Outcome::Proofs if found == 0 => format!("{fitting} {} that {}", if fitting == 1 { "fact" } else { "facts" }, if fitting == 1 { "fits" } else { "fit" }),
+        Outcome::Proofs => format!("{found} {} found", if found == 1 { "proof" } else { "proofs" }),
+        Outcome::Counterexample { .. } => "counterexample found".into(),
+        Outcome::NoCounterexample(_) => "no counterexample".into(),
+        Outcome::NothingFound(_) => "nothing found".into(),
+        Outcome::Failed(_) => "failed".into(),
+        Outcome::Stopped => "stopped".into(),
+        Outcome::Running(_) | Outcome::Done(_) => "done".into(),
+    };
+    let mut head = widget::row::with_capacity(3)
+        .spacing(sp.space_s)
+        .align_y(Alignment::Center)
+        .push(widget::text::heading(r.tool.clone()))
+        .push(widget::text::caption(status).class(muted()).width(Length::Fill));
+    // (a tool that cannot be stopped on its own goes when its line is changed)
+    if r.running && r.stoppable {
+        head = head.push(widget::tooltip(widget::button::text("Stop").on_press(Message::StopTools), widget::text::caption("Stop it (Esc)"), widget::tooltip::Position::Bottom));
+    }
+    let mut col = widget::column::with_capacity(8).spacing(sp.space_xs).push(head);
+    if r.running {
+        col = col.push(iced::widget::progress_bar(0.0..=1.0, ((ws.tool_started.map_or(0.0, |s| s.elapsed().as_secs_f32())) / tool.timeout(&ws.tool_settings)).min(1.0)).girth(4.0));
+    }
+    let said = |text: String| -> Element<'a, Message> { widget::text::body(text).into() };
+    let hint = |text: &str| -> Element<'a, Message> { widget::text::caption(text.to_string()).class(muted()).into() };
+    match &r.outcome {
+        Outcome::Waiting(note) => col = col.push(hint(note)),
+        Outcome::Running(note) => {
+            let looking = if tool.kind == "counterexample" { "Looking for a counterexample…" } else { "Looking for a proof…" };
+            col = col.push(hint(if note.is_empty() { looking } else { note }));
+        }
+        Outcome::Proofs => {
+            col = col.push(offer_list(ws, &r.offers, true, table));
+            if r.running {
+                col = col.push(hint("Still looking: more may come."));
+            }
+        }
+        Outcome::Counterexample { headline, sections } => {
+            col = col.push(counterexample_table(headline, sections, table));
+            let spurious = headline.contains("spurious");
+            col = col.push(hint(if spurious {
+                "The tool is not sure of this one: check the values against the statement."
+            } else {
+                "The statement is false for these values. Correct it, or add an assumption that rules them out."
+            }));
+        }
+        Outcome::NoCounterexample(text) => {
+            col = col.push(said(format!("{text}.")));
+            col = col.push(hint("That does not prove it."));
+        }
+        Outcome::NothingFound(text) => col = col.push(said(text.clone())),
+        Outcome::Failed(text) => col = col.push(tinted("error".into(), widget::text(table.decode(text).text).font(cosmic::font::mono()).size(z(13.0)).into())),
+        Outcome::Stopped => col = col.push(hint("Stopped. Change the line to run it again.")),
+        Outcome::Done(text) => col = col.push(hint(text)),
+    }
+    if !matches!(r.outcome, Outcome::Proofs) && !r.offers.is_empty() {
+        col = col.push(offer_list(ws, &r.offers, true, table));
+    }
+    for m in &r.notes {
+        col = col.push(message_view(ws, m, table));
+    }
+    if tool.settings.iter().any(|s| !s.option.is_empty()) {
+        col = col.push(tool_settings(ws, tool));
+    }
+    widget::container(col)
+        .padding([sp.space_xxs, sp.space_xs])
+        .width(Length::Fill)
+        .class(theme::Container::custom(|theme| iced::widget::container::Style {
+            background: Some(Color { a: 0.06, ..Color::from(theme.cosmic().accent_color()) }.into()),
+            border: Border { radius: 6.0.into(), ..Default::default() },
+            ..Default::default()
+        }))
+        .into()
+}
+
+/// The offers of a tool or an LLM, each a row: whether it was checked, what it is (in the code
+/// font) with who found it and how long it took, and its button. The one Alt+Enter takes is
+/// highlighted (when these are the offers at the caret, `active`), with the keys said under them
+fn offer_list<'a>(ws: &'a Workspace, offers: &[super::flow::Offer], active: bool, table: &dyn super::codec::Symbols) -> Element<'a, Message> {
+    use super::flow::Act;
+    let sp = spacing();
+    let picked = if active { Some(super::flow::picked(ws, offers)) } else { None };
+    // (five at first, the rest a click away; a pick past them shows them all)
+    let shown = if ws.all_offers || picked.is_some_and(|p| p >= 5) { offers.len() } else { offers.len().min(5) };
+    let mut col = widget::column::with_capacity(offers.len() + 2).spacing(2);
+    for (i, o) in offers.iter().enumerate().take(shown) {
+        let on = picked == Some(i);
+        // (who found it and how long it took on the same line, at its end, when that is short:
+        // a list of one-line proofs stays a list of lines)
+        let code = widget::text(table.decode(&o.code).text).font(cosmic::font::mono()).size(z(13.0));
+        let inline = o.detail.chars().count() <= 26;
+        let what: Element<'a, Message> = if o.detail.is_empty() {
+            code.width(Length::Fill).into()
+        } else if inline {
+            widget::row::with_capacity(2)
+                .spacing(sp.space_xs)
+                .align_y(Alignment::Center)
+                .push(code.width(Length::Fill))
+                .push(widget::text::caption(o.detail.clone()).class(muted()).wrapping(iced::widget::text::Wrapping::None))
+                .width(Length::Fill)
+                .into()
+        } else {
+            widget::column::with_capacity(2).push(code).push(widget::text::caption(o.detail.clone()).class(muted())).width(Length::Fill).into()
+        };
+        let mark: Element<'a, Message> = match (&o.act, o.ok) {
+            (Act::Replace(_) | Act::Ask(_), _) | (Act::Insert(_), None) => widget::icon::from_name("go-next-symbolic").size(16).icon().class(theme::Svg::custom(|t| iced::widget::svg::Style { color: Some(Color { a: 0.7, ..Color::from(t.cosmic().on_bg_color()) }) })).into(),
+            (Act::Facts, _) => widget::icon::from_name("view-list-symbolic").size(16).icon().class(theme::Svg::custom(|t| iced::widget::svg::Style { color: Some(Color { a: 0.7, ..Color::from(t.cosmic().on_bg_color()) }) })).into(),
+            (_, ok) => verdict(ok),
+        };
+        let button = if on { widget::button::suggested(o.button()) } else { widget::button::standard(o.button()) };
+        let row = widget::row::with_capacity(3).spacing(sp.space_xs).align_y(Alignment::Center).push(mark).push(what).push(button.on_press(o.message()));
+        col = col.push(widget::container(row).padding([z(3.0), z(6.0)]).width(Length::Fill).class(theme::Container::custom(move |theme| iced::widget::container::Style {
+            background: on.then(|| Color { a: 0.14, ..Color::from(theme.cosmic().accent_color()) }.into()),
+            border: Border { radius: 6.0.into(), ..Default::default() },
+            ..Default::default()
+        })));
+    }
+    if shown < offers.len() {
+        col = col.push(widget::button::text(format!("{} more", offers.len() - shown)).on_press(Message::AllOffers(true)));
+    }
+    if let Some(i) = picked
+        && let Some(o) = offers.get(i)
+    {
+        let keys = if offers.len() > 1 { format!("Alt+Enter {} the highlighted one · Alt+Up or Alt+Down picks another", o.verb()) } else { format!("Alt+Enter {} it", o.verb()) };
+        col = col.push(widget::container(widget::text::caption(keys).class(muted())).padding(Padding { left: z(6.0), top: 2.0, ..Padding::ZERO }));
+    }
+    col.into()
+}
+
+/// A counterexample as its sections, each a table of names and values in the code font
+fn counterexample_table<'a>(headline: &str, sections: &[super::flow::Section], table: &dyn super::codec::Symbols) -> Element<'a, Message> {
+    let sp = spacing();
+    let mut col = widget::column::with_capacity(1 + 2 * sections.len()).spacing(sp.space_xxs).push(widget::text::body(headline.to_string()));
+    let mono = |t: String| widget::text(t).font(cosmic::font::mono()).size(z(13.0));
+    for s in sections {
+        // (each section's names in one column, as wide as the longest of them, up to 180 px)
+        let longest = s.rows.iter().map(|(n, _)| table.decode(n).text.chars().count()).max().unwrap_or(1);
+        let name_width = z((longest as f32 * 7.9 + 4.0).clamp(24.0, 180.0));
+        let mut rows = widget::column::with_capacity(s.rows.len()).spacing(2);
+        for (name, value) in &s.rows {
+            rows = rows.push(
+                widget::row::with_capacity(3)
+                    .spacing(sp.space_xs)
+                    .push(mono(table.decode(name).text).class(theme::Text::Accent).width(Length::Fixed(name_width)))
+                    .push(mono("=".into()).class(muted()))
+                    .push(mono(table.decode(value).text).width(Length::Fill)),
+            );
+        }
+        col = col.push(widget::text::caption(s.title.clone()).class(muted())).push(
+            widget::container(rows).padding([z(4.0), z(8.0)]).width(Length::Fill).class(theme::Container::custom(|theme| iced::widget::container::Style {
+                background: Some(Color { a: if theme.cosmic().is_dark { 0.05 } else { 0.06 }, ..Color::from(theme.cosmic().on_bg_color()) }.into()),
+                border: Border { radius: 4.0.into(), ..Default::default() },
+                ..Default::default()
+            })),
+        );
     }
     col.into()
 }
@@ -2938,33 +3090,70 @@ fn tool_output<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Elem
         col = col.push(widget::text::caption(format!("{who}: asks when you pause typing (Enter asks now)")));
     }
     if fill_here(ws) && !ws.fill.status.is_empty() {
-        // As sledgehammer shows: the tool, how long it has been at it, Stop
-        let busy = matches!(ws.fill.status.as_str(), "starting" | "asking" | "checking");
-        let secs = ws.fill.started.map_or(0, |s| s.elapsed().as_secs());
-        let mut head = widget::row::with_capacity(3)
-            .spacing(sp.space_s)
-            .align_y(Alignment::Center)
-            .push(widget::text::heading(match &ws.fill.asked {
-                Some(name) => format!("@{name}"),
-                None => format!(
-                    "{}{}",
-                    if ws.fill.agent == 1 { "codex" } else { "claude" },
-                    ws.fill.model.as_ref().map_or(String::new(), |m| format!(" · {m}"))
-                ),
-            }));
-        head = head.push(widget::text::caption(if busy { format!("{} · {secs} s", ws.fill.status) } else { ws.fill.status.clone() }).width(Length::Fill));
-        head = head.push(widget::button::text(if busy { "Stop" } else { "Dismiss" }).on_press(Message::FillDismiss));
-        col = col.push(head);
-        if busy {
-            col = col.push(iced::widget::progress_bar(0.0..=1.0, (secs as f32 / 120.0).min(1.0)).girth(4.0));
-        }
-        if let Some(m) = &ws.fill.message {
-            col = col.push(widget::text::body(m.clone()));
-        }
-        col = col.push(fill_results(ws, table));
-        col = col.push(query_route_row(ws));
+        col = col.push(fill_section(ws, table));
     }
     col.into()
+}
+
+/// A `claude`, `codex` or `@name` line's job, as a typed tool's section shows: who was asked,
+/// what it is doing and for how long (Stop, which Esc also does), then its proofs, the checked
+/// ones first, with Insert; where such queries go comes last
+fn fill_section<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Element<'a, Message> {
+    let sp = spacing();
+    let f = &ws.fill;
+    let busy = matches!(f.status.as_str(), "starting" | "asking" | "checking");
+    let secs = f.started.map_or(0, |s| s.elapsed().as_secs());
+    let checked = f.candidates.iter().filter(|c| c["ok"] == serde_json::json!(true)).count();
+    let status = match f.status.as_str() {
+        "starting" | "asking" => format!("asking · {secs} s"),
+        "checking" => format!("checking its proofs · {secs} s"),
+        "done" if f.candidates.is_empty() => "no proofs".to_string(),
+        "done" => format!("{} {}, {checked} checked", f.candidates.len(), if f.candidates.len() == 1 { "proof" } else { "proofs" }),
+        other => other.to_string(),
+    };
+    let who = match &f.asked {
+        Some(name) => format!("@{name}"),
+        None => format!("{}{}", if f.agent == 1 { "codex" } else { "claude" }, f.model.as_ref().map_or(String::new(), |m| format!(" · {m}"))),
+    };
+    let stop: Element<'a, Message> = if busy {
+        widget::tooltip(widget::button::text("Stop").on_press(Message::FillDismiss), widget::text::caption("Stop it (Esc)"), widget::tooltip::Position::Bottom).into()
+    } else {
+        widget::button::text("Dismiss").on_press(Message::FillDismiss).into()
+    };
+    let head = widget::row::with_capacity(3)
+        .spacing(sp.space_s)
+        .align_y(Alignment::Center)
+        .push(widget::text::heading(who))
+        .push(widget::text::caption(status).class(muted()).width(Length::Fill))
+        .push(stop);
+    let mut col = widget::column::with_capacity(6).spacing(sp.space_xs).push(head);
+    if busy {
+        col = col.push(iced::widget::progress_bar(0.0..=1.0, (secs as f32 / 120.0).min(1.0)).girth(4.0));
+    }
+    if let Some(m) = &f.message {
+        col = col.push(widget::text::body(m.clone()));
+    }
+    if let Some(err) = &f.error {
+        col = col.push(widget::text::body(err.clone()));
+    }
+    let offers = super::flow::fill_offers(ws);
+    if offers.is_empty() && busy {
+        col = col.push(widget::text::caption(if f.status == "checking" { "Checking the proposed proofs…" } else { "Asking for proofs…" }).class(muted()));
+    }
+    if !offers.is_empty() {
+        let active = super::flow::offers_here(ws).first().map(|o| &o.code) == offers.first().map(|o| &o.code);
+        col = col.push(offer_list(ws, &offers, active, table));
+    }
+    col = col.push(query_route_row(ws));
+    widget::container(col)
+        .padding([sp.space_xxs, sp.space_xs])
+        .width(Length::Fill)
+        .class(theme::Container::custom(|theme| iced::widget::container::Style {
+            background: Some(Color { a: 0.06, ..Color::from(theme.cosmic().accent_color()) }.into()),
+            border: Border { radius: 6.0.into(), ..Default::default() },
+            ..Default::default()
+        }))
+        .into()
 }
 
 /// Where `claude` and `codex` queries go: the session's helper conversation (it remembers), a
@@ -2980,29 +3169,31 @@ fn query_route_row<'a>(ws: &'a Workspace) -> Element<'a, Message> {
         .flatten()
         .filter_map(|l| Some((l["key"].as_str()?.to_string(), l["label"].as_str()?.to_string())))
         .collect();
-    let mut row = widget::row::with_capacity(8).spacing(sp.space_xxs).align_y(Alignment::Center).push(widget::text::caption("Queries go to"));
-    let choice = |label: String, value: String| {
+    // (as a row that wraps: in a narrow panel the helper's buttons go to a line of their own)
+    let mut items: Vec<Element<'a, Message>> = vec![widget::container(widget::text::caption("Queries go to")).padding([z(6.0), 0.0]).into()];
+    let choice = |label: String, value: String| -> Element<'a, Message> {
         let on = route == value;
-        widget::button::text(label).class(if on { theme::Button::Suggested } else { theme::Button::Text }).on_press(Message::QueryRoute(value))
+        widget::button::text(label).class(if on { theme::Button::Suggested } else { theme::Button::Text }).on_press(Message::QueryRoute(value)).into()
     };
-    row = row.push(choice("the helper".into(), "helper".into())).push(choice("a fresh request".into(), "fresh".into()));
+    items.push(choice("the helper".into(), "helper".into()));
+    items.push(choice("a fresh request".into(), "fresh".into()));
     for (key, label) in listeners {
-        row = row.push(choice(format!("@{label}"), format!("agent:{key}")));
+        items.push(choice(format!("@{label}"), format!("agent:{key}")));
     }
-    row = row.push(widget::Space::new().width(Length::Fill));
     if route == "helper" && ws.fill.asked.is_none() {
         if let Some(conv) = &ws.fill.conversation {
             let resume = conv["resume"].as_str().unwrap_or("").to_string();
             let machine = conv["machine"].as_str().unwrap_or("").to_string();
-            row = row.push(
+            items.push(
                 widget::button::text("Copy resume command")
                     .tooltip(format!("Talk to the helper: run this on {machine}"))
-                    .on_press(Message::CopyText(resume)),
+                    .on_press(Message::CopyText(resume))
+                    .into(),
             );
         }
-        row = row.push(widget::button::text("New conversation").on_press(Message::HelperReset));
+        items.push(widget::button::text("New conversation").on_press(Message::HelperReset).into());
     }
-    widget::container(row).padding([sp.space_xxs, 0]).into()
+    widget::container(widget::flex_row(items).column_spacing(sp.space_xxs).row_spacing(2)).padding([sp.space_xxs, 0]).into()
 }
 
 /// A label in a narrow column, then what it labels
@@ -3284,43 +3475,12 @@ fn fill_results<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Ele
     if let Some(err) = &f.error {
         col = col.push(widget::text::body(err.clone()));
     }
-    if !f.using.is_empty() {
-        // (the facts as the profile writes them, without the tool's line)
-        let decoded: Vec<String> = f.using.iter().map(|u| table.decode(u).text).collect();
-        let facts = ws.profile.facts_line(&decoded, "").lines().next().unwrap_or("").to_string();
-        let tool = ws.profile.facts_tool();
-        let tool_label = ws.caps.tool(tool).map_or(tool, |t| t.label.as_str());
-        col = col.push(
-            widget::row::with_capacity(2)
-                .spacing(sp.space_xs)
-                .align_y(Alignment::Center)
-                .push(
-                    widget::column::with_capacity(2)
-                        .push(widget::text(facts).font(cosmic::font::mono()).size(z(13.0)))
-                        .push(widget::text::caption(format!("Facts to guide {tool_label}")))
-                        .width(Length::Fill),
-                )
-                .push(widget::button::standard(format!("Insert with {tool}")).on_press(Message::InsertUsing)),
-        );
-    }
-    for c in &f.candidates {
-        let text = c["text"].as_str().unwrap_or("").to_string();
-        let ok = c["ok"].as_bool();
-        let mut what = widget::column::with_capacity(2).push(widget::text(table.decode(&text).text).font(cosmic::font::mono()).size(z(13.0)));
-        if let Some(m) = c["message"].as_str().filter(|m| !m.is_empty()) {
-            what = what.push(widget::text::caption(m.to_string()).class(muted()));
-        }
-        let row = widget::row::with_capacity(3)
-            .spacing(sp.space_xs)
-            .align_y(Alignment::Center)
-            .push(verdict(ok))
-            .push(what.width(Length::Fill))
-            .push(if ok == Some(true) {
-                widget::button::suggested("Insert").on_press(Message::InsertFill(text))
-            } else {
-                widget::button::standard("Insert anyway").on_press(Message::InsertFill(text))
-            });
-        col = col.push(row);
+    // Its proofs, the checked ones first, then the facts for Sledgehammer: highlighted for
+    // Alt+Enter when nothing else at the caret offers anything
+    let offers = super::flow::fill_offers(ws);
+    if !offers.is_empty() {
+        let active = super::flow::offers_here(ws).first().map(|o| &o.code) == offers.first().map(|o| &o.code);
+        col = col.push(offer_list(ws, &offers, active, table));
     }
     col.into()
 }

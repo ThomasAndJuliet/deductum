@@ -14,6 +14,7 @@
 mod cli;
 mod codec;
 mod editor;
+mod flow;
 mod gap;
 mod goals;
 mod input;
@@ -36,6 +37,8 @@ mod snapshot;
 mod snapshot_shell;
 #[cfg(test)]
 mod snapshot_lean;
+#[cfg(test)]
+mod snapshot_tools;
 #[cfg(test)]
 mod live;
 #[cfg(test)]
@@ -277,6 +280,19 @@ pub enum Message {
     ToggleRight,
     Goto(usize),
     InsertOutput(String),
+    /// Take the highlighted offer of the tool at the caret (Alt+Enter), or pick the next or the
+    /// previous one (Alt+Down, Alt+Up)
+    AcceptOffer,
+    PickOffer(bool),
+    AllOffers(bool),
+    /// Put this in place of the tool at the caret, which runs it (more time, another tool)
+    ReplaceTool(String),
+    /// Put this keyword line (`claude`) in place of the tool at the caret and ask it at once
+    AskInstead(String),
+    /// Ask the keyword line at the caret once its text has reached the host (tries left)
+    AskKeyword(u8),
+    /// Esc in an editor: stop the tool running at the caret, else finish editing the block
+    Escape,
     PopOutClosed(cosmic::iced::window::Id),
     ToggleSidebar,
     /// The shell: settings, the header and status bar, project actions, the new-session flow
@@ -450,6 +466,11 @@ pub struct Workspace {
     pub gap_hover: Option<usize>,
     /// Stop was pressed for the proof tools: asked again until they have stopped
     pub tools_stopping: bool,
+    /// The offer of the tool at the caret (or of its LLM) picked with Alt+Up and Alt+Down, by its
+    /// text: Alt+Enter takes it (see [`flow`])
+    pub pick: Option<String>,
+    /// Every offer shown, not just the first five
+    pub all_offers: bool,
     /// What the insert palette (beside the text, when there is no goal) and the insert bar
     /// (above the goal) are searched for
     pub palette_query: String,
@@ -651,7 +672,7 @@ impl App {
                 vim::Op::Undo => tasks.push(self.update(Message::Undo)),
                 vim::Op::Redo => tasks.push(self.update(Message::Redo)),
                 vim::Op::Save => tasks.push(self.update(Message::Save)),
-                vim::Op::Escape => tasks.push(self.update(Message::CloseBlock)),
+                vim::Op::Escape => tasks.push(self.update(Message::Escape)),
             }
         }
         Task::batch(tasks)
@@ -1383,6 +1404,25 @@ impl App {
         Task::none()
     }
 
+    /// Put `text` in place of `start..end` (local offsets) as one undo step, the caret just
+    /// after it and the editor in use focused again (a click on Insert took the focus): the
+    /// human goes on typing where the proof ends. The edit goes to the host, and the proof
+    /// state is asked for there
+    fn put_text(&mut self, start: usize, end: usize, text: &str) -> Task<Message> {
+        let Some(machine) = self.workspace.as_ref().map(|w| w.machine.clone()) else { return Task::none() };
+        let table = self.table(&machine);
+        let popout = self.popout.is_some();
+        let Some(ws) = &mut self.workspace else { return Task::none() };
+        ws.pick = None;
+        ws.all_offers = false;
+        let Some(t) = &mut ws.theory else { return Task::none() };
+        t.replace_step(start, end, text, &*table);
+        let focus = if insert::block_in_use(t, popout) { view::block_editor_id() } else { view::source_editor_id() };
+        let line = t.source.cursor().position.line;
+        let keep = if t.mode == Mode::Source && t.block_editor.is_none() { view::keep_source_caret(line) } else { Task::none() };
+        Task::batch([self.flush_edits(), widget::text_input::focus(focus), self.schedule_state(), keep])
+    }
+
     /// A caret moved: ask for the proof state there shortly
     fn schedule_state(&mut self) -> Task<Message> {
         // What the prover said for another cell (a tool's findings, the goal) is not shown in
@@ -2028,6 +2068,8 @@ impl cosmic::Application for App {
                     tool_started: None,
                     gap_hover: None,
                     tools_stopping: false,
+                    pick: None,
+                    all_offers: false,
                     palette_query: String::new(),
                     insert_open: false,
                     find: QueryState { operation: "find_theorems", ..Default::default() },
@@ -3092,20 +3134,17 @@ impl cosmic::Application for App {
                 }
             }
             Message::InsertFill(text) => {
-                let Some(machine) = self.workspace.as_ref().map(|w| w.machine.clone()) else { return Task::none() };
-                let table = self.table(&machine);
                 let Some(ws) = &mut self.workspace else { return Task::none() };
                 let f = ws.fill.clone();
-                let Some(t) = &mut ws.theory else { return Task::none() };
+                let Some(t) = &ws.theory else { return Task::none() };
                 let Some((s0, e0)) = f.replace else { return Task::none() };
                 if f.revision != t.confirmed_rev {
                     // map from the revision the hole was found in
                     self.status = Some("The theory changed since; the proof replaces the hole where it now is".into());
                 }
                 let (s, e) = (Self::local_offset(t, s0), Self::local_offset(t, e0));
-                t.replace(s, e, &text, &*table);
                 ws.fill = FillState { agent: f.agent, hint: f.hint, ..Default::default() };
-                return self.flush_edits();
+                return self.put_text(s, e, &text);
             }
             Message::CommandParams(p) => {
                 if let Some(ws) = &mut self.workspace {
@@ -3333,43 +3372,110 @@ impl cosmic::Application for App {
                 }
             }
             Message::InsertOutput(proof) => {
-                // A proof from the output at the caret: it replaces a proof-search
-                // command (sledgehammer, try0, try), else follows the command
-                let Some(machine) = self.workspace.as_ref().map(|w| w.machine.clone()) else { return Task::none() };
-                let table = self.table(&machine);
-                let Some(ws) = &mut self.workspace else { return Task::none() };
+                // A proof from the output at the caret: it replaces a proof-search command
+                // (sledgehammer, try0, exact?) or the placeholder, else follows the command
+                let Some(ws) = &self.workspace else { return Task::none() };
                 let Some(out) = ws.output.clone() else { return Task::none() };
-                let Some(t) = &mut ws.theory else { return Task::none() };
+                let Some(t) = &ws.theory else { return Task::none() };
                 let cmd = &out["command"];
-                let (Some(start), Some(end)) = (cmd["start"].as_u64(), cmd["end"].as_u64()) else { return Task::none() };
-                if out["revision"].as_u64() != Some(t.confirmed_rev) {
-                    self.status = Some("The theory changed since that output; place the caret again".into());
+                let name = cmd["name"].as_str().unwrap_or("").to_string();
+                // Where that command is now: the caret's, when it is the one the output is about
+                // (so that typing elsewhere since does not stop the proof going in), else where
+                // the output said, if the theory has not changed since
+                let range = match t.caret_command() {
+                    Some((s, e, n)) if n == name => Some((s, e)),
+                    _ if out["revision"].as_u64() == Some(t.confirmed_rev) => match (cmd["start"].as_u64(), cmd["end"].as_u64()) {
+                        (Some(s), Some(e)) => Some((Self::local_offset(t, s as usize), Self::local_offset(t, e as usize))),
+                        _ => None,
+                    },
+                    _ => None,
+                };
+                let Some((s, e)) = range else {
+                    self.status = Some("The theory changed since that output; place the caret on the tool again".into());
                     return Task::none();
-                }
-                let (s, e) = (Self::local_offset(t, start as usize), Self::local_offset(t, end as usize));
+                };
                 // (a tool that finds proofs, or the placeholder, is replaced by the proof)
-                let name = cmd["name"].as_str().unwrap_or("");
-                let replaced = ws.caps.typed_tool(name).is_some_and(|tool| tool.kind == "prove") || t.profile.unfinished().contains(&name);
+                let replaced = ws.caps.typed_tool(&name).is_some_and(|tool| tool.kind == "prove") || t.profile.unfinished().contains(&name.as_str());
                 if replaced {
-                    t.replace(s, e, &proof, &*table);
-                } else {
-                    // Lined up under the command: a one-line proof indented under it, an outline
-                    // (case … next … qed) at its level, each line
-                    let chars: Vec<char> = t.local.chars().collect();
-                    let mut ls = s.min(chars.len());
-                    while ls > 0 && chars[ls - 1] != '\n' {
-                        ls -= 1;
-                    }
-                    let indent: String = chars[ls..].iter().take_while(|c| **c == ' ' || **c == '\t').collect();
-                    let lines: Vec<&str> = proof.lines().collect();
-                    let text: String = if lines.len() > 1 {
-                        lines.iter().map(|l| format!("\n{indent}{l}")).collect()
-                    } else {
-                        format!("\n{indent}  {proof}")
-                    };
-                    t.insert(e, &text, &*table);
+                    return self.put_text(s, e, &proof);
                 }
-                return self.flush_edits();
+                // Lined up under the command: a one-line proof indented under it, an outline
+                // (case … next … qed) at its level, each line
+                let chars: Vec<char> = t.local.chars().collect();
+                let mut ls = s.min(chars.len());
+                while ls > 0 && chars[ls - 1] != '\n' {
+                    ls -= 1;
+                }
+                let indent: String = chars[ls..].iter().take_while(|c| **c == ' ' || **c == '\t').collect();
+                let lines: Vec<&str> = proof.lines().collect();
+                let text: String = if lines.len() > 1 {
+                    lines.iter().map(|l| format!("\n{indent}{l}")).collect()
+                } else {
+                    format!("\n{indent}  {proof}")
+                };
+                return self.put_text(e, e, &text);
+            }
+            Message::AcceptOffer => {
+                let Some(ws) = &self.workspace else { return Task::none() };
+                let offers = flow::offers_here(ws);
+                if let Some(o) = offers.get(flow::picked(ws, &offers)) {
+                    let m = o.message();
+                    return self.update(m);
+                }
+            }
+            Message::PickOffer(down) => {
+                let Some(ws) = &mut self.workspace else { return Task::none() };
+                let offers = flow::offers_here(ws);
+                if !offers.is_empty() {
+                    let i = flow::picked(ws, &offers);
+                    let next = if down { (i + 1).min(offers.len() - 1) } else { i.saturating_sub(1) };
+                    ws.pick = Some(offers[next].code.clone());
+                }
+            }
+            Message::AllOffers(all) => {
+                if let Some(ws) = &mut self.workspace {
+                    ws.all_offers = all;
+                }
+            }
+            Message::ReplaceTool(text) => {
+                let Some(t) = self.workspace.as_ref().and_then(|w| w.theory.as_ref()) else { return Task::none() };
+                let Some((s, e, _)) = t.caret_command() else { return Task::none() };
+                return self.put_text(s, e, &text);
+            }
+            Message::AskInstead(keyword) => {
+                let task = self.update(Message::ReplaceTool(keyword));
+                return Task::batch([task, self.update(Message::AskKeyword(40))]);
+            }
+            Message::AskKeyword(tries) => {
+                // (asked as a pause in typing asks it, once the line has reached the host)
+                let ready = self.workspace.as_ref().and_then(|w| w.theory.as_ref()).is_some_and(|t| t.settled() && keyword_line(t).is_some());
+                if ready {
+                    self.keyword_gen += 1;
+                    return self.update(Message::KeywordTick(self.keyword_gen));
+                }
+                if tries > 0 {
+                    return Task::perform(
+                        async move {
+                            tokio::time::sleep(Duration::from_millis(150)).await;
+                            tries - 1
+                        },
+                        |n| cosmic::Action::App(Message::AskKeyword(n)),
+                    );
+                }
+            }
+            Message::Escape => {
+                // A tool running at the caret (or an LLM asked there) stops first; the block is
+                // finished with the next Esc
+                if let Some(ws) = &self.workspace {
+                    if let Some(r) = flow::report(ws).filter(|r| r.running && r.stoppable) {
+                        let _ = r;
+                        return self.update(Message::StopTools);
+                    }
+                    if view::fill_here(ws) && matches!(ws.fill.status.as_str(), "asking" | "checking" | "starting") {
+                        return self.update(Message::FillDismiss);
+                    }
+                }
+                return self.update(Message::CloseBlock);
             }
             Message::PopIn => {
                 if let Some(id) = self.popout.take() {
