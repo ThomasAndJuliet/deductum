@@ -276,7 +276,7 @@ fn the_search_panel_lists_hits_with_insert() {
 
 #[test]
 fn a_sorry_warns_and_an_error_is_shown_under_its_proof() {
-    let mut app = lean_app(Mode::Literate);
+    let mut app = lean_app_with(Mode::Literate, &proofs_only());
     app.show_sidebar = false;
     app.show_right = false;
     select(&mut app, "theorem broken", "omega");
@@ -308,4 +308,94 @@ fn typing_a_backslash_abbreviation_offers_the_character() {
     assert_eq!(c[0].text, "∀", "{c:?}");
     let c = super::editor::complete(t.profile, "  intro h\n  cases h with | inl h => ex", &*symbols, &HashMap::new(), &["exact".to_string()], None);
     assert!(c.iter().any(|c| c.text == "exact"), "words of the file");
+}
+
+#[test]
+fn clicking_a_lean_paragraph_puts_the_caret_there() {
+    let size = Size::new(1400.0, 900.0);
+    let click_at = |x: f32| {
+        let mut app = lean_app(Mode::Literate);
+        app.show_sidebar = false;
+        app.show_right = false;
+        let mut h = Harness::new(size);
+        h.draw(&app, "lean-prose-click-0");
+        let msgs = h.click(&app, cosmic::iced::Point::new(x, 153.0));
+        let opened = msgs.iter().any(|m| matches!(m, super::Message::EditBlock(_)));
+        for m in msgs {
+            let _ = cosmic::Application::update(&mut app, m);
+        }
+        (app, opened)
+    };
+    // The page's text column, by where a click opens the block
+    let probe: Vec<i32> = (200..1200).step_by(20).filter(|x| click_at(*x as f32).1).collect();
+    assert!(probe.len() > 6, "the paragraph is under the pointer somewhere: {probe:?}");
+    let (lo, hi) = (probe[1] as f32, probe[probe.len() - 2] as f32);
+    // Clicks along the module doc's first line of text: the caret goes to the word clicked
+    let mut results = Vec::new();
+    for x in [lo, lo + (hi - lo) / 3.0, lo + 2.0 * (hi - lo) / 3.0, hi] {
+        let (app, _) = click_at(x);
+        let be = theory(&app).block_editor.as_ref().expect("open");
+        let text = be.content.text();
+        let li = super::editor::LineIndex::new(&text);
+        let at = li.offset(&text, be.content.cursor().position);
+        assert!(text.starts_with("Every observation"), "the paragraph clicked: {text:?}");
+        let word: String = text.chars().skip(at).take_while(|c| c.is_alphanumeric()).collect();
+        results.push((x, at, word));
+    }
+    println!("{results:?}");
+    assert!(results.windows(2).all(|w| w[0].1 < w[1].1), "{results:?}");
+    assert!(results[0].1 < 12 && results[3].1 > 30, "{results:?}");
+}
+
+#[test]
+fn a_bracket_abbreviation_puts_the_caret_between() {
+    let mut app = lean_app(Mode::Source);
+    let symbols = super::prover::LEAN.symbols(None);
+    let c = super::editor::complete(&super::prover::LEAN, "exact \\<>", &*symbols, &HashMap::new(), &[], None);
+    assert_eq!((c[0].text.as_str(), c[0].back, c[0].replace), ("⟨⟩", 1, 3), "{c:?}");
+    let c = super::editor::complete(&super::prover::LEAN, "x \\floor", &*symbols, &HashMap::new(), &[], None);
+    assert_eq!((c[0].text.as_str(), c[0].back), ("⌊⌋", 1), "{c:?}");
+    let c = super::editor::complete(&super::prover::LEAN, "x \\ennreal", &*symbols, &HashMap::new(), &[], None);
+    assert_eq!((c[0].text.as_str(), c[0].back), ("ℝ≥0∞", 0), "{c:?}");
+    // accepted in the source, the caret is between the brackets
+    let t = app.workspace.as_mut().unwrap().theory.as_mut().unwrap();
+    let at = t.local.find("exact hq").map(|b| t.local[..b].chars().count()).unwrap_or(t.local.chars().count());
+    let text = t.decoded.text.clone();
+    let c = super::editor::complete(&super::prover::LEAN, "exact \\<>", &*symbols, &HashMap::new(), &[], None);
+    // (insert the typed abbreviation, then accept)
+    t.insert(at, "\\<>", &*symbols);
+    let pos = t.lines.position(&t.decoded.text.clone(), at + 3);
+    super::editor::place(&mut t.source, pos);
+    t.completions = c;
+    t.accept_completion(0, &*symbols);
+    assert!(t.local.contains("⟨⟩") && !t.local.contains("\\<>"), "{:?}", &t.local[..200.min(t.local.len())]);
+    let _ = text;
+    let caret = t.source.cursor().position;
+    let line: String = t.decoded.text.lines().nth(caret.line).unwrap().to_string();
+    assert_eq!(&line[..caret.column].chars().last(), &Some('⟨'), "the caret sits after ⟨: {line:?} col {}", caret.column);
+}
+
+#[test]
+fn unsolved_goals_are_summarised_under_the_proof() {
+    let mut app = lean_app_with(Mode::Literate, &proofs_only());
+    app.show_sidebar = false;
+    app.show_right = false;
+    {
+        let symbols = super::prover::LEAN.symbols(None);
+        let t = app.workspace.as_mut().unwrap().theory.as_mut().unwrap();
+        let at = t.local.find("constructor").map(|b| t.local[..b].chars().count()).unwrap();
+        t.prover.messages.push(super::editor::ProverMessage {
+            start: at,
+            end: at + 11,
+            kind: "error".into(),
+            text: "unsolved goals\ncase left\np q : Prop\nhp : p\nhq : q\n⊢ q\n\ncase right\np q : Prop\nhp : p\nhq : q\n⊢ p".into(),
+        });
+        t.refresh(&*symbols);
+    }
+    let t = theory(&app);
+    let strip = t.profile.message_summary(&t.prover.messages.last().unwrap().text);
+    assert_eq!(strip, "unsolved goals (2 goals: case left, case right)");
+    let mut h = Harness::new(Size::new(1100.0, 760.0));
+    let png = h.draw(&app, "lean-unsolved-summary");
+    assert!(ink(&png, 1100, 760, 100..1000, 200..400) > 1000);
 }

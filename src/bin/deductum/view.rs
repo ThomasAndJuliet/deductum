@@ -1180,6 +1180,15 @@ fn message_strip<'a>(t: &Theory, kind: &str, start: usize, text: &str, table: &d
             ..Default::default()
         }
     }));
+    // (a summary stands for more: the whole message is a tooltip on it)
+    let full = text.trim_end();
+    let body: Element<'a, Message> = if t.profile.message_summary(text) != full {
+        widget::tooltip(body, widget::container(widget::text(table.decode(full).text).font(cosmic::font::mono()).size(z(12.0))).padding(6), widget::tooltip::Position::Bottom)
+            .class(theme::Container::Card)
+            .into()
+    } else {
+        body.into()
+    };
     let bar = widget::container(widget::Space::new()).width(Length::Fixed(4.0)).height(Length::Fill).class(theme::Container::custom(move |theme| iced::widget::container::Style {
         background: Some(tone(theme).into()),
         border: Border { radius: 2.0.into(), ..Default::default() },
@@ -1399,7 +1408,7 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
                     .into()
             }
             Kind::Heading(_) | Kind::Text => match t.docs.get(i).cloned().flatten() {
-                Some(doc) => rich_text(doc, typo.clone()).into(),
+                Some(doc) => rich_text(doc, typo.clone()).on_hover(move |p| Message::ProseHover(i, p)).into(),
                 None => mono_block(table.decode(&t.source_text(block.start, block.end)).text, block.status),
             },
             Kind::Formal => {
@@ -2978,12 +2987,21 @@ fn query_route_row<'a>(ws: &'a Workspace) -> Element<'a, Message> {
 
 /// A label in a narrow column, then what it labels
 fn labelled<'a>(label: &'static str, body: Element<'a, Message>) -> Element<'a, Message> {
+    // A one-character label (Lean's `⊢`) is part of the line as the infoview sets it: the code
+    // font at the code's size, then a space, then the target
+    if label.chars().count() <= 1 {
+        return widget::row::with_capacity(2)
+            .spacing(z(4.0))
+            .push(widget::container(widget::text(label).font(cosmic::font::mono()).size(z(13.0)).class(theme::Text::Accent)).padding(Padding { top: 2.0, left: 2.0, ..Padding::ZERO }))
+            .push(widget::container(body).width(Length::Fill))
+            .into();
+    }
     widget::row::with_capacity(2)
         .spacing(spacing().space_xs)
         .push(
             widget::container(widget::text(label).font(cosmic::font::mono()).size(z(12.0)).class(theme::Text::Accent))
                 .padding(Padding { top: 3.0, ..Padding::ZERO })
-                .width(Length::Fixed(z(if label.chars().count() <= 1 { 20.0 } else { 52.0 }))),
+                .width(Length::Fixed(z(52.0))),
         )
         .push(widget::container(body).width(Length::Fill))
         .into()
@@ -3030,7 +3048,9 @@ fn subgoal_card<'a>(ws: &'a Workspace, sg: &super::goals::Subgoal, first: bool, 
             let c = theme.cosmic();
             let base = cell_color(theme);
             iced::widget::container::Style {
-                background: Some(if first { blend(base, Color::from(c.accent_color()), 0.08) } else { base }.into()),
+                // (a later card is a little lighter (darker) than what is round it, so that it reads as a card
+                // in either theme; the first, the one the next step works on, is tinted)
+                background: Some(if first { blend(base, Color::from(c.accent_color()), 0.08) } else { blend(base, Color::from(c.on_bg_color()), 0.06) }.into()),
                 border: Border { radius: 6.0.into(), ..Default::default() },
                 ..Default::default()
             }

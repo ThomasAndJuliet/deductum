@@ -101,6 +101,16 @@ impl Input for LeanSymbols {
             .collect()
     }
 
+    fn search_text(&self, query: &str, limit: usize) -> Vec<crate::input::Hit> {
+        abbrev::search(query, limit)
+            .into_iter()
+            .map(|h| {
+                let how = h.aliases.iter().take(3).map(|a| format!("\\{a}")).collect::<Vec<_>>().join(" ");
+                crate::input::Hit { text: h.text, caret: h.cursor, name: format!("\\{}", h.abbrev), how }
+            })
+            .collect()
+    }
+
     fn abbreviations(&self) -> Vec<(char, &str)> {
         // (Lean source is typed with `\`; ASCII like `->` is Lean syntax, not a shortcut)
         Vec::new()
@@ -264,6 +274,36 @@ fn shown_markdown(text: &str) -> String {
     out.into_iter().collect()
 }
 
+/// A Lean message without the goals it lists, which the goal view shows: the text before the first
+/// goal, and for "unsolved goals" how many there are and their case names, as the infoview's first
+/// line says it. A goal is its `case` line, its hypotheses (`x : T`, with continuation lines
+/// indented) and its `⊢` line
+fn summarise(text: &str) -> String {
+    let lines: Vec<&str> = text.trim_end().lines().collect();
+    let Some(first_turnstile) = lines.iter().position(|l| l.starts_with('⊢')) else { return text.trim_end().to_string() };
+    // The goal's start: back over its hypotheses and case line
+    let mut start = first_turnstile;
+    while start > 0 {
+        let l = lines[start - 1];
+        let hypothesis = l.starts_with(char::is_whitespace) || l.contains(" : ") || l.starts_with("case ");
+        if hypothesis && !l.trim().is_empty() {
+            start -= 1;
+        } else {
+            break;
+        }
+    }
+    let head = lines[..start].join("\n").trim().to_string();
+    let goals = lines.iter().filter(|l| l.starts_with('⊢')).count();
+    let cases: Vec<&str> = lines.iter().filter_map(|l| l.strip_prefix("case ")).map(str::trim).collect();
+    let detail = match (goals, cases.len()) {
+        (1, 0) => String::new(),
+        (1, _) => format!(" ({})", cases.iter().map(|c| format!("case {c}")).collect::<Vec<_>>().join(", ")),
+        (n, 0) => format!(" ({n} goals)"),
+        (n, _) => format!(" ({n} goal{}: {})", if n == 1 { "" } else { "s" }, cases.iter().map(|c| format!("case {c}")).collect::<Vec<_>>().join(", ")),
+    };
+    if head.is_empty() { format!("{} goal{}{detail}", goals, if goals == 1 { "" } else { "s" }) } else { format!("{head}{detail}") }
+}
+
 fn name_at(text: &str, at: usize) -> Option<String> {
     let chars: Vec<char> = text.chars().collect();
     let is = |c: char| c.is_alphanumeric() || matches!(c, '_' | '\'' | '.' | '!' | '?') || ('\u{2080}'..='\u{209c}').contains(&c);
@@ -324,7 +364,13 @@ impl Profile for Lean {
 
     fn prose(&self, body: &str, _codec: &dyn Codec) -> String {
         // (the Markdown as written, without the common indentation)
-        docs::to_markdown(body).markdown
+        docs::reflow(&docs::to_markdown(body).markdown)
+    }
+
+    fn prose_map(&self, body: &str) -> Option<super::ProseMap> {
+        let d = docs::to_markdown(body);
+        let runs = d.segments();
+        Some(super::ProseMap { markdown: docs::reflow(&d.markdown), runs })
     }
 
     fn snippet_at(&self, text: &str, at: usize) -> Option<String> {
@@ -384,7 +430,7 @@ impl Profile for Lean {
             .filter_map(|v| v.split_once(" : ").map(|(n, t)| (n.to_string(), t.to_string())))
             .collect();
         let g = edit::Goal { case: None, hyps, target: goal.conclusion.clone() };
-        edit::goal_completions(prefix, replace, &g).into_iter().map(|c| Completion { replace: c.replace, text: c.text, label: c.label }).collect()
+        edit::goal_completions(prefix, replace, &g).into_iter().map(|c| Completion { back: 0, replace: c.replace, text: c.text, label: c.label }).collect()
     }
 
     fn in_term(&self, _before: &str) -> bool {
@@ -451,6 +497,10 @@ impl Profile for Lean {
 
     fn interrupted(&self, text: &str) -> bool {
         text.contains("interrupted") || text.contains("cancelled")
+    }
+
+    fn message_summary(&self, text: &str) -> String {
+        summarise(text)
     }
 
     fn present_goal<'a>(&self, sg: &'a Subgoal) -> GoalPresentation<'a> {
@@ -681,6 +731,7 @@ mod tests {
     fn prose_is_markdown_without_the_indent() {
         let md = Lean.prose("\n  # Title\n\n  Some `code` and $x^2$.\n", &Plain);
         assert_eq!(md, "# Title\n\nSome `code` and $x^2$.");
+        assert_eq!(Lean.prose("\n  one wrapped\n  paragraph\n", &Plain), "one wrapped paragraph");
         assert_eq!(Lean.snippet_at("so $x + 0 = x$ here", 5).as_deref(), Some("$x + 0 = x$"));
         let c = Lean.prose_code_classes("a `b` and $c$");
         assert_eq!(c[3], Some(Hl::Sem(Sem::Free)));
@@ -695,6 +746,50 @@ mod tests {
         assert_eq!(shown.chars().count(), text.chars().count());
         assert!(shown.starts_with("Some prose over two lines."), "{shown:?}");
         assert!(shown.contains("```lean\ndef a := 1\n  def b := 2\n```"), "{shown:?}");
+    }
+
+    #[test]
+    fn prose_offsets_map_back_to_the_source() {
+        let body = "\n  # Title\n\n  Some `code`, $x^2$ and ∀.\n";
+        let map = Lean.prose_map(body).unwrap();
+        assert_eq!(map.markdown, "# Title\n\nSome `code`, $x^2$ and ∀.");
+        for needle in ["Title", "x^2", "∀", "`code`"] {
+            let md = map.markdown.find(needle).unwrap();
+            let src = map.source_char(md);
+            assert_eq!(body.chars().skip(src).take(needle.chars().count()).collect::<String>(), needle);
+            assert_eq!(map.markdown_byte(src), md);
+        }
+        assert_eq!(map.source_char(map.markdown.len()), body.trim_end().chars().count());
+        // Isabelle's conversion rewrites too much to have a map
+        assert!(prover::ISABELLE.prose_map("x").is_none());
+    }
+
+    #[test]
+    fn a_theory_maps_a_rendered_offset_into_the_file() {
+        use crate::editor::{Mode, Theory};
+        let doc = json!({"text": DEMO, "revision": 1, "prover": {}});
+        let t = Theory::new("/x.lean".into(), &doc, &LeanSymbols, Arc::new(HashMap::new()), Mode::Literate, &Lean);
+        let i = t.blocks.iter().position(|b| b.kind == Kind::Text && t.prose_maps[t.blocks.iter().position(|x| x == b).unwrap()].as_ref().is_some_and(|m| m.markdown.contains("enabling"))).unwrap();
+        let md = t.prose_maps[i].as_ref().unwrap().markdown.find("enabling").unwrap();
+        let at = t.source_of_markdown(i, md).unwrap();
+        assert_eq!(t.local.chars().skip(at).take(8).collect::<String>(), "enabling");
+        assert_eq!(t.source_of_markdown(0, 0), None, "the imports are not prose");
+    }
+
+    #[test]
+    fn messages_do_not_list_their_goals() {
+        assert_eq!(Lean.message_summary("unsolved goals\nn : Nat\n⊢ n + 0 = n"), "unsolved goals");
+        assert_eq!(
+            Lean.message_summary("unsolved goals\ncase zero\n⊢ P 0\n\ncase succ\nn : Nat\nih : P n\n⊢ P (n + 1)"),
+            "unsolved goals (2 goals: case zero, case succ)"
+        );
+        assert_eq!(Lean.message_summary("unsolved goals\na : Nat\n⊢ p\n\nb : Nat\n⊢ q"), "unsolved goals (2 goals)");
+        // a hypothesis that runs over lines
+        assert_eq!(Lean.message_summary("unsolved goals\nh : ∃ x,\n    x > 0\n⊢ False"), "unsolved goals");
+        // an error with its own explanation first
+        assert_eq!(Lean.message_summary("type mismatch\n  h\nhas type\n  p : Prop\nbut is expected to have type\n  q : Prop"), "type mismatch\n  h\nhas type\n  p : Prop\nbut is expected to have type\n  q : Prop");
+        assert_eq!(Lean.message_summary("linarith failed to find a contradiction\ncase a\nx : ℝ\n⊢ False"), "linarith failed to find a contradiction (case a)");
+        assert_eq!(Lean.message_summary("declaration uses 'sorry'"), "declaration uses 'sorry'");
     }
 
     #[test]
