@@ -1180,6 +1180,15 @@ fn message_strip<'a>(t: &Theory, kind: &str, start: usize, text: &str, table: &d
             ..Default::default()
         }
     }));
+    // (a summary stands for more: the whole message is a tooltip on it)
+    let full = text.trim_end();
+    let body: Element<'a, Message> = if t.profile.message_summary(text) != full {
+        widget::tooltip(body, widget::container(widget::text(table.decode(full).text).font(cosmic::font::mono()).size(z(12.0))).padding(6), widget::tooltip::Position::Bottom)
+            .class(theme::Container::Card)
+            .into()
+    } else {
+        body.into()
+    };
     let bar = widget::container(widget::Space::new()).width(Length::Fixed(4.0)).height(Length::Fill).class(theme::Container::custom(move |theme| iced::widget::container::Style {
         background: Some(tone(theme).into()),
         border: Border { radius: 2.0.into(), ..Default::default() },
@@ -3003,12 +3012,21 @@ fn query_route_row<'a>(ws: &'a Workspace) -> Element<'a, Message> {
 
 /// A label in a narrow column, then what it labels
 fn labelled<'a>(label: &'static str, body: Element<'a, Message>) -> Element<'a, Message> {
+    // A one-character label (Lean's `⊢`) is part of the line as the infoview sets it: the code
+    // font at the code's size, then a space, then the target
+    if label.chars().count() <= 1 {
+        return widget::row::with_capacity(2)
+            .spacing(z(4.0))
+            .push(widget::container(widget::text(label).font(cosmic::font::mono()).size(z(13.0)).class(theme::Text::Accent)).padding(Padding { top: 2.0, left: 2.0, ..Padding::ZERO }))
+            .push(widget::container(body).width(Length::Fill))
+            .into();
+    }
     widget::row::with_capacity(2)
         .spacing(spacing().space_xs)
         .push(
             widget::container(widget::text(label).font(cosmic::font::mono()).size(z(12.0)).class(theme::Text::Accent))
                 .padding(Padding { top: 3.0, ..Padding::ZERO })
-                .width(Length::Fixed(z(if label.chars().count() <= 1 { 20.0 } else { 52.0 }))),
+                .width(Length::Fixed(z(52.0))),
         )
         .push(widget::container(body).width(Length::Fill))
         .into()

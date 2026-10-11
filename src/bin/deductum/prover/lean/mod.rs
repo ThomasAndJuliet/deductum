@@ -274,6 +274,36 @@ fn shown_markdown(text: &str) -> String {
     out.into_iter().collect()
 }
 
+/// A Lean message without the goals it lists, which the goal view shows: the text before the first
+/// goal, and for "unsolved goals" how many there are and their case names, as the infoview's first
+/// line says it. A goal is its `case` line, its hypotheses (`x : T`, with continuation lines
+/// indented) and its `⊢` line
+fn summarise(text: &str) -> String {
+    let lines: Vec<&str> = text.trim_end().lines().collect();
+    let Some(first_turnstile) = lines.iter().position(|l| l.starts_with('⊢')) else { return text.trim_end().to_string() };
+    // The goal's start: back over its hypotheses and case line
+    let mut start = first_turnstile;
+    while start > 0 {
+        let l = lines[start - 1];
+        let hypothesis = l.starts_with(char::is_whitespace) || l.contains(" : ") || l.starts_with("case ");
+        if hypothesis && !l.trim().is_empty() {
+            start -= 1;
+        } else {
+            break;
+        }
+    }
+    let head = lines[..start].join("\n").trim().to_string();
+    let goals = lines.iter().filter(|l| l.starts_with('⊢')).count();
+    let cases: Vec<&str> = lines.iter().filter_map(|l| l.strip_prefix("case ")).map(str::trim).collect();
+    let detail = match (goals, cases.len()) {
+        (1, 0) => String::new(),
+        (1, _) => format!(" ({})", cases.iter().map(|c| format!("case {c}")).collect::<Vec<_>>().join(", ")),
+        (n, 0) => format!(" ({n} goals)"),
+        (n, _) => format!(" ({n} goal{}: {})", if n == 1 { "" } else { "s" }, cases.iter().map(|c| format!("case {c}")).collect::<Vec<_>>().join(", ")),
+    };
+    if head.is_empty() { format!("{} goal{}{detail}", goals, if goals == 1 { "" } else { "s" }) } else { format!("{head}{detail}") }
+}
+
 fn name_at(text: &str, at: usize) -> Option<String> {
     let chars: Vec<char> = text.chars().collect();
     let is = |c: char| c.is_alphanumeric() || matches!(c, '_' | '\'' | '.' | '!' | '?') || ('\u{2080}'..='\u{209c}').contains(&c);
@@ -467,6 +497,10 @@ impl Profile for Lean {
 
     fn interrupted(&self, text: &str) -> bool {
         text.contains("interrupted") || text.contains("cancelled")
+    }
+
+    fn message_summary(&self, text: &str) -> String {
+        summarise(text)
     }
 
     fn present_goal<'a>(&self, sg: &'a Subgoal) -> GoalPresentation<'a> {
@@ -739,6 +773,22 @@ mod tests {
         let at = t.source_of_markdown(i, md).unwrap();
         assert_eq!(t.local.chars().skip(at).take(8).collect::<String>(), "enabling");
         assert_eq!(t.source_of_markdown(0, 0), None, "the imports are not prose");
+    }
+
+    #[test]
+    fn messages_do_not_list_their_goals() {
+        assert_eq!(Lean.message_summary("unsolved goals\nn : Nat\n⊢ n + 0 = n"), "unsolved goals");
+        assert_eq!(
+            Lean.message_summary("unsolved goals\ncase zero\n⊢ P 0\n\ncase succ\nn : Nat\nih : P n\n⊢ P (n + 1)"),
+            "unsolved goals (2 goals: case zero, case succ)"
+        );
+        assert_eq!(Lean.message_summary("unsolved goals\na : Nat\n⊢ p\n\nb : Nat\n⊢ q"), "unsolved goals (2 goals)");
+        // a hypothesis that runs over lines
+        assert_eq!(Lean.message_summary("unsolved goals\nh : ∃ x,\n    x > 0\n⊢ False"), "unsolved goals");
+        // an error with its own explanation first
+        assert_eq!(Lean.message_summary("type mismatch\n  h\nhas type\n  p : Prop\nbut is expected to have type\n  q : Prop"), "type mismatch\n  h\nhas type\n  p : Prop\nbut is expected to have type\n  q : Prop");
+        assert_eq!(Lean.message_summary("linarith failed to find a contradiction\ncase a\nx : ℝ\n⊢ False"), "linarith failed to find a contradiction (case a)");
+        assert_eq!(Lean.message_summary("declaration uses 'sorry'"), "declaration uses 'sorry'");
     }
 
     #[test]
