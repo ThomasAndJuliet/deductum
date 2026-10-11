@@ -34,4 +34,6 @@ merman = { version = "0.8", default-features = false, features = [
     "diagram-pie",
 ] }
 serde_json = "1"
+# Code coloured by language, with Sublime Text's grammars, in pure Rust
+syntect = { version = "5.3", default-features = false, features = ["default-syntaxes", "regex-fancy"] }
 log = "0.4"

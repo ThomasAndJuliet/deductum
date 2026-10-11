@@ -174,6 +174,8 @@ fn ct_color(color: Color) -> cosmic_text::Color {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Tone {
     Normal,
+    /// A token of code, coloured by its class
+    Code(crate::highlight::Class),
     Added,
     Removed,
     Muted,
@@ -260,7 +262,22 @@ fn code_cell(lang: &str, text: &str) -> Cell {
             start += line.len();
         }
     } else {
-        cell.spans.push(Span { range: 0..text.len(), kind: SpanKind::Text { style: code, link: None, tone: Tone::Normal } });
+        // Coloured by its language, plain between tokens
+        let mut at = 0;
+        let mut push = |range: Range<usize>, tone: Tone| {
+            if !range.is_empty() {
+                cell.spans.push(Span { range, kind: SpanKind::Text { style: code, link: None, tone } });
+            }
+        };
+        for (range, class) in crate::highlight::tokens(text, lang).iter() {
+            push(at..range.start, Tone::Normal);
+            push(range.clone(), Tone::Code(*class));
+            at = range.end;
+        }
+        push(at..text.len(), Tone::Normal);
+        if text.is_empty() {
+            cell.spans.push(Span { range: 0..0, kind: SpanKind::Text { style: code, link: None, tone: Tone::Normal } });
+        }
     }
     cell
 }
@@ -1176,6 +1193,12 @@ fn shape(
                         Tone::Added => attrs = attrs.color(ct_color(t.added)),
                         Tone::Removed => attrs = attrs.color(ct_color(t.removed)),
                         Tone::Muted => attrs = attrs.color(ct_color(t.muted)),
+                        Tone::Code(class) => {
+                            attrs = attrs.color(ct_color(crate::highlight::color(*class, t)));
+                            if crate::highlight::italic(*class) {
+                                attrs = attrs.style(FontStyle::Italic);
+                            }
+                        }
                         Tone::Normal => {}
                     }
                     (text, attrs)

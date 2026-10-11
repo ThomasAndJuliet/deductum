@@ -370,12 +370,36 @@ fn fence_closed(block: &str) -> bool {
 /// Rewrite `\(…\)` as `$…$`, `\[…\]` as `$$…$$`, and wrap bare display
 /// environments such as `\begin{align}` in `$$`, outside code
 pub fn normalize_math(text: &str) -> String {
+    normalize_math_mapped(text).0
+}
+
+/// Where a rewritten piece of text came from: `out` in the rewritten text
+/// stands for `src` in the original
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Rewrite {
+    pub src: std::ops::Range<usize>,
+    pub out: std::ops::Range<usize>,
+}
+
+/// [`normalize_math`], with each rewrite it made, in order, so that offsets
+/// into the rewritten text map back to the original: an editor parses the
+/// rewritten text and edits the original
+pub fn normalize_math_mapped(text: &str) -> (String, Vec<Rewrite>) {
     const ENVIRONMENTS: [&str; 8] =
         ["align", "align*", "equation", "equation*", "gather", "gather*", "multline", "eqnarray"];
     let mut out = String::with_capacity(text.len() + 16);
+    let mut rewrites = Vec::new();
+    let mut insert = |out: &mut String, rewrites: &mut Vec<Rewrite>, src: std::ops::Range<usize>, with: &str| {
+        let start = out.len();
+        out.push_str(with);
+        rewrites.push(Rewrite { src, out: start..out.len() });
+    };
     let mut in_fence: Option<String> = None;
     let mut in_display = false;
+    let mut line_start = 0;
     for line in text.split_inclusive('\n') {
+        let at = line_start;
+        line_start += line.len();
         let trimmed = line.trim_start();
         if let Some(fence) = &in_fence {
             if trimmed.starts_with(fence.as_str()) {
@@ -393,12 +417,11 @@ pub fn normalize_math(text: &str) -> String {
         // Environments on lines of their own
         let begins = ENVIRONMENTS.iter().any(|env| trimmed.starts_with(&format!("\\begin{{{env}}}")));
         if begins && !in_display {
-            out.push_str("$$\n");
+            insert(&mut out, &mut rewrites, at..at, "$$\n");
         }
-        let mut converted = String::with_capacity(line.len());
         let mut chars = line.char_indices().peekable();
         let mut in_code = 0usize;
-        while let Some((_, c)) = chars.next() {
+        while let Some((i, c)) = chars.next() {
             if c == '`' {
                 let mut run = 1;
                 while chars.peek().is_some_and(|(_, c)| *c == '`') {
@@ -410,49 +433,84 @@ pub fn normalize_math(text: &str) -> String {
                 } else if in_code == run {
                     in_code = 0;
                 }
-                converted.extend(std::iter::repeat_n('`', run));
+                out.extend(std::iter::repeat_n('`', run));
                 continue;
             }
             if c == '\\' && in_code == 0 {
                 match chars.peek().map(|(_, c)| *c) {
                     Some('(') | Some(')') => {
                         chars.next();
-                        converted.push('$');
+                        insert(&mut out, &mut rewrites, at + i..at + i + 2, "$");
                         continue;
                     }
                     Some('[') => {
                         chars.next();
-                        converted.push_str("$$");
+                        insert(&mut out, &mut rewrites, at + i..at + i + 2, "$$");
                         in_display = true;
                         continue;
                     }
                     Some(']') if in_display => {
                         chars.next();
-                        converted.push_str("$$");
+                        insert(&mut out, &mut rewrites, at + i..at + i + 2, "$$");
                         in_display = false;
                         continue;
                     }
                     Some(next) => {
-                        converted.push(c);
-                        converted.push(next);
+                        out.push(c);
+                        out.push(next);
                         chars.next();
                         continue;
                     }
                     None => {}
                 }
             }
-            converted.push(c);
+            out.push(c);
         }
-        out.push_str(&converted);
         let ends = ENVIRONMENTS.iter().any(|env| trimmed.trim_end().ends_with(&format!("\\end{{{env}}}")));
-        if (ends || (begins && trimmed.trim_end().ends_with('}') && ends)) && !in_display {
-            if !out.ends_with('\n') {
-                out.push('\n');
+        if ends && !in_display {
+            // The line's own break stands for the closing fence's line, so
+            // the maths ends where its last line does
+            let end = at + line.len();
+            if out.ends_with('\n') {
+                out.pop();
+                insert(&mut out, &mut rewrites, end - 1..end, "\n$$\n");
+            } else {
+                insert(&mut out, &mut rewrites, end..end, "\n$$\n");
             }
-            out.push_str("$$\n");
         }
     }
-    out
+    (out, rewrites)
+}
+
+/// Maps offsets into a rewritten text back to the original
+pub struct OffsetMap<'a> {
+    rewrites: &'a [Rewrite],
+}
+
+impl<'a> OffsetMap<'a> {
+    pub fn new(rewrites: &'a [Rewrite]) -> Self {
+        OffsetMap { rewrites }
+    }
+
+    /// The original offset of rewritten offset `at`. Inside a rewrite, its
+    /// start; at its end, the end of what it replaced
+    pub fn source(&self, at: usize) -> usize {
+        // The last rewrite starting at or before `at`
+        let i = self.rewrites.partition_point(|r| r.out.start <= at);
+        let Some(r) = i.checked_sub(1).map(|i| &self.rewrites[i]) else { return at };
+        if at >= r.out.end {
+            r.src.end + (at - r.out.end)
+        } else if at == r.out.start {
+            r.src.start
+        } else {
+            r.src.start
+        }
+    }
+
+    pub fn range(&self, range: &std::ops::Range<usize>) -> std::ops::Range<usize> {
+        let start = self.source(range.start);
+        start..self.source(range.end).max(start)
+    }
 }
 
 #[cfg(test)]
@@ -496,6 +554,23 @@ mod tests {
         let doc = parse("Before $$x$$ after");
         assert_eq!(doc.blocks.len(), 3, "{doc:#?}");
         assert!(matches!(doc.blocks[1], Block::Math { .. }));
+    }
+
+    #[test]
+    fn rewritten_offsets_map_back() {
+        let text = "a \\(x\\) b\n\\[y\\]\n\\begin{align}\nz\n\\end{align}\nc\n";
+        let (out, rewrites) = normalize_math_mapped(text);
+        assert_eq!(out, "a $x$ b\n$$y$$\n$$\n\\begin{align}\nz\n\\end{align}\n$$\nc\n");
+        assert_eq!(out, normalize_math(text));
+        let map = OffsetMap::new(&rewrites);
+        // "x" and " b"
+        assert_eq!(&text[map.range(&(3..4))], "x");
+        assert_eq!(&text[map.range(&(2..5))], "\\(x\\)");
+        assert_eq!(&text[map.source(5)..map.source(7)], " b");
+        // The display maths, and the environment with its inserted fences
+        let env = out.find("$$\n\\begin").unwrap()..out.rfind("$$").unwrap() + 2;
+        assert_eq!(&text[map.range(&env)], "\\begin{align}\nz\n\\end{align}");
+        assert_eq!(&text[map.source(out.len() - 2)..], "c\n");
     }
 
     #[test]
