@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! Deductum's window: sessions on the left, the theory in the middle in its
-//! literate or source view (design C14), proof output, Sledgehammer, agents
-//! and history on the right.
+//! literate or source view (design C14), proof output, the prover's tools,
+//! agents and history on the right. The prover's panels, tools and settings
+//! show as the session's capabilities offer them (provers §5.2), laid out with
+//! the profile's labels.
 
 use std::sync::{Arc, LazyLock};
 
@@ -13,6 +15,7 @@ use cosmic::{iced, theme};
 use serde_json::Value;
 
 use super::editor::{Mode, Theory, highlight_format};
+use super::prover::{GoalBody, InsertContext, PaletteEntry, Setting, Tool};
 use super::theory::{Block, Kind, Status};
 use prose_render::rich::{Typography, rich_text};
 use super::{App, LeftMode, Message, Panel, Workspace, file_name, link};
@@ -353,7 +356,7 @@ fn nav_item<'a>(label: String, detail: Option<String>, indent: f32, color: Optio
         .into()
 }
 
-fn block_title(t: &Theory, table: &super::symbols::Table, block: &Block, max: usize) -> String {
+fn block_title(t: &Theory, table: &dyn super::codec::Symbols, block: &Block, max: usize) -> String {
     let text = match block.body {
         Some((s, e)) => t.source_text(s, e),
         None => t.source_text(block.start, block.end),
@@ -367,26 +370,19 @@ fn outline<'a>(app: &'a App, t: &'a Theory) -> Element<'a, Message> {
     let mut col = widget::column::with_capacity(t.blocks.len()).spacing(1);
     for block in &t.blocks {
         if let Kind::Heading(level) = block.kind {
-            let title = block_title(t, &table, block, 60).replace("\\<open>", "").replace("\\<close>", "");
+            let title = block_title(t, &*table, block, 60).replace("\\<open>", "").replace("\\<close>", "");
             col = col.push(nav_item(title, None, 12.0 * (level.saturating_sub(1) as f32), None, Message::Goto(block.start)));
         }
     }
     col.into()
 }
 
-fn is_goal(block: &Block, kinds: &std::collections::HashMap<String, String>) -> bool {
-    match kinds.get(&block.name) {
-        Some(k) => k.starts_with("thy_goal"),
-        None => matches!(block.name.as_str(), "lemma" | "theorem" | "corollary" | "proposition" | "schematic_goal" | "lemmas"),
-    }
-}
-
 fn theorems<'a>(app: &'a App, t: &'a Theory) -> Element<'a, Message> {
     let table = app.table(&app.workspace.as_ref().map(|w| w.machine.clone()).unwrap_or_default());
     let mut col = widget::column::with_capacity(t.blocks.len()).spacing(1);
-    for block in t.blocks.iter().filter(|b| b.kind == Kind::Formal && is_goal(b, &t.kinds)) {
-        let title = block_title(t, &table, block, 48);
-        let sorry = block.commands.iter().any(|c| c.name == "sorry" || c.name == "oops");
+    for block in t.blocks.iter().filter(|b| b.kind == Kind::Formal && t.profile.is_statement(b, &t.kinds)) {
+        let title = block_title(t, &*table, block, 48);
+        let sorry = block.commands.iter().any(|c| t.profile.unfinished().contains(&c.name.as_str()));
         let status = if sorry && block.status == Status::Finished { Status::Warned } else { block.status };
         col = col.push(nav_item(title, sorry.then(|| "unfinished".to_string()), 0.0, Some(status), Message::Goto(block.start)));
     }
@@ -416,9 +412,9 @@ fn problems<'a>(app: &'a App, t: &'a Theory) -> Element<'a, Message> {
         col = col.push(nav_item(format!("Error, line {line}"), Some(text), 0.0, Some(Status::Failed), Message::Goto(m.start)));
     }
     for block in &t.blocks {
-        for c in block.commands.iter().filter(|c| c.name == "sorry" || c.name == "oops") {
+        for c in block.commands.iter().filter(|c| t.profile.unfinished().contains(&c.name.as_str())) {
             let line = super::ot::line_col(&t.local, c.start).0;
-            col = col.push(nav_item(format!("{}, line {line}", c.name), Some(block_title(t, &table, block, 48)), 0.0, Some(Status::Warned), Message::Goto(c.start)));
+            col = col.push(nav_item(format!("{}, line {line}", c.name), Some(block_title(t, &*table, block, 48)), 0.0, Some(Status::Warned), Message::Goto(c.start)));
         }
     }
     col.into()
@@ -477,7 +473,7 @@ fn theories<'a>(app: &'a App, ws: &'a Workspace) -> Element<'a, Message> {
     let mut col = widget::column::with_capacity(64).spacing(1).padding(Padding { left: sp.space_xs as f32, ..Padding::ZERO });
     let Some(info) = &ws.info else { return widget::text::caption("Loading…").into() };
     let folder = info["folder"].as_str().unwrap_or("");
-    let all: Vec<&Value> = info["theories"].as_array().into_iter().flatten().filter(|t| t["path"].as_str().is_some_and(|p| p.ends_with(".thy"))).collect();
+    let all: Vec<&Value> = info["theories"].as_array().into_iter().flatten().filter(|t| t["path"].as_str().is_some_and(|p| ws.profile.is_document(p))).collect();
     // A big folder gets a filter
     if all.len() > 10 {
         col = col.push(
@@ -491,11 +487,11 @@ fn theories<'a>(app: &'a App, ws: &'a Workspace) -> Element<'a, Message> {
     for t in &all {
         let path = t["path"].as_str().unwrap_or("");
         let rel = path.strip_prefix(folder).unwrap_or(path).trim_start_matches('/');
-        if !filter.is_empty() && super::symbols::fuzzy(&filter, &rel.to_lowercase()).is_none() {
+        if !filter.is_empty() && super::input::fuzzy(&filter, &rel.to_lowercase()).is_none() {
             continue;
         }
         let (dir, name) = rel.rsplit_once('/').unwrap_or(("", rel));
-        groups.entry(dir.to_string()).or_default().push((name.trim_end_matches(".thy").to_string(), *t));
+        groups.entry(dir.to_string()).or_default().push((ws.profile.document_name(name).to_string(), *t));
     }
     if groups.is_empty() {
         col = col.push(widget::text::caption("No theory matches"));
@@ -541,7 +537,7 @@ fn theories<'a>(app: &'a App, ws: &'a Workspace) -> Element<'a, Message> {
                         .padding(Padding { left: 6.0 + indent, right: 6.0, top: 2.0, bottom: 2.0 })
                         .class(if current { theme::Button::Standard } else { theme::Button::MenuItem })
                         .on_press(Message::OpenTheory(path.clone())),
-                    widget::text::caption(format!("{name}.thy")),
+                    widget::text::caption(file_name(&path).to_string()),
                     widget::tooltip::Position::Right,
                 ),
             );
@@ -710,7 +706,7 @@ fn workspace<'a>(app: &'a App, ws: &'a Workspace, right: bool, main_width: f32) 
             let mut body: Element<'_, Message> = match t.mode {
                 Mode::Literate if beside && goal_placement(true, 0) == GoalPlacement::Pinned => {
                     // the goal column beside the page, at the top of the view, not scrolling
-                    let goal: Element<'_, Message> = match inline_goal(Some(ws), &app.table(&ws.machine)) {
+                    let goal: Element<'_, Message> = match inline_goal(Some(ws), &*app.table(&ws.machine)) {
                         Some(g) => widget::container(widget::scrollable(g)).width(Length::Fixed(goal_width)).into(),
                         None => widget::Space::new().width(Length::Fixed(goal_width)).into(),
                     };
@@ -729,7 +725,7 @@ fn workspace<'a>(app: &'a App, ws: &'a Workspace, right: bool, main_width: f32) 
                     // (the goal column narrows to the room there is, down to a readable width)
                     let room = (main_width - source_width - z(70.0)).min(goal_width);
                     let fits = (ws.output.is_some() || fill_here(ws)) && room >= z(320.0) && goal_beside_on();
-                    source(ws, t, if fits { None } else { Some(ws) }, &app.table(&ws.machine), fits.then_some((room, source_width)), source_width.min(main_width - z(24.0)))
+                    source(ws, t, if fits { None } else { Some(ws) }, &*app.table(&ws.machine), fits.then_some((room, source_width)), source_width.min(main_width - z(24.0)))
                 }
             };
             let _ = &mut body;
@@ -949,7 +945,7 @@ fn prover_status<'a>(ws: &'a Workspace, t: &'a Theory) -> Option<Element<'a, Mes
     if failed > 0 {
         parts.push(format!("{failed} failing"));
     }
-    let is_tool = |r: &Value| r["name"].as_str().is_some_and(|n| super::editor::TOOLS.contains(&n));
+    let is_tool = |r: &Value| r["name"].as_str().is_some_and(|n| ws.caps.typed_tool(n).is_some());
     if let Some(longest) = running.iter().find(|r| !is_tool(r))
         && longest["seconds"].as_u64().unwrap_or(0) >= 5
     {
@@ -985,18 +981,21 @@ fn prover_status<'a>(ws: &'a Workspace, t: &'a Theory) -> Option<Element<'a, Mes
     // A proof tool typed in the text, running: stoppable on its own
     // A proof tool typed in the text: its own entry, with its own Stop
     if let Some(tool) = running.iter().find(|r| is_tool(r)) {
-        let label = format!("{} {} s", tool["name"].as_str().unwrap_or(""), tool["seconds"].as_u64().unwrap_or(0));
+        let name = tool["name"].as_str().unwrap_or("");
+        let label = format!("{name} {} s", tool["seconds"].as_u64().unwrap_or(0));
         if ws.tools_stopping {
             out = out.push(widget::text::body(format!("· {label} · stopping…")));
-        } else {
+        } else if ws.caps.typed_tool(name).is_some_and(|t| t.stop) {
             out = out
                 .push(widget::text::body(format!("· {label}")))
                 .push(icon_button("process-stop-symbolic", "Stop it (as if its time ran out)", Some(Message::StopTools)));
+        } else {
+            out = out.push(widget::text::body(format!("· {label}")));
         }
     }
-    // Interrupt: for proofs other than the tools
+    // Interrupt: for proofs other than the tools, where the prover can
     let others = running.iter().any(|r| !is_tool(r));
-    if busy && others {
+    if busy && others && ws.caps.interrupt {
         out = out.push(icon_button("process-stop-symbolic", "Interrupt running proofs", Some(Message::Lifecycle("cancel"))));
     }
     Some(out.into())
@@ -1013,7 +1012,9 @@ fn activity_panel(ws: &Workspace) -> Element<'_, Message> {
             prover["cpu"].as_u64().map(|c| format!(" · CPU {c}%")).unwrap_or_default(),
             prover["rss_mb"].as_u64().map(|m| format!(" · {:.1} GB", m as f64 / 1000.0)).unwrap_or_default()
         )));
-        col = col.push(widget::button::standard("Interrupt running proofs").on_press(Message::Lifecycle("cancel")));
+        if ws.caps.interrupt {
+            col = col.push(widget::button::standard("Interrupt running proofs").on_press(Message::Lifecycle("cancel")));
+        }
         let running = act["running"].as_array().cloned().unwrap_or_default();
         if !running.is_empty() {
             col = col.push(widget::text::caption_heading("Running"));
@@ -1053,21 +1054,27 @@ fn activity_panel(ws: &Workspace) -> Element<'_, Message> {
     widget::scrollable(col).height(Length::Fill).into()
 }
 
-/// Quickcheck, Nitpick and the simple methods at the caret, without editing the theory
-fn quickcheck_panel<'a>(ws: &'a Workspace, table: &super::symbols::Table) -> Element<'a, Message> {
+/// The session's counterexample finders and quick proofs at the caret, without editing the
+/// document (Isabelle: Quickcheck, Nitpick, try0, solve_direct)
+fn counterexamples_panel<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Element<'a, Message> {
     let sp = spacing();
     let q = &ws.cex;
+    let caps = &ws.caps;
     let mut col = widget::column::with_capacity(12).spacing(sp.space_xs);
-    col = col.push(widget::text::caption("Counterexamples and quick proofs for the goal at the caret. Typing quickcheck or nitpick in the proof works too."));
-    col = col.push(
-        widget::row::with_capacity(4)
-            .spacing(4)
-            .push(widget::button::suggested("Quickcheck").on_press(Message::RunCommand("quickcheck")))
-            .push(widget::button::standard("Nitpick").on_press(Message::RunCommand("nitpick")))
-            .push(widget::button::standard("Try methods").on_press(Message::RunCommand("try0")))
-            .push(widget::button::standard("Solve direct").on_press(Message::RunCommand("solve_direct"))),
-    );
-    col = col.push(widget::text_input("options, e.g. timeout = 60, size = 8, tester = random", &ws.cex_params).on_input(Message::CommandParams));
+    let typed: Vec<&str> = caps.counterexamples.iter().filter(|n| caps.typed_tool(n).is_some()).map(String::as_str).collect();
+    let typing = if typed.is_empty() { String::new() } else { format!(" Typing {} in the proof works too.", typed.join(" or ")) };
+    col = col.push(widget::text::caption(format!("Counterexamples and quick proofs for the goal at the caret.{typing}")));
+    // (the finders, the first suggested, then the quick proofs)
+    let label = |name: &str| caps.tool(name).map_or_else(|| name.to_string(), |t| t.label.clone());
+    let names: Vec<&str> = caps.counterexamples.iter().map(String::as_str).chain(caps.tools.iter().filter(|t| t.quick).map(|t| t.name.as_str())).collect();
+    let mut buttons = widget::row::with_capacity(names.len()).spacing(4);
+    for (i, name) in names.into_iter().enumerate() {
+        let b = if i == 0 { widget::button::suggested(label(name)) } else { widget::button::standard(label(name)) };
+        buttons = buttons.push(b.on_press(Message::RunCommand(name.to_string())));
+    }
+    col = col.push(buttons);
+    let params = caps.counterexamples.iter().filter_map(|n| caps.tool(n)).map(|t| t.params.as_str()).find(|p| !p.is_empty()).unwrap_or("options");
+    col = col.push(widget::text_input(params, &ws.cex_params).on_input(Message::CommandParams));
     if !q.status.is_empty() {
         col = col.push(
             widget::row::with_capacity(2)
@@ -1133,16 +1140,14 @@ fn mono_block<'a>(text: String, status: Status) -> Element<'a, Message> {
     widget::row::with_capacity(2).spacing(4).height(Length::Shrink).push(strip).push(body).into()
 }
 
-/// A formal block as the source view colours it
-/// Add a text, section or lemma after a block (or at the end), and delete the block
-fn block_actions<'a>(after: Option<usize>, delete: bool) -> Element<'a, Message> {
+/// Add a block after a block (or at the end) from the profile's templates (a text, section or
+/// lemma), and delete the block
+fn block_actions<'a>(t: &Theory, after: Option<usize>, delete: bool) -> Element<'a, Message> {
     let small = |label: &'static str, msg: Message| widget::button::text(label).font_size(z(12.0) as u16).padding([0, 6]).on_press(msg);
-    let mut row = widget::row::with_capacity(5)
-        .spacing(2)
-        .align_y(Alignment::Center)
-        .push(small("+ Text", Message::InsertBlock(after, "text")))
-        .push(small("+ Section", Message::InsertBlock(after, "section")))
-        .push(small("+ Lemma", Message::InsertBlock(after, "lemma")));
+    let mut row = widget::row::with_capacity(5).spacing(2).align_y(Alignment::Center);
+    for template in t.profile.block_templates() {
+        row = row.push(small(template.label, Message::InsertBlock(after, template.kind)));
+    }
     if let Some(i) = after.filter(|_| delete) {
         row = row.push(widget::Space::new().width(Length::Fixed(12.0))).push(small("Delete", Message::DeleteBlock(i)));
     }
@@ -1257,24 +1262,12 @@ pub fn read_only_binding(press: text_editor::KeyPress) -> Option<text_editor::Bi
     B::from_key_press(press).filter(|b| matches!(b, B::Copy | B::Select(_) | B::SelectWord | B::SelectLine | B::SelectAll | B::Unfocus))
 }
 
-/// An error or warning without the goal Isabelle lists after it (the goal view shows that) or
-/// its position marker
-pub fn message_summary_pub(text: &str) -> String {
-    message_summary(text)
-}
-
-fn message_summary(text: &str) -> String {
-    let t = text.replace("\\<^here>", "").replace('\u{2302}', "");
-    let cut = ["\ngoal (", "\ngoal:", "\nGoal ("].iter().filter_map(|g| t.find(g)).min().unwrap_or(t.len());
-    t[..cut].trim_end().trim_end_matches(':').to_string()
-}
-
 /// Text with Isabelle symbols, in the code font: scripts with no Unicode form are drawn in the
 /// scripts font (as the editors draw them), bold symbols bold
-fn symbol_text<'a>(text: &str, table: &super::symbols::Table, size: f32) -> Element<'a, Message> {
+fn symbol_text<'a>(text: &str, table: &dyn super::codec::Symbols, size: f32) -> Element<'a, Message> {
     let d = table.decode(text);
-    let style_at: std::collections::HashMap<usize, super::symbols::Style> = d.styles.iter().map(|(i, st)| (*i, *st)).collect();
-    let mut runs: Vec<(String, Option<super::symbols::Style>)> = Vec::new();
+    let style_at: std::collections::HashMap<usize, super::codec::Style> = d.styles.iter().map(|(i, st)| (*i, *st)).collect();
+    let mut runs: Vec<(String, Option<super::codec::Style>)> = Vec::new();
     for (i, ch) in d.text.chars().enumerate() {
         let st = style_at.get(&i).copied();
         match runs.last_mut() {
@@ -1289,19 +1282,20 @@ fn symbol_text<'a>(text: &str, table: &super::symbols::Table, size: f32) -> Elem
     iced::widget::rich_text(spans).size(size).into()
 }
 
-fn symbol_font(st: Option<super::symbols::Style>) -> cosmic::iced::Font {
+fn symbol_font(st: Option<super::codec::Style>) -> cosmic::iced::Font {
     match st {
-        Some(super::symbols::Style::Script) => cosmic::iced::Font::with_name("Isabellum Scripts"),
-        Some(super::symbols::Style::Bold) => cosmic::iced::Font { weight: cosmic::iced::font::Weight::Bold, ..cosmic::font::mono() },
+        Some(super::codec::Style::Script) => cosmic::iced::Font::with_name("Isabellum Scripts"),
+        Some(super::codec::Style::Bold) => cosmic::iced::Font { weight: cosmic::iced::font::Weight::Bold, ..cosmic::font::mono() },
         _ => cosmic::font::mono(),
     }
 }
 
 /// A message as code, as wide as its text: coloured spans in the code font, wrapping when long
-fn code_text<'a>(m: &Value) -> Element<'a, Message> {
+/// (decoded with the profile's own symbols, whatever table the host sent)
+fn code_text<'a>(ws: &Workspace, m: &Value) -> Element<'a, Message> {
     let theme = theme::active();
     let raw = m["raw"].as_str().or_else(|| m["text"].as_str()).unwrap_or("");
-    let d = super::symbols::Table::fallback().decode(raw.trim_end());
+    let d = ws.profile.symbols(None).decode(raw.trim_end());
     let n = d.src_of.len().saturating_sub(1);
     let mut class: Vec<Option<super::editor::Sem>> = vec![None; n];
     for sp in m["spans"].as_array().into_iter().flatten() {
@@ -1310,8 +1304,8 @@ fn code_text<'a>(m: &Value) -> Element<'a, Message> {
             *c = Some(sem);
         }
     }
-    let style_at: std::collections::HashMap<usize, super::symbols::Style> = d.styles.iter().map(|(i, st)| (*i, *st)).collect();
-    let mut runs: Vec<(String, Option<super::editor::Sem>, Option<super::symbols::Style>)> = Vec::new();
+    let style_at: std::collections::HashMap<usize, super::codec::Style> = d.styles.iter().map(|(i, st)| (*i, *st)).collect();
+    let mut runs: Vec<(String, Option<super::editor::Sem>, Option<super::codec::Style>)> = Vec::new();
     for (i, (ch, c)) in d.text.chars().zip(class.iter().copied().chain(std::iter::repeat(None))).enumerate() {
         let st = style_at.get(&i).copied();
         match runs.last_mut() {
@@ -1345,7 +1339,7 @@ fn hover_card<'a>(ws: &'a Workspace, h: &super::Hover) -> Option<Element<'a, Mes
     let sp = spacing();
     let mut col = widget::column::with_capacity(items.len() + 1).spacing(4);
     for item in items {
-        col = col.push(code_text(item));
+        col = col.push(code_text(ws, item));
     }
     if let Some(d) = definition {
         let name = d.get("name").and_then(Value::as_str).unwrap_or("");
@@ -1470,7 +1464,7 @@ pub fn z(px: f32) -> f32 {
 }
 
 /// Messages under a block: all for the proof at the caret, errors for failing ones
-fn messages_view<'a>(t: &Theory, block: &Block, table: &super::symbols::Table, current: bool) -> Option<Element<'a, Message>> {
+fn messages_view<'a>(t: &Theory, block: &Block, table: &dyn super::codec::Symbols, current: bool) -> Option<Element<'a, Message>> {
     let all = t.messages_in(block.start, block.end);
     let waiting = all.iter().any(|m| t.expected_error(m));
     let msgs: Vec<_> = all
@@ -1487,7 +1481,7 @@ fn messages_view<'a>(t: &Theory, block: &Block, table: &super::symbols::Table, c
         let line = super::ot::line_col(&t.local, m.start).0;
         // (what went wrong: the goal it lists is the one the goal view shows)
         col = col.push(
-            widget::container(symbol_text(&format!("{kind} (line {line}): {}", message_summary(&m.text)), table, z(12.0)))
+            widget::container(symbol_text(&format!("{kind} (line {line}): {}", t.profile.message_summary(&m.text)), table, z(12.0)))
                 .padding([2, 8])
                 .width(Length::Fill)
                 .class(theme::Container::custom(move |theme| {
@@ -1509,7 +1503,7 @@ pub fn fill_here(ws: &Workspace) -> bool {
     t.blocks.iter().find(|b| b.start <= t.cursor && t.cursor <= b.end).is_none_or(|b| b.start <= at && at <= b.end)
 }
 
-fn inline_goal<'a>(ws: Option<&'a Workspace>, table: &super::symbols::Table) -> Option<Element<'a, Message>> {
+fn inline_goal<'a>(ws: Option<&'a Workspace>, table: &dyn super::codec::Symbols) -> Option<Element<'a, Message>> {
     let ws = ws?;
     if ws.output.is_none() && !fill_here(ws) {
         return None;
@@ -1528,7 +1522,7 @@ fn inline_goal<'a>(ws: Option<&'a Workspace>, table: &super::symbols::Table) -> 
 }
 
 #[allow(dead_code)]
-fn inline_goal_text<'a>(ws: Option<&'a Workspace>, table: &super::symbols::Table) -> Option<Element<'a, Message>> {
+fn inline_goal_text<'a>(ws: Option<&'a Workspace>, table: &dyn super::codec::Symbols) -> Option<Element<'a, Message>> {
     let ws = ws?;
     let out = ws.output.as_ref()?;
     let msgs = out["messages"].as_array()?;
@@ -1630,7 +1624,7 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
                         anchor = Some((i, top));
                     }
                     open_item = Some(i);
-                    item = item.push(side_at(widget::container(block_editor_in(app.workspace.as_ref(), t, false, inline, &table)).id(selected_block_id()).into(), formal, top));
+                    item = item.push(side_at(widget::container(block_editor_in(app.workspace.as_ref(), t, false, inline, &*table)).id(selected_block_id()).into(), formal, top));
                 }
             }
             // (its notes stay under it while it is open: nothing after it moves)
@@ -1668,10 +1662,10 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
             },
             Kind::Formal => {
                 let mut c = widget::column::with_capacity(3).spacing(4).push(block_code(app.workspace.as_ref(), t, i, block, marked));
-                if let Some(m) = messages_view(t, block, &table, current) {
+                if let Some(m) = messages_view(t, block, &*table, current) {
                     c = c.push(m);
                 }
-                if current && let Some(g) = inline_goal(inline, &table) {
+                if current && let Some(g) = inline_goal(inline, &*table) {
                     c = c.push(g);
                 }
                 c.into()
@@ -1710,7 +1704,7 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
         // The selected block: what can be added after it, and Delete
         let selected_here = t.selected == Some(i) && editing.is_none() && block.kind != Kind::Header;
         if selected_here {
-            item = item.push(side(block_actions(Some(i), true), false));
+            item = item.push(side(block_actions(t, Some(i), true), false));
         }
         // Agents' notes on this block, under it
         if let Some(ws) = app.workspace.as_ref() {
@@ -1726,7 +1720,7 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
         // The gap after it: hovered, it offers what can be added there
         if !selected_here && block.kind != Kind::End {
             let hovered = app.workspace.as_ref().is_some_and(|w| w.gap_hover == Some(i));
-            let inner: Element<'a, Message> = if hovered { block_actions(Some(i), false) } else { widget::Space::new().into() };
+            let inner: Element<'a, Message> = if hovered { block_actions(t, Some(i), false) } else { widget::Space::new().into() };
             let gap = widget::mouse_area(widget::container(inner).height(Length::Fixed(z(20.0))).width(Length::Fill).center_y(Length::Fixed(z(20.0))))
                 .on_enter(Message::GapHover(Some(i)))
                 .on_exit(Message::GapLeave(i));
@@ -1739,7 +1733,7 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
     // At the end: add a block (unless the last block is selected, whose own actions add one there)
     let last = t.blocks.iter().rposition(|b| b.kind != Kind::End);
     let last_selected = editing.is_none() && last.is_some() && t.selected == last && last.is_some_and(|i| t.blocks[i].kind != Kind::Header);
-    col = col.push(if last_selected { side(widget::Space::new().height(Length::Fixed(0.0)).into(), false) } else { side(block_actions(None, false), false) });
+    col = col.push(if last_selected { side(widget::Space::new().height(Length::Fixed(0.0)).into(), false) } else { side(block_actions(t, None, false), false) });
     // (room at the end, for a goal beside the last block to be scrolled into sight)
     col = col.push(widget::Space::new().height(Length::Fixed(if beside.is_some() { view_height() * 0.5 } else { 0.0 })));
     // Clicking outside every block finishes the one being edited
@@ -1750,15 +1744,15 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
     // With no goal to show beside the block being edited (prose, or a proof with no state yet),
     // that room holds what can be inserted there
     let palette = match (beside, open_item) {
-        (Some((ws, width, _)), Some(i)) if anchor.is_none() || inline_goal(Some(ws), &table).is_none() => {
+        (Some((ws, width, _)), Some(i)) if anchor.is_none() || inline_goal(Some(ws), &*table).is_none() => {
             anchor = Some((i, 0.0));
-            Some(insert_palette(ws, t, &table, width))
+            Some(insert_palette(ws, t, &*table, width))
         }
         _ => None,
     };
     let goal: Element<'a, Message> = match (beside, anchor) {
         _ if palette.is_some() => palette.unwrap_or_else(|| widget::Space::new().into()),
-        (Some((ws, width, _)), Some(_)) => match inline_goal(Some(ws), &table) {
+        (Some((ws, width, _)), Some(_)) => match inline_goal(Some(ws), &*table) {
             Some(g) => widget::container(g)
                 .width(Length::Fixed(width))
                 .class(theme::Container::custom(|theme| iced::widget::container::Style {
@@ -1921,7 +1915,7 @@ fn status_caption(status: Option<Status>) -> &'static str {
     }
 }
 
-fn block_editor_in<'a>(ws: Option<&'a Workspace>, t: &'a Theory, window: bool, inline: Option<&'a Workspace>, table: &super::symbols::Table) -> Element<'a, Message> {
+fn block_editor_in<'a>(ws: Option<&'a Workspace>, t: &'a Theory, window: bool, inline: Option<&'a Workspace>, table: &dyn super::codec::Symbols) -> Element<'a, Message> {
     let sp = spacing();
     let Some(be) = &t.block_editor else { return widget::Space::new().into() };
     let vim_mode = vim_mode_now();
@@ -2029,7 +2023,7 @@ fn block_editor_in<'a>(ws: Option<&'a Workspace>, t: &'a Theory, window: bool, i
         let kind = m.kind.clone();
         let line = super::ot::line_col(&t.local, m.start).0;
         col = col.push(
-            widget::container(symbol_text(&format!("{kind} (line {line}): {}", message_summary(&m.text)), table, z(12.0)))
+            widget::container(symbol_text(&format!("{kind} (line {line}): {}", t.profile.message_summary(&m.text)), table, z(12.0)))
                 .padding([2, 8])
                 .width(Length::Fill)
                 .class(theme::Container::custom(move |theme| {
@@ -2109,7 +2103,7 @@ fn prose_editor<'a>(t: &'a Theory, be: &'a super::editor::BlockEditor, vim_mode:
         (!src.trim().is_empty()).then(|| {
             let mut typo = typography(&theme::active());
             typo.size = z(17.0);
-            let md = super::literate::to_markdown(src.trim(), &super::symbols::Table::fallback());
+            let md = t.profile.prose(src.trim(), &*t.profile.symbols(None));
             rich_text(Arc::new(prose_render::markdown::parse(&md)), Arc::new(typo)).into()
         })
     };
@@ -2122,11 +2116,11 @@ fn prose_editor<'a>(t: &'a Theory, be: &'a super::editor::BlockEditor, vim_mode:
         col = col.push(bar);
     }
     // The maths or antiquotation the caret is in, set as it will read
-    if let Some(snippet) = super::literate::snippet_at(&be.shown(), {
+    if let Some(snippet) = t.profile.snippet_at(&be.shown(), {
         let shown = be.shown();
         super::editor::LineIndex::new(&shown).offset(&shown, be.content.cursor().position)
     }) {
-        let md = super::literate::to_markdown(&snippet, &super::symbols::Table::fallback());
+        let md = t.profile.prose(&snippet, &*t.profile.symbols(None));
         let mut typo = typography(&theme::active());
         typo.size = z(17.0);
         col = col.push(
@@ -2276,8 +2270,8 @@ pub fn proof_window(app: &App) -> Element<'_, Message> {
     // As the main window: the state beside the proof when there is room, else under it
     let content = widget::responsive(move |size| {
         let table = app.table(&ws.machine);
-        let state = widget::container(widget::scrollable(state_view(ws, &table))).padding(sp.space_s).class(theme::Container::Card);
-        let editor = widget::container(block_editor_in(Some(ws), t, true, None, &table));
+        let state = widget::container(widget::scrollable(state_view(ws, &*table))).padding(sp.space_s).class(theme::Container::Card);
+        let editor = widget::container(block_editor_in(Some(ws), t, true, None, &*table));
         let wide = size.width >= z(900.0);
         let el: Element<'_, Message> = if wide {
             widget::row::with_capacity(2)
@@ -2472,14 +2466,7 @@ pub fn goal_placement(wide: bool, proof_lines: usize) -> GoalPlacement {
 }
 
 /// What the caret is in, for the insert palette: maths or a term (symbols), prose (text
-/// templates), or a proof (Isar)
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum InsertContext {
-    Symbols,
-    Prose,
-    Proof,
-}
-
+/// templates), or a proof
 pub fn insert_context(t: &Theory) -> Option<InsertContext> {
     let be = t.block_editor.as_ref()?;
     // (the source as decoded, which the editor shows one character for one: maths shown set
@@ -2494,63 +2481,19 @@ pub fn insert_context(t: &Theory) -> Option<InsertContext> {
     if be.kind != Kind::Formal {
         return None;
     }
-    // (inside a quoted term)
-    Some(if before.matches('"').count() % 2 == 1 { InsertContext::Symbols } else { InsertContext::Proof })
+    Some(if t.profile.in_term(&before) { InsertContext::Symbols } else { InsertContext::Proof })
 }
 
-const COMMON_SYMBOLS: &[&str] = &[
-    "∧", "∨", "¬", "⟶", "⟷", "∀", "∃", "⟹", "⇒", "→", "↦", "∈", "∉", "⊆", "⊂", "∪", "∩", "∅", "≤", "≥", "≠", "≡", "×", "∘", "λ", "α",
-    "β", "γ", "δ", "σ", "τ", "φ", "ψ", "ω", "⦇", "⦈", "⟦", "⟧", "‹", "›", "⇩", "⇧",
-];
-
-/// What text editing can add around the selection (or at the caret, the caret then between):
-/// a label, what goes before, what goes after
-const PROSE_TEMPLATES: &[(&str, &str, &str)] = &[
-    ("emphasis", "\\<^emph>‹", "›"),
-    ("bold", "\\<^bold>‹", "›"),
-    ("code", "\\<^verbatim>‹", "›"),
-    ("term", "@{term \"", "\"}"),
-    ("theorem", "@{thm ", "}"),
-    ("constant", "@{const ", "}"),
-    ("type", "@{typ \"", "\"}"),
-    ("maths", "$", "$"),
-    ("cartouche", "‹", "›"),
-    ("url", "\\<^url>‹", "›"),
-    ("citation", "\\cite{", "}"),
-    ("footnote", "\\footnote{", "}"),
-];
-
-/// Whether the caret's line is an item of a list (`\<^item>` or `\<^enum>`, as the symbols show
-/// them): which marker, with the line's indent
-pub fn list_item_at(t: &Theory, table: &super::symbols::Table) -> Option<(String, String)> {
-    let be = t.block_editor.as_ref().filter(|be| be.wrap.is_some())?;
+/// The palette's list entries for the prose being edited: the profile's, for the caret's line
+pub fn list_entries(t: &Theory, table: &dyn super::codec::Symbols) -> Vec<PaletteEntry> {
+    let Some(be) = t.block_editor.as_ref().filter(|be| be.wrap.is_some()) else { return Vec::new() };
     let before: String = be.decoded.text.chars().take(be.caret()).collect();
-    let line = before.rsplit('\n').next().unwrap_or("");
-    let indent: String = line.chars().take_while(|c| *c == ' ').collect();
-    let rest = line.trim_start();
-    ["\\<^item>", "\\<^enum>"].into_iter().find_map(|m| {
-        let shown = table.decode(m).text;
-        (rest.starts_with(m) || rest.starts_with(shown.as_str())).then(|| (m.to_string(), indent.clone()))
-    })
+    t.profile.lists(before.rsplit('\n').next().unwrap_or(""), table)
 }
-
-const PROOF_TEMPLATES: &[(&str, &str, &str)] = &[
-    ("have", "have \"", "\"\n  "),
-    ("show ?thesis", "show ?thesis\n  ", ""),
-    ("proof … qed", "proof -\n  ", "\nqed"),
-    ("using", "using ", ""),
-    ("unfolding", "unfolding ", ""),
-    ("by simp", "by simp", ""),
-    ("by auto", "by auto", ""),
-    ("sledgehammer", "sledgehammer", ""),
-    ("claude", "claude", ""),
-    ("nitpick", "nitpick", ""),
-    ("quickcheck", "quickcheck", ""),
-];
 
 /// Beside the block being edited, when there is no goal: what can be inserted at the caret, by
 /// context (symbols in maths or a term, templates in prose, Isar in a proof), searchable
-fn insert_palette<'a>(ws: &'a Workspace, t: &'a Theory, table: &super::symbols::Table, width: f32) -> Element<'a, Message> {
+fn insert_palette<'a>(ws: &'a Workspace, t: &'a Theory, table: &dyn super::codec::Symbols, width: f32) -> Element<'a, Message> {
     let sp = spacing();
     let context = insert_context(t).unwrap_or(InsertContext::Prose);
     let query = ws.palette_query.trim().to_lowercase();
@@ -2564,36 +2507,21 @@ fn insert_palette<'a>(ws: &'a Workspace, t: &'a Theory, table: &super::symbols::
     // (each: its label, and what it puts before and after the selection or the caret)
     let mut items: Vec<(String, String, String)> = Vec::new();
     let symbol = |c: char, label: String| (label, c.to_string(), String::new());
+    let entry = |e: PaletteEntry| (e.label, e.before, e.after);
+    let matches = |e: &PaletteEntry| query.is_empty() || e.label.contains(&query);
     match context {
         InsertContext::Symbols if !query.is_empty() => {
             for (c, sym, how) in table.search(&query, 40) {
                 items.push(symbol(c, format!("{c}  {}", if how.is_empty() { sym.clone() } else { format!("{sym} {how}") })));
             }
         }
-        InsertContext::Symbols => {
-            for c in COMMON_SYMBOLS {
-                items.push((c.to_string(), c.to_string(), String::new()));
-            }
-        }
+        InsertContext::Symbols => items.extend(t.profile.palette(context, &ws.caps).into_iter().map(entry)),
         InsertContext::Prose | InsertContext::Proof => {
             // Lists: in one, its next item (and a nested one); elsewhere, a list to begin
             if context == InsertContext::Prose {
-                let lists: Vec<(String, String, String)> = match list_item_at(t, table) {
-                    Some((marker, indent)) => vec![
-                        ("next item".into(), format!("\n{indent}{marker} "), String::new()),
-                        ("nested item".into(), format!("\n{indent}  {marker} "), String::new()),
-                    ],
-                    None => vec![
-                        ("bullet list".into(), "\n\\<^item> ".into(), String::new()),
-                        ("numbered list".into(), "\n\\<^enum> ".into(), String::new()),
-                    ],
-                };
-                items.extend(lists.into_iter().filter(|(l, _, _)| query.is_empty() || l.contains(&query)));
+                items.extend(list_entries(t, table).into_iter().filter(matches).map(entry));
             }
-            let list = if context == InsertContext::Prose { PROSE_TEMPLATES } else { PROOF_TEMPLATES };
-            for (label, before, after) in list.iter().filter(|(l, _, _)| query.is_empty() || l.contains(&query)) {
-                items.push((label.to_string(), before.to_string(), after.to_string()));
-            }
+            items.extend(t.profile.palette(context, &ws.caps).into_iter().filter(matches).map(entry));
             // (and symbols matching the search)
             if !query.is_empty() {
                 for (c, sym, _) in table.search(&query, 12) {
@@ -2660,7 +2588,7 @@ pub fn source_scroll_id() -> widget::Id {
     widget::Id::new("deductum-source-scroll")
 }
 
-fn source<'a>(ws: &'a Workspace, t: &'a Theory, inline: Option<&'a Workspace>, table: &super::symbols::Table, beside: Option<(f32, f32)>, width: f32) -> Element<'a, Message> {
+fn source<'a>(ws: &'a Workspace, t: &'a Theory, inline: Option<&'a Workspace>, table: &dyn super::codec::Symbols, beside: Option<(f32, f32)>, width: f32) -> Element<'a, Message> {
     let mut col = widget::column::with_capacity(4).spacing(2).height(Length::Fill);
     let pad = Padding::from(spacing().space_s as f32);
     // The editor at its full height in a scroll view (shared with the goal when that is beside
@@ -2756,14 +2684,18 @@ fn source_editor(t: &Theory, height: Length) -> Element<'_, Message> {
 
 fn side_panel<'a>(app: &'a App, ws: &'a Workspace) -> Element<'a, Message> {
     let sp = spacing();
-    let tabs = [
-        (Panel::Quickcheck, "Quickcheck"),
-        (Panel::Find, "Find"),
-        (Panel::Symbols, "Symbols"),
-        (Panel::Agents, "Agents"),
-        (Panel::History, "History"),
-        (Panel::Log, "Activity"),
-    ];
+    // (the prover's panels as the session's capabilities and profile offer them)
+    let mut tabs: Vec<(Panel, String)> = Vec::with_capacity(6);
+    if let Some(label) = ws.caps.counterexamples_label() {
+        tabs.push((Panel::Counterexamples, label));
+    }
+    if let Some(search) = &ws.caps.search {
+        tabs.push((Panel::Search, search.short().to_string()));
+    }
+    if ws.profile.has_symbol_table() {
+        tabs.push((Panel::Symbols, "Symbols".into()));
+    }
+    tabs.extend([(Panel::Agents, "Agents".into()), (Panel::History, "History".into()), (Panel::Log, "Activity".into())]);
     let mut rows = [widget::row::with_capacity(4).spacing(2), widget::row::with_capacity(4).spacing(2)];
     for (i, (panel, label)) in tabs.into_iter().enumerate() {
         let r = std::mem::replace(&mut rows[i / 4], widget::row::with_capacity(0));
@@ -2777,14 +2709,14 @@ fn side_panel<'a>(app: &'a App, ws: &'a Workspace) -> Element<'a, Message> {
     let bar = widget::column::with_capacity(2).push(r0).push(r1);
     let table = app.table(&ws.machine);
     let content: Element<'a, Message> = match ws.panel {
-        Panel::Output => output_panel(ws, &table),
-        Panel::Sledgehammer => sledgehammer_panel(ws, &table),
-        Panel::Find => find_panel(ws, &table),
-        Panel::Symbols => symbols_panel(ws, &table),
+        Panel::Output => output_panel(ws, &*table),
+        Panel::Tool => tool_panel(ws, &*table),
+        Panel::Search => find_panel(ws, &*table),
+        Panel::Symbols => symbols_panel(ws, &*table),
         Panel::Agents => agents_panel(app, ws),
         Panel::History => history_panel(ws),
         Panel::Log => activity_panel(ws),
-        Panel::Quickcheck => quickcheck_panel(ws, &table),
+        Panel::Counterexamples => counterexamples_panel(ws, &*table),
     };
     widget::container(widget::column::with_capacity(2).spacing(sp.space_xs).push(bar).push(content))
         .padding(sp.space_s)
@@ -2794,7 +2726,7 @@ fn side_panel<'a>(app: &'a App, ws: &'a Workspace) -> Element<'a, Message> {
         .into()
 }
 
-fn message_text<'a>(m: &Value, table: &super::symbols::Table) -> Element<'a, Message> {
+fn message_text<'a>(m: &Value, table: &dyn super::codec::Symbols) -> Element<'a, Message> {
     let kind = m["kind"].as_str().unwrap_or("").to_string();
     let text = table.decode(m["text"].as_str().unwrap_or("")).text;
     let w = widget::text(text).font(cosmic::font::mono()).size(z(13.0));
@@ -2818,7 +2750,7 @@ fn tinted<'a>(kind: String, inner: Element<'a, Message>) -> Element<'a, Message>
 }
 
 /// A message as code: highlighted with the prover's markup, selectable and copyable
-fn message_view<'a>(ws: &'a Workspace, m: &Value, table: &super::symbols::Table) -> Element<'a, Message> {
+fn message_view<'a>(ws: &'a Workspace, m: &Value, table: &dyn super::codec::Symbols) -> Element<'a, Message> {
     let key = super::message_key(m);
     let kind = m["kind"].as_str().unwrap_or("").to_string();
     match ws.views.get(&key) {
@@ -2850,13 +2782,13 @@ fn message_view<'a>(ws: &'a Workspace, m: &Value, table: &super::symbols::Table)
     }
 }
 
-fn output_panel<'a>(ws: &'a Workspace, table: &super::symbols::Table) -> Element<'a, Message> {
+fn output_panel<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Element<'a, Message> {
     widget::scrollable(state_view(ws, table)).height(Length::Fill).into()
 }
 
 /// The proof state: as parts (the chained facts, then each subgoal as fix, assume and show,
 /// with what the command changed), or as Isabelle prints it; then any other output
-fn state_view<'a>(ws: &'a Workspace, table: &super::symbols::Table) -> Element<'a, Message> {
+fn state_view<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Element<'a, Message> {
     let sp = spacing();
     // While Isabelle has yet to check what changed at the caret, output about another command
     // (the one that was there before the edit) is not shown as if it were this one's
@@ -2884,29 +2816,32 @@ fn state_view<'a>(ws: &'a Workspace, table: &super::symbols::Table) -> Element<'
         .push(widget::checkbox(ws.show_types).label("Types").on_toggle(Message::ShowTypes));
     // On a proof tool typed in the text (sledgehammer, nitpick, …): its findings, as they come,
     // in place of the state, with its settings
-    let tool = ws.output.as_ref().and_then(|o| o["command"]["name"].as_str()).filter(|n| super::editor::TOOLS.contains(n));
+    let tool = ws.output.as_ref().and_then(|o| o["command"]["name"].as_str()).and_then(|n| ws.caps.typed_tool(n));
     let mut tool_section: Option<Element<'a, Message>> = None;
-    if let Some(name) = tool {
+    if let Some(tool) = tool {
+        let name = tool.typed.as_str();
         let running = ws.theory.as_ref().is_some_and(|t| t.caret_signature().2 == Status::Running);
         let mut head = widget::row::with_capacity(2).spacing(sp.space_s).align_y(Alignment::Center).push(widget::text::heading(name.to_string()));
         if running {
             let secs = ws.tool_started.map_or(0, |s| s.elapsed().as_secs());
-            head = head
-                .push(widget::text::caption(format!("running · {secs} s")).width(Length::Fill))
-                .push(widget::button::text("Stop").on_press(Message::StopTools));
+            head = head.push(widget::text::caption(format!("running · {secs} s")).width(Length::Fill));
+            // (a tool that cannot be stopped on its own goes when its line is changed)
+            if tool.stop {
+                head = head.push(widget::button::text("Stop").on_press(Message::StopTools));
+            }
         }
         let stopped = !running
-            && ws.output.as_ref().and_then(|o| o["messages"].as_array()).is_some_and(|ms| ms.iter().any(|m| m["kind"] == "error" && m["text"].as_str().is_some_and(|t| t.contains("Interrupt"))));
+            && ws.output.as_ref().and_then(|o| o["messages"].as_array()).is_some_and(|ms| ms.iter().any(|m| m["kind"] == "error" && m["text"].as_str().is_some_and(|t| ws.profile.interrupted(t))));
         if stopped {
             head = head.push(widget::text::caption("stopped (as if its time ran out)"));
         }
         let mut col = widget::column::with_capacity(4).spacing(sp.space_xs).push(head);
         if running {
-            col = col.push(iced::widget::progress_bar(0.0..=1.0, ((ws.tool_started.map_or(0.0, |s| s.elapsed().as_secs_f32())) / ws.sh_timeout.trim().parse::<f32>().unwrap_or(30.0)).min(1.0)).girth(4.0));
+            col = col.push(iced::widget::progress_bar(0.0..=1.0, ((ws.tool_started.map_or(0.0, |s| s.elapsed().as_secs_f32())) / tool.timeout(&ws.tool_settings)).min(1.0)).girth(4.0));
         }
         col = col.push(tool_output(ws, table));
-        if name == "sledgehammer" {
-            col = col.push(sledgehammer_settings(ws));
+        if tool.settings.iter().any(|s| !s.option.is_empty()) {
+            col = col.push(tool_settings(ws, tool));
         }
         // (above the goal it works on, which shows as usual)
         tool_section = Some(
@@ -2994,7 +2929,7 @@ fn state_view<'a>(ws: &'a Workspace, table: &super::symbols::Table) -> Element<'
         for f in &g.facts {
             facts = facts.push(message_view(ws, f, table));
         }
-        col = col.push(labelled("using", facts.into()));
+        col = col.push(labelled(ws.profile.facts_label(), facts.into()));
     }
     let shown = if ws.all_goals { g.subgoals.len() } else { g.subgoals.len().min(4) };
     for (i, sg) in g.subgoals.iter().take(shown).enumerate() {
@@ -3009,29 +2944,44 @@ fn state_view<'a>(ws: &'a Workspace, table: &super::symbols::Table) -> Element<'
     col.into()
 }
 
-/// Sledgehammer's settings, folded away under the proof state: sledgehammer itself is typed in
-/// the text (where its proofs come with Insert)
-fn sledgehammer_settings<'a>(ws: &'a Workspace) -> Element<'a, Message> {
+/// A typed tool's settings, folded away under the proof state: the tool itself is typed in the
+/// text (where its proofs come with Insert), so only the settings that set prover options are
+/// here, for they hold for it there. Built from the tool's settings: a setting without a label
+/// is a line of its own, one with a label a row with its unit after it; Apply ends the last row
+fn tool_settings<'a>(ws: &'a Workspace, tool: &'a Tool) -> Element<'a, Message> {
     let sp = spacing();
-    let head = widget::button::text(if ws.sh_open { "▾ Sledgehammer settings" } else { "▸ Sledgehammer settings" })
-        .on_press(Message::ShSettings(!ws.sh_open));
+    let head = widget::button::text(format!("{} {} settings", if ws.settings_open { "▾" } else { "▸" }, tool.label)).on_press(Message::ToolSettings(!ws.settings_open));
     let mut col = widget::column::with_capacity(4).spacing(sp.space_xxs).push(head);
-    if ws.sh_open {
-        col = col.push(
-            widget::text_input("provers (default: cvc5 verit z3 e spass vampire zipperposition)", &ws.provers)
-                .on_input(Message::Provers)
-                .on_submit(|_| Message::ShApply),
-        );
-        col = col.push(
-            widget::row::with_capacity(4)
+    if ws.settings_open {
+        let shown: Vec<&Setting> = tool.settings.iter().filter(|s| !s.option.is_empty()).collect();
+        let last_row = shown.iter().rposition(|s| !s.label.is_empty());
+        let apply = || Message::ToolApply(tool.name.clone());
+        for (i, s) in shown.iter().enumerate() {
+            let (name, key) = (tool.name.clone(), s.key.clone());
+            let input = widget::text_input(s.placeholder.as_str(), tool.value(&ws.tool_settings, &s.key))
+                .on_input(move |v| Message::ToolSetting(name.clone(), key.clone(), v))
+                .on_submit(move |_| apply());
+            if s.label.is_empty() {
+                col = col.push(input);
+                continue;
+            }
+            let mut row = widget::row::with_capacity(4)
                 .spacing(sp.space_xs)
                 .align_y(Alignment::Center)
-                .push(widget::text::body("Timeout"))
-                .push(widget::text_input("30", &ws.sh_timeout).on_input(Message::ShTimeout).on_submit(|_| Message::ShApply).width(Length::Fixed(64.0)))
-                .push(widget::text::body("seconds per prover").width(Length::Fill))
-                .push(widget::button::standard("Apply").on_press(Message::ShApply)),
-        );
-        col = col.push(widget::text::caption("These hold for sledgehammer typed in the text. For one run, write sledgehammer [timeout = 120, isar_proofs] there."));
+                .push(widget::text::body(s.label.as_str()))
+                .push(if s.kind == "number" { input.width(Length::Fixed(64.0)) } else { input.width(Length::Fill) })
+                .push(widget::text::body(s.unit.as_str()).width(Length::Fill));
+            if Some(i) == last_row {
+                row = row.push(widget::button::standard("Apply").on_press(apply()));
+            }
+            col = col.push(row);
+        }
+        if last_row.is_none() {
+            col = col.push(widget::button::standard("Apply").on_press(apply()));
+        }
+        if !tool.settings_note.is_empty() {
+            col = col.push(widget::text::caption(tool.settings_note.as_str()));
+        }
     }
     col.into()
 }
@@ -3039,12 +2989,12 @@ fn sledgehammer_settings<'a>(ws: &'a Workspace) -> Element<'a, Message> {
 /// What the command at the caret printed besides the state (a theorem, sledgehammer's or
 /// nitpick's findings typed in the text, a warning), with Insert for the proofs it offers; then
 /// an LLM's proofs for a hole, when one was asked for (typing `claude` or `codex`)
-fn tool_output<'a>(ws: &'a Workspace, table: &super::symbols::Table) -> Element<'a, Message> {
+fn tool_output<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Element<'a, Message> {
     let sp = spacing();
     let mut col = widget::column::with_capacity(8).spacing(sp.space_xxs);
     if let Some(out) = &ws.output {
         // (a tool's Interrupt is its being stopped: said in its heading, not as an error)
-        for m in out["messages"].as_array().into_iter().flatten().filter(|m| m["kind"] != "state" && !(m["kind"] == "error" && m["text"].as_str().is_some_and(|t| t.contains("Interrupt")))) {
+        for m in out["messages"].as_array().into_iter().flatten().filter(|m| m["kind"] != "state" && !(m["kind"] == "error" && m["text"].as_str().is_some_and(|t| ws.profile.interrupted(t)))) {
             col = col.push(message_view(ws, m, table));
             for sb in m["sendbacks"].as_array().into_iter().flatten().filter_map(|s| s.as_str()) {
                 col = col.push(
@@ -3146,8 +3096,9 @@ fn labelled<'a>(label: &'static str, body: Element<'a, Message>) -> Element<'a, 
         .into()
 }
 
-/// One subgoal as an Isar user reads it: the variables it fixes, what it assumes, what it shows
-fn subgoal_card<'a>(ws: &'a Workspace, sg: &super::goals::Subgoal, first: bool, new: bool, table: &super::symbols::Table) -> Element<'a, Message> {
+/// One subgoal as the backend's users read it, laid out by the profile (Isabelle: the variables it
+/// fixes, what it assumes, what it shows)
+fn subgoal_card<'a>(ws: &'a Workspace, sg: &super::goals::Subgoal, first: bool, new: bool, table: &dyn super::codec::Symbols) -> Element<'a, Message> {
     let sp = spacing();
     let mut head = widget::row::with_capacity(2).spacing(sp.space_xs).push(widget::text::caption(format!("Subgoal {}", sg.n)));
     if new {
@@ -3161,14 +3112,19 @@ fn subgoal_card<'a>(ws: &'a Workspace, sg: &super::goals::Subgoal, first: bool, 
         }
         c.into()
     };
-    if !sg.params.is_empty() {
-        col = col.push(labelled("fix", stack(&sg.params)));
+    let shown = ws.profile.present_goal(sg);
+    if let Some(heading) = shown.heading {
+        col = col.push(widget::text(heading).font(cosmic::font::mono()).size(z(13.0)));
     }
-    if !sg.prems.is_empty() {
-        col = col.push(labelled("assume", stack(&sg.prems)));
-    }
-    if let Some(c) = &sg.concl {
-        col = col.push(labelled("show", message_view(ws, c, table)));
+    for section in shown.sections {
+        let body = match section.body {
+            GoalBody::One(part) => message_view(ws, part, table),
+            GoalBody::Many(parts) => stack(parts),
+        };
+        col = col.push(match section.label {
+            Some(label) => labelled(label, body),
+            None => body,
+        });
     }
     widget::container(col)
         .padding([sp.space_xxs, sp.space_xs])
@@ -3186,7 +3142,7 @@ fn subgoal_card<'a>(ws: &'a Workspace, sg: &super::goals::Subgoal, first: bool, 
 }
 
 /// The state as Isabelle prints it, with the command's other output
-fn state_text<'a>(ws: &'a Workspace, table: &super::symbols::Table) -> Element<'a, Message> {
+fn state_text<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Element<'a, Message> {
     let mut col = widget::column::with_capacity(8).spacing(6);
     match &ws.output {
         None => col = col.push(widget::text::caption("Move the caret into a proof to see its state.")),
@@ -3235,81 +3191,115 @@ fn proofs(q: &super::QueryState) -> Vec<String> {
     out
 }
 
-fn sledgehammer_panel<'a>(ws: &'a Workspace, table: &super::symbols::Table) -> Element<'a, Message> {
+/// The proof tool that runs from a panel (Isabelle's Sledgehammer), built from its settings: the
+/// first one without a label beside Run and Cancel, the labelled ones in rows, the switches in a
+/// row of their own; then its findings with Insert. Under it, LLM help for the hole
+fn tool_panel<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Element<'a, Message> {
     let sp = spacing();
-    let q = &ws.sledgehammer;
+    let q = &ws.tool_query;
     let mut col = widget::column::with_capacity(12).spacing(sp.space_xs);
-    col = col.push(widget::text::caption("Runs on the goal at the caret; on a sorry or oops, on the goal before it."));
-    col = col.push(
-        widget::row::with_capacity(3)
-            .spacing(sp.space_xs)
-            .align_y(Alignment::Center)
-            .push(widget::text_input("provers (default: cvc5 verit z3 e spass vampire zipperposition)", &ws.provers).on_input(Message::Provers).width(Length::Fill))
-            .push(widget::button::suggested("Run").on_press(Message::Sledgehammer))
-            .push(widget::button::standard("Cancel").on_press_maybe((q.status == "running" || q.status == "waiting").then_some(Message::CancelQuery))),
-    );
-    col = col.push(
-        widget::row::with_capacity(3)
-            .spacing(sp.space_xs)
-            .align_y(Alignment::Center)
-            .push(widget::text::body("Timeout"))
-            .push(widget::text_input("30", &ws.sh_timeout).on_input(Message::ShTimeout).width(Length::Fixed(64.0)))
-            .push(widget::text::body("seconds per prover")),
-    );
-    col = col.push(
-        widget::row::with_capacity(2)
-            .spacing(sp.space_m)
-            .push(widget::checkbox(ws.sh_isar).label("Isar proofs").on_toggle(Message::ShIsar))
-            .push(widget::checkbox(ws.sh_try0).label("Try simple methods first").on_toggle(Message::ShTry0)),
-    );
-    col = col.push(widget::text::caption("For finer control write sledgehammer [timeout = 120, max_facts = 1000] in the proof; its proofs appear in Output with Insert."));
-    if !q.status.is_empty() {
-        let status = match q.status.as_str() {
-            "waiting" | "starting" => "Waiting for the goal to be checked…",
-            "running" => "Sledgehammering…",
-            "finished" => "Finished",
-            "canceled" => "Canceled",
-            "failed" => "Failed",
-            other => other,
+    if let Some(tool) = ws.caps.panel_tool() {
+        if !tool.panel_note.is_empty() {
+            col = col.push(widget::text::caption(tool.panel_note.as_str()));
+        }
+        let setting = |s: &'a Setting| {
+            let (name, key) = (tool.name.clone(), s.key.clone());
+            widget::text_input(s.placeholder.as_str(), tool.value(&ws.tool_settings, &s.key)).on_input(move |v| Message::ToolSetting(name.clone(), key.clone(), v))
         };
-        col = col.push(widget::text::heading(status.to_string()));
-    }
-    if let Some(err) = &q.error {
-        col = col.push(widget::text::body(err.clone()));
-    }
-    let found = proofs(q);
-    if !found.is_empty() {
-        col = col.push(widget::text::caption(if q.replace.is_some() { "Found proofs — Insert replaces the sorry:" } else { "Found proofs — Insert adds the proof after the command:" }));
-        for p in found {
+        let first = tool.settings.iter().position(|s| s.label.is_empty() && s.kind != "bool");
+        let mut run = widget::row::with_capacity(3).spacing(sp.space_xs).align_y(Alignment::Center);
+        if let Some(i) = first {
+            run = run.push(setting(&tool.settings[i]).width(Length::Fill));
+        }
+        col = col.push(
+            run.push(widget::button::suggested("Run").on_press(Message::RunTool(tool.name.clone())))
+                .push(widget::button::standard("Cancel").on_press_maybe((q.status == "running" || q.status == "waiting").then_some(Message::CancelQuery))),
+        );
+        for (i, s) in tool.settings.iter().enumerate() {
+            if Some(i) == first || s.kind == "bool" {
+                continue;
+            }
+            let input = setting(s);
+            if s.label.is_empty() {
+                col = col.push(input);
+                continue;
+            }
             col = col.push(
-                widget::row::with_capacity(2)
+                widget::row::with_capacity(3)
                     .spacing(sp.space_xs)
                     .align_y(Alignment::Center)
-                    .push(widget::text(table.decode(&p).text).font(cosmic::font::mono()).size(13).width(Length::Fill))
-                    .push(widget::button::suggested("Insert").on_press(Message::InsertProof(p.clone()))),
+                    .push(widget::text::body(s.label.as_str()))
+                    .push(if s.kind == "number" { input.width(Length::Fixed(64.0)) } else { input.width(Length::Fill) })
+                    .push(widget::text::body(s.unit.as_str())),
             );
         }
-    }
-    for m in &q.messages {
-        let text = m["text"].as_str().unwrap_or("");
-        if text.contains("found a proof") || m["sendbacks"].as_array().is_some_and(|s| !s.is_empty()) {
-            continue;
+        let switches: Vec<&Setting> = tool.settings.iter().filter(|s| s.kind == "bool").collect();
+        if !switches.is_empty() {
+            let mut row = widget::row::with_capacity(switches.len()).spacing(sp.space_m);
+            for s in switches {
+                let (name, key) = (tool.name.clone(), s.key.clone());
+                row = row.push(widget::checkbox(tool.value(&ws.tool_settings, &s.key) == "true").label(s.label.as_str()).on_toggle(move |on| Message::ToolSetting(name.clone(), key.clone(), on.to_string())));
+            }
+            col = col.push(row);
         }
-        col = col.push(message_view(ws, m, table));
+        if !tool.typed_note.is_empty() {
+            col = col.push(widget::text::caption(tool.typed_note.as_str()));
+        }
+        if !q.status.is_empty() {
+            let status = match q.status.as_str() {
+                "waiting" | "starting" => "Waiting for the goal to be checked…",
+                "running" if !tool.running.is_empty() => tool.running.as_str(),
+                "running" => "Running…",
+                "finished" => "Finished",
+                "canceled" => "Canceled",
+                "failed" => "Failed",
+                other => other,
+            };
+            col = col.push(widget::text::heading(status.to_string()));
+        }
+        if let Some(err) = &q.error {
+            col = col.push(widget::text::body(err.clone()));
+        }
+        let found = proofs(q);
+        if !found.is_empty() {
+            col = col.push(widget::text::caption(if q.replace.is_some() {
+                format!("Found proofs — Insert replaces the {}:", ws.profile.placeholder())
+            } else {
+                "Found proofs — Insert adds the proof after the command:".to_string()
+            }));
+            for p in found {
+                col = col.push(
+                    widget::row::with_capacity(2)
+                        .spacing(sp.space_xs)
+                        .align_y(Alignment::Center)
+                        .push(widget::text(table.decode(&p).text).font(cosmic::font::mono()).size(13).width(Length::Fill))
+                        .push(widget::button::suggested("Insert").on_press(Message::InsertProof(p.clone()))),
+                );
+            }
+        }
+        // (the provers' lines saying they found the proofs shown above)
+        for m in &q.messages {
+            let text = m["text"].as_str().unwrap_or("");
+            if text.contains("found a proof") || m["sendbacks"].as_array().is_some_and(|s| !s.is_empty()) {
+                continue;
+            }
+            col = col.push(message_view(ws, m, table));
+        }
+        col = col.push(widget::divider::horizontal::default());
     }
     // An LLM's proofs for the hole, each checked by the prover before it is offered
-    let f = &ws.fill;
-    col = col.push(widget::divider::horizontal::default());
+    let placeholder = ws.profile.placeholder();
     col = col.push(widget::text::heading("Fill the hole with an LLM"));
-    col = col.push(widget::text::caption("Claude or Codex on the session's machine proposes proofs for the sorry at or after the caret; each is checked by the prover first."));
+    col = col.push(widget::text::caption(format!(
+        "Claude or Codex on the session's machine proposes proofs for the {placeholder} at or after the caret; each is checked by the prover first."
+    )));
     col = col.push(widget::text::caption("Type claude or codex (with a hint after it, if you like) on a line of its own in a proof and press Enter."));
-    let _ = f;
     col = col.push(fill_results(ws, table));
     widget::scrollable(col).height(Length::Fill).into()
 }
 
 /// An LLM fill's progress and its proofs, each with an Insert button
-fn fill_results<'a>(ws: &'a Workspace, table: &super::symbols::Table) -> Element<'a, Message> {
+fn fill_results<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Element<'a, Message> {
     let sp = spacing();
     let f = &ws.fill;
     let mut col = widget::column::with_capacity(f.candidates.len() + 2).spacing(sp.space_xs);
@@ -3327,17 +3317,22 @@ fn fill_results<'a>(ws: &'a Workspace, table: &super::symbols::Table) -> Element
         col = col.push(widget::text::body(err.clone()));
     }
     if !f.using.is_empty() {
+        // (the facts as the profile writes them, without the tool's line)
+        let decoded: Vec<String> = f.using.iter().map(|u| table.decode(u).text).collect();
+        let facts = ws.profile.facts_line(&decoded, "").lines().next().unwrap_or("").to_string();
+        let tool = ws.profile.facts_tool();
+        let tool_label = ws.caps.tool(tool).map_or(tool, |t| t.label.as_str());
         col = col.push(
             widget::row::with_capacity(2)
                 .spacing(sp.space_xs)
                 .align_y(Alignment::Center)
                 .push(
                     widget::column::with_capacity(2)
-                        .push(widget::text(format!("using {}", f.using.iter().map(|u| table.decode(u).text).collect::<Vec<_>>().join(" "))).font(cosmic::font::mono()).size(z(13.0)))
-                        .push(widget::text::caption("Facts to guide Sledgehammer"))
+                        .push(widget::text(facts).font(cosmic::font::mono()).size(z(13.0)))
+                        .push(widget::text::caption(format!("Facts to guide {tool_label}")))
                         .width(Length::Fill),
                 )
-                .push(widget::button::standard("Insert with sledgehammer").on_press(Message::InsertUsing)),
+                .push(widget::button::standard(format!("Insert with {tool}")).on_press(Message::InsertUsing)),
         );
     }
     for c in &f.candidates {
@@ -3363,17 +3358,21 @@ fn fill_results<'a>(ws: &'a Workspace, table: &super::symbols::Table) -> Element
     col.into()
 }
 
-fn find_panel<'a>(ws: &'a Workspace, table: &super::symbols::Table) -> Element<'a, Message> {
+/// Searching for theorems, as the session's capabilities describe it
+fn find_panel<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Element<'a, Message> {
     let sp = spacing();
     let q = &ws.find;
+    let Some(search) = &ws.caps.search else { return widget::text::caption("This prover has no search.").into() };
     let mut col = widget::column::with_capacity(6).spacing(sp.space_xs);
     col = col.push(
         widget::row::with_capacity(2)
             .spacing(sp.space_xs)
-            .push(widget::text_input("\"_ + _ = _ + _\" name: comm", &ws.find_input).on_input(Message::FindInput).on_submit(|_| Message::Find).width(Length::Fill))
-            .push(widget::button::suggested("Find").on_press(Message::Find)),
+            .push(widget::text_input(search.placeholder.as_str(), &ws.find_input).on_input(Message::FindInput).on_submit(|_| Message::Find).width(Length::Fill))
+            .push(widget::button::suggested(search.short()).on_press(Message::Find)),
     );
-    col = col.push(widget::text::caption("Theorems in the context at the caret."));
+    if !search.note.is_empty() {
+        col = col.push(widget::text::caption(search.note.as_str()));
+    }
     if q.status == "running" || q.status == "waiting" || q.status == "starting" {
         col = col.push(widget::text::caption("Searching…"));
     }
@@ -3384,7 +3383,7 @@ fn find_panel<'a>(ws: &'a Workspace, table: &super::symbols::Table) -> Element<'
 }
 
 /// Isabelle symbols to insert, by group or by search (name, LaTeX name or abbreviation)
-fn symbols_panel<'a>(ws: &'a Workspace, table: &super::symbols::Table) -> Element<'a, Message> {
+fn symbols_panel<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Element<'a, Message> {
     let sp = spacing();
     let mut col = widget::column::with_capacity(24).spacing(sp.space_xs);
     col = col.push(widget::text_input("search: forall, leq, -->, sub…", &ws.symbol_search).on_input(Message::SymbolSearch));

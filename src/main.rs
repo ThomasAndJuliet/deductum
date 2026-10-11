@@ -1,22 +1,25 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Deductum: Isabelle theories as literate documents, worked on together with
-//! agents in one live prover session. A sibling of COSMIC Terminal Agents
+//! Deductum: proof documents (Isabelle theories now) as literate documents,
+//! worked on together with agents in one live prover session. A sibling of COSMIC Terminal Agents
 //! (design C7), sharing its rendering and its list of machines.
 //!
 //! The design record is `docs/deductum-decisions.md`. The app is a client of
 //! the session host on each machine (`deductum/host`), which owns sessions,
 //! buffers and provers; it keeps a replica of each open theory and shows it
-//! in a literate view and a source view.
+//! in a literate view and a source view. What depends on the prover is in
+//! `prover`: a profile per backend, and the capabilities each session's host
+//! reports, which decide what the UI offers.
 
 mod cli;
+mod codec;
 mod editor;
 mod gap;
 mod goals;
+mod input;
 mod link;
-mod literate;
 mod ot;
-mod symbols;
+mod prover;
 mod theory;
 mod view;
 mod vim;
@@ -56,8 +59,9 @@ use cosmic::{executor, widget};
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
 
+use codec::Symbols;
 use editor::{Mode, Theory};
-use symbols::Table;
+use prover::{Capabilities, Profile, Tool};
 
 pub const APP_ID: &str = "dev.twright.Deductum";
 
@@ -87,9 +91,10 @@ pub struct Flags {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Panel {
     Output,
-    Sledgehammer,
-    Find,
-    Quickcheck,
+    /// The proof tool that runs from a panel (Isabelle's Sledgehammer) and LLM help
+    Tool,
+    Search,
+    Counterexamples,
     Symbols,
     Agents,
     History,
@@ -123,9 +128,11 @@ pub enum Message {
     Save,
     Panel(Panel),
     StateTick(u64),
-    Sledgehammer,
-    SledgehammerAt(usize),
-    Provers(String),
+    /// Run the panel's proof tool at the caret, or at a source offset
+    RunTool(String),
+    RunToolAt(String, usize),
+    /// A proof tool's setting changed (tool, setting, value)
+    ToolSetting(String, String, String),
     CancelQuery,
     InsertProof(String),
     FindInput(String),
@@ -169,8 +176,8 @@ pub enum Message {
     ViewAction(u64, Action),
     /// A click in a formal block shown in the literate view: opens it there, caret at the click
     BlockViewAction(usize, Action),
-    /// Run a diagnostic command (quickcheck, nitpick, try0, solve_direct) at the caret
-    RunCommand(&'static str),
+    /// Run a tool once at the caret without editing (a counterexample finder, a quick proof)
+    RunCommand(String),
     /// Ask an LLM (0 Claude, 1 Codex) to fill the hole at the caret; its proofs are checked
     Fill,
     FillAgent(usize),
@@ -185,9 +192,9 @@ pub enum Message {
     /// The pointer over an editor (where, in its coordinates), or off it
     HoverMove(HoverTarget, cosmic::iced::Point),
     HoverExit,
-    /// Show or hide the Sledgehammer settings; apply them (sent to the prover)
-    ShSettings(bool),
-    ShApply,
+    /// Show or hide a typed tool's settings; apply a tool's settings (sent to the prover)
+    ToolSettings(bool),
+    ToolApply(String),
     HoverTick(u64),
     /// A new block after the one at this index (none: at the end): text, section or lemma
     InsertBlock(Option<usize>, &'static str),
@@ -248,9 +255,6 @@ pub enum Message {
     ToggleRight,
     Goto(usize),
     InsertOutput(String),
-    ShTimeout(String),
-    ShIsar(bool),
-    ShTry0(bool),
     PopOutClosed(cosmic::iced::window::Id),
     ToggleSidebar,
     Noop,
@@ -303,7 +307,8 @@ pub struct Link {
     pub status: String,
     pub hello: Option<Value>,
     pub client_id: Option<String>,
-    pub symbols: Arc<Table>,
+    /// The symbol table the host sent (Isabelle's runtime's), if it has one
+    pub symbols: Option<Arc<dyn Symbols>>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -383,12 +388,16 @@ pub struct FillState {
 pub struct Workspace {
     pub machine: String,
     pub sid: String,
+    /// The session's backend, and what its host says it can do (see [`App::sync_backend`])
+    pub profile: &'static dyn Profile,
+    pub caps: Capabilities,
     pub info: Option<Value>,
     pub theory: Option<Theory>,
     pub opening: Option<String>,
     pub panel: Panel,
     pub output: Option<Value>,
-    pub sledgehammer: QueryState,
+    /// The panel tool's run (Sledgehammer from its panel)
+    pub tool_query: QueryState,
     /// The proof state in parts at the caret, and at the command before (for what changed)
     pub goals: QueryState,
     pub goals_prev: QueryState,
@@ -407,8 +416,8 @@ pub struct Workspace {
     pub pending_goto: Option<usize>,
     /// What the pointer is over, and what the prover says about it
     pub hover: Option<Hover>,
-    /// The Sledgehammer settings are shown (under the proof state)
-    pub sh_open: bool,
+    /// The settings of the typed tool at the caret are shown (under the proof state)
+    pub settings_open: bool,
     /// When the command at the caret was first seen running (a proof tool's progress)
     pub tool_started: Option<std::time::Instant>,
     /// The gap between blocks the pointer is over (after the block at this index)
@@ -425,10 +434,8 @@ pub struct Workspace {
     pub activity: Option<Value>,
     /// Messages shown as code, by the hash of the message
     pub views: HashMap<u64, editor::CodeView>,
-    pub provers: String,
-    pub sh_timeout: String,
-    pub sh_isar: bool,
-    pub sh_try0: bool,
+    /// Proof tools' settings as the human set them, by `tool.setting` (see [`Tool::value`])
+    pub tool_settings: HashMap<String, String>,
     pub symbol_search: String,
     pub history: Vec<Value>,
     pub follow: Option<String>,
@@ -590,7 +597,7 @@ impl App {
                 let machine = self.workspace.as_ref().map(|w| w.machine.clone()).unwrap_or_default();
                 let table = self.table(&machine);
                 if let Some(t) = self.workspace.as_mut().and_then(|w| w.theory.as_mut())
-                    && t.adjacent_paragraph(*m == M::Down, &table)
+                    && t.adjacent_paragraph(*m == M::Down, &*table)
                 {
                     tasks.push(view::centre_selected());
                     continue;
@@ -687,8 +694,28 @@ impl App {
         self.links.iter_mut().find(|l| l.target.key == key)
     }
 
-    pub fn table(&self, machine: &str) -> Arc<Table> {
-        self.link(machine).map_or_else(|| Arc::new(Table::fallback()), |l| l.symbols.clone())
+    /// The symbols the open session's documents are decoded and typed with: its profile's, from
+    /// the table this machine's host sent
+    pub fn table(&self, machine: &str) -> Arc<dyn Symbols> {
+        let profile = self.workspace.as_ref().map_or(prover::profile(None), |w| w.profile);
+        profile.symbols(self.link(machine).and_then(|l| l.symbols.as_ref()))
+    }
+
+    /// The open session's profile and capabilities, from its summary: called whenever summaries
+    /// change. A summary without `backend` is Isabelle's (a host older than backends)
+    fn sync_backend(&mut self) {
+        let Some(ws) = &mut self.workspace else { return };
+        let summary = self.sessions.get(&(ws.machine.clone(), ws.sid.clone()));
+        let profile = prover::profile(summary.and_then(|s| s["backend"].as_str()));
+        let caps = Capabilities::from_summary(summary, profile.default_capabilities());
+        ws.profile = profile;
+        if caps != ws.caps {
+            let typed = caps.typed_tools();
+            ws.caps = caps;
+            if let Some(t) = &mut ws.theory {
+                t.typed_tools = typed;
+            }
+        }
     }
 
     /// Send a request to a machine's host; the reply comes back as `pending`
@@ -804,7 +831,7 @@ impl App {
                 Pending::Query(op) => {
                     if let Some(ws) = &mut self.workspace {
                         let q = match op {
-                            "sledgehammer" => &mut ws.sledgehammer,
+                            "tool" => &mut ws.tool_query,
                             "deductum_command" => &mut ws.cex,
                             "deductum_goals" => &mut ws.goals,
                             "goals_prev" => &mut ws.goals_prev,
@@ -843,14 +870,14 @@ impl App {
                         self.sessions.insert((machine.clone(), id.to_string()), s);
                     }
                 }
+                self.sync_backend();
                 return self.handle_request();
             }
             Pending::Symbols => {
-                let entries: Vec<symbols::Entry> = serde_json::from_value(v["symbols"].clone()).unwrap_or_default();
-                if !entries.is_empty()
+                if let Some(table) = prover::host_symbols(&v["symbols"])
                     && let Some(l) = self.link_mut(&machine)
                 {
-                    l.symbols = Arc::new(Table::new(entries));
+                    l.symbols = Some(table);
                 }
             }
             Pending::SessionInfo(sid) => {
@@ -862,6 +889,7 @@ impl App {
                     let mut summary = Value::Object(s.clone());
                     summary.as_object_mut().map(|o| o.remove("theories"));
                     self.sessions.insert((machine.clone(), sid.clone()), summary);
+                    self.sync_backend();
                 }
                 if let Some(want) = self.want_theory.take() {
                     return self.update(Message::OpenTheory(want));
@@ -869,7 +897,7 @@ impl App {
                 // Open the first theory if none is open
                 if let Some(ws) = self.workspace.as_ref().filter(|w| w.sid == sid && w.theory.is_none() && w.opening.is_none())
                     && let Some(first) = ws.info.as_ref().and_then(|i| {
-                        i["theories"].as_array()?.iter().filter_map(|t| t["path"].as_str()).find(|p| p.ends_with(".thy")).map(str::to_string)
+                        i["theories"].as_array()?.iter().filter_map(|t| t["path"].as_str()).find(|p| ws.profile.is_document(p)).map(str::to_string)
                     })
                 {
                     let _ = ws;
@@ -880,6 +908,7 @@ impl App {
                 let table = self.table(&machine);
                 let kinds = self.kinds.clone();
                 if let Some(ws) = self.workspace.as_mut().filter(|w| w.sid == sid) {
+                    let ws_profile = ws.profile;
                     let mode = ws.theory.as_ref().map_or(Mode::Literate, |t| t.mode);
                     let doc = &v["doc"];
                     let real = doc["path"].as_str().unwrap_or(&path).to_string();
@@ -890,12 +919,13 @@ impl App {
                         .as_ref()
                         .filter(|t| t.path == real && t.local != t.confirmed)
                         .map(|t| (t.confirmed.clone(), ot::diff(&t.confirmed, &t.local), t.cursor));
-                    let mut theory = Theory::new(real, doc, &table, kinds, mode);
+                    let mut theory = Theory::new(real, doc, &*table, kinds, mode, ws_profile);
+                    theory.typed_tools = ws.caps.typed_tools();
                     if let Some((old_confirmed, delta, cursor)) = pending {
                         let remote = ot::diff(&old_confirmed, &theory.confirmed);
                         let rebased = ot::rebase_merge(&delta, &remote);
                         theory.cursor = cursor;
-                        theory.replace_change(&rebased, &table);
+                        theory.replace_change(&rebased, &*table);
                     }
                     ws.theory = Some(theory);
                     ws.opening = None;
@@ -916,7 +946,8 @@ impl App {
                 if generation == self.state_gen
                     && let Some(ws) = &mut self.workspace
                 {
-                    let table = self.links.iter().find(|l| l.target.key == ws.machine).map(|l| l.symbols.clone());
+                    // (decoded with the session's symbols, once its machine is known)
+                    let table = self.links.iter().find(|l| l.target.key == ws.machine).map(|l| ws.profile.symbols(l.symbols.as_ref()));
                     if let Some(t) = &mut ws.theory {
                         let state: String = v["messages"]
                             .as_array()
@@ -927,18 +958,18 @@ impl App {
                             .collect::<Vec<_>>()
                             .join("\n");
                         let state = table.as_ref().map_or(state.clone(), |tb| tb.decode(&state).text);
-                        t.goal = parse_goal_text(&state);
+                        t.goal = t.profile.parse_goal(&state);
                     }
                     ws.output = Some(v);
                     if let Some(tb) = &table {
-                        ws.rebuild_views(tb);
+                        ws.rebuild_views(&**tb);
                     }
                 }
             }
             Pending::Query(op) => {
                 if let Some(ws) = &mut self.workspace {
                     let q = match op {
-                        "sledgehammer" => &mut ws.sledgehammer,
+                        "tool" => &mut ws.tool_query,
                         "deductum_command" => &mut ws.cex,
                             "deductum_goals" => &mut ws.goals,
                             "goals_prev" => &mut ws.goals_prev,
@@ -987,7 +1018,7 @@ impl App {
                     && let Some(h) = ws.hover.as_mut().filter(|h| h.generation == generation)
                 {
                     h.info = Some(v["info"].clone());
-                    ws.rebuild_views(&table);
+                    ws.rebuild_views(&*table);
                 }
             }
             Pending::Definition(window) => {
@@ -1013,7 +1044,12 @@ impl App {
                 let doc = &v["doc"];
                 let path = doc["path"].as_str().or(d["file"].as_str()).unwrap_or("").to_string();
                 let table = self.table(&machine);
-                let mut theory = Theory::new(path.clone(), doc, &table, self.kinds.clone(), Mode::Source);
+                // (a theory of the open session's backend)
+                let ws_profile = self.workspace.as_ref().map_or(prover::profile(None), |w| w.profile);
+                let mut theory = Theory::new(path.clone(), doc, &*table, self.kinds.clone(), Mode::Source, ws_profile);
+                if let Some(ws) = &self.workspace {
+                    theory.typed_tools = ws.caps.typed_tools();
+                }
                 let line = (d["line"].as_u64().unwrap_or(1).max(1) - 1) as usize;
                 let start = d["offset"]
                     .as_u64()
@@ -1087,6 +1123,7 @@ impl App {
             "session" => {
                 if let Some(id) = v["session"]["id"].as_str() {
                     self.sessions.insert((machine.clone(), id.to_string()), v["session"].clone());
+                    self.sync_backend();
                 }
             }
             "session_removed" => {
@@ -1138,7 +1175,7 @@ impl App {
                     let revision = v["revision"].as_u64().unwrap_or(0);
                     let mine = v["client"].as_str().is_some() && v["client"].as_str() == client_id.as_deref();
                     let request = v["request"].as_u64();
-                    if !t.committed(revision, &change, request, mine, &table) {
+                    if !t.committed(revision, &change, request, mine, &*table) {
                         resync = Some((ws.sid.clone(), t.path.clone()));
                     }
                     t.dirty = v["dirty"].as_bool().unwrap_or(t.dirty);
@@ -1162,7 +1199,7 @@ impl App {
                     && Some(t.path.as_str()) == v["path"].as_str()
                 {
                     let before = t.caret_signature();
-                    t.prover_update(&v["prover"], &table);
+                    t.prover_update(&v["prover"], &*table);
                     // The command at the caret moved on (sledgehammer said more, a proof
                     // finished): its state again
                     if t.caret_signature() != before {
@@ -1200,7 +1237,7 @@ impl App {
                 }
                 if let Some(ws) = &mut self.workspace {
                     let id = v["id"].as_str();
-                    for q in [&mut ws.sledgehammer, &mut ws.find, &mut ws.cex, &mut ws.goals, &mut ws.goals_prev] {
+                    for q in [&mut ws.tool_query, &mut ws.find, &mut ws.cex, &mut ws.goals, &mut ws.goals_prev] {
                         if q.id.as_deref() == id && id.is_some() {
                             q.status = v["status"].as_str().unwrap_or("").to_string();
                             // The state keeps showing the last one until the new one is ready
@@ -1214,7 +1251,7 @@ impl App {
                             q.error = v["error"].as_str().map(str::to_string);
                         }
                     }
-                    ws.rebuild_views(&table);
+                    ws.rebuild_views(&*table);
                 }
             }
             "notes" => {
@@ -1257,7 +1294,7 @@ impl App {
                         started: Some(std::time::Instant::now()),
                         ..Default::default()
                     };
-                    ws.panel = Panel::Sledgehammer;
+                    ws.panel = Panel::Tool;
                 }
                 // Its keyword deleted (or a proof inserted for it): its proofs go
                 if v["status"] == json!("canceled") {
@@ -1541,7 +1578,7 @@ impl App {
             self.send(&machine, "info", json!({"session": sid, "path": path, "offset": at, "revision": rev}), Pending::RefInfo(id, how));
             return Task::none();
         }
-        let Some(name) = editor::name_at(&r.theory.local, at) else { return Task::none() };
+        let Some(name) = r.theory.profile.name_at(&r.theory.local, at) else { return Task::none() };
         let Some(t) = &ws.theory else { return Task::none() };
         let (path, offset, rev) = (t.path.clone(), Self::host_offset(t, t.cursor), t.confirmed_rev);
         self.send(
@@ -1563,7 +1600,7 @@ impl App {
                     && let Some(h) = ws.hover.as_mut().filter(|h| h.generation == generation)
                 {
                     h.info = Some(info);
-                    ws.rebuild_views(&table);
+                    ws.rebuild_views(&*table);
                 }
             }
             RefUse::Goto(window) => {
@@ -1591,15 +1628,11 @@ impl App {
         self.workspace
             .as_ref()
             .and_then(|w| w.theory.as_ref())
-            .and_then(|t| t.block_editor.as_ref().filter(|_| t.mode == Mode::Literate))
-            .is_some_and(|be| {
+            .and_then(|t| t.block_editor.as_ref().filter(|_| t.mode == Mode::Literate).map(|be| (t, be)))
+            .is_some_and(|(t, be)| {
                 // (a text or heading block: empty when its paragraph is and nothing but its
                 // command and brackets is around it)
-                let bare = |s: &str| {
-                    s.replace("\\<open>", " ").replace("\\<close>", " ").split_whitespace().all(|w| {
-                        matches!(w, "text" | "txt" | "section" | "subsection" | "subsubsection" | "paragraph" | "subparagraph" | "chapter" | "text_raw")
-                    })
-                };
+                let bare = |s: &str| t.profile.bare_prose(s);
                 be.content.text().trim().is_empty() && be.wrap.as_ref().is_none_or(|(before, after)| bare(before) && bare(after))
             })
     }
@@ -1638,7 +1671,7 @@ impl App {
                 }
                 t.block_editor = None;
                 t.break_step();
-                t.replace(start, e, "", &table);
+                t.replace(start, e, "", &*table);
                 t.break_step();
                 tasks.push(self.flush_edits());
             }
@@ -1695,7 +1728,7 @@ impl App {
                     status: "starting".into(),
                     hello: None,
                     client_id: None,
-                    symbols: Arc::new(Table::fallback()),
+                    symbols: None,
                 });
                 return Task::none();
             }
@@ -1708,7 +1741,8 @@ impl App {
             return self.update(Message::OpenSession(machine, sid.clone()));
         }
         if let Some(path) = &request.path {
-            let (folder, theory) = if path.ends_with(".thy") {
+            // (a document of some backend: its folder's session, opened at it)
+            let (folder, theory) = if prover::profiles().iter().any(|p| p.is_document(path)) {
                 (std::path::Path::new(path).parent().map(|p| p.display().to_string()).unwrap_or_default(), Some(path.clone()))
             } else {
                 (path.clone(), None)
@@ -1718,10 +1752,6 @@ impl App {
         }
         Task::none()
     }
-}
-
-fn parse_goal_text(state: &str) -> Option<editor::Goal> {
-    editor::parse_goal(state)
 }
 
 /// The key of a message's code view
@@ -1735,12 +1765,12 @@ pub fn message_key(m: &Value) -> u64 {
 
 impl Workspace {
     /// Code views for the messages on show: the proof state and the queries' output
-    pub fn rebuild_views(&mut self, table: &Table) {
+    pub fn rebuild_views(&mut self, table: &dyn Symbols) {
         let mut wanted: Vec<&Value> = Vec::new();
         if let Some(out) = &self.output {
             wanted.extend(out["messages"].as_array().into_iter().flatten());
         }
-        for q in [&self.sledgehammer, &self.find, &self.cex] {
+        for q in [&self.tool_query, &self.find, &self.cex] {
             wanted.extend(q.messages.iter());
         }
         let goals = goals::Goals::parse(&self.goals.messages);
@@ -1767,34 +1797,7 @@ pub fn keyword_line(t: &Theory) -> Option<String> {
     let start = chars[..at].iter().rposition(|c| *c == '\n').map_or(0, |i| i + 1);
     let end = chars[at..].iter().position(|c| *c == '\n').map_or(chars.len(), |i| at + i);
     let line: String = chars[start..end].iter().collect();
-    // The word anywhere on the line, outside strings (alone, or ending a proof's start)
-    let mut quoted = false;
-    let mut at_word = true;
-    let lc: Vec<char> = line.chars().collect();
-    for (i, c) in lc.iter().enumerate() {
-        if *c == '"' {
-            quoted = !quoted;
-        }
-        if !quoted && at_word {
-            let rest: String = lc[i..].iter().collect();
-            // (`@name` asks a listening agent)
-            let at_name = rest.strip_prefix('@').map(|r| r.chars().take_while(|c| c.is_alphanumeric() || matches!(c, '_' | '.' | '-')).count()).filter(|n| *n > 0);
-            if let Some(n) = at_name
-                && rest[1 + n..].chars().next().is_none_or(char::is_whitespace)
-                && !rest.contains('"')
-            {
-                return Some(line);
-            }
-            for kw in ["claude", "codex"] {
-                // (a model may follow in brackets: `codex[astra]`)
-                if rest.starts_with(kw) && rest[kw.len()..].chars().next().is_none_or(|c| c.is_whitespace() || c == '[') && !rest.contains('"') {
-                    return Some(line);
-                }
-            }
-        }
-        at_word = c.is_whitespace();
-    }
-    None
+    t.profile.keyword_line(&line).then_some(line)
 }
 
 pub fn file_name(path: &str) -> &str {
@@ -1828,7 +1831,7 @@ impl cosmic::Application for App {
                 status: "starting".into(),
                 hello: None,
                 client_id: None,
-                symbols: Arc::new(Table::fallback()),
+                symbols: None,
             })
             .collect();
         let mut mode_model = widget::segmented_button::SingleSelectModel::default();
@@ -1983,15 +1986,20 @@ impl cosmic::Application for App {
                 if let Some((m, old)) = self.workspace_ids() {
                     self.send(&m, "detach", json!({"session": old}), Pending::Plain);
                 }
+                let summary = self.sessions.get(&(machine.clone(), sid.clone()));
+                let profile = prover::profile(summary.and_then(|s| s["backend"].as_str()));
+                let caps = Capabilities::from_summary(summary, profile.default_capabilities());
                 self.workspace = Some(Workspace {
                     machine: machine.clone(),
                     sid: sid.clone(),
+                    profile,
+                    caps,
                     info: None,
                     theory: None,
                     opening: None,
-                    panel: Panel::Symbols,
+                    panel: if profile.has_symbol_table() { Panel::Symbols } else { Panel::Agents },
                     output: None,
-                    sledgehammer: QueryState { operation: "sledgehammer", ..Default::default() },
+                    tool_query: QueryState { operation: "tool", ..Default::default() },
                     goals: QueryState { operation: "deductum_goals", ..Default::default() },
                     goals_prev: QueryState { operation: "deductum_goals", ..Default::default() },
                     state_text: false,
@@ -2003,7 +2011,7 @@ impl cosmic::Application for App {
                     show_offer: None,
                     pending_goto: None,
                     hover: None,
-                    sh_open: false,
+                    settings_open: false,
                     tool_started: None,
                     gap_hover: None,
                     tools_stopping: false,
@@ -2015,10 +2023,7 @@ impl cosmic::Application for App {
                     cex_params: String::new(),
                     activity: None,
                     views: HashMap::new(),
-                    provers: String::new(),
-                    sh_timeout: String::new(),
-                    sh_isar: false,
-                    sh_try0: true,
+                    tool_settings: HashMap::new(),
                     symbol_search: String::new(),
                     history: Vec::new(),
                     follow: None,
@@ -2059,7 +2064,7 @@ impl cosmic::Application for App {
                 let Some(machine) = self.workspace.as_ref().map(|w| w.machine.clone()) else { return Task::none() };
                 let table = self.table(&machine);
                 if let Some(t) = self.workspace.as_mut().and_then(|w| w.theory.as_mut()) {
-                    t.source_action(action, &table);
+                    t.source_action(action, &*table);
                 }
                 return self.goto_definition();
             }
@@ -2067,7 +2072,7 @@ impl cosmic::Application for App {
                 let Some(machine) = self.workspace.as_ref().map(|w| w.machine.clone()) else { return Task::none() };
                 let table = self.table(&machine);
                 if let Some(t) = self.workspace.as_mut().and_then(|w| w.theory.as_mut()) {
-                    t.block_action(action, &table);
+                    t.block_action(action, &*table);
                 }
                 return self.goto_definition();
             }
@@ -2077,14 +2082,14 @@ impl cosmic::Application for App {
                 let Some(machine) = self.workspace.as_ref().map(|w| w.machine.clone()) else { return Task::none() };
                 let table = self.table(&machine);
                 if let Some(t) = self.workspace.as_mut().and_then(|w| w.theory.as_mut()) {
-                    let edited = t.source_action(action, &table);
+                    let edited = t.source_action(action, &*table);
                     if clicked {
                         self.vim_caret(true);
                     }
                     let Some(t) = self.workspace.as_mut().and_then(|w| w.theory.as_mut()) else { return Task::none() };
                     // (the side-by-side source view scrolls itself, keeping the caret in sight)
                     let keep = view::keep_source_caret(t.source.cursor().position.line);
-                    t.update_completions(&table, edited);
+                    t.update_completions(&*table, edited);
                     let state = self.schedule_state();
                     if edited {
                         // A line reading `claude …` or `codex …`: asked when the typing pauses
@@ -2111,8 +2116,8 @@ impl cosmic::Application for App {
                 let Some(machine) = self.workspace.as_ref().map(|w| w.machine.clone()) else { return Task::none() };
                 let table = self.table(&machine);
                 if let Some(t) = self.workspace.as_mut().and_then(|w| w.theory.as_mut()) {
-                    let edited = t.block_action(action, &table);
-                    t.update_completions(&table, edited);
+                    let edited = t.block_action(action, &*table);
+                    t.update_completions(&*table, edited);
                     // (vim's block cursor where the click put the caret, in normal mode)
                     if clicked {
                         self.vim_caret(true);
@@ -2163,7 +2168,7 @@ impl cosmic::Application for App {
                 let close_popout = self.popout.take().map(cosmic::iced::window::close::<cosmic::Action<Message>>);
                 if let Some(t) = self.workspace.as_mut().and_then(|w| w.theory.as_mut()) {
                     t.break_step();
-                    t.open_block(index, &table);
+                    t.open_block(index, &*table);
                     t.selected = Some(index);
                     // Prose opens in its own typography, laid out as it was shown: the click,
                     // replayed once the editor is laid out, lands where it was made
@@ -2172,7 +2177,7 @@ impl cosmic::Application for App {
                         _ => None,
                     };
                     if replay.is_none() {
-                        t.narrow_to_paragraph(&table);
+                        t.narrow_to_paragraph(&*table);
                     }
                     let mut tasks = vec![widget::text_input::focus(view::block_editor_id()), self.schedule_state()];
                     tasks.extend(close_popout);
@@ -2302,50 +2307,47 @@ impl cosmic::Application for App {
                     ws.goals_prev = QueryState { operation: "deductum_goals", ..Default::default() };
                 }
             }
-            Message::Provers(p) => {
+            Message::ToolSetting(tool, key, value) => {
                 if let Some(ws) = &mut self.workspace {
-                    ws.provers = p;
+                    // (a number's field takes digits only)
+                    let number = ws.caps.tool(&tool).and_then(|t| t.settings.iter().find(|s| s.key == key)).is_some_and(|s| s.kind == "number");
+                    let value = if number { value.chars().filter(char::is_ascii_digit).collect() } else { value };
+                    ws.tool_settings.insert(Tool::setting_key(&tool, &key), value);
                 }
             }
-            Message::Sledgehammer => {
+            Message::RunTool(name) => {
                 let cursor = self.workspace.as_ref().and_then(|w| w.theory.as_ref()).map(|t| t.cursor.saturating_sub(1));
                 if let Some(c) = cursor {
-                    return self.update(Message::SledgehammerAt(c));
+                    return self.update(Message::RunToolAt(name, c));
                 }
             }
-            Message::SledgehammerAt(offset) => {
+            Message::RunToolAt(name, offset) => {
                 let Some(ws) = &mut self.workspace else { return Task::none() };
                 let Some(t) = &ws.theory else { return Task::none() };
+                let Some(tool) = ws.caps.tool(&name).cloned() else { return Task::none() };
                 let host = Self::host_offset(t, offset);
                 let (machine, sid, path, rev) = (ws.machine.clone(), ws.sid.clone(), t.path.clone(), t.confirmed_rev);
-                let provers = ws.provers.trim().to_string();
-                let isar = if ws.sh_isar { "true" } else { "false" };
-                let try0 = if ws.sh_try0 { "true" } else { "false" };
-                let mut options = serde_json::Map::new();
-                if let Ok(secs) = ws.sh_timeout.trim().parse::<u32>() {
-                    options.insert("sledgehammer_timeout".into(), json!(secs.to_string()));
-                }
-                if !provers.is_empty() {
-                    options.insert("sledgehammer_provers".into(), json!(provers));
-                }
-                ws.panel = Panel::Sledgehammer;
-                ws.sledgehammer = QueryState { operation: "sledgehammer", status: "starting".into(), ..Default::default() };
+                // Its settings: the prover options they set, then the ones it takes as arguments
+                let options = tool.options(&ws.tool_settings);
+                let args: Vec<String> = tool.args.iter().map(|k| tool.value(&ws.tool_settings, k).trim().to_string()).collect();
+                ws.panel = Panel::Tool;
+                ws.tool_query = QueryState { operation: "tool", status: "starting".into(), ..Default::default() };
                 if !options.is_empty() {
                     self.send(&machine, "prover_options", json!({"session": sid, "set": options}), Pending::Plain);
                 }
                 self.send(
                     &machine,
                     "query",
-                    json!({"session": sid, "path": path, "offset": host, "revision": rev, "operation": "sledgehammer", "args": [provers, isar, try0]}),
-                    Pending::Query("sledgehammer"),
+                    json!({"session": sid, "path": path, "offset": host, "revision": rev, "operation": tool.name, "args": args}),
+                    Pending::Query("tool"),
                 );
             }
             Message::CancelQuery => {
                 if let Some(ws) = &self.workspace {
                     let q = match ws.panel {
-                        Panel::Find => &ws.find,
-                        Panel::Quickcheck => &ws.cex,
-                        _ => &ws.sledgehammer,
+                        Panel::Search => &ws.find,
+                        Panel::Counterexamples => &ws.cex,
+                        _ => &ws.tool_query,
                     };
                     if let Some(id) = q.id.clone() {
                         let (m, sid) = (ws.machine.clone(), ws.sid.clone());
@@ -2357,15 +2359,15 @@ impl cosmic::Application for App {
                 let Some(machine) = self.workspace.as_ref().map(|w| w.machine.clone()) else { return Task::none() };
                 let table = self.table(&machine);
                 let Some(ws) = &mut self.workspace else { return Task::none() };
-                let q = ws.sledgehammer.clone();
+                let q = ws.tool_query.clone();
                 let Some(t) = &mut ws.theory else { return Task::none() };
                 if q.revision == t.confirmed_rev || q.replace.is_some() || q.end.is_some() {
                     if let Some((s, e)) = q.replace {
                         let (s, e) = (Self::local_offset(t, s), Self::local_offset(t, e));
-                        t.replace(s, e, &proof, &table);
+                        t.replace(s, e, &proof, &*table);
                     } else if let Some(end) = q.end {
                         let end = Self::local_offset(t, end);
-                        t.insert(end, &format!("\n  {proof}"), &table);
+                        t.insert(end, &format!("\n  {proof}"), &*table);
                     }
                     return self.flush_edits();
                 }
@@ -2379,12 +2381,14 @@ impl cosmic::Application for App {
                 let Some(ws) = &mut self.workspace else { return Task::none() };
                 let Some(t) = &ws.theory else { return Task::none() };
                 let host = Self::host_offset(t, t.cursor.saturating_sub(1));
+                let Some(search) = ws.caps.search.clone() else { return Task::none() };
                 let (machine, sid, path, rev, query) = (ws.machine.clone(), ws.sid.clone(), t.path.clone(), t.confirmed_rev, ws.find_input.clone());
                 ws.find = QueryState { operation: "find_theorems", status: "starting".into(), ..Default::default() };
+                let args: Vec<String> = search.args.iter().cloned().chain([query]).collect();
                 self.send(
                     &machine,
                     "query",
-                    json!({"session": sid, "path": path, "offset": host, "revision": rev, "operation": "find_theorems", "args": ["40", "false", query]}),
+                    json!({"session": sid, "path": path, "offset": host, "revision": rev, "operation": search.operation, "args": args}),
                     Pending::Query("find_theorems"),
                 );
             }
@@ -2442,7 +2446,7 @@ impl cosmic::Application for App {
                     let at = Self::local_offset(t, p["at"].as_u64().unwrap_or(0) as usize).min(len);
                     let end = p["end"].as_u64().map_or(at, |e| Self::local_offset(t, e as usize)).clamp(at, len);
                     let text = p["restore"].as_str().unwrap_or("").to_string();
-                    t.replace(at, end, &text, &table);
+                    t.replace(at, end, &text, &*table);
                     t.alternatives.retain(|a| a["id"].as_str() != Some(id.as_str()));
                     return self.flush_edits();
                 }
@@ -2518,7 +2522,7 @@ impl cosmic::Application for App {
                     // the block at the caret
                     let at = t.cursor.saturating_sub(1);
                     if let Some(i) = t.blocks.iter().position(|b| b.start <= at && at <= b.end) {
-                        t.open_block(i, &table);
+                        t.open_block(i, &*table);
                     }
                 }
                 // Proofs only: prose is edited on the page
@@ -2687,7 +2691,7 @@ impl cosmic::Application for App {
                 let (machine, sid, path, rev) = (ws.machine.clone(), ws.sid.clone(), t.path.clone(), t.confirmed_rev);
                 let agent = if ws.fill.agent == 1 { "codex" } else { "claude" };
                 let hint = ws.fill.hint.clone();
-                ws.panel = Panel::Sledgehammer;
+                ws.panel = Panel::Tool;
                 ws.fill = FillState { agent: ws.fill.agent, hint: hint.clone(), status: "starting".into(), ..Default::default() };
                 self.send(&machine, "fill_hole", json!({"session": sid, "path": path, "offset": host, "revision": rev, "agent": agent, "hint": hint}), Pending::Fill);
             }
@@ -2709,27 +2713,23 @@ impl cosmic::Application for App {
                     self.send(&machine, "reply_note", json!({"session": sid, "note": id, "text": text, "resolve": resolve}), Pending::Plain);
                 }
             }
-            Message::ShSettings(open) => {
+            Message::ToolSettings(open) => {
                 if let Some(ws) = &mut self.workspace {
-                    ws.sh_open = open;
+                    ws.settings_open = open;
                 }
             }
-            Message::ShApply => {
-                // For `sledgehammer` typed in the text: the prover's own defaults
+            Message::ToolApply(name) => {
+                // For the tool typed in the text: the prover's own defaults
                 let Some(ws) = &self.workspace else { return Task::none() };
-                let mut options = serde_json::Map::new();
-                if let Ok(secs) = ws.sh_timeout.trim().parse::<u32>() {
-                    options.insert("sledgehammer_timeout".into(), json!(secs.to_string()));
-                }
-                if !ws.provers.trim().is_empty() {
-                    options.insert("sledgehammer_provers".into(), json!(ws.provers.trim()));
-                }
+                let Some(tool) = ws.caps.tool(&name) else { return Task::none() };
+                let options = tool.options(&ws.tool_settings);
                 if options.is_empty() {
                     return Task::none();
                 }
+                let label = tool.label.clone();
                 let (machine, sid) = (ws.machine.clone(), ws.sid.clone());
                 self.send(&machine, "prover_options", json!({"session": sid, "set": options}), Pending::Plain);
-                self.status = Some("Sledgehammer settings applied: they hold for sledgehammer typed in the text".into());
+                self.status = Some(format!("{label} settings applied: they hold for {name} typed in the text"));
             }
             Message::Modifiers(ctrl, alt) => {
                 self.ctrl = ctrl;
@@ -2765,8 +2765,8 @@ impl cosmic::Application for App {
                 return self.update(Message::StopToolsAgain(0));
             }
             Message::StopToolsAgain(round) => {
-                let still = self.workspace.as_ref().and_then(|w| w.activity.as_ref()).is_some_and(|a| {
-                    a["running"].as_array().into_iter().flatten().any(|r| r["name"].as_str().is_some_and(|n| editor::TOOLS.contains(&n)))
+                let still = self.workspace.as_ref().is_some_and(|w| {
+                    w.activity.as_ref().is_some_and(|a| a["running"].as_array().into_iter().flatten().any(|r| r["name"].as_str().is_some_and(|n| w.caps.typed_tool(n).is_some())))
                 });
                 if round > 0 && !still || round >= 6 {
                     if let Some(ws) = &mut self.workspace {
@@ -2862,7 +2862,7 @@ impl cosmic::Application for App {
                 let Some(machine) = self.workspace.as_ref().map(|w| w.machine.clone()) else { return Task::none() };
                 let table = self.table(&machine);
                 let Some((_, r)) = self.references.iter_mut().find(|(w, _)| *w == id) else { return Task::none() };
-                r.theory.source_action(action, &table);
+                r.theory.source_action(action, &*table);
                 if click && (self.ctrl || self.alt) {
                     let at = r.theory.cursor;
                     return self.ref_lookup(id, at, RefUse::Goto(self.alt));
@@ -2929,25 +2929,23 @@ impl cosmic::Application for App {
                     (Some('\n'), _) => "\n",
                     _ => "\n\n",
                 };
-                let body = match kind {
-                    "section" => "section \\<open>\\<close>",
-                    "lemma" => "lemma \"\"\n  sorry",
-                    _ => "text \\<open>\\<close>",
-                };
+                let templates = t.profile.block_templates();
+                let Some(template) = templates.iter().find(|b| b.kind == kind).or(templates.first()).copied() else { return Task::none() };
+                let body = template.body;
                 let after_nl = if chars.get(at) == Some(&'\n') { "\n" } else { "\n\n" };
                 t.break_step();
-                t.replace(at, at, &format!("{before}{body}{after_nl}"), &table);
+                t.replace(at, at, &format!("{before}{body}{after_nl}"), &*table);
                 t.break_step();
                 let start = at + before.chars().count();
                 let index = t.blocks.iter().position(|b| b.start <= start && start < b.end.max(b.start + 1));
                 let mut tasks = vec![self.flush_edits()];
                 if let Some(i) = index {
                     tasks.push(self.update(Message::EditBlock(i)));
-                    // A lemma's caret goes between the quotes
-                    if kind == "lemma"
+                    // (where the template puts the caret: a lemma's between its quotes)
+                    if let Some((line, column)) = template.caret
                         && let Some(be) = self.workspace.as_mut().and_then(|w| w.theory.as_mut()).and_then(|t| t.block_editor.as_mut())
                     {
-                        editor::place(&mut be.content, cosmic::widget::text_editor::Position { line: 0, column: 7 });
+                        editor::place(&mut be.content, cosmic::widget::text_editor::Position { line, column });
                     }
                     tasks.push(view::centre_selected());
                 }
@@ -2966,7 +2964,7 @@ impl cosmic::Application for App {
                 }
                 t.block_editor = None;
                 t.break_step();
-                t.replace(b.start, end, "", &table);
+                t.replace(b.start, end, "", &*table);
                 t.break_step();
                 t.selected = Some(i.min(t.blocks.len().saturating_sub(1)));
                 self.status = Some("Block deleted (Ctrl+Z brings it back)".into());
@@ -2985,7 +2983,7 @@ impl cosmic::Application for App {
                     let machine = self.workspace.as_ref().map(|w| w.machine.clone()).unwrap_or_default();
                     let table = self.table(&machine);
                     if let Some(t) = self.workspace.as_mut().and_then(|w| w.theory.as_mut()) {
-                        t.narrow_to_paragraph(&table);
+                        t.narrow_to_paragraph(&*table);
                     }
                     self.vim_caret(true);
                 }
@@ -3032,7 +3030,8 @@ impl cosmic::Application for App {
             Message::InsertUsing => {
                 let Some(ws) = &self.workspace else { return Task::none() };
                 let (Some((s0, _)), Some(t)) = (ws.fill.replace, &ws.theory) else { return Task::none() };
-                // Sledgehammer on its own line under the `using`, indented like the hole
+                // The facts as the profile writes them, the tool on its own line under them,
+                // indented like the hole
                 let chars: Vec<char> = t.local.chars().collect();
                 let s = Self::local_offset(t, s0).min(chars.len());
                 let mut line_start = s;
@@ -3041,7 +3040,7 @@ impl cosmic::Application for App {
                 }
                 let before: String = chars[line_start..s].iter().collect();
                 let indent = if before.trim().is_empty() { before } else { String::new() };
-                let text = format!("using {}\n{indent}sledgehammer", ws.fill.using.join(" "));
+                let text = t.profile.facts_line(&ws.fill.using, &indent);
                 return self.update(Message::InsertFill(text));
             }
             Message::FillDismiss => {
@@ -3069,7 +3068,7 @@ impl cosmic::Application for App {
                     self.status = Some("The theory changed since; the proof replaces the hole where it now is".into());
                 }
                 let (s, e) = (Self::local_offset(t, s0), Self::local_offset(t, e0));
-                t.replace(s, e, &text, &table);
+                t.replace(s, e, &text, &*table);
                 ws.fill = FillState { agent: f.agent, hint: f.hint, ..Default::default() };
                 return self.flush_edits();
             }
@@ -3084,8 +3083,8 @@ impl cosmic::Application for App {
                 let host = Self::host_offset(t, t.cursor.saturating_sub(1));
                 let (machine, sid, path, rev) = (ws.machine.clone(), ws.sid.clone(), t.path.clone(), t.confirmed_rev);
                 let params = ws.cex_params.trim().trim_start_matches('[').trim_end_matches(']').trim().to_string();
-                let text = if params.is_empty() { cmd.to_string() } else { format!("{cmd} [{params}]") };
-                ws.panel = Panel::Quickcheck;
+                let text = t.profile.tool_invocation(&cmd, &params);
+                ws.panel = Panel::Counterexamples;
                 ws.cex = QueryState { operation: "deductum_command", status: format!("running {text}"), ..Default::default() };
                 self.send(
                     &machine,
@@ -3105,7 +3104,7 @@ impl cosmic::Application for App {
                 let Some(Some(v)) = t.block_views.get_mut(i) else { return Task::none() };
                 v.content.perform(action.clone());
                 let cursor = v.content.cursor();
-                t.open_block(i, &table);
+                t.open_block(i, &*table);
                 t.selected = Some(i);
                 if let Some(be) = &mut t.block_editor {
                     editor::place(&mut be.content, cursor.position);
@@ -3283,7 +3282,7 @@ impl cosmic::Application for App {
             }
             Message::Newline => {
                 let Some(t) = self.workspace.as_ref().and_then(|w| w.theory.as_ref()) else { return Task::none() };
-                let indent = editor::next_indent(&t.line_before_caret());
+                let indent = t.profile.next_indent(&t.line_before_caret());
                 let paste = cosmic::widget::text_editor::Action::Edit(cosmic::widget::text_editor::Edit::Paste(Arc::new(format!("\n{indent}"))));
                 if t.block_editor.is_some() && t.mode == Mode::Literate {
                     return self.update(Message::BlockAction(paste));
@@ -3294,7 +3293,7 @@ impl cosmic::Application for App {
                 let Some(machine) = self.workspace.as_ref().map(|w| w.machine.clone()) else { return Task::none() };
                 let table = self.table(&machine);
                 if let Some(t) = self.workspace.as_mut().and_then(|w| w.theory.as_mut()) {
-                    t.accept_completion(i, &table);
+                    t.accept_completion(i, &*table);
                     return Task::batch([self.flush_edits(), self.schedule_state()]);
                 }
             }
@@ -3313,9 +3312,11 @@ impl cosmic::Application for App {
                     return Task::none();
                 }
                 let (s, e) = (Self::local_offset(t, start as usize), Self::local_offset(t, end as usize));
+                // (a tool that finds proofs, or the placeholder, is replaced by the proof)
                 let name = cmd["name"].as_str().unwrap_or("");
-                if matches!(name, "sledgehammer" | "try0" | "try" | "sorry" | "oops") {
-                    t.replace(s, e, &proof, &table);
+                let replaced = ws.caps.typed_tool(name).is_some_and(|tool| tool.kind == "prove") || t.profile.unfinished().contains(&name);
+                if replaced {
+                    t.replace(s, e, &proof, &*table);
                 } else {
                     // Lined up under the command: a one-line proof indented under it, an outline
                     // (case … next … qed) at its level, each line
@@ -3331,24 +3332,9 @@ impl cosmic::Application for App {
                     } else {
                         format!("\n{indent}  {proof}")
                     };
-                    t.insert(e, &text, &table);
+                    t.insert(e, &text, &*table);
                 }
                 return self.flush_edits();
-            }
-            Message::ShTimeout(v) => {
-                if let Some(ws) = &mut self.workspace {
-                    ws.sh_timeout = v.chars().filter(char::is_ascii_digit).collect();
-                }
-            }
-            Message::ShIsar(v) => {
-                if let Some(ws) = &mut self.workspace {
-                    ws.sh_isar = v;
-                }
-            }
-            Message::ShTry0(v) => {
-                if let Some(ws) = &mut self.workspace {
-                    ws.sh_try0 = v;
-                }
             }
             Message::PopIn => {
                 if let Some(id) = self.popout.take() {

@@ -18,7 +18,10 @@ use cosmic::iced::advanced::text::highlighter;
 use cosmic::widget::text_editor::{self, Action, Cursor, Position};
 
 use super::ot::{self, Change};
-use super::symbols::{Decoded, Table};
+use super::codec::{Decoded, Symbols};
+use super::prover::Profile;
+#[cfg(test)]
+use super::prover::isabelle::symbols::Table;
 use super::theory::{self, Block, Command, Status};
 use prose_render::markdown::{self, Doc};
 
@@ -29,9 +32,6 @@ pub struct ProverMessage {
     pub kind: String,
     pub text: String,
 }
-
-/// Proof tools typed in a proof, whose findings come with Insert
-pub const TOOLS: &[&str] = &["sledgehammer", "try", "try0", "nitpick", "quickcheck", "solve_direct", "nunchaku"];
 
 /// What the prover last said about the theory, in confirmed-text offsets
 #[derive(Clone, Debug, Default)]
@@ -146,8 +146,8 @@ impl BlockEditor {
 
     /// The text as shown for a caret at `caret` (decoded); if it changed, the editor gets it, the
     /// caret where it was. True if it changed
-    pub fn reshow(&mut self, caret: Option<usize>, table: &Table) -> bool {
-        let shown = shown_with_markup(&self.decoded, self.wrap.is_some(), caret, table);
+    pub fn reshow(&mut self, profile: &dyn Profile, caret: Option<usize>, table: &dyn Symbols) -> bool {
+        let shown = shown_with_markup(profile, &self.decoded, self.wrap.is_some(), caret, table);
         if shown == self.shown_text {
             return false;
         }
@@ -159,170 +159,24 @@ impl BlockEditor {
     }
 }
 
-/// Prose as the editor shows it, the caret at `caret` (a decoded offset): [`shown_text`], and its
-/// maths set in Unicode where it can be (`$x \le y^2$` as `x ≤ y²`), one shown character for one
-/// source character (the rest zero-width spaces), except the formula the caret is in, which is
-/// its source, to edit
-pub fn shown_text_at(text: &str, prose: bool, caret: Option<usize>, table: &Table) -> String {
-    let base = shown_text(text, prose);
-    if !prose || !text.contains('$') {
-        return base;
-    }
-    let src: Vec<char> = text.chars().collect();
-    let mut out: Vec<char> = base.chars().collect();
-    let mut i = 0;
-    while i < src.len() {
-        if src[i] != '$' {
-            i += 1;
-            continue;
-        }
-        let open = if src.get(i + 1) == Some(&'$') { 2 } else { 1 };
-        let mut j = i + open;
-        while j < src.len() && !(src[j] == '$' && (open == 1 || src.get(j + 1) == Some(&'$'))) {
-            j += 1;
-        }
-        if j >= src.len() {
-            break;
-        }
-        let end = j + open;
-        if !caret.is_some_and(|c| i <= c && c <= end) {
-            set_math(&src, i, end, open, &mut out, table);
-        }
-        i = end;
-    }
-    out.into_iter().collect()
-}
-
-const ZERO_WIDTH: char = '\u{200B}';
+pub const ZERO_WIDTH: char = '\u{200B}';
 
 /// Markup in a paragraph of prose, rendered where the caret is not inside it: the characters it
-/// hides (its delimiters, shown zero-width) and how what it holds is set
+/// hides (its delimiters, shown zero-width) and how what it holds is set (the profile finds it)
 pub struct Markup {
     pub hide: Vec<usize>,
     pub style: (usize, usize, Hl),
 }
 
-/// The markup of a paragraph's decoded text: `\<^bold>‹…›` (decoded as a bold `‹`),
-/// `\<^emph>‹…›` (a control glyph and a cartouche), `\<^verbatim>‹…›`, and antiquotations
-/// (`@{name …}`, shown as what they hold, as code); none the caret is inside
-pub fn prose_markup(decoded: &super::symbols::Decoded, caret: Option<usize>) -> Vec<Markup> {
-    let cs: Vec<char> = decoded.text.chars().collect();
-    let n = cs.len();
-    let style_at: HashMap<usize, super::symbols::Style> = decoded.styles.iter().map(|(i, st)| (*i, *st)).collect();
-    let inside = |s: usize, e: usize| caret.is_some_and(|c| s <= c && c <= e);
-    // the cartouche opened at `i`: where it closes
-    let close = |i: usize| -> Option<usize> {
-        let mut depth = 0;
-        for (k, c) in cs.iter().enumerate().skip(i) {
-            match c {
-                '‹' => depth += 1,
-                '›' => {
-                    depth -= 1;
-                    if depth == 0 {
-                        return Some(k);
-                    }
-                }
-                '\n' if cs.get(k + 1) == Some(&'\n') => return None,
-                _ => {}
-            }
-        }
-        None
-    };
-    let mut out = Vec::new();
-    let mut i = 0;
-    while i < n {
-        // \<^bold>‹…›: the bold `‹` stands for both
-        if cs[i] == '‹' && style_at.get(&i) == Some(&super::symbols::Style::Bold)
-            && let Some(j) = close(i)
-        {
-            if !inside(i, j + 1) {
-                out.push(Markup { hide: vec![i, j], style: (i + 1, j, Hl::Bold) });
-            }
-            i = j + 1;
-            continue;
-        }
-        // \<^emph>‹…›: its control glyph, then the cartouche
-        if cs[i] == '\u{2223}' && style_at.get(&i) == Some(&super::symbols::Style::Control) && cs.get(i + 1) == Some(&'‹')
-            && let Some(j) = close(i + 1)
-        {
-            if !inside(i, j + 1) {
-                out.push(Markup { hide: vec![i, i + 1, j], style: (i + 2, j, Hl::Emph) });
-            }
-            i = j + 1;
-            continue;
-        }
-        // \<^verbatim>‹…› (and the like, written out)
-        if cs[i] == '\\' && cs[i..].iter().collect::<String>().starts_with("\\<^verbatim>‹") {
-            let open = i + "\\<^verbatim>".chars().count();
-            if let Some(j) = close(open) {
-                if !inside(i, j + 1) {
-                    out.push(Markup { hide: (i..=open).chain([j]).collect(), style: (open + 1, j, Hl::Sem(Sem::Free)) });
-                }
-                i = j + 1;
-                continue;
-            }
-        }
-        // @{name arguments}: shown as the arguments, as code
-        if cs[i] == '@' && cs.get(i + 1) == Some(&'{') {
-            let mut j = i + 2;
-            while j < n && (cs[j].is_alphanumeric() || cs[j] == '_') {
-                j += 1;
-            }
-            while j < n && cs[j] == ' ' {
-                j += 1;
-            }
-            let body = j;
-            let (mut depth, mut quoted, mut k) = (0usize, false, j);
-            let mut end = None;
-            while k < n {
-                let c = cs[k];
-                if quoted {
-                    quoted = c != '"';
-                } else if c == '"' {
-                    quoted = true;
-                } else if c == '‹' {
-                    depth += 1;
-                } else if c == '›' {
-                    depth = depth.saturating_sub(1);
-                } else if c == '}' && depth == 0 {
-                    end = Some(k);
-                    break;
-                } else if c == '\n' && cs.get(k + 1) == Some(&'\n') {
-                    break;
-                }
-                k += 1;
-            }
-            if let Some(e) = end {
-                if !inside(i, e + 1) && e > body {
-                    // (its quotes or cartouche around the argument hidden too)
-                    let (mut s0, mut e0) = (body, e);
-                    let mut hide: Vec<usize> = (i..body).chain([e]).collect();
-                    if (cs[s0] == '"' && cs[e0 - 1] == '"' && e0 - 1 > s0) || (cs[s0] == '‹' && cs[e0 - 1] == '›' && e0 - 1 > s0) {
-                        hide.push(s0);
-                        hide.push(e0 - 1);
-                        s0 += 1;
-                        e0 -= 1;
-                    }
-                    out.push(Markup { hide, style: (s0, e0, Hl::Sem(Sem::Free)) });
-                }
-                i = e + 1;
-                continue;
-            }
-        }
-        i += 1;
-    }
-    out
-}
-
-/// The text the editor shows, maths and markup rendered where the caret is not in them (see
-/// [`shown_text_at`] and [`prose_markup`])
-pub fn shown_with_markup(decoded: &super::symbols::Decoded, prose: bool, caret: Option<usize>, table: &Table) -> String {
-    let shown = shown_text_at(&decoded.text, prose, caret, table);
+/// The text the editor shows: for prose, maths and markup rendered where the caret is not in them
+/// (the profile's [`Profile::shown_prose`] and [`Profile::prose_markup`])
+pub fn shown_with_markup(profile: &dyn Profile, decoded: &Decoded, prose: bool, caret: Option<usize>, table: &dyn Symbols) -> String {
     if !prose {
-        return shown;
+        return shown_text(&decoded.text, false);
     }
+    let shown = profile.shown_prose(&decoded.text, caret, table);
     let mut chars: Vec<char> = shown.chars().collect();
-    for m in prose_markup(decoded, caret) {
+    for m in profile.prose_markup(decoded, caret) {
         for k in m.hide {
             if let Some(c) = chars.get_mut(k) {
                 *c = ZERO_WIDTH;
@@ -330,134 +184,6 @@ pub fn shown_with_markup(decoded: &super::symbols::Decoded, prose: bool, caret: 
         }
     }
     chars.into_iter().collect()
-}
-
-/// A LaTeX command's Unicode character, through Isabelle's symbols (`le` is `\<le>`, `≤`)
-fn latex_char(name: &str, table: &Table) -> Option<char> {
-    let isabelle = super::symbols::LATEX.iter().find(|(_, names)| names.contains(&name)).map_or(name, |(n, _)| *n);
-    let decoded = table.decode(&format!("\\<{isabelle}>")).text;
-    let mut chars = decoded.chars();
-    match (chars.next(), chars.next()) {
-        (Some(c), None) if c != '\\' => Some(c),
-        _ => None,
-    }
-}
-
-/// The formula `s..e` of `src` (delimiters `open` wide) set in Unicode into `out`, where it can be
-fn set_math(src: &[char], s: usize, e: usize, open: usize, out: &mut [char], table: &Table) {
-    for k in (s..s + open).chain(e - open..e) {
-        out[k] = ZERO_WIDTH;
-    }
-    let end = e - open;
-    let mut k = s + open;
-    while k < end {
-        let c = src[k];
-        if c == '\\' {
-            let mut j = k + 1;
-            while j < end && src[j].is_ascii_alphabetic() {
-                j += 1;
-            }
-            if j == k + 1 {
-                // \, \; \! and the like: a space, or nothing
-                if j < end {
-                    out[k] = if matches!(src[j], ',' | ';' | ' ') { ' ' } else { ZERO_WIDTH };
-                    out[j] = ZERO_WIDTH;
-                }
-                k = j + 1;
-                continue;
-            }
-            let name: String = src[k + 1..j].iter().collect();
-            // \frac{a}{b} as a⁄b, \sqrt{x} as √x, \text{…} and the like as what they hold
-            let group = |at: usize| -> Option<usize> {
-                (src.get(at) == Some(&'{')).then(|| {
-                    let mut depth = 0;
-                    (at..end).find(|&m| {
-                        match src[m] {
-                            '{' => depth += 1,
-                            '}' => depth -= 1,
-                            _ => {}
-                        }
-                        depth == 0
-                    })
-                })?
-            };
-            let blank = |out: &mut [char], from: usize, to: usize| {
-                for slot in &mut out[from..to] {
-                    *slot = ZERO_WIDTH;
-                }
-            };
-            match name.as_str() {
-                "frac" | "dfrac" | "tfrac" => {
-                    if let Some(a) = group(j)
-                        && let Some(b) = group(a + 1)
-                    {
-                        blank(out, k, j + 1);
-                        out[a] = '⁄';
-                        out[a + 1] = ZERO_WIDTH;
-                        out[b] = ZERO_WIDTH;
-                        k = j + 1;
-                        continue;
-                    }
-                }
-                "sqrt" => {
-                    if group(j).is_some() {
-                        out[k] = '√';
-                        blank(out, k + 1, j + 1);
-                        k = j + 1;
-                        continue;
-                    }
-                }
-                "text" | "mathrm" | "mathit" | "mathsf" | "mathtt" | "textrm" | "textit" | "operatorname" | "mathbf" => {
-                    if group(j).is_some() {
-                        blank(out, k, j + 1);
-                        k = j + 1;
-                        continue;
-                    }
-                }
-                "left" | "right" | "big" | "Big" | "bigl" | "bigr" | "Bigl" | "Bigr" => {
-                    blank(out, k, j);
-                    k = j;
-                    continue;
-                }
-                _ => {}
-            }
-            if let Some(ch) = latex_char(&name, table) {
-                out[k] = ch;
-                for slot in &mut out[k + 1..j] {
-                    *slot = ZERO_WIDTH;
-                }
-            }
-            k = j;
-            continue;
-        }
-        if (c == '^' || c == '_') && k + 1 < end {
-            let sup = c == '^';
-            if src[k + 1] == '{' {
-                if let Some(m) = (k + 2..end).find(|&m| src[m] == '}')
-                    && src[k + 2..m].iter().all(|&ch| super::symbols::unicode_script(sup, ch).is_some())
-                {
-                    out[k] = ZERO_WIDTH;
-                    out[k + 1] = ZERO_WIDTH;
-                    for n in k + 2..m {
-                        out[n] = super::symbols::unicode_script(sup, src[n]).unwrap();
-                    }
-                    out[m] = ZERO_WIDTH;
-                    k = m + 1;
-                    continue;
-                }
-            } else if let Some(sc) = super::symbols::unicode_script(sup, src[k + 1]) {
-                out[k] = ZERO_WIDTH;
-                out[k + 1] = sc;
-                k += 2;
-                continue;
-            }
-        }
-        // (grouping braces; not one a \frac has already made its slash)
-        if (c == '{' || c == '}') && out[k] == c {
-            out[k] = ZERO_WIDTH;
-        }
-        k += 1;
-    }
 }
 
 /// Prose as it reads while edited: a single line break is shown as a space (the editor wraps the
@@ -491,20 +217,18 @@ pub fn shown_text(text: &str, prose: bool) -> String {
     out
 }
 
-/// The rendered prose of a block's source, if it is a document command
-fn preview_of(source: &str, kinds: &HashMap<String, String>, table: &Table) -> (theory::Kind, Option<Arc<Doc>>) {
-    let blocks = theory::blocks(source, &[], kinds);
+/// The rendered prose of a block's source, if it is prose
+fn preview_of(profile: &dyn Profile, source: &str, kinds: &HashMap<String, String>, table: &dyn Symbols) -> (theory::Kind, Option<Arc<Doc>>) {
+    let blocks = profile.blocks(source, &[], kinds);
     let Some(block) = blocks.first() else { return (theory::Kind::Formal, None) };
     let chars: Vec<char> = source.chars().collect();
     let md = match (block.kind, block.body) {
         (theory::Kind::Heading(level), Some((s, e))) if e <= chars.len() => Some(format!(
             "{} {}",
             "#".repeat(level.min(4) as usize),
-            super::literate::to_markdown(&chars[s..e].iter().collect::<String>(), table).replace('\n', " ")
+            profile.prose(&chars[s..e].iter().collect::<String>(), table).replace('\n', " ")
         )),
-        (theory::Kind::Text, Some((s, e))) if e <= chars.len() => {
-            Some(super::literate::to_markdown(&chars[s..e].iter().collect::<String>(), table))
-        }
+        (theory::Kind::Text, Some((s, e))) if e <= chars.len() => Some(profile.prose(&chars[s..e].iter().collect::<String>(), table)),
         _ => None,
     };
     (block.kind, md.map(|md| Arc::new(markdown::parse(&md))))
@@ -556,7 +280,8 @@ impl LineIndex {
     }
 }
 
-/// The classes of the prover's markup colours (Isabelle's Rendering.Color)
+/// The classes of the prover's markup colours: Isabelle's Rendering.Color names, which the backend
+/// protocol uses for every backend (a driver maps its own semantic classes onto them)
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Sem {
     Keyword1,
@@ -828,7 +553,7 @@ pub struct CodeView {
 }
 
 impl CodeView {
-    pub fn from_message(m: &serde_json::Value, table: &Table) -> Self {
+    pub fn from_message(m: &serde_json::Value, table: &dyn Symbols) -> Self {
         let raw = m["raw"].as_str().or_else(|| m["text"].as_str()).unwrap_or("");
         let d = table.decode(raw.trim_end());
         let n = d.src_of.len() - 1;
@@ -847,9 +572,9 @@ impl CodeView {
                     _ => None,
                 };
                 *c = Some(match style {
-                    super::symbols::Style::Bold => Hl::Bold,
-                    super::symbols::Style::Control => Hl::Control,
-                    super::symbols::Style::Script => Hl::Script(sem),
+                    super::codec::Style::Bold => Hl::Bold,
+                    super::codec::Style::Control => Hl::Control,
+                    super::codec::Style::Script => Hl::Script(sem),
                 });
             }
         }
@@ -924,6 +649,11 @@ pub struct Theory {
     pub can_redo: bool,
     pub save_error: Option<String>,
     pub kinds: Arc<HashMap<String, String>>,
+    /// What the session's backend is like: blocks, prose, colours, indentation
+    pub profile: &'static dyn Profile,
+    /// What the session's typed proof tools are typed as (`sledgehammer`): a proof waiting on
+    /// one is unfinished, not failed
+    pub typed_tools: Vec<String>,
     /// Highlight class of each code point of the decoded text
     pub classes: Vec<Option<Hl>>,
     /// Completions for the word at the caret of the editor in use
@@ -956,79 +686,6 @@ pub struct Goal {
     pub conclusion: String,
 }
 
-/// The first subgoal in a proof state's text (`goal (n subgoals):  1. …`)
-pub fn parse_goal(state: &str) -> Option<Goal> {
-    let mut lines = state.lines().skip_while(|l| !l.trim_start().starts_with("1. "));
-    let first = lines.next()?.trim_start().strip_prefix("1. ")?.to_string();
-    let mut text = first;
-    for l in lines {
-        let t = l.trim_start();
-        if t.split_once(". ").is_some_and(|(n, _)| n.chars().all(|c| c.is_ascii_digit())) || t.is_empty() {
-            break;
-        }
-        text.push(' ');
-        text.push_str(t);
-    }
-    let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
-    let mut goal = Goal::default();
-    let mut body = text.as_str();
-    if let Some(rest) = body.strip_prefix('⋀')
-        && let Some((vars, rest)) = rest.split_once(". ")
-    {
-        goal.vars = vars.split_whitespace().map(str::to_string).collect();
-        body = rest;
-    }
-    if let Some(rest) = body.strip_prefix('⟦')
-        && let Some((prems, concl)) = rest.split_once("⟧ ⟹ ")
-    {
-        goal.premises = prems.split("; ").map(|p| p.trim().to_string()).collect();
-        goal.conclusion = concl.trim().to_string();
-    } else if let Some((prem, concl)) = body.split_once(" ⟹ ") {
-        goal.premises = vec![prem.trim().to_string()];
-        goal.conclusion = concl.trim().to_string();
-    } else {
-        goal.conclusion = body.trim().to_string();
-    }
-    Some(goal)
-}
-
-/// Isar steps from the goal, for the word being typed
-pub fn goal_completions(prefix: &str, replace: usize, goal: &Goal) -> Vec<Completion> {
-    let quote = |t: &str| format!("\"{t}\"");
-    let mut steps: Vec<(&str, String)> = Vec::new();
-    if !goal.vars.is_empty() {
-        steps.push(("fix", format!("fix {}", goal.vars.join(" "))));
-    }
-    if !goal.premises.is_empty() {
-        steps.push(("assume", format!("assume {}", goal.premises.iter().map(|p| quote(p)).collect::<Vec<_>>().join(" "))));
-    }
-    if !goal.conclusion.is_empty() {
-        steps.push(("show", format!("show {}", quote(&goal.conclusion))));
-        steps.push(("have", format!("have {}", quote(&goal.conclusion))));
-        steps.push(("thus", format!("thus {}", quote(&goal.conclusion))));
-    }
-    let intro: Vec<&str> = [
-        (goal.conclusion.starts_with('∀'), "allI"),
-        (goal.conclusion.contains('⟶'), "impI"),
-        (goal.conclusion.contains('∧'), "conjI"),
-        (goal.conclusion.contains('⟷'), "iffI"),
-    ]
-    .into_iter()
-    .filter(|(b, _)| *b)
-    .map(|(_, r)| r)
-    .collect();
-    steps.push(("proof", "proof -".into()));
-    if !intro.is_empty() {
-        steps.push(("proof", format!("proof (intro {})", intro.join(" "))));
-    }
-    steps.push(("using", "using assms".into()));
-    steps
-        .into_iter()
-        .filter(|(kw, _)| prefix.len() >= 2 && kw.starts_with(prefix))
-        .map(|(_, text)| Completion { replace, label: format!("{text}   (from the goal)"), text })
-        .collect()
-}
-
 fn is_word_char(c: char) -> bool {
     c.is_alphanumeric() || c == '_' || c == '\''
 }
@@ -1056,7 +713,7 @@ pub fn at_name(label: &str) -> String {
     out.trim_matches('-').to_string()
 }
 
-pub fn complete(before: &str, table: &Table, kinds: &HashMap<String, String>, words: &[String], goal: Option<&Goal>) -> Vec<Completion> {
+pub fn complete(profile: &dyn Profile, before: &str, table: &dyn Symbols, kinds: &HashMap<String, String>, words: &[String], goal: Option<&Goal>) -> Vec<Completion> {
     let chars: Vec<char> = before.chars().collect();
     let n = chars.len();
     let mut out: Vec<Completion> = Vec::new();
@@ -1093,13 +750,10 @@ pub fn complete(before: &str, table: &Table, kinds: &HashMap<String, String>, wo
     }
     // Abbreviations such as ==> or -->, ending at the caret
     let mut abbrevs: Vec<(usize, char, &str)> = Vec::new();
-    for (name, c, abbrs) in table.completions() {
-        let _ = name;
-        for a in abbrs {
-            let ac: Vec<char> = a.chars().collect();
-            if ac.len() >= 2 && ac.iter().all(|c| !is_word_char(*c)) && n >= ac.len() && chars[n - ac.len()..] == ac[..] {
-                abbrevs.push((ac.len(), c, a.as_str()));
-            }
+    for (c, a) in table.abbreviations() {
+        let ac: Vec<char> = a.chars().collect();
+        if ac.len() >= 2 && ac.iter().all(|c| !is_word_char(*c)) && n >= ac.len() && chars[n - ac.len()..] == ac[..] {
+            abbrevs.push((ac.len(), c, a));
         }
     }
     abbrevs.sort_by(|a, b| b.0.cmp(&a.0));
@@ -1123,7 +777,7 @@ pub fn complete(before: &str, table: &Table, kinds: &HashMap<String, String>, wo
     // Steps built from the goal first, when typing at the start of a line
     let line_start = chars[..j].iter().rev().take_while(|c| **c != '\n').all(|c| c.is_whitespace());
     if line_start && let Some(goal) = goal {
-        out.extend(goal_completions(&prefix, n - j, goal));
+        out.extend(profile.goal_completions(&prefix, n - j, goal));
     }
     let mut kws: Vec<&String> = kinds.keys().filter(|k| k.starts_with(&prefix) && k.len() > prefix.len()).collect();
     kws.sort_by_key(|k| (k.len(), k.to_string()));
@@ -1136,29 +790,6 @@ pub fn complete(before: &str, table: &Table, kinds: &HashMap<String, String>, wo
         }
     }
     out
-}
-
-/// The indentation for a new line after `line`, the Isar way: inside a statement or an
-/// opened proof one level deeper, after the end of a proof one level out
-pub fn next_indent(line: &str) -> String {
-    let indent: String = line.chars().take_while(|c| *c == ' ' || *c == '\t').collect();
-    let trimmed = line.trim();
-    let first = trimmed.split(|c: char| !(c.is_alphanumeric() || c == '_')).next().unwrap_or("");
-    const OPEN: &[&str] = &[
-        "lemma", "theorem", "corollary", "proposition", "schematic_goal", "have", "show", "hence", "thus",
-        "obtain", "fun", "function", "primrec", "definition", "abbreviation", "inductive", "datatype",
-        "record", "locale", "instance", "termination", "case", "next", "interpretation", "sublocale", "consider",
-    ];
-    const CLOSE: &[&str] = &["done", "qed", "sorry", "oops", "by"];
-    let opens = OPEN.contains(&first) || trimmed == "proof" || trimmed.starts_with("proof ") || trimmed.ends_with(" proof") || trimmed.ends_with("{");
-    if CLOSE.contains(&first) && !OPEN.contains(&first) {
-        let n = indent.chars().count().saturating_sub(2);
-        return " ".repeat(n);
-    }
-    if opens && !trimmed.contains(" by ") && !trimmed.ends_with("done") {
-        return format!("{indent}  ");
-    }
-    indent
 }
 
 /// The kind of an edit, for the undo steps: typing a word character, a space or punctuation,
@@ -1193,99 +824,6 @@ pub fn on_edge_row(content: &mut text_editor::Content, last: bool) -> bool {
         return false;
     }
     if last { pos.line == edge.line && pos.column >= edge.column } else { pos.line == 0 && edge.line == 0 && pos.column <= edge.column }
-}
-
-/// The code in a paragraph of prose, as it reads lexically: antiquotations (`@{name` and its
-/// closing brace as keywords, quoted or cartouche arguments as terms, other arguments as names),
-/// maths source (`$` and LaTeX commands, its braces and scripts) and raw LaTeX commands
-pub fn prose_code_classes(text: &str) -> Vec<Option<Hl>> {
-    let cs: Vec<char> = text.chars().collect();
-    let n = cs.len();
-    let mut out: Vec<Option<Hl>> = vec![None; n];
-    let term = Some(Hl::Sem(Sem::Free));
-    let name = Some(Hl::Sem(Sem::TFree));
-    let punct = Some(Hl::Sem(Sem::Skolem));
-    let mut i = 0;
-    while i < n {
-        if cs[i] == '@' && cs.get(i + 1) == Some(&'{') {
-            let mut j = i + 2;
-            while j < n && (cs[j].is_alphanumeric() || cs[j] == '_') {
-                j += 1;
-            }
-            for c in out.iter_mut().take(j).skip(i) {
-                *c = Some(Hl::Keyword);
-            }
-            // its arguments, to the closing brace (quotes and cartouches nest)
-            let (mut depth, mut quoted, mut k) = (0usize, false, j);
-            while k < n {
-                let c = cs[k];
-                if quoted {
-                    out[k] = term;
-                    quoted = c != '"';
-                } else if c == '"' {
-                    out[k] = term;
-                    quoted = true;
-                } else if c == '‹' {
-                    depth += 1;
-                    out[k] = term;
-                } else if c == '›' {
-                    depth = depth.saturating_sub(1);
-                    out[k] = term;
-                } else if depth > 0 {
-                    out[k] = term;
-                } else if c == '}' {
-                    out[k] = Some(Hl::Keyword);
-                    k += 1;
-                    break;
-                } else if !c.is_whitespace() {
-                    out[k] = name;
-                }
-                k += 1;
-            }
-            i = k;
-            continue;
-        }
-        if cs[i] == '$' {
-            out[i] = Some(Hl::Keyword);
-            let mut k = i + 1;
-            while k < n && cs[k] != '$' {
-                if cs[k] == '\\' {
-                    let mut j = k + 1;
-                    while j < n && cs[j].is_ascii_alphabetic() {
-                        j += 1;
-                    }
-                    let j = j.max(k + 2).min(n);
-                    for c in out.iter_mut().take(j).skip(k) {
-                        *c = Some(Hl::Keyword);
-                    }
-                    k = j;
-                    continue;
-                }
-                if matches!(cs[k], '{' | '}' | '^' | '_') {
-                    out[k] = punct;
-                }
-                k += 1;
-            }
-            if k < n {
-                out[k] = Some(Hl::Keyword);
-            }
-            i = k + 1;
-            continue;
-        }
-        if cs[i] == '\\' && cs.get(i + 1).is_some_and(|c| c.is_ascii_alphabetic()) {
-            let mut j = i + 1;
-            while j < n && cs[j].is_ascii_alphabetic() {
-                j += 1;
-            }
-            for c in out.iter_mut().take(j).skip(i) {
-                *c = Some(Hl::Keyword);
-            }
-            i = j;
-            continue;
-        }
-        i += 1;
-    }
-    out
 }
 
 /// Where the selection is (code point offsets in the editor's text, start before end): from the
@@ -1324,7 +862,9 @@ fn new_txn() -> String {
 }
 
 impl Theory {
-    pub fn new(path: String, doc: &serde_json::Value, table: &Table, kinds: Arc<HashMap<String, String>>, mode: Mode) -> Self {
+    /// A document read from the host, of a session whose backend's profile is `profile` (its
+    /// typed tools are the profile's until the session's capabilities say otherwise)
+    pub fn new(path: String, doc: &serde_json::Value, table: &dyn Symbols, kinds: Arc<HashMap<String, String>>, mode: Mode, profile: &'static dyn Profile) -> Self {
         let text = doc["text"].as_str().unwrap_or("").to_string();
         let decoded = table.decode(&text);
         let mut theory = Self {
@@ -1362,6 +902,8 @@ impl Theory {
             can_redo: doc["can_redo"].as_bool().unwrap_or(false),
             save_error: None,
             kinds,
+            profile,
+            typed_tools: profile.default_capabilities().typed_tools(),
             classes: Vec::new(),
             completions: Vec::new(),
             block_highlight: HighlightSettings(Arc::new(HighlightData { generation: 0, lines: Vec::new() }), false),
@@ -1402,7 +944,7 @@ impl Theory {
     }
 
     /// Recompute the completions at the caret of the editor in use
-    pub fn update_completions(&mut self, table: &Table, edited: bool) {
+    pub fn update_completions(&mut self, table: &dyn Symbols, edited: bool) {
         if !edited {
             self.completions.clear();
             return;
@@ -1415,11 +957,11 @@ impl Theory {
         let caret = li.offset(&text, pos);
         let before: String = text.chars().take(caret).collect();
         let words = self.words();
-        self.completions = complete(&before, table, &self.kinds, &words, self.goal.as_ref());
+        self.completions = complete(self.profile, &before, table, &self.kinds, &words, self.goal.as_ref());
     }
 
     /// Accept completion `i` in the editor in use
-    pub fn accept_completion(&mut self, i: usize, table: &Table) {
+    pub fn accept_completion(&mut self, i: usize, table: &dyn Symbols) {
         let Some(c) = self.completions.get(i).cloned() else { return };
         self.completions.clear();
         let in_block = self.block_editor.is_some() && self.mode == Mode::Literate;
@@ -1455,7 +997,7 @@ impl Theory {
                 let src = self.local.chars().skip(be.start).take(be.end - be.start).collect::<String>();
                 be.decoded = table.decode(&src);
                 // (what the editor shows now, for the next edit to be taken against)
-                let shown = shown_with_markup(&be.decoded, be.wrap.is_some(), Some(caret_after), table);
+                let shown = shown_with_markup(self.profile, &be.decoded, be.wrap.is_some(), Some(caret_after), table);
                 if shown != new {
                     let li = LineIndex::new(&shown);
                     be.content = text_editor::Content::with_text(&shown);
@@ -1489,11 +1031,11 @@ impl Theory {
         // Prose being edited: the code in it coloured as code at once (antiquotations, maths
         // source, LaTeX commands), where the prover has not coloured it (yet)
         let shown = be.shown();
-        let prose = be.wrap.as_ref().map(|_| prose_code_classes(&shown));
+        let prose = be.wrap.as_ref().map(|_| self.profile.prose_code_classes(&shown));
         // (markup rendered where the caret is not in it: set bold, emphasised, or as code)
         let mut rendered: Vec<Option<Hl>> = vec![None; shown.chars().count()];
         if be.wrap.is_some() {
-            for m in prose_markup(&be.decoded, Some(be.caret())) {
+            for m in self.profile.prose_markup(&be.decoded, Some(be.caret())) {
                 for c in rendered.iter_mut().take(m.style.1).skip(m.style.0) {
                     *c = Some(m.style.2);
                 }
@@ -1536,26 +1078,13 @@ impl Theory {
         self.block_highlight = HighlightSettings(Arc::new(HighlightData { generation: self.generation, lines }), false);
     }
 
-    /// The source construct the caret is in, within `start..end` (a proof): the Isar statement
-    /// (`have`, `show`, `case`, …, with its proof) around the caret, or, if that is long, the
-    /// command at the caret. As source offsets; the goal goes level with or just after it
+    /// The source construct the caret is in, within `start..end` (a proof), as the profile finds
+    /// it among the proof's commands. As source offsets; the goal goes level with or just after it
     pub fn construct_at(&self, start: usize, end: usize) -> Option<(usize, usize)> {
-        const STATEMENTS: &[&str] = &[
-            "have", "show", "hence", "thus", "obtain", "case", "next", "fix", "assume", "presume", "define", "consider",
-            "proof", "from", "with", "using", "then", "moreover", "ultimately", "finally", "also", "note",
-        ];
-        const OPENERS: &[&str] = &["have", "show", "hence", "thus", "obtain", "case", "next", "consider"];
         let prover = self.local_prover();
         let cmds: Vec<_> = prover.commands.iter().filter(|c| c.start >= start && c.end <= end.max(start + 1)).collect();
         let at = self.cursor.saturating_sub(1).max(start);
-        let i = cmds.iter().position(|c| c.start <= at && at < c.end).or_else(|| cmds.iter().rposition(|c| c.start <= at))?;
-        // The statement: back to the nearest opener, forward to the next opener or the end
-        let s = (0..=i).rev().find(|&k| OPENERS.contains(&cmds[k].name.as_str())).unwrap_or(0);
-        let e = (i + 1..cmds.len()).find(|&k| OPENERS.contains(&cmds[k].name.as_str()) || cmds[k].name == "qed").map_or(cmds.len() - 1, |k| k.saturating_sub(1).max(i));
-        let (cs, ce) = (cmds[s].start, cmds[e].end);
-        let lines = self.local.chars().skip(cs).take(ce.saturating_sub(cs)).filter(|c| *c == '\n').count();
-        let _ = STATEMENTS;
-        if lines > 12 { Some((cmds[i].start, cmds[i].end)) } else { Some((cs, ce)) }
+        self.profile.construct_at(&self.local, &cmds, at)
     }
 
     /// The status of the commands in a source span: worst first
@@ -1603,9 +1132,9 @@ impl Theory {
     }
 
     /// Recompute blocks, rendered prose and highlighting after the text or the prover changed
-    pub fn refresh(&mut self, table: &Table) {
+    pub fn refresh(&mut self, table: &dyn Symbols) {
         let prover = self.local_prover();
-        self.blocks = theory::blocks(&self.local, &prover.commands, &self.kinds);
+        self.blocks = self.profile.blocks(&self.local, &prover.commands, &self.kinds);
         let chars: Vec<char> = self.local.chars().collect();
         let mut docs = Vec::with_capacity(self.blocks.len());
         let mut cache = std::mem::take(&mut self.doc_cache);
@@ -1616,12 +1145,12 @@ impl Theory {
                     if s <= e && e <= chars.len() =>
                 {
                     let src: String = chars[s..e].iter().collect();
-                    let md = format!("{} {}", "#".repeat(level.min(4) as usize), super::literate::to_markdown(&src, table).replace('\n', " "));
+                    let md = format!("{} {}", "#".repeat(level.min(4) as usize), self.profile.prose(&src, table).replace('\n', " "));
                     Some(md)
                 }
                 (theory::Kind::Text, Some((s, e))) if s <= e && e <= chars.len() => {
                     let src: String = chars[s..e].iter().collect();
-                    Some(super::literate::to_markdown(&src, table))
+                    Some(self.profile.prose(&src, table))
                 }
                 _ => None,
             }
@@ -1711,12 +1240,12 @@ impl Theory {
                 }
             }
         };
-        for (s, e, sem) in prover.colours.iter().chain(&paired_brackets(&self.local, &prover.colours)) {
+        for (s, e, sem) in prover.colours.iter().chain(&self.profile.derived_colours(&self.local, &prover.colours)) {
             paint(&mut class, *s, *e, Hl::Sem(*sem), &[]);
         }
         // A `claude` or `codex` line reads to the prover as a `sorry` of the same length: the
         // whole keyword (and its model) coloured as that `sorry` is
-        for (s, e) in keyword_tokens(&self.local) {
+        for (s, e) in self.profile.keyword_tokens(&self.local) {
             let hl = prover.colours.iter().find(|(cs, ce, _)| *cs <= s && s < *ce).map_or(Hl::Keyword, |(_, _, sem)| Hl::Sem(*sem));
             paint(&mut class, s, e, hl, &[]);
         }
@@ -1732,7 +1261,7 @@ impl Theory {
             }
         }
         if prover.commands.is_empty() {
-            for cmd in theory::lexical_commands(&self.local, &self.kinds) {
+            for cmd in self.profile.lexical_commands(&self.local, &self.kinds) {
                 paint(&mut class, cmd.start, cmd.start + cmd.name.chars().count(), Hl::Keyword, &[]);
             }
         }
@@ -1744,31 +1273,9 @@ impl Theory {
             };
             paint(&mut class, m.start, m.end.max(m.start + 1), hl, &[Hl::Keyword, Hl::Unprocessed, Hl::Running, Hl::Warning]);
         }
-        // Comments (* … *), lexically
-        let chars: Vec<char> = self.local.chars().collect();
-        let mut i = 0;
-        while i + 1 < chars.len() {
-            if chars[i] == '(' && chars[i + 1] == '*' {
-                let mut depth = 0;
-                let s = i;
-                while i + 1 < chars.len() {
-                    if chars[i] == '(' && chars[i + 1] == '*' {
-                        depth += 1;
-                        i += 2;
-                    } else if chars[i] == '*' && chars[i + 1] == ')' {
-                        depth -= 1;
-                        i += 2;
-                        if depth == 0 {
-                            break;
-                        }
-                    } else {
-                        i += 1;
-                    }
-                }
-                paint(&mut class, s, i, Hl::Comment, &[Hl::Unprocessed]);
-            } else {
-                i += 1;
-            }
+        // Comments, lexically
+        for (s, e) in self.profile.comments(&self.local) {
+            paint(&mut class, s, e, Hl::Comment, &[Hl::Unprocessed]);
         }
         // Bold and control markers from the symbols
         for (i, style) in &self.decoded.styles {
@@ -1778,10 +1285,10 @@ impl Theory {
                     _ => None,
                 };
                 match style {
-                    super::symbols::Style::Script => *c = Some(Hl::Script(sem)),
+                    super::codec::Style::Script => *c = Some(Hl::Script(sem)),
                     _ if matches!(c, Some(Hl::Error | Hl::Warning)) => {}
-                    super::symbols::Style::Bold => *c = Some(Hl::Bold),
-                    super::symbols::Style::Control => *c = Some(Hl::Control),
+                    super::codec::Style::Bold => *c = Some(Hl::Bold),
+                    super::codec::Style::Control => *c = Some(Hl::Control),
                 }
             }
         }
@@ -1836,18 +1343,16 @@ impl Theory {
     pub fn expected_error(&self, m: &ProverMessage) -> bool {
         // A tool stopped by the human: as if it had run out of time
         if m.kind == "error"
-            && m.text.contains("Interrupt")
-            && self.local_prover().commands.iter().any(|c| TOOLS.contains(&c.name.as_str()) && c.start <= m.start && m.start < c.end)
+            && self.profile.interrupted(&m.text)
+            && self.local_prover().commands.iter().any(|c| self.typed_tools.contains(&c.name) && c.start <= m.start && m.start < c.end)
         {
             return true;
         }
-        if m.kind != "error"
-            || !["Illegal application of proof command", "Failed to finish proof", "Bad context for command"].iter().any(|e| m.text.contains(e))
-        {
+        if m.kind != "error" || !self.profile.tool_waiting_error(&m.text) {
             return false;
         }
         let Some(block) = self.blocks.iter().find(|b| b.start <= m.start && m.start < b.end.max(b.start + 1)) else { return false };
-        block.commands.iter().any(|c| TOOLS.contains(&c.name.as_str()) && c.end <= m.start)
+        block.commands.iter().any(|c| self.typed_tools.contains(&c.name) && c.end <= m.start)
     }
 
     /// A block's status as shown: a proof waiting on a tool typed in it is unfinished, not failed
@@ -1860,7 +1365,7 @@ impl Theory {
         // A stopped tool is a failed command of its own, with or without a message
         let prover = self.local_prover();
         let failed: Vec<_> = prover.commands.iter().filter(|c| c.start >= start && c.end <= end.max(start + 1) && c.status == Status::Failed).collect();
-        let only_tools = failed.iter().all(|c| TOOLS.contains(&c.name.as_str()) || errors.iter().any(|m| m.start >= c.start && m.start < c.end && self.expected_error(m)));
+        let only_tools = failed.iter().all(|c| self.typed_tools.contains(&c.name) || errors.iter().any(|m| m.start >= c.start && m.start < c.end && self.expected_error(m)));
         if errors.iter().all(|m| self.expected_error(m)) && only_tools { Status::Warned } else { status }
     }
 
@@ -1881,7 +1386,7 @@ impl Theory {
     // ----- local edits
 
     /// Apply a source change made here; true if the views had to be rebuilt
-    pub fn apply_local(&mut self, change: &Change, table: &Table) {
+    pub fn apply_local(&mut self, change: &Change, table: &dyn Symbols) {
         if change.is_empty() {
             return;
         }
@@ -1931,7 +1436,7 @@ impl Theory {
     }
 
     /// The source view's edit or motion
-    pub fn source_action(&mut self, action: Action, table: &Table) -> bool {
+    pub fn source_action(&mut self, action: Action, table: &dyn Symbols) -> bool {
         let edit = action.is_edit();
         self.source.perform(action);
         let cursor = self.source.cursor();
@@ -1960,7 +1465,7 @@ impl Theory {
     /// Decode the local text again; when the decoded text differs from what
     /// the editor shows (a symbol was completed, an edit arrived), reset the
     /// editor and put the caret back
-    fn redecode(&mut self, table: &Table, caret_dec: Option<usize>, shown: &str) {
+    fn redecode(&mut self, table: &dyn Symbols, caret_dec: Option<usize>, shown: &str) {
         self.decoded = table.decode(&self.local);
         self.lines = LineIndex::new(&self.decoded.text);
         if self.decoded.text != shown {
@@ -1976,7 +1481,7 @@ impl Theory {
             if dec.text != be.decoded.text {
                 let caret = be.caret();
                 be.decoded = dec;
-                be.reshow(Some(caret), table);
+                be.reshow(self.profile, Some(caret), table);
             } else {
                 be.decoded = dec;
             }
@@ -1992,7 +1497,7 @@ impl Theory {
     }
 
     /// The block editor's edit or motion
-    pub fn block_action(&mut self, action: Action, table: &Table) -> bool {
+    pub fn block_action(&mut self, action: Action, table: &dyn Symbols) -> bool {
         let Some(be) = &mut self.block_editor else { return false };
         let edit = action.is_edit();
         be.content.perform(action);
@@ -2000,7 +1505,7 @@ impl Theory {
         if !edit {
             // (a formula the caret moves into is shown as its source; one it leaves, set)
             let caret = be.caret();
-            if be.reshow(Some(caret), table) {
+            if be.reshow(self.profile, Some(caret), table) {
                 self.compute_block_highlight();
             }
             let Some(be) = &self.block_editor else { return false };
@@ -2025,7 +1530,7 @@ impl Theory {
             let src = self.local.chars().skip(be.start).take(be.end - be.start).collect::<String>();
             let dec = table.decode(&src);
             let caret = dec.to_decoded(caret_src.saturating_sub(be.start));
-            let shown = shown_with_markup(&dec, be.wrap.is_some(), Some(caret), table);
+            let shown = shown_with_markup(self.profile, &dec, be.wrap.is_some(), Some(caret), table);
             if shown != new {
                 let li = LineIndex::new(&shown);
                 be.content = text_editor::Content::with_text(&shown);
@@ -2037,7 +1542,7 @@ impl Theory {
                 Some((before, after)) => format!("{before}{src}{after}"),
                 None => src.clone(),
             };
-            let (kind, preview) = preview_of(&full, &self.kinds, table);
+            let (kind, preview) = preview_of(self.profile, &full, &self.kinds, table);
             be.kind = kind;
             be.preview = preview;
         }
@@ -2052,10 +1557,10 @@ impl Theory {
         true
     }
 
-    pub fn open_block(&mut self, index: usize, table: &Table) {
+    pub fn open_block(&mut self, index: usize, table: &dyn Symbols) {
         let Some(block) = self.blocks.get(index) else { return };
         let full = self.source_text(block.start, block.end);
-        let (kind, preview) = preview_of(&full, &self.kinds, table);
+        let (kind, preview) = preview_of(self.profile, &full, &self.kinds, table);
         // A heading or text is edited as its text alone, set like the text it is
         let (start, end, wrap) = match (block.kind, block.body) {
             (theory::Kind::Heading(_) | theory::Kind::Text, Some((s, e))) if block.start <= s && s <= e && e <= block.end => {
@@ -2065,7 +1570,7 @@ impl Theory {
         };
         let src = self.source_text(start, end);
         let decoded = table.decode(&src);
-        let shown_text = shown_with_markup(&decoded, wrap.is_some(), Some(decoded.text.chars().count()), table);
+        let shown_text = shown_with_markup(self.profile, &decoded, wrap.is_some(), Some(decoded.text.chars().count()), table);
         let content = text_editor::Content::with_text(&shown_text);
         self.cursor = end;
         self.block_editor = Some(BlockEditor { start, end, decoded, content, preview, kind, wrap, shown_text });
@@ -2115,13 +1620,13 @@ impl Theory {
     }
 
     /// Edit `s..e` of a block (a paragraph of its text) as its prose editor, the caret at `at`
-    fn open_range(&mut self, block: &theory::Block, s: usize, e: usize, at: usize, table: &Table) {
+    fn open_range(&mut self, block: &theory::Block, s: usize, e: usize, at: usize, table: &dyn Symbols) {
         let full = self.source_text(block.start, block.end);
-        let (kind, preview) = preview_of(&full, &self.kinds, table);
+        let (kind, preview) = preview_of(self.profile, &full, &self.kinds, table);
         let wrap = Some((self.source_text(block.start, s), self.source_text(e, block.end)));
         let decoded = table.decode(&self.source_text(s, e));
         let caret = decoded.to_decoded(at.clamp(s, e) - s);
-        let shown = shown_with_markup(&decoded, true, Some(caret), table);
+        let shown = shown_with_markup(self.profile, &decoded, true, Some(caret), table);
         let mut content = text_editor::Content::with_text(&shown);
         let pos = LineIndex::new(&shown).position(&shown, caret);
         place(&mut content, pos);
@@ -2132,7 +1637,7 @@ impl Theory {
 
     /// Prose is edited a paragraph at a time: the one the caret is in becomes source, the rest of
     /// the block stays as it reads
-    pub fn narrow_to_paragraph(&mut self, table: &Table) {
+    pub fn narrow_to_paragraph(&mut self, table: &dyn Symbols) {
         let Some((block, body)) = self.prose_block() else { return };
         let paras = self.paragraphs(body);
         if paras.len() < 2 {
@@ -2150,7 +1655,7 @@ impl Theory {
     }
 
     /// The next (or previous) paragraph of the text being edited, opened; false at the block's edge
-    pub fn adjacent_paragraph(&mut self, down: bool, table: &Table) -> bool {
+    pub fn adjacent_paragraph(&mut self, down: bool, table: &dyn Symbols) -> bool {
         let Some((block, body)) = self.prose_block() else { return false };
         let paras = self.paragraphs(body);
         let be = self.block_editor.as_ref().unwrap();
@@ -2162,12 +1667,12 @@ impl Theory {
     }
 
     /// Insert source text at a source offset, as the human
-    pub fn insert(&mut self, at: usize, text: &str, table: &Table) {
+    pub fn insert(&mut self, at: usize, text: &str, table: &dyn Symbols) {
         self.replace(at, at, text, table);
     }
 
     /// Apply a whole change as local edits
-    pub fn replace_change(&mut self, change: &Change, table: &Table) {
+    pub fn replace_change(&mut self, change: &Change, table: &dyn Symbols) {
         if change.is_empty() {
             return;
         }
@@ -2179,7 +1684,7 @@ impl Theory {
         self.refresh(table);
     }
 
-    pub fn replace(&mut self, start: usize, end: usize, text: &str, table: &Table) {
+    pub fn replace(&mut self, start: usize, end: usize, text: &str, table: &dyn Symbols) {
         let change = vec![(start, end, text.to_string())];
         self.apply_local(&change, table);
         self.cursor = start + text.chars().count();
@@ -2243,7 +1748,7 @@ impl Theory {
 
     /// A change the host committed. Returns false when the replica is out of
     /// step and must be read again
-    pub fn committed(&mut self, revision: u64, change: &Change, request: Option<u64>, mine: bool, table: &Table) -> bool {
+    pub fn committed(&mut self, revision: u64, change: &Change, request: Option<u64>, mine: bool, table: &dyn Symbols) -> bool {
         if revision != self.confirmed_rev + 1 {
             return revision <= self.confirmed_rev;
         }
@@ -2283,7 +1788,7 @@ impl Theory {
         true
     }
 
-    pub fn prover_update(&mut self, prover: &serde_json::Value, table: &Table) {
+    pub fn prover_update(&mut self, prover: &serde_json::Value, table: &dyn Symbols) {
         if prover["revision"].as_u64() == Some(self.confirmed_rev) {
             self.prover = Prover::from_json(prover);
             // A report on the text as it is now: nothing it has not seen
@@ -2317,7 +1822,7 @@ mod tests {
     #[test]
     fn local_edits_and_remote_rebase() {
         let table = Table::fallback();
-        let mut t = Theory::new("/x.thy".into(), &doc("lemma \"\\<forall>x. P x\"\n  sorry\n"), &table, Arc::new(HashMap::new()), Mode::Source);
+        let mut t = Theory::new("/x.thy".into(), &doc("lemma \"\\<forall>x. P x\"\n  sorry\n"), &table, Arc::new(HashMap::new()), Mode::Source, crate::prover::profile(None));
         assert!(t.decoded.text.contains('∀'));
         // the human types at the end of the first line
         let end = t.decoded.text.find('\n').unwrap();
@@ -2339,32 +1844,9 @@ mod tests {
     }
 
     #[test]
-    fn completes_steps_from_the_goal() {
-        let state = "proof (prove)\ngoal (1 subgoal):\n 1. ⋀x y. ⟦P x; Q y⟧\n    ⟹ R x y\n";
-        let g = parse_goal(state).unwrap();
-        assert_eq!(g.vars, vec!["x", "y"]);
-        assert_eq!(g.premises, vec!["P x", "Q y"]);
-        assert_eq!(g.conclusion, "R x y");
-        let c = goal_completions("sh", 2, &g);
-        assert_eq!(c[0].text, "show \"R x y\"");
-        let f = goal_completions("fi", 2, &g);
-        assert_eq!(f[0].text, "fix x y");
-    }
-
-    #[test]
-    fn indents_the_isar_way() {
-        assert_eq!(next_indent("lemma foo: \"x = x\""), "  ");
-        assert_eq!(next_indent("  apply simp"), "  ");
-        assert_eq!(next_indent("  done"), "");
-        assert_eq!(next_indent("  proof (induct xs)"), "    ");
-        assert_eq!(next_indent("    show ?case by simp"), "    ");
-        assert_eq!(next_indent("    show \"P x\""), "      ");
-    }
-
-    #[test]
     fn typing_a_symbol_escape_shows_the_symbol() {
         let table = Table::fallback();
-        let mut t = Theory::new("/x.thy".into(), &doc(""), &table, Arc::new(HashMap::new()), Mode::Source);
+        let mut t = Theory::new("/x.thy".into(), &doc(""), &table, Arc::new(HashMap::new()), Mode::Source, crate::prover::profile(None));
         for c in "\\<and>".chars() {
             t.source_action(Action::Edit(text_editor::Edit::Insert(c)), &table);
         }
@@ -2381,7 +1863,7 @@ mod preview_tests {
     fn previews_prose() {
         let table = Table::fallback();
         let src = "text \\<open>We prove that $x + 0 = x$ for every @{typ nat}.\\<close>";
-        let (kind, doc) = preview_of(src, &HashMap::new(), &table);
+        let (kind, doc) = preview_of(crate::prover::profile(None), src, &HashMap::new(), &table);
         assert_eq!(kind, theory::Kind::Text);
         let doc = doc.expect("a preview");
         let text = format!("{:?}", doc);
@@ -2401,67 +1883,6 @@ mod shown_tests {
         assert_eq!(shown, "We prove \u{200B}\u{200B}that it holds.\n\nNext para \u{200B}\u{200B}here");
         assert_eq!(shown_text(src, false), src);
     }
-
-    #[test]
-    fn prose_maths_reads_as_unicode_until_the_caret_is_in_it() {
-        let table = super::super::symbols::Table::fallback();
-        let src = "so $x \\le y^2$ holds";
-        let away = super::shown_text_at(src, true, Some(0), &table);
-        assert_eq!(away.chars().count(), src.chars().count());
-        assert_eq!(away.replace('\u{200B}', ""), "so x ≤ y² holds");
-        let inside = super::shown_text_at(src, true, Some(6), &table);
-        assert_eq!(inside, src);
-        let frac = "half is $\\frac{1}{2}$ and root $\\sqrt{x}$, $\\text{if } a$";
-        let shown = super::shown_text_at(frac, true, None, &table);
-        assert_eq!(shown.chars().count(), frac.chars().count());
-        assert_eq!(shown.replace('\u{200B}', ""), "half is 1⁄2 and root √x, if  a");
-    }
-}
-
-/// The name at a source offset (an identifier, long names with their dots, Greek letters and
-/// sub- and superscripts in it), for looking up what it is
-pub fn name_at(text: &str, at: usize) -> Option<String> {
-    const LETTERS: &[&str] = &[
-        "alpha", "beta", "gamma", "delta", "epsilon", "zeta", "eta", "theta", "iota", "kappa", "mu", "nu", "xi", "pi", "rho", "sigma",
-        "tau", "upsilon", "phi", "chi", "psi", "omega", "Gamma", "Delta", "Theta", "Lambda", "Xi", "Pi", "Sigma", "Upsilon", "Phi",
-        "Psi", "Omega", "^sub", "^sup", "^isub", "^isup",
-    ];
-    let chars: Vec<char> = text.chars().collect();
-    // The pieces of the line around it: plain characters, and `\<...>` symbols as one piece
-    let mut line_start = at.min(chars.len());
-    while line_start > 0 && chars[line_start - 1] != '\n' {
-        line_start -= 1;
-    }
-    let mut pieces: Vec<(usize, usize, bool)> = Vec::new();
-    let mut i = line_start;
-    while i < chars.len() && chars[i] != '\n' {
-        if chars[i] == '\\' && chars.get(i + 1) == Some(&'<') {
-            let close = (i + 2..chars.len()).find(|&k| chars[k] == '>' || chars[k] == '\n');
-            if let Some(k) = close.filter(|&k| chars[k] == '>') {
-                let name: String = chars[i + 2..k].iter().collect();
-                pieces.push((i, k + 1, LETTERS.contains(&name.as_str())));
-                i = k + 1;
-                continue;
-            }
-        }
-        let c = chars[i];
-        pieces.push((i, i + 1, c.is_alphanumeric() || c == '_' || c == '\'' || c == '.'));
-        i += 1;
-    }
-    let k = pieces.iter().position(|&(s, e, _)| s <= at && at < e).or_else(|| pieces.iter().rposition(|&(_, e, _)| e == at))?;
-    if !pieces[k].2 {
-        return None;
-    }
-    let (mut a, mut b) = (k, k);
-    while a > 0 && pieces[a - 1].2 {
-        a -= 1;
-    }
-    while b + 1 < pieces.len() && pieces[b + 1].2 {
-        b += 1;
-    }
-    let name: String = chars[pieces[a].0..pieces[b].1].iter().collect();
-    let name = name.trim_matches('.').to_string();
-    (!name.is_empty() && !name.chars().all(|c| c.is_ascii_digit())).then_some(name)
 }
 
 /// A tooltip and a definition, as the host's `info` gives them, from the prelude's
@@ -2503,7 +1924,7 @@ mod staleness_tests {
         let prover = serde_json::json!({"revision": 3, "backend_revision": 3, "commands": [
             [0, 16, "lemma", "finished"], [16, 26, "by", "finished"], [b, b + 16, "lemma", "finished"], [b + 16, text.len(), "by", "finished"]]});
         let doc = serde_json::json!({"text": text, "revision": 3, "prover": prover});
-        let mut t = Theory::new("/x.thy".into(), &doc, &table, Arc::new(HashMap::new()), Mode::Source);
+        let mut t = Theory::new("/x.thy".into(), &doc, &table, Arc::new(HashMap::new()), Mode::Source, crate::prover::profile(None));
         assert_eq!(t.status_in(b, text.len()), Some(Status::Finished));
         // Typed in the second lemma, not yet sent: it waits, the first does not
         t.replace(b + 6, b + 6, "x", &table);
@@ -2542,114 +1963,6 @@ mod index_tests {
 }
 
 #[cfg(test)]
-mod name_tests {
-    use super::*;
-
-    #[test]
-    fn names_are_found_with_their_dots_and_greek_letters() {
-        let text = "lemma foo: \"List.append xs ys = rev \\<alpha>\\<^sub>1 \\<Rightarrow> x\"";
-        let at = |s: &str| text.find(s).unwrap() + 2;
-        assert_eq!(name_at(text, at("append")).as_deref(), Some("List.append"));
-        assert_eq!(name_at(text, at("rev")).as_deref(), Some("rev"));
-        assert_eq!(name_at(text, at("alpha")).as_deref(), Some("\\<alpha>\\<^sub>1"));
-        assert_eq!(name_at(text, at("Rightarrow")), None);
-        assert_eq!(name_at(text, text.find(" = ").unwrap() + 1), None);
-    }
-
-    #[test]
-    fn entity_results_become_a_tooltip_and_a_definition() {
-        let m = serde_json::json!({"raw": "#deductum:entity constant\nList.rev\n/isa/src/HOL/List.thy\n420\nrev :: 'a list \\<Rightarrow> 'a list"});
-        let info = entity_info(&[m, serde_json::json!({"raw": "#deductum:done"})]);
-        assert_eq!(info["definition"]["line"], 420);
-        assert_eq!(info["definition"]["file"], "/isa/src/HOL/List.thy");
-        assert!(info["tooltip"]["items"][0]["raw"].as_str().unwrap().starts_with("constant List.rev\nrev ::"));
-    }
-}
-
-/// Where `claude` or `codex` (and a model in brackets) asks for a proof, as the host finds such
-/// lines: the keyword ending a line or followed by a hint, outside strings (char offsets)
-pub fn keyword_tokens(text: &str) -> Vec<(usize, usize)> {
-    let mut out = Vec::new();
-    let mut offset = 0;
-    for line in text.split('\n') {
-        let chars: Vec<char> = line.chars().collect();
-        for i in 0..chars.len() {
-            if chars[..i].contains(&'"') || (i > 0 && !matches!(chars[i - 1], ' ' | '\t')) {
-                continue;
-            }
-            let rest: String = chars[i..].iter().collect();
-            let name_len = rest.strip_prefix('@').filter(|r| r.starts_with(|c: char| c.is_ascii_alphabetic())).map(|r| 1 + r.chars().take_while(|c| c.is_alphanumeric() || matches!(c, '_' | '.' | '-')).count());
-            let Some(kw_len) = ["claude", "codex"].into_iter().find(|kw| rest.starts_with(kw)).map(str::len).or(name_len) else { continue };
-            let mut end = i + kw_len;
-            if chars.get(end) == Some(&'[')
-                && let Some(close) = (end + 1..chars.len()).find(|&k| chars[k] == ']')
-                && chars[end + 1..close].iter().all(|c| c.is_alphanumeric() || matches!(c, '.' | ':' | '-' | '_'))
-            {
-                end = close + 1;
-            }
-            let after: String = chars[end..].iter().collect();
-            if (after.is_empty() || after.starts_with([' ', '\t'])) && !after.contains('"') {
-                out.push((offset + i, offset + end));
-                break;
-            }
-        }
-        offset += chars.len() + 1;
-    }
-    out
-}
-
-/// The other half of a bracket the prover colours as part of a literal (Isabelle colours a
-/// delimiter with a letter in it, as UTP's `)\<^sub>e` closing `(P \<or> Q)\<^sub>e`, but not
-/// the plain `(` that opens it): the matching bracket, coloured alike, so that the pair reads as one
-pub fn paired_brackets(text: &str, colours: &[(usize, usize, Sem)]) -> Vec<(usize, usize, Sem)> {
-    let chars: Vec<char> = text.chars().collect();
-    let pair = |c: char| match c {
-        ')' => Some(('(', false)),
-        ']' => Some(('[', false)),
-        '}' => Some(('{', false)),
-        '(' => Some((')', true)),
-        '[' => Some((']', true)),
-        '{' => Some(('}', true)),
-        _ => None,
-    };
-    let mut out = Vec::new();
-    for &(s, e, sem) in colours {
-        if e <= s + 1 || e > chars.len() {
-            continue;
-        }
-        // A closing bracket at its start (matched backwards), or an opening one at its end
-        let (at, close) = match (pair(chars[s]), pair(chars[e - 1])) {
-            (Some((_, false)), _) => (s, chars[s]),
-            (_, Some((_, true))) => (e - 1, chars[e - 1]),
-            _ => continue,
-        };
-        let Some((other, forward)) = pair(close) else { continue };
-        let mut depth = 0usize;
-        let mut k = at;
-        let found = loop {
-            k = match forward {
-                true if k + 1 < chars.len() && k + 1 < at + 4000 => k + 1,
-                false if k > 0 && k + 4000 > at => k - 1,
-                _ => break None,
-            };
-            if chars[k] == close {
-                depth += 1;
-            } else if chars[k] == other {
-                if depth == 0 {
-                    break Some(k);
-                }
-                depth -= 1;
-            }
-        };
-        // (unless the prover colours it already)
-        if let Some(k) = found.filter(|&k| !colours.iter().any(|&(cs, ce, _)| cs <= k && k < ce)) {
-            out.push((k, k + 1, sem));
-        }
-    }
-    out
-}
-
-#[cfg(test)]
 mod prose_completion_tests {
     use super::*;
 
@@ -2658,7 +1971,7 @@ mod prose_completion_tests {
         let table = Table::fallback();
         let text = "theory T imports Main begin\n\ntext \\<open>An assignment shares the unstable\n  observation. Its final commitment applies a\n  total substitution, assign\\<close>\n\nend\n";
         let doc = serde_json::json!({"text": text, "revision": 1, "prover": {}});
-        let mut t = Theory::new("/x.thy".into(), &doc, &table, Arc::new(HashMap::new()), Mode::Literate);
+        let mut t = Theory::new("/x.thy".into(), &doc, &table, Arc::new(HashMap::new()), Mode::Literate, crate::prover::profile(None));
         let i = t.blocks.iter().position(|b| b.kind == theory::Kind::Text).unwrap();
         t.open_block(i, &table);
         let be = t.block_editor.as_ref().unwrap();
@@ -2678,26 +1991,6 @@ mod prose_completion_tests {
 }
 
 #[cfg(test)]
-mod prose_code_tests {
-    use super::*;
-
-    #[test]
-    fn code_in_prose_reads_as_code() {
-        let text = "so @{term \"x + y\"} by @{thm foo_def}, see \\cite{Nipkow} and $x \\le y^2$ here";
-        let c = prose_code_classes(text);
-        let at = |s: &str| text[..text.find(s).unwrap()].chars().count();
-        assert_eq!(c[at("@{term")], Some(Hl::Keyword));
-        assert_eq!(c[at("x + y")], Some(Hl::Sem(Sem::Free)), "the term");
-        assert_eq!(c[at("foo_def")], Some(Hl::Sem(Sem::TFree)), "the theorem's name");
-        assert_eq!(c[at("\\cite")], Some(Hl::Keyword));
-        assert_eq!(c[at("\\le")], Some(Hl::Keyword), "a LaTeX command in maths");
-        assert_eq!(c[at("^2")], Some(Hl::Sem(Sem::Skolem)), "a superscript in maths");
-        assert_eq!(c[at("so")], None, "prose stays prose");
-        assert_eq!(c[at("here")], None);
-    }
-}
-
-#[cfg(test)]
 mod keyword_tests {
     use super::*;
 
@@ -2711,7 +2004,7 @@ mod keyword_tests {
         let prover = serde_json::json!({"revision": 1, "backend_revision": 1, "commands": [], "colours": [[k, k + 5, "keyword1"], [a, a + 5, "keyword1"]]});
         let doc = serde_json::json!({"text": text, "revision": 1, "prover": prover});
         for mode in [Mode::Source, Mode::Literate] {
-            let t = Theory::new("/x.thy".into(), &doc, &table, Arc::new(HashMap::new()), mode);
+            let t = Theory::new("/x.thy".into(), &doc, &table, Arc::new(HashMap::new()), mode, crate::prover::profile(None));
             let classes = |s: usize, n: usize| (s..s + n).map(|i| t.classes[t.decoded.to_decoded(i)]).collect::<Vec<_>>();
             let kw = classes(k, "claude[opus]".len());
             assert!(kw.iter().all(|c| *c == kw[0] && c.is_some()), "{mode:?}: claude[opus] coloured alike: {kw:?}");
@@ -2719,31 +2012,18 @@ mod keyword_tests {
             assert!(at.iter().all(|c| *c == at[0] && c.is_some()), "{mode:?}: @tock coloured alike: {at:?}");
         }
     }
-
-    #[test]
-    fn keyword_lines_are_found_as_the_host_finds_them() {
-        let text = "lemma \"claude\"\n  show ?thesis unfolding f_def claude\n  codex[astra] use foo\n  claudette\n";
-        let words: Vec<String> = keyword_tokens(text).into_iter().map(|(s, e)| text.chars().skip(s).take(e - s).collect()).collect();
-        assert_eq!(words, vec!["claude", "codex[astra]"]);
-    }
 }
 
 #[cfg(test)]
-mod bracket_tests {
+mod entity_tests {
     use super::*;
 
     #[test]
-    fn an_expression_bracket_is_coloured_at_both_ends() {
-        let text = "raw_execution (P \\<or> (Q)) (R)\\<^sub>e a b";
-        let close = text.find(")\\<^sub>e").unwrap();
-        let sem = Sem::parse("keyword1").unwrap();
-        let open = text.find("(R)").unwrap();
-        let close_c = text[..close].chars().count();
-        let extra = paired_brackets(text, &[(close_c, close_c + 9, sem)]);
-        assert_eq!(extra, vec![(text[..open].chars().count(), text[..open].chars().count() + 1, sem)]);
-        // nested: the outer one
-        let text = "f ((a) + b)\\<^sub>e";
-        let c = text.find(")\\<^sub>e").unwrap();
-        assert_eq!(paired_brackets(text, &[(c, c + 9, sem)]), vec![(2, 3, sem)]);
+    fn entity_results_become_a_tooltip_and_a_definition() {
+        let m = serde_json::json!({"raw": "#deductum:entity constant\nList.rev\n/isa/src/HOL/List.thy\n420\nrev :: 'a list \\<Rightarrow> 'a list"});
+        let info = entity_info(&[m, serde_json::json!({"raw": "#deductum:done"})]);
+        assert_eq!(info["definition"]["line"], 420);
+        assert_eq!(info["definition"]["file"], "/isa/src/HOL/List.thy");
+        assert!(info["tooltip"]["items"][0]["raw"].as_str().unwrap().starts_with("constant List.rev\nrev ::"));
     }
 }

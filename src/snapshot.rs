@@ -14,7 +14,8 @@ use cosmic::iced::{Event, Font, Pixels, Size, mouse};
 use serde_json::json;
 
 use super::editor::{Mode, Theory};
-use super::symbols::Table;
+use super::prover::Profile;
+use super::prover::isabelle::symbols::Table;
 use super::{App, Link, Panel, QueryState, Workspace, link};
 
 pub const DEMO: &str = r#"theory Demo
@@ -43,7 +44,7 @@ end
 "#;
 
 fn prover_json(text: &str) -> serde_json::Value {
-    let cmds = super::theory::lexical_commands(text, &HashMap::new());
+    let cmds = super::prover::isabelle::blocks::lexical_commands(text, &HashMap::new());
     let chars: Vec<char> = text.chars().collect();
     let commands: Vec<serde_json::Value> = cmds
         .iter()
@@ -65,7 +66,7 @@ fn prover_json(text: &str) -> serde_json::Value {
 pub fn demo_app(mode: Mode) -> App {
     let table = Arc::new(Table::fallback());
     let doc = json!({"text": DEMO, "revision": 1, "prover": prover_json(DEMO), "dirty": false, "can_undo": true});
-    let mut theory = Theory::new("/home/me/Demo/Demo.thy".into(), &doc, &table, Arc::new(HashMap::new()), mode);
+    let mut theory = Theory::new("/home/me/Demo/Demo.thy".into(), &doc, &*table, Arc::new(HashMap::new()), mode, crate::prover::profile(None));
     theory.cursor = DEMO.find("apply simp").unwrap() + 3;
     let mut sessions = BTreeMap::new();
     sessions.insert(
@@ -94,7 +95,7 @@ pub fn demo_app(mode: Mode) -> App {
             status: "connected".into(),
             hello: None,
             client_id: None,
-            symbols: table,
+            symbols: Some(table),
         }],
         ctrl: false,
         alt: false,
@@ -112,13 +113,15 @@ pub fn demo_app(mode: Mode) -> App {
         workspace: Some(Workspace {
             machine: "local".into(),
             sid: "s1".into(),
+            profile: super::prover::profile(None),
+            caps: super::prover::profile(None).default_capabilities(),
             info: Some(info),
             theory: Some(theory),
             opening: None,
             panel: Panel::Symbols,
             output: Some(json!({"command": {"name": "apply", "status": "finished"}, "messages": [
                 {"kind": "state", "text": "proof (prove)\ngoal (1 subgoal):\n 1. \\<forall>x. x + 0 = x"}]})),
-            sledgehammer: QueryState { operation: "sledgehammer", ..Default::default() },
+            tool_query: QueryState { operation: "tool", ..Default::default() },
             goals: QueryState {
                 operation: "deductum_goals",
                 status: "finished".into(),
@@ -146,7 +149,7 @@ pub fn demo_app(mode: Mode) -> App {
             show_offer: None,
             pending_goto: None,
             hover: None,
-            sh_open: false,
+            settings_open: false,
             tool_started: None,
             gap_hover: None,
             tools_stopping: false,
@@ -166,10 +169,7 @@ pub fn demo_app(mode: Mode) -> App {
                 "running": [{"path": "/home/me/Demo/Demo.thy", "line": 21, "name": "by", "seconds": 41}],
                 "theories": [{"path": "/home/me/Demo/Demo.thy", "theory": "Draft.Demo", "percentage": 80, "running": 1, "failed": 1, "consolidated": false, "total": 16, "imports": ["/home/me/Demo/Base.thy"]},
                              {"path": "/home/me/Demo/Base.thy", "theory": "Draft.Base", "percentage": 45, "running": 2, "failed": 0, "consolidated": false, "total": 120, "imports": []}]})),
-            provers: String::new(),
-            sh_timeout: String::new(),
-            sh_isar: false,
-            sh_try0: true,
+            tool_settings: HashMap::new(),
             symbol_search: String::new(),
             history: vec![json!({"id": 3, "author": {"kind": "agent", "label": "Claude"}, "kind": "edit", "line": 18, "summary": "−5 +'by simp'"}),
                           json!({"id": 2, "author": {"kind": "human", "label": "You"}, "kind": "edit", "line": 7, "summary": "+'zero'"})],
@@ -253,8 +253,8 @@ fn draws_the_source_view() {
 fn draws_the_panels() {
     let mut app = demo_app(Mode::Literate);
     let ws = app.workspace.as_mut().unwrap();
-    ws.panel = Panel::Sledgehammer;
-    ws.sledgehammer = QueryState {
+    ws.panel = Panel::Tool;
+    ws.tool_query = QueryState {
         operation: "sledgehammer",
         status: "finished".into(),
         messages: vec![
@@ -407,7 +407,7 @@ fn draws_a_real_theory() {
         let mut app = demo_app(mode);
         let table = Arc::new(Table::fallback());
         let doc = json!({"text": text, "revision": 1, "prover": {}});
-        let t = Theory::new(path.clone(), &doc, &table, Arc::new(HashMap::new()), mode);
+        let t = Theory::new(path.clone(), &doc, &*table, Arc::new(HashMap::new()), mode, crate::prover::profile(None));
         app.workspace.as_mut().unwrap().theory = Some(t);
         draw(&app, name, Size::new(1400.0, 900.0));
         if mode == Mode::Literate {
@@ -536,7 +536,7 @@ fn a_typed_sledgehammer_leaves_the_proof_unfinished_not_failed() {
     });
     let doc = json!({"text": text, "revision": 1, "prover": prover});
     let table = Arc::new(Table::fallback());
-    let t = Theory::new("/tmp/T.thy".into(), &doc, &table, Arc::new(HashMap::new()), Mode::Literate);
+    let t = Theory::new("/tmp/T.thy".into(), &doc, &*table, Arc::new(HashMap::new()), Mode::Literate, crate::prover::profile(None));
     let b = t.blocks.iter().find(|b| b.name == "lemma").expect("the lemma");
     assert_eq!(b.status, super::theory::Status::Failed);
     assert_eq!(t.shown_status(b.start, b.end, b.status), super::theory::Status::Warned);
@@ -734,7 +734,7 @@ fn places_the_goal_by_the_construct_in_a_long_proof() {
     let text = "theory Long imports Main begin\n\nlemma long: \"(a::nat) + b + c = c + b + a\"\nproof -\n  have one: \"a + b = b + a\"\n    by simp\n  have two: \"(b + a) + c = c + (b + a)\"\n    by simp\n  have three: \"c + (b + a) = c + b + a\"\n    by simp\n  have four: \"a + b + c = (b + a) + c\"\n    using one\n    by simp\n  have five: \"True\"\n    by simp\n  have six: \"True\"\n    by simp\n  show ?thesis\n    using one two three four\n    by simp\nqed\n\nend\n";
     let mut app = demo_app(Mode::Literate);
     let doc = json!({"text": text, "revision": 1, "prover": prover_json(text)});
-    let t = Theory::new("/tmp/Long.thy".into(), &doc, &Arc::new(Table::fallback()), Arc::new(HashMap::new()), Mode::Literate);
+    let t = Theory::new("/tmp/Long.thy".into(), &doc, &Table::fallback(), Arc::new(HashMap::new()), Mode::Literate, crate::prover::profile(None));
     app.workspace.as_mut().unwrap().theory = Some(t);
     app.show_right = false;
     let i = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.name == "lemma").unwrap();
@@ -754,7 +754,7 @@ fn prose_is_edited_a_paragraph_at_a_time() {
     let text = "theory P imports Main begin\n\ntext \\<open>The first paragraph says one thing\n  over two lines.\n\n  The second says $x^2$ another.\n\n  The third ends it.\\<close>\n\nlemma \"True\"\n  by simp\n\nend\n";
     let mut app = demo_app(Mode::Literate);
     let doc = json!({"text": text, "revision": 1, "prover": prover_json(text)});
-    app.workspace.as_mut().unwrap().theory = Some(Theory::new("/tmp/P.thy".into(), &doc, &Arc::new(Table::fallback()), Arc::new(HashMap::new()), Mode::Literate));
+    app.workspace.as_mut().unwrap().theory = Some(Theory::new("/tmp/P.thy".into(), &doc, &Table::fallback(), Arc::new(HashMap::new()), Mode::Literate, crate::prover::profile(None)));
     let i = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.kind == super::theory::Kind::Text).unwrap();
     let mut h = Harness::new(Size::new(1400.0, 900.0));
     let t = app.workspace.as_mut().unwrap().theory.as_mut().unwrap();
@@ -853,7 +853,7 @@ fn goal_placement_pictures() {
     let shot = |name: &str, lemma: &str, at: &str, size: Size, placement: Option<super::view::GoalPlacement>| {
         let mut app = demo_app(Mode::Literate);
         let doc = json!({"text": text, "revision": 1, "prover": prover_json(text)});
-        app.workspace.as_mut().unwrap().theory = Some(Theory::new("/tmp/Long.thy".into(), &doc, &Arc::new(Table::fallback()), Arc::new(HashMap::new()), Mode::Literate));
+        app.workspace.as_mut().unwrap().theory = Some(Theory::new("/tmp/Long.thy".into(), &doc, &Table::fallback(), Arc::new(HashMap::new()), Mode::Literate, crate::prover::profile(None)));
         app.show_right = false;
         app.show_sidebar = false;
         app.goal_placement_override = placement;
@@ -877,7 +877,7 @@ fn the_goal_opens_a_gap_in_a_long_proof_and_clicks_below_it_land_right() {
     let text = "theory Long imports Main begin\n\nlemma long: \"(a::nat) + b + c = c + b + a\"\nproof -\n  have one: \"a + b = b + a\"\n    by simp\n  have two: \"(b + a) + c = c + (b + a)\"\n    by simp\n  have three: \"c + (b + a) = c + b + a\"\n    by simp\n  have four: \"True\"\n    by simp\n  have five: \"True\"\n    by simp\n  have six: \"True\"\n    by simp\n  have seven: \"True\"\n    by simp\n  have eight: \"True\"\n    by simp\n  have nine: \"True\"\n    by simp\n  have ten: \"True\"\n    by simp\n  have eleven: \"True\"\n    by simp\n  show ?thesis\n    using one two three\n    by simp\nqed\n\nend\n";
     let mut app = demo_app(Mode::Literate);
     let doc = json!({"text": text, "revision": 1, "prover": prover_json(text)});
-    app.workspace.as_mut().unwrap().theory = Some(Theory::new("/tmp/Long.thy".into(), &doc, &Arc::new(Table::fallback()), Arc::new(HashMap::new()), Mode::Literate));
+    app.workspace.as_mut().unwrap().theory = Some(Theory::new("/tmp/Long.thy".into(), &doc, &Table::fallback(), Arc::new(HashMap::new()), Mode::Literate, crate::prover::profile(None)));
     app.show_right = false;
     app.show_sidebar = false;
     let i = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.name == "lemma").unwrap();
@@ -936,7 +936,7 @@ fn a_reference_window_shows_its_theory_and_moves_on_ctrl_click() {
     draw_element(super::view::reference_window(&app, id), "deductum-reference", Size::new(820.0, 420.0));
     // The name under the pointer (the hover looks it up by it)
     let hover_at = r.theory.local.find("Node (mirror r)").unwrap() + 7;
-    assert_eq!(super::editor::name_at(&r.theory.local, hover_at).as_deref(), Some("mirror"));
+    assert_eq!(super::prover::profile(None).name_at(&r.theory.local, hover_at).as_deref(), Some("mirror"));
     // Ctrl+click on a name found elsewhere: this window moves there, and Back knows where it was
     let info = super::editor::entity_info(&[json!({"raw": "#deductum:entity type\nLib.tree\n/isa/src/HOL/Lib.thy\n3\ntype tree"})]);
     let _ = app.ref_found(id, RefUse::Goto(false), info);
@@ -1005,7 +1005,7 @@ fn the_goal_beside_stays_level_with_its_construct() {
     text.push_str("lemma low: \"(a::nat) + b + c = c + b + a\"\nproof -\n  have one: \"a + b = b + a\"\n    by simp\n  show ?thesis\n    using one\n    by simp\nqed\n\nend\n");
     let mut app = demo_app(Mode::Literate);
     let doc = json!({"text": text, "revision": 1, "prover": prover_json(&text)});
-    app.workspace.as_mut().unwrap().theory = Some(Theory::new("/tmp/Low.thy".into(), &doc, &Arc::new(Table::fallback()), Arc::new(HashMap::new()), Mode::Literate));
+    app.workspace.as_mut().unwrap().theory = Some(Theory::new("/tmp/Low.thy".into(), &doc, &Table::fallback(), Arc::new(HashMap::new()), Mode::Literate, crate::prover::profile(None)));
     app.show_right = false;
     app.show_sidebar = false;
     let i = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().rposition(|b| b.name == "lemma").unwrap();
@@ -1032,7 +1032,7 @@ fn the_source_view_pops_out_its_proof_with_the_construct_tinted() {
     let text = "theory Pop imports Main begin\n\nlemma pop: \"(a::nat) + b + c = c + b + a\"\nproof -\n  have one: \"a + b = b + a\"\n    by simp\n  show ?thesis\n    using one\n    by simp\nqed\n\nend\n";
     let mut app = demo_app(Mode::Source);
     let doc = json!({"text": text, "revision": 1, "prover": prover_json(text)});
-    app.workspace.as_mut().unwrap().theory = Some(Theory::new("/tmp/Pop.thy".into(), &doc, &Arc::new(Table::fallback()), Arc::new(HashMap::new()), Mode::Source));
+    app.workspace.as_mut().unwrap().theory = Some(Theory::new("/tmp/Pop.thy".into(), &doc, &Table::fallback(), Arc::new(HashMap::new()), Mode::Source, crate::prover::profile(None)));
     app.show_right = false;
     app.show_sidebar = false;
     app.workspace.as_mut().unwrap().theory.as_mut().unwrap().cursor = text[..text.find("have one").unwrap()].chars().count() + 3;
@@ -1068,7 +1068,7 @@ fn the_vim_block_cursor_covers_a_whole_character() {
     let text = "theory Z imports Main begin\n\nlemma z: \"x \\<Rightarrow> \u{200b}y\"\n  by simp\n\nend\n";
     let mut app = demo_app(Mode::Source);
     let doc = json!({"text": text, "revision": 1, "prover": prover_json(text)});
-    app.workspace.as_mut().unwrap().theory = Some(Theory::new("/tmp/Z.thy".into(), &doc, &Arc::new(Table::fallback()), Arc::new(HashMap::new()), Mode::Source));
+    app.workspace.as_mut().unwrap().theory = Some(Theory::new("/tmp/Z.thy".into(), &doc, &Table::fallback(), Arc::new(HashMap::new()), Mode::Source, crate::prover::profile(None)));
     app.vim_enabled = true;
     app.vim.mode = super::vim::Mode::Normal;
     let t = app.workspace.as_mut().unwrap().theory.as_mut().unwrap();
@@ -1118,7 +1118,7 @@ fn a_utp_reference_window_with_the_real_symbols() {
     let table = Arc::new(Table::new(serde_json::from_value(v["symbols"].clone()).unwrap()));
     let mut app = demo_app(Mode::Source);
     if let Some(l) = app.links.first_mut() {
-        l.symbols = table.clone();
+        l.symbols = Some(table.clone());
     }
     let doc = json!({"ok": true, "doc": {"path": "/isa/utp_rea_prog.thy", "text": text, "revision": 0, "prover": null, "library": true}});
     let d = json!({"file": "/isa/utp_rea_prog.thy", "line": 203, "name": "utp_rea_prog.lift_cond_srea_def"});
@@ -1197,10 +1197,10 @@ fn double_click_selects_a_word_and_it_stays() {
 #[test]
 fn block_errors_are_short_and_draw_their_scripts() {
     assert_eq!(
-        super::view::message_summary_pub("Failed to finish proof\\<^here>:\ngoal (2 subgoals):\n 1. \\<And>ok. ok\\<^sup>> = ok"),
+        super::prover::profile(None).message_summary("Failed to finish proof\\<^here>:\ngoal (2 subgoals):\n 1. \\<And>ok. ok\\<^sup>> = ok"),
         "Failed to finish proof"
     );
-    assert_eq!(super::view::message_summary_pub("Undefined fact: \"foo\"\\<^here>"), "Undefined fact: \"foo\"");
+    assert_eq!(super::prover::profile(None).message_summary("Undefined fact: \"foo\"\\<^here>"), "Undefined fact: \"foo\"");
 }
 
 
@@ -1258,7 +1258,7 @@ fn nothing_on_the_page_runs_into_the_goal_beside_it() {
         text.push_str(&format!("text \\<open>{para}\\<close>\n\nend\n"));
         let mut app = demo_app(Mode::Literate);
         let doc = json!({"text": text, "revision": 1, "prover": prover_json(&text)});
-        app.workspace.as_mut().unwrap().theory = Some(Theory::new("/tmp/Fit.thy".into(), &doc, &Arc::new(Table::fallback()), Arc::new(HashMap::new()), Mode::Literate));
+        app.workspace.as_mut().unwrap().theory = Some(Theory::new("/tmp/Fit.thy".into(), &doc, &Table::fallback(), Arc::new(HashMap::new()), Mode::Literate, crate::prover::profile(None)));
         app.show_right = false;
         app.show_sidebar = false;
         let small = text.find("lemma small").unwrap();
@@ -1313,7 +1313,7 @@ fn the_margins_collapse_before_the_goal_goes_under() {
     for (w, beside) in [(1320.0f32, true), (1100.0, true), (1000.0, false)] {
         let mut app = demo_app(Mode::Literate);
         let doc = json!({"text": text, "revision": 1, "prover": prover_json(&text)});
-        app.workspace.as_mut().unwrap().theory = Some(Theory::new("/tmp/W.thy".into(), &doc, &Arc::new(Table::fallback()), Arc::new(HashMap::new()), Mode::Literate));
+        app.workspace.as_mut().unwrap().theory = Some(Theory::new("/tmp/W.thy".into(), &doc, &Table::fallback(), Arc::new(HashMap::new()), Mode::Literate, crate::prover::profile(None)));
         app.show_right = false;
         app.show_sidebar = false;
         let i = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().rposition(|b| b.name == "lemma").unwrap();
@@ -1335,7 +1335,7 @@ fn empty_blocks_go() {
     let fresh = |text: &str| {
         let mut app = demo_app(Mode::Literate);
         let doc = json!({"text": text, "revision": 1, "prover": prover_json(text)});
-        app.workspace.as_mut().unwrap().theory = Some(Theory::new("/tmp/G.thy".into(), &doc, &Arc::new(Table::fallback()), Arc::new(HashMap::new()), Mode::Literate));
+        app.workspace.as_mut().unwrap().theory = Some(Theory::new("/tmp/G.thy".into(), &doc, &Table::fallback(), Arc::new(HashMap::new()), Mode::Literate, crate::prover::profile(None)));
         app
     };
     let local = |app: &App| app.workspace.as_ref().unwrap().theory.as_ref().unwrap().local.clone();
@@ -1445,7 +1445,7 @@ fn moving_from_a_wrapped_text_block_into_a_code_block_with_keys() {
     for (vim, up) in [(false, false), (true, false), (false, true), (true, true)] {
         let mut app = demo_app(Mode::Literate);
         let doc = json!({"text": text, "revision": 1, "prover": prover_json(&text)});
-        app.workspace.as_mut().unwrap().theory = Some(Theory::new("/tmp/P.thy".into(), &doc, &Arc::new(Table::fallback()), Arc::new(HashMap::new()), Mode::Literate));
+        app.workspace.as_mut().unwrap().theory = Some(Theory::new("/tmp/P.thy".into(), &doc, &Table::fallback(), Arc::new(HashMap::new()), Mode::Literate, crate::prover::profile(None)));
         app.show_right = false;
         app.show_sidebar = false;
         app.vim_enabled = vim;
@@ -1493,7 +1493,7 @@ fn moving_from_a_paragraph_through_the_next_into_a_code_block() {
     for vim in [false, true] {
         let mut app = demo_app(Mode::Literate);
         let doc = json!({"text": text, "revision": 1, "prover": prover_json(&text)});
-        app.workspace.as_mut().unwrap().theory = Some(Theory::new("/tmp/P.thy".into(), &doc, &Arc::new(Table::fallback()), Arc::new(HashMap::new()), Mode::Literate));
+        app.workspace.as_mut().unwrap().theory = Some(Theory::new("/tmp/P.thy".into(), &doc, &Table::fallback(), Arc::new(HashMap::new()), Mode::Literate, crate::prover::profile(None)));
         app.show_right = false;
         app.show_sidebar = false;
         app.vim_enabled = vim;
@@ -1649,7 +1649,7 @@ fn the_insert_palette_follows_the_context() {
     let ti = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.kind == super::theory::Kind::Text).unwrap();
     let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(ti));
     let ctx = |app: &App| super::view::insert_context(app.workspace.as_ref().unwrap().theory.as_ref().unwrap());
-    assert_eq!(ctx(&app), Some(super::view::InsertContext::Prose));
+    assert_eq!(ctx(&app), Some(super::prover::InsertContext::Prose));
     let mut h = Harness::new(Size::new(1320.0, 800.0));
     h.draw(&app, "palette-prose");
     // the caret inside the maths
@@ -1661,7 +1661,7 @@ fn the_insert_palette_follows_the_context() {
         let li = super::editor::LineIndex::new(&text);
         super::editor::place(&mut be.content, li.position(&text, at));
     }
-    assert_eq!(ctx(&app), Some(super::view::InsertContext::Symbols), "inside $…$: symbols");
+    assert_eq!(ctx(&app), Some(super::prover::InsertContext::Symbols), "inside $…$: symbols");
     let _ = cosmic::Application::update(&mut app, super::Message::PaletteQuery("forall".into()));
     h.draw(&app, "palette-symbols");
     // a template, inserted at the caret, in the source
@@ -1719,7 +1719,7 @@ fn up_and_down_leave_a_block_from_its_edge_rows() {
     for up in [true, false] {
         let mut app = demo_app(Mode::Literate);
         let doc = json!({"text": text, "revision": 1, "prover": prover_json(&text)});
-        app.workspace.as_mut().unwrap().theory = Some(Theory::new("/tmp/U.thy".into(), &doc, &Arc::new(Table::fallback()), Arc::new(HashMap::new()), Mode::Literate));
+        app.workspace.as_mut().unwrap().theory = Some(Theory::new("/tmp/U.thy".into(), &doc, &Table::fallback(), Arc::new(HashMap::new()), Mode::Literate, crate::prover::profile(None)));
         app.show_right = false;
         app.show_sidebar = false;
         let wi = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.name == "lemma" && b.start > text.find("lemma wrapped").unwrap().saturating_sub(1)).unwrap();
@@ -1766,7 +1766,7 @@ fn the_palette_wraps_the_selection() {
     let fresh = || {
         let mut app = demo_app(Mode::Literate);
         let doc = json!({"text": text, "revision": 1, "prover": {}});
-        app.workspace.as_mut().unwrap().theory = Some(Theory::new("/tmp/W.thy".into(), &doc, &Arc::new(Table::fallback()), Arc::new(HashMap::new()), Mode::Literate));
+        app.workspace.as_mut().unwrap().theory = Some(Theory::new("/tmp/W.thy".into(), &doc, &Table::fallback(), Arc::new(HashMap::new()), Mode::Literate, crate::prover::profile(None)));
         let ti = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.kind == super::theory::Kind::Text).unwrap();
         let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(ti));
         app
@@ -1822,7 +1822,7 @@ fn a_palette_click_is_one_history_entry() {
     let text = "theory W imports Main begin\n\ntext \\<open>We prove that addition with zero is the identity.\\<close>\n\nend\n";
     let mut app = demo_app(Mode::Literate);
     let doc = json!({"text": text, "revision": 1, "prover": {}});
-    app.workspace.as_mut().unwrap().theory = Some(Theory::new("/tmp/W.thy".into(), &doc, &Arc::new(Table::fallback()), Arc::new(HashMap::new()), Mode::Literate));
+    app.workspace.as_mut().unwrap().theory = Some(Theory::new("/tmp/W.thy".into(), &doc, &Table::fallback(), Arc::new(HashMap::new()), Mode::Literate, crate::prover::profile(None)));
     let ti = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.kind == super::theory::Kind::Text).unwrap();
     let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(ti));
     {
@@ -1855,16 +1855,16 @@ fn markup_renders_unless_the_caret_is_in_it() {
     let d = table.decode(src);
     let text: Vec<char> = d.text.chars().collect();
     let far = Some(0);
-    let shown: Vec<char> = super::editor::shown_with_markup(&d, true, far, &table).chars().collect();
+    let shown: Vec<char> = super::editor::shown_with_markup(super::prover::profile(None), &d, true, far, &table).chars().collect();
     assert_eq!(shown.len(), text.len(), "one shown character for each");
     let visible: String = shown.iter().filter(|c| **c != '\u{200B}').collect();
     assert!(visible.contains("The finite case and this one, x + y too."), "rendered: {visible:?}");
-    let marks = super::editor::prose_markup(&d, far);
+    let marks = super::prover::profile(None).prose_markup(&d, far);
     assert!(marks.iter().any(|m| m.style.2 == super::editor::Hl::Bold), "bold");
     assert!(marks.iter().any(|m| m.style.2 == super::editor::Hl::Emph), "emphasis");
     // the caret inside the bold: that one is source again, the others still rendered
     let at = d.text.find("finite").map(|b| d.text[..b].chars().count() + 2);
-    let inside: String = super::editor::shown_with_markup(&d, true, at, &table).chars().filter(|c| *c != '\u{200B}').collect();
+    let inside: String = super::editor::shown_with_markup(super::prover::profile(None), &d, true, at, &table).chars().filter(|c| *c != '\u{200B}').collect();
     assert!(inside.contains("‹finite›") && inside.contains("and this one"), "source where the caret is: {inside:?}");
 }
 
@@ -1874,7 +1874,7 @@ fn list_items_are_offered_in_a_list() {
     let text = "theory L imports Main begin\n\ntext \\<open>Some prose.\n\n\\<^item> one\n\\<^item> two\\<close>\n\nend\n";
     let mut app = demo_app(Mode::Literate);
     let doc = json!({"text": text, "revision": 1, "prover": {}});
-    app.workspace.as_mut().unwrap().theory = Some(Theory::new("/tmp/L.thy".into(), &doc, &Arc::new(Table::fallback()), Arc::new(HashMap::new()), Mode::Literate));
+    app.workspace.as_mut().unwrap().theory = Some(Theory::new("/tmp/L.thy".into(), &doc, &Table::fallback(), Arc::new(HashMap::new()), Mode::Literate, crate::prover::profile(None)));
     let ti = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.kind == super::theory::Kind::Text).unwrap();
     let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(ti));
     let table = Table::fallback();
@@ -1883,12 +1883,12 @@ fn list_items_are_offered_in_a_list() {
         let shown = be.content.text();
         eprintln!("line {line}: {:?}", shown.split('\n').nth(line));
         super::editor::place(&mut be.content, cosmic::widget::text_editor::Position { line, column: 3 });
-        super::view::list_item_at(app.workspace.as_ref().unwrap().theory.as_ref().unwrap(), &table)
+        super::view::list_entries(app.workspace.as_ref().unwrap().theory.as_ref().unwrap(), &table)
     };
     let end = |app: &mut App| {
         let be = app.workspace.as_mut().unwrap().theory.as_mut().unwrap().block_editor.as_mut().unwrap();
         be.content.perform(cosmic::widget::text_editor::Action::Move(cosmic::widget::text_editor::Motion::DocumentEnd));
-        super::view::list_item_at(app.workspace.as_ref().unwrap().theory.as_ref().unwrap(), &table)
+        super::view::list_entries(app.workspace.as_ref().unwrap().theory.as_ref().unwrap(), &table)
     };
     let _ = at;
     // (the block opens on its last paragraph, the items)
@@ -1896,8 +1896,8 @@ fn list_items_are_offered_in_a_list() {
     let _ = app.workspace.as_mut().unwrap().theory.as_mut().unwrap().adjacent_paragraph(false, &table);
     let first = end(&mut app);
     eprintln!("first {first:?}, second {second:?}");
-    assert!(first.is_none(), "prose is not a list");
-    assert!(second.is_some_and(|(m, _)| m == "\\<^item>"), "an item's line is in a list");
+    assert!(first.first().is_some_and(|e| e.label == "bullet list"), "prose is not a list");
+    assert!(second.first().is_some_and(|e| e.label == "next item" && e.before.contains("\\<^item>")), "an item's line is in a list");
 }
 
 /// The last block selected: its own actions add a block after it, and the page's closing row of
@@ -1908,7 +1908,7 @@ fn no_duplicate_actions_after_the_last_block() {
     let text = "theory One imports Main begin\n\ntext \\<open>Only prose here.\\<close>\n\nend\n";
     let mut app = demo_app(Mode::Literate);
     let doc = json!({"text": text, "revision": 1, "prover": {}});
-    app.workspace.as_mut().unwrap().theory = Some(Theory::new("/tmp/One.thy".into(), &doc, &Arc::new(Table::fallback()), Arc::new(HashMap::new()), Mode::Literate));
+    app.workspace.as_mut().unwrap().theory = Some(Theory::new("/tmp/One.thy".into(), &doc, &Table::fallback(), Arc::new(HashMap::new()), Mode::Literate, crate::prover::profile(None)));
     app.show_right = false;
     app.show_sidebar = false;
     let ti = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.kind == super::theory::Kind::Text).unwrap();
