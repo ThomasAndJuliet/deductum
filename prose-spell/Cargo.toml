@@ -1,0 +1,11 @@
+[package]
+name = "prose-spell"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-only"
+description = "Spelling and grammar checking with Harper, off the UI thread"
+
+[dependencies]
+harper-core = "2.11"
+log = "0.4"
+tokio = { version = "1", features = ["sync"] }
