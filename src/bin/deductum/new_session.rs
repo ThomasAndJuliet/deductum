@@ -245,7 +245,8 @@ pub fn page<'a>(app: &'a App, ns: &'a NewSession) -> Element<'a, Message> {
     if let Some(err) = &ns.error {
         col = col.push(note(err.clone(), true));
     }
-    let ready = !ns.folder.is_empty() && (ns.backend.is_some() || ns.detections.as_ref().is_some_and(|d| d.is_empty()));
+    // (a backend picked: by the human, or as the only one found)
+    let ready = !ns.folder.is_empty() && ns.backend.is_some();
     col = col.push(
         widget::row::with_capacity(3)
             .spacing(s.space_s)

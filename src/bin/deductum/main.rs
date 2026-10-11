@@ -975,8 +975,13 @@ impl App {
                 }
             }
             Pending::Suggest => {
+                // (nothing detected and one backend on the machine, as with an older host: it)
+                let only = self.new_session.as_ref().map(|ns| self.backends(ns.machine)).filter(|b| b.len() == 1).and_then(|b| b[0]["backend"].as_str().map(str::to_string));
                 if let Some(ns) = &mut self.new_session {
                     ns.suggested(&v);
+                    if ns.backend.is_none() && ns.detections.as_ref().is_some_and(Vec::is_empty) {
+                        ns.backend = only;
+                    }
                 }
             }
             Pending::Create => {
