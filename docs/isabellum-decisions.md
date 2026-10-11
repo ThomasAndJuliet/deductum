@@ -4,6 +4,11 @@ Isabellum opens a folder of Isabelle theories and shows it as a literate
 document. You and any number of agents work in the same live prover session.
 The app is a sibling of COSMIC Terminal Agents and lives in the same repository.
 
+On branch `multi-prover`, Isabellum is being extended to Lean and Rocq (Coq)
+backends alongside Isabelle (C16). That design is in
+[isabellum-provers.md](isabellum-provers.md). The rest of this record still
+describes the Isabelle-only app as implemented.
+
 This record keeps three things apart:
 
 - **Specified**: behaviour the human decided.
@@ -40,6 +45,7 @@ isabellum command, Terminal Agents ┘   socket, or         │ edit log, undo, 
 | Transforms | `isabellum/host/isabellum_ot.py`, `src/bin/isabellum/ot.rs` | Rebasing a change past later changes under the `strict`, `partial` and `merge` policies. |
 | MCP adapter | `isabellum/host/isabellum_mcp.py` | The agent tools. Run with `isabellum_host.py mcp [--ssh DEST]`. |
 | App | `src/bin/isabellum/` | Sessions sidebar, the literate and source views, panels, the `isabellum` command. |
+| Renderer | `prose/prose-render`, `prose/prose-spell` | Cerea's shared crates, as a git subtree. They replace the `#[path]` borrowing of `src/thread/{markdown,rich,math}.rs` described under "The literate view" (merged from `shared-prose`). |
 
 ## Specified behaviour
 
@@ -59,6 +65,7 @@ isabellum command, Terminal Agents ┘   socket, or         │ edit log, undo, 
 | C12 | The main Isabelle version is the one isabelle-utp supports: CyPhyAssure's patched **Isabelle2025**. |
 | C13 | **Autosave**, and agents can save. When a file changes on disk with no unsaved edits, it is reloaded; otherwise a Reload button is shown, or agents can resolve the conflict. |
 | C14 | Two views per theory, **literate** and **source**, with Isabelle symbols rendered in both. **Sledgehammer** integration with a good UI is essential. |
+| C16 | In a new worktree, a large extension with **separate Isabelle, Lean and Coq/Rocq backends**. The UI exposes the features that are relevant to the current backend, and manages projects and sessions across the backends. Builds on Cerea's split rendering engine (`prose/`). Design: [isabellum-provers.md](isabellum-provers.md). |
 
 ## Chosen architecture
 
