@@ -291,6 +291,18 @@ pub trait Profile: Send + Sync {
         "subgoal"
     }
 
+    /// Whether `c` can be typed after the `\` of a symbol being completed (Isabelle's names are
+    /// letters, digits and `^`; Lean's abbreviations also use punctuation: `\<`, `\.`, `\->`)
+    fn symbol_query_char(&self, c: char) -> bool {
+        c.is_ascii_alphanumeric() || c == '^'
+    }
+
+    /// Whether `\<name>` is the form of a symbol (Isabelle's), so that `\<` begins a name rather
+    /// than being a symbol of its own (Lean's `⟨`)
+    fn angle_escapes(&self) -> bool {
+        true
+    }
+
     /// Whether the first word of each command is a keyword to colour (Isabelle). Lean's commands
     /// include every tactic, whose words are coloured by the lexer where they are keywords
     fn commands_are_keywords(&self) -> bool {

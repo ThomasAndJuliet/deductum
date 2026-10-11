@@ -295,6 +295,16 @@ fn typing_a_backslash_abbreviation_offers_the_character() {
     let c = super::editor::complete(t.profile, "theorem t : p \\to", &*symbols, &HashMap::new(), &[], None);
     assert_eq!(c[0].text, "→", "{c:?}");
     assert_eq!(c[0].replace, 3);
+    // the punctuation abbreviations: `\<` is ⟨ (not the start of an Isabelle name), `\.` is ·
+    let c = super::editor::complete(t.profile, "exact \\<", &*symbols, &HashMap::new(), &[], None);
+    assert_eq!(c[0].text, "⟨", "{c:?}");
+    assert_eq!(c[0].replace, 2);
+    let c = super::editor::complete(t.profile, "  \\.", &*symbols, &HashMap::new(), &[], None);
+    assert_eq!(c[0].text, "·", "{c:?}");
+    // Isabelle keeps its `\<name>` form
+    let table = super::prover::isabelle::symbols::Table::fallback();
+    let c = super::editor::complete(&super::prover::ISABELLE, "lemma \"\\<fora", &table, &HashMap::new(), &[], None);
+    assert_eq!(c[0].text, "∀", "{c:?}");
     let c = super::editor::complete(t.profile, "  intro h\n  cases h with | inl h => ex", &*symbols, &HashMap::new(), &["exact".to_string()], None);
     assert!(c.iter().any(|c| c.text == "exact"), "words of the file");
 }

@@ -731,10 +731,10 @@ pub fn complete(profile: &dyn Profile, before: &str, table: &dyn Symbols, kinds:
     }
     // \<name or \name: symbols by name
     let mut i = n;
-    while i > 0 && (chars[i - 1].is_ascii_alphanumeric() || chars[i - 1] == '^') {
+    while i > 0 && profile.symbol_query_char(chars[i - 1]) {
         i -= 1;
     }
-    let lt = i >= 2 && chars[i - 1] == '<' && chars[i - 2] == '\\';
+    let lt = profile.angle_escapes() && i >= 2 && chars[i - 1] == '<' && chars[i - 2] == '\\';
     let bs = i >= 1 && chars[i - 1] == '\\';
     if lt || bs {
         let prefix: String = chars[i..].iter().collect();
