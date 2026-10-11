@@ -903,6 +903,34 @@ fn blend(a: Color, b: Color, t: f32) -> Color {
     Color { r: a.r + (b.r - a.r) * t, g: a.g + (b.g - a.g) * t, b: a.b + (b.b - a.b) * t, a: a.a }
 }
 
+pub fn pop_out_button_id() -> widget::Id {
+    widget::Id::new("deductum-pop-out")
+}
+
+/// The pop-out button's size: no taller than a line of the source view, so that, centred on the
+/// proof's first line, it stays inside the proof's band there and inside a code cell's corner
+pub fn pop_out_size() -> f32 {
+    z(16.0).round() + 2.0 * z(2.0)
+}
+
+/// How far the pop-out button is inside the top right corner of the code it floats over: as far
+/// from the right as from the top, the top such that it is centred on the first line
+pub fn pop_out_inset() -> f32 {
+    (CODE_PADDING.top + code_line_height() / 2.0 - pop_out_size() / 2.0).max(1.0)
+}
+
+/// Pop out: the proof in a window of its own, a small icon button floating over the code (in
+/// both views)
+fn pop_out_button<'a>() -> Element<'a, Message> {
+    let button = widget::button::custom(widget::icon::from_name("window-pop-out-symbolic").size(z(16.0).round() as u16).icon())
+        .padding(z(2.0))
+        .width(Length::Fixed(pop_out_size()))
+        .height(Length::Fixed(pop_out_size()))
+        .class(theme::Button::Icon)
+        .on_press(Message::PopOut);
+    widget::container(widget::tooltip(button, widget::text("Pop out (the proof in a window of its own)"), widget::tooltip::Position::Bottom)).id(pop_out_button_id()).into()
+}
+
 /// A block's status strip, then its code
 fn framed<'a>(code: Element<'a, Message>, status: Status, marked: bool) -> Element<'a, Message> {
     let strip = widget::container(widget::Space::new())
@@ -1732,15 +1760,9 @@ fn block_editor_in<'a>(ws: Option<&'a Workspace>, t: &'a Theory, window: bool, i
             None => banded(super::gap::Gap::new(code, widget::Space::new().height(Length::Fixed(0.0)), 0.0)).into(),
         };
         // Pop out: a small button floating at the top right of the code, as in the source view
-        let pop: Element<'_, Message> = if be.kind == Kind::Formal {
-            widget::button::icon(widget::icon::from_name("window-pop-out-symbolic"))
-                .tooltip("Pop out (the proof in a window of its own)")
-                .on_press(Message::PopOut)
-                .into()
-        } else {
-            widget::Space::new().width(Length::Fixed(0.0)).height(Length::Fixed(0.0)).into()
-        };
-        let code: Element<'_, Message> = super::gap::Beside::new(code, pop, iced::Vector::new(4.0, 0.0)).right().fixed().into();
+        let pop: Element<'_, Message> = if be.kind == Kind::Formal { pop_out_button() } else { widget::Space::new().width(Length::Fixed(0.0)).height(Length::Fixed(0.0)).into() };
+        let inset = pop_out_inset();
+        let code: Element<'_, Message> = super::gap::Beside::new(code, pop, iced::Vector::new(inset, inset)).right().fixed().into();
         framed(code, t.shown_status(be.start, be.end, t.status_in(be.start, be.end).unwrap_or(Status::Finished)), true)
     };
     let mut col = widget::column::with_capacity(6).spacing(4).push(editor);
@@ -2467,12 +2489,13 @@ fn source<'a>(ws: &'a Workspace, t: &'a Theory, inline: Option<&'a Workspace>, t
     let proof = t.blocks.iter().find(|b| b.start <= t.cursor && t.cursor <= b.end && b.kind == Kind::Formal);
     let (pop, pop_at): (Element<'a, Message>, iced::Vector) = match proof {
         Some(b) => (
-            widget::button::icon(widget::icon::from_name("window-pop-out-symbolic"))
-                .tooltip("Pop out (the proof in a window of its own)")
-                .on_press(Message::PopOut)
-                .into(),
-            // (centred on the proof's first line: the button is taller than a line)
-            iced::Vector::new(source_width - z(40.0), row_top(t.lines.position(&t.decoded.text, t.decoded.to_decoded(b.start)).line) - (z(32.0) - source_line_height()) / 2.0),
+            pop_out_button(),
+            // (centred on the proof's first line, as far inside the editor's right edge as in a
+            // code cell of the literate view)
+            iced::Vector::new(
+                source_width - pop_out_inset() - pop_out_size(),
+                row_top(t.lines.position(&t.decoded.text, t.decoded.to_decoded(b.start)).line) + (source_line_height() - pop_out_size()) / 2.0,
+            ),
         ),
         None => (widget::Space::new().width(Length::Fixed(0.0)).height(Length::Fixed(0.0)).into(), iced::Vector::ZERO),
     };

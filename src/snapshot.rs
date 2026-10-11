@@ -590,6 +590,13 @@ impl Harness {
         self.cache = Some(ui.into_cache());
     }
 
+    /// An operation over the widgets as laid out (to find where something is)
+    pub fn operate(&mut self, app: &App, operation: &mut dyn cosmic::iced::advanced::widget::Operation<()>) {
+        let mut ui = UserInterface::build(super::view::view(app), self.size, self.cache.take().unwrap_or_default(), &mut self.renderer);
+        ui.operate(&self.renderer, operation);
+        self.cache = Some(ui.into_cache());
+    }
+
     pub fn move_to(&mut self, app: &App, at: cosmic::iced::Point) -> Vec<super::Message> {
         self.cursor = mouse::Cursor::Available(at);
         self.events(app, &[Event::Mouse(mouse::Event::CursorMoved { position: at })])
