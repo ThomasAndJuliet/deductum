@@ -435,7 +435,7 @@ fn compares_superscript_glyphs() {
 fn scripts_font_loads() {
     super::load_fonts();
     let mut fs = cosmic::iced::advanced::graphics::text::font_system().write().unwrap();
-    let found: Vec<String> = fs.raw().db().faces().flat_map(|f| f.families.iter().map(|(n, _)| n.clone())).filter(|n| n.contains("Deductum")).collect();
+    let found: Vec<String> = fs.raw().db().faces().flat_map(|f| f.families.iter().map(|(n, _)| n.clone())).filter(|n| n.contains("Isabellum Scripts")).collect();
     println!("faces: {found:?}");
     let ncm: Vec<String> = fs.raw().db().faces().flat_map(|f| f.families.iter().map(|(n, _)| n.clone())).filter(|n| n.contains("NewComputer")).collect();
     println!("ncm: {}", ncm.len());

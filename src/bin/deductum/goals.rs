@@ -133,7 +133,7 @@ mod tests {
     fn parts_become_subgoals() {
         let msgs = vec![
             json!({"kind": "writeln", "raw": "#deductum:count 2\n", "text": "#deductum:count 2\n", "spans": []}),
-            json!({"kind": "writeln", "raw": "#deductum:param 1\nxs :: 'a list", "text": "#deductum:param 1\nxs :: 'a list", "spans": [[19, 21, "free"]]}),
+            json!({"kind": "writeln", "raw": "#deductum:param 1\nxs :: 'a list", "text": "#deductum:param 1\nxs :: 'a list", "spans": [[18, 20, "free"]]}),
             json!({"kind": "writeln", "raw": "#deductum:prem 1\n0 < n", "text": "#deductum:prem 1\n0 < n", "spans": []}),
             json!({"kind": "writeln", "raw": "#deductum:concl 1\nxs \\<noteq> []", "text": "#deductum:concl 1\nxs ≠ []", "spans": []}),
             json!({"kind": "writeln", "raw": "#deductum:concl 2\nP n", "text": "#deductum:concl 2\nP n", "spans": []}),
