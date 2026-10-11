@@ -675,6 +675,8 @@ pub struct Theory {
 /// A completion: replace the `replace` code points before the caret with `text`
 #[derive(Clone, Debug, PartialEq)]
 pub struct Completion {
+    /// Characters before the end of `text` that the caret goes to (a bracket pair's middle)
+    pub back: usize,
     pub replace: usize,
     pub text: String,
     pub label: String,
@@ -727,7 +729,7 @@ pub fn complete(profile: &dyn Profile, before: &str, table: &dyn Symbols, kinds:
     if j > 0 && chars[j - 1] == '@' && (j == 1 || chars[j - 2].is_whitespace()) {
         let prefix: String = chars[j..].iter().collect();
         for name in LISTENERS.lock().map(|l| l.clone()).unwrap_or_default().into_iter().filter(|nm| nm.starts_with(&prefix)) {
-            out.push(Completion { replace: n - j, text: name.clone(), label: format!("@{name}  listening agent") });
+            out.push(Completion { back: 0, replace: n - j, text: name.clone(), label: format!("@{name}  listening agent") });
         }
         return out;
     }
@@ -744,9 +746,10 @@ pub fn complete(profile: &dyn Profile, before: &str, table: &dyn Symbols, kinds:
         if prefix.is_empty() && bs {
             return out;
         }
-        for (c, sym, how) in table.search(&prefix, 10) {
+        for h in table.search_text(&prefix, 10) {
+            let (c, sym, how) = (&h.text, &h.name, &h.how);
             let label = if how.is_empty() { format!("{c}  {sym}") } else { format!("{c}  {sym}  {how}") };
-            out.push(Completion { replace: n - start, text: c.to_string(), label });
+            out.push(Completion { back: h.text.chars().count().saturating_sub(h.caret), replace: n - start, text: h.text.clone(), label });
         }
         return out;
     }
@@ -761,7 +764,7 @@ pub fn complete(profile: &dyn Profile, before: &str, table: &dyn Symbols, kinds:
     abbrevs.sort_by(|a, b| b.0.cmp(&a.0));
     for (len, c, a) in abbrevs.into_iter().take(4) {
         if !out.iter().any(|o| o.text == c.to_string()) {
-            out.push(Completion { replace: len, text: c.to_string(), label: format!("{c}  {a}") });
+            out.push(Completion { back: 0, replace: len, text: c.to_string(), label: format!("{c}  {a}") });
         }
     }
     if !out.is_empty() {
@@ -784,11 +787,11 @@ pub fn complete(profile: &dyn Profile, before: &str, table: &dyn Symbols, kinds:
     let mut kws: Vec<&String> = kinds.keys().filter(|k| k.starts_with(&prefix) && k.len() > prefix.len()).collect();
     kws.sort_by_key(|k| (k.len(), k.to_string()));
     for k in kws.into_iter().take(4) {
-        out.push(Completion { replace: n - j, text: k.clone(), label: k.clone() });
+        out.push(Completion { back: 0, replace: n - j, text: k.clone(), label: k.clone() });
     }
     for w in words.iter().filter(|w| w.starts_with(&prefix) && w.len() > prefix.len()).take(8 - out.len().min(8)) {
         if !out.iter().any(|o| &o.text == w) {
-            out.push(Completion { replace: n - j, text: w.clone(), label: w.clone() });
+            out.push(Completion { back: 0, replace: n - j, text: w.clone(), label: w.clone() });
         }
     }
     out
@@ -987,7 +990,7 @@ impl Theory {
         let chars: Vec<char> = text.chars().collect();
         let start = caret.saturating_sub(c.replace);
         let new: String = chars[..start].iter().chain(c.text.chars().collect::<Vec<_>>().iter()).chain(chars[caret..].iter()).collect();
-        let caret_after = start + c.text.chars().count();
+        let caret_after = (start + c.text.chars().count()).saturating_sub(c.back);
         if in_block {
             let be = self.block_editor.as_mut().unwrap();
             be.content = text_editor::Content::with_text(&new);
@@ -2088,7 +2091,7 @@ mod prose_completion_tests {
         let li = LineIndex::new(&shown);
         let be = t.block_editor.as_mut().unwrap();
         place(&mut be.content, li.position(&shown, at));
-        t.completions = vec![Completion { replace: 6, text: "assignment".into(), label: "assignment".into() }];
+        t.completions = vec![Completion { back: 0, replace: 6, text: "assignment".into(), label: "assignment".into() }];
         t.accept_completion(0, &table);
         assert!(!t.local.contains('\u{200B}'), "no zero-width spaces in the source: {:?}", t.local);
         assert!(t.local.contains("the unstable\n  observation. Its final commitment applies a\n  total substitution, assignment"), "{:?}", t.local);
