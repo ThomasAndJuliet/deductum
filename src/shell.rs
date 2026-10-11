@@ -412,7 +412,7 @@ pub fn header_start(app: &App) -> Vec<Element<'_, Message>> {
     }
     if let Some(t) = app.workspace.as_ref().and_then(|w| w.theory.as_ref()) {
         items.push(widget::Space::new().width(Length::Fixed(4.0)).into());
-        items.push(mode_switch(t.mode));
+        items.push(mode_switch(t.mode, app.window_width < 1100.0));
         items.push(widget::Space::new().width(Length::Fixed(sp().space_s as f32)).into());
         items.push(icon_button("edit-undo-symbolic", "Undo your last edit (Ctrl+Z)", t.can_undo.then_some(Message::Undo)));
         items.push(icon_button("edit-redo-symbolic", "Redo (Ctrl+Shift+Z)", t.can_redo.then_some(Message::Redo)));
@@ -424,11 +424,12 @@ pub fn header_start(app: &App) -> Vec<Element<'_, Message>> {
 }
 
 /// Literate or Source: two equal segments in one rounded frame, the current one filled
-pub fn mode_switch<'a>(mode: Mode) -> Element<'a, Message> {
+/// (`narrow`: segments as wide as their words, for a narrow window's header)
+pub fn mode_switch<'a>(mode: Mode, narrow: bool) -> Element<'a, Message> {
     let segment = |label: &'static str, this: Mode| {
         let on = mode == this;
         button::custom(widget::text::body(label).width(Length::Fill).align_x(Alignment::Center))
-            .width(Length::Fixed(92.0))
+            .width(Length::Fixed(if narrow { 76.0 } else { 92.0 }))
             .padding([5, 10])
             .class(segment_style(on))
             .on_press(Message::SetMode(this))
@@ -505,7 +506,7 @@ pub fn header_end(app: &App) -> Vec<Element<'_, Message>> {
             _ => {}
         }
         // (a narrow window keeps its room for the document's own controls)
-        if ws.info.is_some() && app.window_width >= 1000.0 {
+        if ws.info.is_some() && app.window_width >= 1250.0 {
             items.push(widget::Space::new().width(Length::Fixed(sp().space_xxs as f32)).into());
             items.push(icon_button("folder-open-symbolic", "Open the session's folder in Files", Some(Message::OpenFolder(link::Opener::Files))));
             items.push(icon_button("accessories-text-editor-symbolic", "Open the session's folder in Zed", Some(Message::OpenFolder(link::Opener::Zed))));
@@ -549,7 +550,7 @@ pub fn header_center(app: &App) -> Vec<Element<'_, Message>> {
     let toolchain = summary.and_then(|s| s["toolchain"]["label"].as_str()).filter(|l| !l.is_empty()).map(str::to_string);
     let backend = summary.and_then(|s| s["backend"].as_str()).unwrap_or("isabelle").to_string();
     match (&ws.theory, lifecycle.as_str()) {
-        (Some(t), "Running") => prover_status(ws, t, &backend, toolchain, app.window_width < 1250.0).into_iter().collect(),
+        (Some(t), "Running") => prover_status(ws, t, &backend, toolchain, app.window_width < 1250.0, app.window_width < 1100.0).into_iter().collect(),
         (_, "") => Vec::new(),
         (_, lc) => {
             let (icon_name, tint): (&'static str, fn(&cosmic::Theme) -> Color) = match lc {
@@ -606,7 +607,8 @@ fn chip_style() -> theme::Button {
 }
 
 /// (`compact`, in a narrow window: the state and what fails only)
-fn prover_status<'a>(ws: &'a Workspace, t: &'a super::editor::Theory, backend: &str, toolchain: Option<String>, compact: bool) -> Option<Element<'a, Message>> {
+/// (`narrow`, narrower still: no backend mark, and a running tool without its time)
+fn prover_status<'a>(ws: &'a Workspace, t: &'a super::editor::Theory, backend: &str, toolchain: Option<String>, compact: bool, narrow: bool) -> Option<Element<'a, Message>> {
     let act = ws.activity.as_ref()?;
     let theories = act["theories"].as_array()?;
     let find = |path: &str| theories.iter().find(|th| th["path"].as_str() == Some(path));
@@ -654,7 +656,9 @@ fn prover_status<'a>(ws: &'a Workspace, t: &'a super::editor::Theory, backend: &
         "Starting".to_string()
     };
     let mut row = widget::row::with_capacity(10).spacing(s.space_xs).align_y(Alignment::Center);
-    row = row.push(backend_mark(backend));
+    if !narrow {
+        row = row.push(backend_mark(backend));
+    }
     if let Some(tc) = toolchain.filter(|_| !compact) {
         row = row.push(widget::text::caption(tc).wrapping(iced::widget::text::Wrapping::None)).push(divider(14.0));
     }
@@ -709,9 +713,10 @@ fn prover_status<'a>(ws: &'a Workspace, t: &'a super::editor::Theory, backend: &
         if ws.tools_stopping {
             trow = trow.push(widget::text::body(format!("{name}: stopping…")));
         } else {
-            trow = trow
-                .push(widget::text(name.clone()).size(13.0).font(cosmic::font::mono()))
-                .push(widget::text::body(format!("{seconds} s")));
+            trow = trow.push(widget::text(name.clone()).size(13.0).font(cosmic::font::mono()));
+            if !narrow {
+                trow = trow.push(widget::text::body(format!("{seconds} s")));
+            }
             if ws.caps.typed_tool(&name).is_some_and(|t| t.stop) {
                 trow = trow.push(
                     widget::tooltip(
@@ -747,6 +752,70 @@ fn prover_status<'a>(ws: &'a Workspace, t: &'a super::editor::Theory, backend: &
     Some(out.into())
 }
 
+// ----- a machine's connection, as every part of the window says it
+
+/// Whether a machine's host is reached: connected, being connected (with what is being tried), or
+/// not (with why)
+#[derive(Clone, Debug, PartialEq)]
+pub enum Conn {
+    Connected,
+    Connecting(String),
+    Offline(String),
+}
+
+/// A link's connection. The app sets its sender and its status together (`connected`,
+/// `disconnected: why`, or what it is trying); the status alone decides, so that a link read
+/// from either says the same everywhere
+pub fn connection(link: &super::Link) -> Conn {
+    if link.sender.is_some() || link.status == "connected" {
+        Conn::Connected
+    } else if let Some(why) = link.status.strip_prefix("disconnected") {
+        Conn::Offline(why.trim_start_matches(':').trim().to_string())
+    } else {
+        Conn::Connecting(link.status.clone())
+    }
+}
+
+impl Conn {
+    pub fn word(&self) -> &'static str {
+        match self {
+            Conn::Connected => "connected",
+            Conn::Connecting(_) => "connecting…",
+            Conn::Offline(_) => "not connected",
+        }
+    }
+
+    /// What is tried, or why it failed, when there is something to say
+    pub fn detail(&self) -> Option<&str> {
+        match self {
+            Conn::Connected => None,
+            Conn::Connecting(what) | Conn::Offline(what) => Some(what.as_str()).filter(|w| !w.is_empty() && *w != "starting"),
+        }
+    }
+
+    pub fn tint(&self) -> fn(&cosmic::Theme) -> Color {
+        match self {
+            Conn::Connected => success,
+            Conn::Connecting(_) => warning,
+            Conn::Offline(_) => destructive,
+        }
+    }
+
+    /// A small dot in the connection's colour
+    pub fn dot<'a>(&self, size: f32) -> Element<'a, Message> {
+        let tint = self.tint();
+        widget::container(widget::Space::new())
+            .width(Length::Fixed(size))
+            .height(Length::Fixed(size))
+            .class(theme::Container::custom(move |theme| iced::widget::container::Style {
+                background: Some(tint(theme).into()),
+                border: Border { radius: (size / 2.0).into(), ..Default::default() },
+                ..Default::default()
+            }))
+            .into()
+    }
+}
+
 // ----- the status bar
 
 /// The status bar's height: fixed, so that the page above never moves for it
@@ -756,28 +825,15 @@ pub const STATUS_BAR_HEIGHT: f32 = 28.0;
 /// vim keys on), what editing the open block means, then the app's last word and the connection
 pub fn status_bar(app: &App) -> Option<Element<'_, Message>> {
     let theory = app.workspace.as_ref().and_then(|w| w.theory.as_ref()).filter(|_| !app.shell.settings_open);
-    let disconnected = app.workspace.as_ref().and_then(|w| app.link(&w.machine)).filter(|l| l.sender.is_none());
+    // (the open session's machine, when it is not connected; connected, it goes unsaid)
+    let disconnected = app.workspace.as_ref().and_then(|w| app.link(&w.machine)).map(|l| (l, connection(l))).filter(|(_, c)| *c != Conn::Connected);
     if theory.is_none() && app.status.is_none() && disconnected.is_none() {
         return None;
     }
     let s = sp();
     let mut fields: Vec<Element<'_, Message>> = Vec::new();
     if app.vim_enabled && theory.is_some() {
-        let label = app.vim.mode.label();
-        fields.push(
-            widget::container(widget::text::caption(label).font(cosmic::font::semibold()))
-                .padding([1, 8])
-                .class(theme::Container::custom(|theme| {
-                    let c = theme.cosmic();
-                    iced::widget::container::Style {
-                        background: Some(Color::from(c.accent_color()).into()),
-                        text_color: Some(c.on_accent_color().into()),
-                        border: Border { radius: 4.0.into(), ..Default::default() },
-                        ..Default::default()
-                    }
-                }))
-                .into(),
-        );
+        fields.push(vim_badge(app.vim.mode));
     }
     if let Some(t) = theory
         && let Some(be) = t.block_editor.as_ref().filter(|_| t.mode == Mode::Literate)
@@ -792,25 +848,20 @@ pub fn status_bar(app: &App) -> Option<Element<'_, Message>> {
         }
         fields.push(widget::text::caption("Esc or a click outside finishes").into());
     }
-    let mut row = widget::row::with_capacity(2 * fields.len() + 4).spacing(s.space_s).align_y(Alignment::Center);
-    for (i, f) in fields.into_iter().enumerate() {
-        if i > 0 {
-            row = row.push(divider(14.0));
-        }
-        row = row.push(f);
-    }
-    row = row.push(widget::Space::new().width(Length::Fill));
+    let mut row = fields_row(fields).push(widget::Space::new().width(Length::Fill));
     if let Some(status) = &app.status {
         row = row.push(widget::text::caption(status.clone()).wrapping(iced::widget::text::Wrapping::None));
     }
-    if let Some(l) = disconnected {
+    if let Some((l, conn)) = disconnected {
         if app.status.is_some() {
             row = row.push(divider(14.0));
         }
-        let state = if l.status.starts_with("disconnected") || l.status == "starting" { "not connected".to_string() } else { l.status.clone() };
-        row = row
-            .push(tinted_icon("network-error-symbolic", 14, warning))
-            .push(widget::text::caption(format!("{}: {state}", l.name)).wrapping(iced::widget::text::Wrapping::None));
+        let text = format!("{} {}", l.name, conn.word());
+        let mut field = widget::row::with_capacity(2).spacing(6).align_y(Alignment::Center).push(conn.dot(8.0)).push(widget::text::caption(text).wrapping(iced::widget::text::Wrapping::None));
+        if let Some(why) = conn.detail() {
+            field = field.push(widget::text::caption(format!("({why})")).wrapping(iced::widget::text::Wrapping::None));
+        }
+        row = row.push(field);
     }
     Some(
         widget::container(row)
@@ -818,18 +869,62 @@ pub fn status_bar(app: &App) -> Option<Element<'_, Message>> {
             .width(Length::Fill)
             .height(Length::Fixed(STATUS_BAR_HEIGHT))
             .center_y(Length::Fixed(STATUS_BAR_HEIGHT))
-            // (on the page's own background: the bar is set apart by its fixed place and height,
-            // and the page's pixels stay the page's)
-            .class(theme::Container::custom(|theme| {
-                let c = theme.cosmic();
-                iced::widget::container::Style {
-                    background: Some(Color { a: 1.0, ..Color::from(c.bg_color()) }.into()),
-                    text_color: Some(c.on_bg_color().into()),
-                    ..Default::default()
-                }
+            // (no background of its own: the window's page shows through, in either theme, so the
+            // bar is set apart by its fixed place and height and the page's pixels stay the page's)
+            .class(theme::Container::custom(|theme| iced::widget::container::Style {
+                text_color: Some(theme.cosmic().on_bg_color().into()),
+                ..Default::default()
             }))
             .into(),
     )
+}
+
+/// Fields of a status bar, a thin line between each two (never before the first)
+fn fields_row<'a>(fields: Vec<Element<'a, Message>>) -> iced::widget::Row<'a, Message, cosmic::Theme, cosmic::Renderer> {
+    let mut row = widget::row::with_capacity(2 * fields.len() + 4).spacing(sp().space_s).align_y(Alignment::Center);
+    for (i, f) in fields.into_iter().enumerate() {
+        if i > 0 {
+            row = row.push(divider(14.0));
+        }
+        row = row.push(f);
+    }
+    row
+}
+
+/// Vim's mode, as a badge
+fn vim_badge<'a>(mode: super::vim::Mode) -> Element<'a, Message> {
+    widget::container(widget::text::caption(mode.label()).font(cosmic::font::semibold()))
+        .padding([1, 8])
+        .class(theme::Container::custom(|theme| {
+            let c = theme.cosmic();
+            iced::widget::container::Style {
+                background: Some(Color::from(c.accent_color()).into()),
+                text_color: Some(c.on_accent_color().into()),
+                border: Border { radius: 4.0.into(), ..Default::default() },
+                ..Default::default()
+            }
+        }))
+        .into()
+}
+
+/// The status bar of a window of its own (the proof window, a reference window): the same fields
+/// as the main window's, under a line
+pub fn window_status_bar<'a>(vim: Option<super::vim::Mode>, status: Option<Status>, hints: &[&str]) -> Element<'a, Message> {
+    let mut fields: Vec<Element<'a, Message>> = Vec::new();
+    fields.extend(vim.map(vim_badge));
+    fields.extend(status.map(block_status));
+    fields.extend(hints.iter().map(|h| widget::text::caption(h.to_string()).into()));
+    let s = sp();
+    widget::column::with_capacity(2)
+        .push(widget::divider::horizontal::light())
+        .push(
+            widget::container(fields_row(fields))
+                .padding(Padding { left: s.space_s as f32, right: s.space_s as f32, top: 0.0, bottom: 0.0 })
+                .width(Length::Fill)
+                .height(Length::Fixed(STATUS_BAR_HEIGHT))
+                .center_y(Length::Fixed(STATUS_BAR_HEIGHT)),
+        )
+        .into()
 }
 
 /// The open block's checking, with an icon (a spinner while it is being checked)
