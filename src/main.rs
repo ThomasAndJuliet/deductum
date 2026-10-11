@@ -67,6 +67,7 @@ pub const APP_ID: &str = "dev.twright.Deductum";
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger_init();
+    prover::register_highlighters();
     let request = cli::parse(std::env::args().skip(1).collect());
     if let Some(request) = &request
         && cli::forward(request)

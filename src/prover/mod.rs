@@ -19,6 +19,7 @@
 
 pub mod capabilities;
 pub mod isabelle;
+pub mod lean;
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -33,18 +34,30 @@ use crate::theory::{Block, Command};
 /// The Isabelle profile
 pub static ISABELLE: isabelle::Isabelle = isabelle::Isabelle;
 
+/// The Lean 4 profile
+pub static LEAN: lean::Lean = lean::Lean;
+
 /// The profile for a session's `backend`. A session summary without one comes from a host
 /// older than backends, which ran Isabelle only
 pub fn profile(backend: Option<&str>) -> &'static dyn Profile {
     match backend.unwrap_or("isabelle") {
-        // "lean" => &LEAN,   (registered here once the Lean profile exists)
+        "lean" => &LEAN,
         _ => &ISABELLE,
     }
 }
 
 /// Every profile, for what is decided before a session is known (a path on the command line)
-pub fn profiles() -> [&'static dyn Profile; 1] {
-    [&ISABELLE]
+pub fn profiles() -> [&'static dyn Profile; 2] {
+    [&ISABELLE, &LEAN]
+}
+
+/// Colour ```lean and ```isabelle code in prose with the profiles' lexers (once, at startup)
+pub fn register_highlighters() {
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| {
+        prose_render::highlight::register("lean", &["lean4"], lean::highlight);
+        prose_render::highlight::register("isabelle", &["isar", "thy"], isabelle::highlight);
+    });
 }
 
 /// The symbol table a host sent (`symbol_table`), kept per machine. Only Isabelle's driver has
@@ -194,6 +207,13 @@ pub trait Profile: Send + Sync {
 
     /// Comments, found lexically: coloured whatever the prover says
     fn comments(&self, text: &str) -> Vec<(usize, usize)>;
+
+    /// Colours found from the characters alone, painted under the prover's: what a document
+    /// looks like before the prover has answered (Lean's lexer; Isabelle needs none)
+    fn lexical_colours(&self, text: &str) -> Vec<(usize, usize, Hl)> {
+        let _ = text;
+        Vec::new()
+    }
 
     /// Colours the profile adds to the prover's (Isabelle: the other half of a coloured bracket)
     fn derived_colours(&self, text: &str, colours: &[(usize, usize, Sem)]) -> Vec<(usize, usize, Sem)> {

@@ -115,6 +115,9 @@ pub struct Search {
     /// The query operation, and the arguments before the human's query
     pub operation: String,
     pub args: Vec<String>,
+    /// Other ways to search the panel offers as buttons (Lean's `exact?`, `apply?`: typed at the
+    /// caret), besides the query field
+    pub sources: Vec<String>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq)]
@@ -181,6 +184,9 @@ impl Capabilities {
             }
             if s.args.is_empty() {
                 s.args = d.args.clone();
+            }
+            if s.sources.is_empty() {
+                s.sources = d.sources.clone();
             }
         }
     }

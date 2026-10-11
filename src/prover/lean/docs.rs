@@ -53,7 +53,6 @@ pub struct Docs {
     segs: Vec<Seg>,
     /// Where the Markdown would start if it were empty
     origin: (usize, usize),
-    source_len: (usize, usize),
 }
 
 /// A comment's delimiter and the byte range of what is inside it
@@ -151,7 +150,7 @@ pub fn to_markdown(comment: &str) -> Docs {
         }
     }
     let origin = lines.first().map_or((start, char_of(start)), |l| (l.from, char_of(l.from)));
-    Docs { markdown, delimiter, body: (start, end), segs, origin, source_len: (comment.len(), comment.chars().count()) }
+    Docs { markdown, delimiter, body: (start, end), segs, origin }
 }
 
 impl Docs {
@@ -208,11 +207,6 @@ impl Docs {
             None => self.markdown.len(),
         }
     }
-
-    /// The length of the comment this was made from: (bytes, code points)
-    pub fn source_len(&self) -> (usize, usize) {
-        self.source_len
-    }
 }
 
 /// What a snippet is
@@ -239,6 +233,13 @@ pub struct Snippet {
 /// maths: as in Pandoc, an opening `$` needs a non-space after it, a closing one a non-space
 /// before it and no digit after it.
 pub fn snippet_span_at(text: &str, at: usize) -> Option<Snippet> {
+    snippets(text).into_iter().find(|s| s.start <= at && at <= s.end)
+}
+
+/// Every maths and inline code snippet of a prose text, in order (see [`snippet_span_at`] for
+/// what counts)
+pub fn snippets(text: &str) -> Vec<Snippet> {
+    let mut out = Vec::new();
     let c: Vec<char> = text.chars().collect();
     let n = c.len();
     // Lines inside fenced code blocks do not hold snippets
@@ -280,9 +281,7 @@ pub fn snippet_span_at(text: &str, at: usize) -> Option<Snippet> {
         }
         n
     };
-    let found = |start: usize, end: usize, kind: Kind| -> Option<Snippet> {
-        (start <= at && at <= end).then(|| Snippet { start, end, kind, text: c[start..end].iter().collect() })
-    };
+    let found = |start: usize, end: usize, kind: Kind| Snippet { start, end, kind, text: c[start..end].iter().collect() };
     let mut i = 0;
     while i < n {
         if blocked[i] {
@@ -310,9 +309,7 @@ pub fn snippet_span_at(text: &str, at: usize) -> Option<Snippet> {
                 }
                 match close {
                     Some(e) => {
-                        if let Some(s) = found(i, e, Kind::Code) {
-                            return Some(s);
-                        }
+                        out.push(found(i, e, Kind::Code));
                         i = e;
                     }
                     None => i += run,
@@ -351,9 +348,7 @@ pub fn snippet_span_at(text: &str, at: usize) -> Option<Snippet> {
                 }
                 match close {
                     Some(e) => {
-                        if let Some(s) = found(i, e, Kind::Math { display }) {
-                            return Some(s);
-                        }
+                        out.push(found(i, e, Kind::Math { display }));
                         i = e;
                     }
                     None => i += open,
@@ -362,7 +357,7 @@ pub fn snippet_span_at(text: &str, at: usize) -> Option<Snippet> {
             _ => i += 1,
         }
     }
-    None
+    out
 }
 
 /// [`snippet_span_at`]'s text

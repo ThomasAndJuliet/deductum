@@ -1240,6 +1240,10 @@ impl Theory {
                 }
             }
         };
+        // What the characters alone show, under the prover's colours
+        for (s, e, hl) in self.profile.lexical_colours(&self.local) {
+            paint(&mut class, s, e, hl, &[]);
+        }
         for (s, e, sem) in prover.colours.iter().chain(&self.profile.derived_colours(&self.local, &prover.colours)) {
             paint(&mut class, *s, *e, Hl::Sem(*sem), &[]);
         }
