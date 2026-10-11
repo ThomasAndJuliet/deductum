@@ -625,8 +625,11 @@ impl Harness {
     pub fn draw(&mut self, app: &App, name: &str) -> Vec<u8> {
         let theme = cosmic::theme::active();
         let mut ui = UserInterface::build(super::view::view(app), self.size, self.cache.take().unwrap_or_default(), &mut self.renderer);
+        // (a moment before any editor took focus: its caret is in the visible half of its blink
+        // whatever the time, so a busy machine does not change the frame)
+        let earlier = std::time::Instant::now().checked_sub(std::time::Duration::from_secs(3600)).unwrap_or_else(std::time::Instant::now);
         let _ = ui.update(
-            &[Event::Window(cosmic::iced::window::Event::RedrawRequested(std::time::Instant::now()))],
+            &[Event::Window(cosmic::iced::window::Event::RedrawRequested(earlier))],
             self.cursor,
             &mut self.renderer,
             &mut clipboard::Null,
