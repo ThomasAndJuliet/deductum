@@ -154,6 +154,8 @@ pub fn demo_app(mode: Mode) -> App {
             tool_started: None,
             gap_hover: None,
             tools_stopping: false,
+            pick: None,
+            all_offers: false,
             palette_query: String::new(),
             insert_open: false,
             find: QueryState { operation: "find_theorems", ..Default::default() },
@@ -633,18 +635,23 @@ impl Harness {
 
     /// A key as the keyboard sends it (a character, or a named key such as Escape)
     pub fn key(&mut self, app: &App, key: cosmic::iced::keyboard::Key, text: Option<&str>) -> Vec<super::Message> {
-        use cosmic::iced::keyboard::{Event as K, Location, Modifiers, key::{NativeCode, Physical}};
+        self.key_with(app, key, text, cosmic::iced::keyboard::Modifiers::empty())
+    }
+
+    /// A key with modifiers held (Alt+Enter)
+    pub fn key_with(&mut self, app: &App, key: cosmic::iced::keyboard::Key, text: Option<&str>, modifiers: cosmic::iced::keyboard::Modifiers) -> Vec<super::Message> {
+        use cosmic::iced::keyboard::{Event as K, Location, key::{NativeCode, Physical}};
         let physical = Physical::Unidentified(NativeCode::Unidentified);
         let mut out = self.events(app, &[Event::Keyboard(K::KeyPressed {
             key: key.clone(),
             modified_key: key.clone(),
             physical_key: physical,
             location: Location::Standard,
-            modifiers: Modifiers::empty(),
+            modifiers,
             text: text.map(Into::into),
             repeat: false,
         })]);
-        out.extend(self.events(app, &[Event::Keyboard(K::KeyReleased { key: key.clone(), modified_key: key, physical_key: physical, location: Location::Standard, modifiers: Modifiers::empty() })]));
+        out.extend(self.events(app, &[Event::Keyboard(K::KeyReleased { key: key.clone(), modified_key: key, physical_key: physical, location: Location::Standard, modifiers })]));
         out
     }
 
