@@ -70,7 +70,7 @@ fn error_color(theme: &cosmic::Theme) -> Color {
 /// The page the theory is set on. In the dark theme COSMIC's background; in the light one its
 /// primary container, the lighter layer COSMIC sets content on (its background is a mid grey
 /// meant for the frame around content)
-fn page_color(theme: &cosmic::Theme) -> Color {
+pub fn page_color(theme: &cosmic::Theme) -> Color {
     let c = theme.cosmic();
     if c.is_dark { c.bg_color().into() } else { c.primary_container_color().into() }
 }
@@ -1634,17 +1634,6 @@ pub fn centre_selected() -> cosmic::app::Task<Message> {
     })
 }
 
-fn status_caption(status: Option<Status>) -> &'static str {
-    match status {
-        Some(Status::Failed) => "✗ failing",
-        Some(Status::Running) => "… checking",
-        Some(Status::Unprocessed) => "… waiting to be checked",
-        Some(Status::Warned) => "⚠ checked with warnings",
-        Some(Status::Finished) => "✓ checked",
-        None => "",
-    }
-}
-
 fn block_editor_in<'a>(ws: Option<&'a Workspace>, t: &'a Theory, window: bool, inline: Option<&'a Workspace>, table: &dyn super::codec::Symbols) -> Element<'a, Message> {
     let sp = spacing();
     let Some(be) = &t.block_editor else { return widget::Space::new().into() };
@@ -1925,7 +1914,7 @@ pub fn reference_window(app: &App, id: iced::window::Id) -> Element<'_, Message>
         .into(),
     );
     let header = window_header(r.title.clone(), actions);
-    let footer = window_footer(vec!["Read-only".into(), "Ctrl+click: go to a definition here".into(), "Alt+click: in a new window".into()]);
+    let footer = super::shell::window_status_bar(None, None, &["Read-only", "Ctrl+click: go to a definition here", "Alt+click: in a new window"]);
     // The whole theory, read-only, as the source view draws it: the definition tinted, tooltips
     // under the pointer
     let content = widget::responsive(move |size| {
@@ -2025,16 +2014,6 @@ fn window_header<'a>(title: String, actions: Vec<Element<'a, Message>>) -> Eleme
         .into()
 }
 
-/// A window's status bar: captions at its foot, apart from the content by a rule
-fn window_footer<'a>(parts: Vec<String>) -> Element<'a, Message> {
-    let sp = spacing();
-    let text = parts.into_iter().filter(|p| !p.is_empty()).collect::<Vec<_>>().join("  ·  ");
-    widget::column::with_capacity(2)
-        .push(widget::divider::horizontal::light())
-        .push(widget::container(widget::text::caption(text).class(muted())).padding([sp.space_xxs, sp.space_s]).width(Length::Fill))
-        .into()
-}
-
 /// A statement's name, from its first line ("lemma add_zero: …" is add_zero), else the line
 fn statement_name(first: &str) -> String {
     let mut words = first.split_whitespace();
@@ -2112,11 +2091,7 @@ pub fn proof_window(app: &App) -> Element<'_, Message> {
             .into(),
         ],
     );
-    let footer = window_footer(vec![
-        vim_mode_now().map(|m| format!("-- {} --", m.label())).unwrap_or_default(),
-        status_caption(t.status_in(be.start, be.end)).to_string(),
-        "Esc or Bring back to finish".to_string(),
-    ]);
+    let footer = super::shell::window_status_bar(vim_mode_now(), t.status_in(be.start, be.end), &["Esc or Bring back to finish"]);
     widget::container(widget::column::with_capacity(3).push(header).push(content).push(footer))
         .width(Length::Fill)
         .height(Length::Fill)

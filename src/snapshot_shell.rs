@@ -237,8 +237,13 @@ fn the_header_and_status_bar_in_their_states() {
     app.sessions.get_mut(&("local".to_string(), "s1".to_string())).unwrap()["lifecycle"] = json!("Running");
 
     // The status bar: nothing open, a block open without and with vim, a message and a lost machine
+    // (on the page, as the window draws it)
     fn bar(app: &App) -> Element<'_, Message> {
-        shell::status_bar(app).unwrap_or_else(|| widget::Space::new().into())
+        widget::container(shell::status_bar(app).unwrap_or_else(|| widget::Space::new().into()))
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .class(cosmic::theme::Container::custom(|t| cosmic::iced::widget::container::Style { background: Some(super::view::page_color(t).into()), ..Default::default() }))
+            .into()
     }
     draw_in(false, || bar(&app), "shell-status-idle", Size::new(1400.0, 28.0));
     let lemma = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.name == "lemma").unwrap();
@@ -395,3 +400,24 @@ fn a_card_picks_its_backend_and_start_sends_it() {
     assert!(ns.reason.as_deref().is_some_and(|r| r.contains("Scratch.lean is a Lean document")), "{:?}", ns.reason);
 }
 
+
+/// The sidebar, the status bar and the settings read a machine's connection from one place, so
+/// they never disagree in one frame
+#[test]
+fn every_part_of_the_window_says_the_same_about_a_connection() {
+    let mut l = connected("au-laptop", "local", None);
+    assert_eq!(shell::connection(&l), shell::Conn::Connected);
+    l.sender = None;
+    assert_eq!(shell::connection(&l), shell::Conn::Connected, "the status says connected");
+    l.status = "starting".into();
+    assert_eq!(shell::connection(&l).word(), "connecting…");
+    assert_eq!(shell::connection(&l).detail(), None, "nothing to add while starting");
+    l.status = "disconnected: broken pipe".into();
+    assert_eq!(shell::connection(&l), shell::Conn::Offline("broken pipe".into()));
+    // the open session's machine: said in the status bar only when it is not connected
+    let mut app = demo_app(Mode::Literate);
+    app.links[0].status = "connected".into();
+    assert!(shell::status_bar(&app).is_some(), "a document is open");
+    let _ = cosmic::Application::update(&mut app, Message::Save);
+    assert_eq!(app.status, None, "no \"Not connected to local\" for the machine the bar speaks for");
+}

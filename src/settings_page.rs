@@ -5,10 +5,10 @@
 //! it is open (the header's settings button, or Ctrl+,). Every change applies at once and is
 //! written at once; there is nothing to confirm.
 
-use cosmic::iced::{Alignment, Border, Color, Length};
+use cosmic::iced::{Alignment, Length};
 use cosmic::prelude::*;
 use cosmic::widget::{self, settings};
-use cosmic::{iced, theme};
+use cosmic::iced;
 
 use super::settings::{Loogle, ThemeChoice};
 use super::shell::{self, Msg, sp};
@@ -155,30 +155,18 @@ pub fn page(app: &App) -> Element<'_, Message> {
     widget::scrollable(widget::container(col).center_x(Length::Fill)).height(Length::Fill).into()
 }
 
-/// A machine's connection, in a word with a coloured dot
+/// A machine's connection, in a word with a coloured dot, as the sidebar and the status bar say it
 fn machine_state<'a>(link: &super::Link) -> Element<'a, Message> {
-    let (word, tint): (String, fn(&cosmic::Theme) -> Color) = if link.sender.is_some() {
-        ("Connected".into(), shell::success)
-    } else if let Some(reason) = link.status.strip_prefix("disconnected: ") {
-        (if reason.is_empty() { "Not connected".into() } else { format!("Not connected: {reason}") }, shell::destructive)
-    } else if link.status == "starting" {
-        ("Connecting…".into(), shell::warning)
-    } else {
-        (link.status.clone(), shell::warning)
-    };
+    let conn = shell::connection(link);
+    let mut word = conn.word().to_string();
+    word[..1].make_ascii_uppercase();
+    if let Some(d) = conn.detail() {
+        word = format!("{word}: {d}");
+    }
     widget::row::with_capacity(2)
         .spacing(6)
         .align_y(Alignment::Center)
-        .push(
-            widget::container(widget::Space::new())
-                .width(Length::Fixed(8.0))
-                .height(Length::Fixed(8.0))
-                .class(theme::Container::custom(move |theme| iced::widget::container::Style {
-                    background: Some(tint(theme).into()),
-                    border: Border { radius: 4.0.into(), ..Default::default() },
-                    ..Default::default()
-                })),
-        )
+        .push(conn.dot(8.0))
         .push(widget::text::body(word).wrapping(iced::widget::text::Wrapping::None))
         .into()
 }

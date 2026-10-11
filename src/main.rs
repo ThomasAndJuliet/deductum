@@ -693,7 +693,11 @@ impl App {
         {
             self.pending.insert(id, (machine.to_string(), pending));
         } else {
-            self.status = Some(format!("Not connected to {machine}"));
+            // (the open session's machine says so in the status bar already; another one, here)
+            if self.workspace.as_ref().is_none_or(|w| w.machine != machine) {
+                let name = self.link(machine).map_or(machine.to_string(), |l| l.name.clone());
+                self.status = Some(format!("Not sent: {name} is not connected"));
+            }
         }
         id
     }
