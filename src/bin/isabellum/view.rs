@@ -1736,8 +1736,10 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
         }
         col = col.push(item);
     }
-    // At the end: add a block
-    col = col.push(side(block_actions(None, false), false));
+    // At the end: add a block (unless the last block is selected, whose own actions add one there)
+    let last = t.blocks.iter().rposition(|b| b.kind != Kind::End);
+    let last_selected = editing.is_none() && last.is_some() && t.selected == last && last.is_some_and(|i| t.blocks[i].kind != Kind::Header);
+    col = col.push(if last_selected { side(widget::Space::new().height(Length::Fixed(0.0)).into(), false) } else { side(block_actions(None, false), false) });
     // (room at the end, for a goal beside the last block to be scrolled into sight)
     col = col.push(widget::Space::new().height(Length::Fixed(if beside.is_some() { view_height() * 0.5 } else { 0.0 })));
     // Clicking outside every block finishes the one being edited
