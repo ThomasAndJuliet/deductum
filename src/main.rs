@@ -2683,6 +2683,8 @@ impl cosmic::Application for App {
                     }
                     t.sync_block_cursor();
                 }
+                // (placing the caret at the click clears vim's block cursor: again, there)
+                self.vim_caret(true);
                 if self.ctrl || self.alt {
                     return Task::batch([open, self.goto_definition()]);
                 }
@@ -2917,6 +2919,7 @@ impl cosmic::Application for App {
                     if let Some(t) = self.workspace.as_mut().and_then(|w| w.theory.as_mut()) {
                         t.narrow_to_paragraph(&table);
                     }
+                    self.vim_caret(true);
                 }
                 return self.schedule_state();
             }
