@@ -179,10 +179,12 @@ pub fn set_goal_beside(on: bool) {
 // ----- the window
 
 pub fn view(app: &App) -> Element<'_, Message> {
-    // The editors' keys follow vim's mode, whoever draws the view
-    set_vim_mode(app.vim_enabled.then_some(app.vim.mode));
-    set_placement_override(app.goal_placement_override);
     widget::responsive(move |size| {
+        // The editors' keys follow vim's mode, whoever draws the view. Published as the page is
+        // laid out, where it is read, rather than when the view is built: another window's view
+        // (or, in the tests, another test's) built in between would otherwise leave its mode here
+        set_vim_mode(app.vim_enabled.then_some(app.vim.mode));
+        set_placement_override(app.goal_placement_override);
         set_view_height(size.height);
         layout(app, size.width)
     })

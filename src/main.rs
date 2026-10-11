@@ -535,6 +535,10 @@ fn load_settings() -> UiSettings {
 
 impl App {
     fn save_settings(&self) {
+        // (the tests toggle settings as the user would: they must not write the user's file)
+        if cfg!(test) {
+            return;
+        }
         let settings = UiSettings {
             vim: self.vim_enabled,
             zoom: Some(view::zoom()),

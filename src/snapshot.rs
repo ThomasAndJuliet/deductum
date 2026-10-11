@@ -199,7 +199,8 @@ pub fn demo_app(mode: Mode) -> App {
 }
 
 pub fn draw(app: &App, name: &str, size: Size) -> Vec<u8> {
-    draw_element(super::view::view(app), name, size)
+    let turn = ui_turn();
+    draw_locked(super::view::view(app), name, size, turn)
 }
 
 /// Views publish process-wide state as they are built (vim's mode, the zoom): tests that draw or
@@ -211,7 +212,12 @@ fn ui_turn() -> std::sync::MutexGuard<'static, ()> {
 }
 
 pub fn draw_element(element: cosmic::Element<'_, super::Message>, name: &str, size: Size) -> Vec<u8> {
-    let _turn = ui_turn();
+    draw_locked(element, name, size, ui_turn())
+}
+
+/// As [`draw_element`], with the UI's turn already taken (before the element was built, which
+/// may publish process-wide state too)
+fn draw_locked(element: cosmic::Element<'_, super::Message>, name: &str, size: Size, _turn: std::sync::MutexGuard<'static, ()>) -> Vec<u8> {
     super::load_fonts();
     let mut renderer = cosmic::iced::futures::executor::block_on(<cosmic::Renderer as Headless>::new(Font::default(), Pixels(14.0), Some("tiny-skia"))).expect("a headless renderer");
     let theme = cosmic::theme::active();
