@@ -28,7 +28,7 @@ Coq 8.x projects.
 10. [Agents (MCP)](#10-agents-mcp)
 11. [Order of work and evidence](#11-order-of-work-and-evidence)
 12. [To verify before relying on it](#12-to-verify-before-relying-on-it)
-13. [Questions for the human](#13-questions-for-the-human)
+13. [Decisions from the human](#13-decisions-from-the-human-c17-2026-10-11)
 
 ## 1. What the human asked for (C16)
 
@@ -238,7 +238,7 @@ syntax.
 | Hover, definition | `info` (as now). | `textDocument/hover`, `definition`. | `textDocument/hover`; `definition` where coq-lsp provides it. |
 | Typed proof tools (offered with Insert) | `sledgehammer`, `try0`, `try`, `solve_direct`, `nitpick`, `quickcheck`, `nunchaku` (as now). | `exact?`, `apply?`, `rw?`, `simp?`, `aesop?`, `hint`, `grind`, and `hammer` when the project depends on LeanHammer. Their "Try this" messages and code actions become findings with Insert. | `hammer` (CoqHammer, when loaded), `sauto`/`best` and the like; their "Replace … with" output becomes findings with Insert. |
 | Counterexamples | Quickcheck, Nitpick. | `plausible` (when the project has it). | QuickChick (when the project has it). |
-| Search | Find Theorems. | `exact?`/`apply?` at the caret; Loogle if installed on the machine (§13, Q5). | `Search` at the caret. |
+| Search | Find Theorems. | `exact?`/`apply?` at the caret; Loogle, public or local, chosen in settings (C17e). | `Search` at the caret. |
 | Commands without editing (`command`) | `isabellum_command` (as now). | A scratch document (§9.4): `#check`, `#eval`, `#print`, `#reduce`. | Petanque at the caret's state, or a scratch document: `Check`, `Print`, `About`, `Compute`, `Search`. |
 | Checking LLM candidates | `isabellum_command` (`check_candidates: query`). | Scratch document (`scratch`). | Petanque `get_state_at_pos` then `run` (`petanque`). |
 | Pause | Empty perspective plus cancel (as now). | Close every document in the server, keeping the server; edits keep going to the host's buffers. Resume reopens and rechecks from each file's header (`close_documents`). | `check_only_on_request` through `workspace/didChangeConfiguration` (`on_request`). |
@@ -247,7 +247,7 @@ syntax.
 | Colours | PIDE markup. | Semantic tokens plus the profile's lexer. | The profile's lexer. |
 | Project actions | Build the heap for the chosen logic. | `lake build`; `lake exe cache get` when Mathlib is a dependency; Rebuild imports (`lake setup-file`, then restart the file) when `$/lean/staleDependency` arrives. `lake update` only with a warning. | Build with the project's system (dune, or `coq_makefile` and make); `coq/saveVo` after a file checks, so dependent files see it. |
 | Prose | `text ‹…›`, `section ‹…›` and the like (as now). | Module docs `/-! … -/` and docstrings `/-- … -/`, which are already Markdown with `$…$`. | coqdoc comments `(** … *)` in `.v`; Markdown outside the code blocks in `.mv`. |
-| Symbols | `\<forall>` escapes, decoded for display with an offset map (as now). | Unicode in the source. `\` completion inserts the character (Lean's abbreviation table). | Unicode or ASCII notations in the source. `\` completion as in Lean. An optional per-session display of `->`, `forall`, `/\` as `→ ∀ ∧`, using the same offset-map codec as Isabelle's escapes (§13, Q4). |
+| Symbols | `\<forall>` escapes, decoded for display with an offset map (as now). | Unicode in the source. `\` completion inserts the character (Lean's abbreviation table). | Unicode or ASCII notations in the source. `\` completion as in Lean. Source shown as written, as CoqIDE and VsRocq show it (C17d). |
 
 ### 5.2 How the UI uses the capabilities
 
@@ -297,7 +297,7 @@ syntax.
 - **Rocq.** A toolchain is a `coq-lsp` binary and the Rocq it was built with.
   The host finds them in opam switches (named switches, and a project-local
   `_opam`) and in the configured list. Neither neo nor au-laptop has Rocq yet.
-  au-laptop has opam (§13, Q3).
+  It is installed on au-laptop with opam (C17c).
 
 ### 6.2 Detection
 
@@ -496,7 +496,7 @@ The paragraph-at-a-time editor works unchanged for every backend. It needs
 two things from the profile: the codec, and how markup shows while edited.
 The existing "markup reads as it renders unless the caret is in it" rules are
 Isabelle's. Lean docstrings and Rocq `.mv` files are plain Markdown, so their
-rules are the Markdown ones that Cerea's editor already implements (§13, Q2).
+rules are the Markdown ones that Cerea's editor already implements (still open, §13).
 
 ### 8.3 Spelling
 
@@ -643,7 +643,7 @@ unchanged.
   uses detection when the folder is unambiguous.
 - **Unchanged for every backend:** grants, access requests, notices, notes,
   `listen`/`propose`, independent sessions and merge preview.
-- **The MCP server's name** stays `isabellum` for now (§13, Q1).
+- **The MCP server's name** follows the new app name (C17a).
 
 ## 11. Order of work and evidence
 
@@ -666,7 +666,7 @@ Each step keeps every existing test passing before the next starts:
 | 7 | `prose-render` highlight hook (in Cerea) and `prose-spell` in prose blocks | Highlighted ```` ```lean ```` in a docstring snapshot; spelling marks on a coqdoc paragraph. |
 
 Lean comes before Rocq for two reasons. Lean is installed on both machines
-already. It is also the backend least like PIDE, with no spans and no
+already, and the human's main Lean project (C17f) runs on it. It is also the backend least like PIDE, with no spans and no
 checking without editing, so the abstractions are tested against it early.
 
 ## 12. To verify before relying on it
@@ -694,28 +694,17 @@ checking without editing, so the abstractions are tested against it early.
   9.0 and 9.1. Builds for Coq 8.17–8.19 return goals in a different form
   (`reified_pp`), so the driver must read both.
 
-## 13. Questions for the human
+## 13. Decisions from the human (C17, 2026-10-11)
 
-These are left open on purpose. Each has a default that the work above uses
-until the human decides.
+| Id | Decision | Effect on the design |
+|---|---|---|
+| C17a | **A new name** for the app. | Pending the human's choice. Identifiers (binary, app ID, command, Flatpak, config and state directories, MCP server name) change together. The state and config directories are migrated, so existing sessions survive. |
+| C17b | **Testing runs headlessly on neo.** | Every test uses the snapshot harness (`snapshot::Harness`) or the host tests, never a window. Provers that live on au-laptop (CyPhyAssure Isabelle2025, Rocq) are reached from neo over ssh, as `live_*` tests already do with `ISABELLUM_LIVE=d59500`. |
+| C17c | **Rocq may be installed on au-laptop.** | Step 4 installs Rocq 9.1 and coq-lsp there with opam. |
+| C17d | **Use the notation users of each tool are used to.** | Each backend shows source and goals the way its usual editor does. Isabelle: as Isabelle/jEdit (symbols decoded). Lean: as the VS Code infoview (`case tag`, `x : T`, `⊢ goal`). Rocq: as CoqIDE and VsRocq (hypotheses above `============================`, source as written). The Rocq ASCII-to-Unicode display option is dropped. |
+| C17e | **Public Loogle is allowed, as a setting.** | A Lean search setting: Off, Local, or Public (loogle.lean-lang.org), default Public. The Search panel names the source it used. |
+| C17f | **The main Lean project is the formalisation of the causal semantics and DSRV**: `DSRVLean` (Lake package `dsrv`, library `DSRV`, toolchain v4.19.0, no Mathlib). | It is the real test for Lean, as tock-Circus is for Isabelle. The current copy is au-laptop's `~/Documents/Research/Repositories/DSRVLean` (3716 lines, including `CausalSemantics`, `CausalCorrectness`, `CausalPaperSemantics`). neo's `~/Documents/DSRVLean` is an older 757-line copy. Neither is a git repository, so independent sessions need the plain-copy fork (C8's "later extension"). Tests run on a fresh copy and never touch either original. |
 
-1. **The name.** "Isabellum" names Isabelle. Keep it for an app that also
-   proves in Lean and Rocq, or rename the app (app ID, command, Flatpak, MCP
-   server name)? *Default: keep every name until decided. A rename touches
-   only identifiers, because nothing in the design depends on the name.*
-2. **Prose editing for Markdown-native backends.** Lean docstrings and `.mv`
-   files are plain Markdown. Cerea already has a Typora-style inline editor
-   for Markdown, chosen over Isabellum's paragraph-at-a-time editing. Should
-   Lean and Rocq prose use Cerea's editor (moved into `prose/` as a crate), or
-   keep one prose-editing behaviour across all three backends? *Default: keep
-   Isabellum's for all three.*
-3. **Installing Rocq.** Step 4 needs Rocq 9.1 and coq-lsp, through opam on
-   au-laptop (and later neo). That is a few gigabytes in the home directory.
-   *Default: ask before installing.*
-4. **Rocq ASCII notations.** Should `->`, `forall` and `/\` display as
-   `→ ∀ ∧`? The source keeps ASCII either way. *Default: off.*
-5. **Loogle for Lean search.** It can run locally if installed, or as the
-   public web service. The web service sends search terms to an outside
-   server. *Default: local only.*
-6. **Which Lean and Rocq projects to test on**, in the way tock-Circus is the
-   real test for Isabelle (C15). *Default: small demo projects until named.*
+Still open: Cerea's inline editor for Markdown-native prose (default: keep
+Isabellum's paragraph-at-a-time editing for all three backends), and a Rocq
+project to test on (default: a small demo).
