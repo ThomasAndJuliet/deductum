@@ -1,6 +1,6 @@
 # Isabellum with Isabelle, Lean and Rocq backends
 
-Status: design, 2026-10-11, on branch `multi-prover`
+Status: design, 2026-10-11 (Rocq deferred, C17c), on branch `multi-prover`
 (`~/Documents/cosmic-term-multi-prover`). No production code has changed for
 it yet. The branch starts from the Isabellum branch `worktree-2026-10-10-isabelle`
 at `4b6b42c3b`. Cerea's rendering split (`shared-prose`, `9a556ee36`) is merged
@@ -660,7 +660,7 @@ Each step keeps every existing test passing before the next starts:
 | 1 | Host: `Driver` interface; Isabelle code moved to `drivers/isabelle.py`; protocol v2 fields; `meta.json` migration | Every Isabelle test above passes unchanged. A host restart keeps existing sessions on neo and au-laptop. |
 | 2 | App: `Profile` with the Isabelle implementation; modules moved (§7.2); neutral goal model; capability-driven panels | Snapshot PNGs of the literate and source views, goal, tools and panels are pixel-identical before and after (`CT_SNAPSHOTS`). |
 | 3 | `lsp.py` and the Lean driver; Lean profile; Lake detection and the new-session cards | `integration_lean.py` against v4.19.0 on neo: open, edit, goals at positions, a stale edit rebased, a typed `exact?` inserted, a `claude` line checked by scratch, Pause and Resume, Stop and a new epoch. Snapshots of a Lean demo. |
-| 4 | Rocq toolchain on au-laptop (opam), then the Rocq driver and profile, `.v` and `.mv` | `integration_rocq.py`: the same checks, with Petanque candidate checks and `check_only_on_request` Pause. Snapshots of a coqdoc demo and a `.mv` demo. |
+| 4 (future, C17c) | Rocq toolchain on au-laptop (opam), then the Rocq driver and profile, `.v` and `.mv` | `integration_rocq.py`: the same checks, with Petanque candidate checks and `check_only_on_request` Pause. Snapshots of a coqdoc demo and a `.mv` demo. |
 | 5 | Sessions across backends: grouped sidebar, memory budget, mixed folders, the Project tab and actions | A `live_sessions` test with an Isabelle and a Lean session on one folder, each claiming only its own documents; a memory refusal. |
 | 6 | MCP: neutral names, `proof_run_tool`, aliases | The scripted MCP tests per backend; a real Claude session proving one lemma in Lean and one in Rocq after a grant. |
 | 7 | `prose-render` highlight hook (in Cerea) and `prose-spell` in prose blocks | Highlighted ```` ```lean ```` in a docstring snapshot; spelling marks on a coqdoc paragraph. |
@@ -700,11 +700,20 @@ checking without editing, so the abstractions are tested against it early.
 |---|---|---|
 | C17a | **A new name** for the app. | Pending the human's choice. Identifiers (binary, app ID, command, Flatpak, config and state directories, MCP server name) change together. The state and config directories are migrated, so existing sessions survive. |
 | C17b | **Testing runs headlessly on neo.** | Every test uses the snapshot harness (`snapshot::Harness`) or the host tests, never a window. Provers that live on au-laptop (CyPhyAssure Isabelle2025, Rocq) are reached from neo over ssh, as `live_*` tests already do with `ISABELLUM_LIVE=d59500`. |
-| C17c | **Rocq may be installed on au-laptop.** | Step 4 installs Rocq 9.1 and coq-lsp there with opam. |
+| C17c | **Rocq is future work.** (It may be installed on au-laptop when it is taken up.) | This round builds Isabelle and Lean only. The Rocq parts of this design stay as the plan for later. The generic layers (driver interface, capabilities, profiles, goal model, session identity) are kept general enough for it, so adding Rocq means adding a driver and a profile. |
 | C17d | **Use the notation users of each tool are used to.** | Each backend shows source and goals the way its usual editor does. Isabelle: as Isabelle/jEdit (symbols decoded). Lean: as the VS Code infoview (`case tag`, `x : T`, `⊢ goal`). Rocq: as CoqIDE and VsRocq (hypotheses above `============================`, source as written). The Rocq ASCII-to-Unicode display option is dropped. |
 | C17e | **Public Loogle is allowed, as a setting.** | A Lean search setting: Off, Local, or Public (loogle.lean-lang.org), default Public. The Search panel names the source it used. |
 | C17f | **The main Lean project is the formalisation of the causal semantics and DSRV**: `DSRVLean` (Lake package `dsrv`, library `DSRV`, toolchain v4.19.0, no Mathlib). | It is the real test for Lean, as tock-Circus is for Isabelle. The current copy is au-laptop's `~/Documents/Research/Repositories/DSRVLean` (3716 lines, including `CausalSemantics`, `CausalCorrectness`, `CausalPaperSemantics`). neo's `~/Documents/DSRVLean` is an older 757-line copy. Neither is a git repository, so independent sessions need the plain-copy fork (C8's "later extension"). Tests run on a fresh copy and never touch either original. |
 
-Still open: Cerea's inline editor for Markdown-native prose (default: keep
-Isabellum's paragraph-at-a-time editing for all three backends), and a Rocq
-project to test on (default: a small demo).
+Still open: the new name (C17a), and Cerea's inline editor for
+Markdown-native prose (default: keep Isabellum's paragraph-at-a-time editing
+for every backend).
+
+**Portability (checked 2026-10-11).** The app's sources, compiled on their own
+with libcosmic's `winit` and `wgpu` features and without Wayland or D-Bus,
+type-check for `aarch64-apple-darwin` unchanged. For `x86_64-pc-windows-gnu`,
+only `cli.rs`'s Unix socket fails. These are type checks only: nothing has been
+linked or run on either system. Generic code added for this extension must not
+add Linux-only dependencies. Platform-specific pieces stay behind small
+interfaces: the single-instance socket, Flatpak spawning, sshfs paths, and in
+the host `/proc` sampling, `fcntl` locks and `AF_UNIX`.
