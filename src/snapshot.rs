@@ -2293,3 +2293,26 @@ pub fn scroll_to_open_block(h: &mut Harness, app: &App) {
     h.move_to(app, cosmic::iced::Point::new(h.size.width / 4.0, h.size.height / 2.0));
     h.events(app, &[cosmic::iced::Event::Mouse(cosmic::iced::mouse::Event::WheelScrolled { delta: cosmic::iced::mouse::ScrollDelta::Pixels { x: 0.0, y: -by } })]);
 }
+
+/// Opening a selected block does not move its goal down: the insert bar's row is there, saying
+/// how to use it, while the block is only selected, and is filled when it opens
+#[test]
+fn opening_a_selected_block_keeps_the_goal_where_it_was() {
+    for beside in [true, false] {
+        let mut harness = Harness::new(Size::new(1400.0, 900.0));
+        super::view::set_goal_beside(beside);
+        let mut app = demo_app(Mode::Literate);
+        app.show_right = false;
+        app.show_sidebar = false;
+        app.window_width = 1400.0;
+        let i = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.name == "lemma").unwrap();
+        app.workspace.as_mut().unwrap().theory.as_mut().unwrap().selected = Some(i);
+        harness.draw(&app, &format!("bar-selected-{}", if beside { "beside" } else { "under" }));
+        let closed = insert_bar_bounds(&mut harness, &app).expect("the bar's row is there while the block is only selected");
+        let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(i));
+        harness.draw(&app, &format!("bar-opened-{}", if beside { "beside" } else { "under" }));
+        let open = insert_bar_bounds(&mut harness, &app).expect("the bar once the block is open");
+        assert!((closed.y - open.y).abs() <= 2.0 && (closed.height - open.height).abs() <= 2.0, "beside={beside}: {closed:?} → {open:?}");
+    }
+    super::view::set_goal_beside(true);
+}

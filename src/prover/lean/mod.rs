@@ -408,6 +408,37 @@ impl Profile for Lean {
 
     fn prose_code_classes(&self, text: &str) -> Vec<Option<Hl>> {
         let mut out = vec![None; text.chars().count()];
+        // Fenced code (```lean …```): its fences and its lines set as code, coloured as Lean (in
+        // the prose's serif font a fence's backticks would join into TeX's “ ligature)
+        let mut at = 0;
+        let mut fence: Option<usize> = None;
+        for line in text.split_inclusive('\n') {
+            let n = line.chars().count();
+            let is_fence = { let t = line.trim_start(); t.starts_with("```") || t.starts_with("~~~") };
+            match (is_fence, fence) {
+                (true, None) => {
+                    out[at..at + n].fill(Some(Hl::Sem(Sem::Free)));
+                    fence = Some(at + n);
+                }
+                (true, Some(from)) => {
+                    let code: String = text.chars().skip(from).take(at - from).collect();
+                    out[from..at].fill(Some(Hl::Sem(Sem::Free)));
+                    for t in lexer::lex(&code) {
+                        if let Some(Hl::Sem(sem)) = colour_of(t.class).filter(|hl| !matches!(hl, Hl::Sem(Sem::Inner | Sem::Comment | Sem::Raw))) {
+                            out[from + t.start..(from + t.end).min(at)].fill(Some(Hl::Sem(sem)));
+                        }
+                    }
+                    out[at..at + n].fill(Some(Hl::Sem(Sem::Free)));
+                    fence = None;
+                }
+                _ => {}
+            }
+            at += n;
+        }
+        // (an unclosed fence: code to the end)
+        if let Some(from) = fence {
+            out[from..].fill(Some(Hl::Sem(Sem::Free)));
+        }
         for s in docs::snippets(text) {
             let hl = match s.kind {
                 docs::Kind::Math { .. } => Hl::Sem(Sem::Skolem),
@@ -622,6 +653,18 @@ impl Profile for Lean {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn fenced_code_in_prose_is_set_as_code() {
+        use super::super::Profile;
+        let text = "A def:\n```lean\ndef first := 1\n```\nafter";
+        let classes = super::Lean.prose_code_classes(text);
+        let at = |needle: &str| text[..text.find(needle).unwrap()].chars().count();
+        // the fence's backticks are code (mono, so the serif font cannot join them into “)
+        assert!(classes[at("```lean")].is_some() && classes[at("```lean") + 1].is_some());
+        assert!(classes[at("def first")].is_some(), "the fence's code is code");
+        assert!(classes[at("A def")].is_none() && classes[at("after")].is_none(), "prose stays prose");
+    }
     use super::demo::{DEMO, goal_parts};
     use super::*;
     use crate::goals::Goals;
