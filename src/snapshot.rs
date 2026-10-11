@@ -105,6 +105,7 @@ pub fn demo_app(mode: Mode) -> App {
         hover_gen: 0,
         keyword_gen: 0,
         prose_pointer: None,
+        prose_hover: None,
         vim_block: false,
         goal_placement_override: None,
         sessions,

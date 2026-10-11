@@ -635,6 +635,8 @@ pub struct Theory {
     pub prover: Prover,
     pub blocks: Vec<Block>,
     pub docs: Vec<Option<Arc<Doc>>>,
+    /// Each prose block's Markdown offsets mapped to the source, where the profile can say
+    pub prose_maps: Vec<Option<crate::prover::ProseMap>>,
     doc_cache: HashMap<String, Arc<Doc>>,
     pub block_editor: Option<BlockEditor>,
     pub mode: Mode,
@@ -673,6 +675,8 @@ pub struct Theory {
 /// A completion: replace the `replace` code points before the caret with `text`
 #[derive(Clone, Debug, PartialEq)]
 pub struct Completion {
+    /// Characters before the end of `text` that the caret goes to (a bracket pair's middle)
+    pub back: usize,
     pub replace: usize,
     pub text: String,
     pub label: String,
@@ -725,7 +729,7 @@ pub fn complete(profile: &dyn Profile, before: &str, table: &dyn Symbols, kinds:
     if j > 0 && chars[j - 1] == '@' && (j == 1 || chars[j - 2].is_whitespace()) {
         let prefix: String = chars[j..].iter().collect();
         for name in LISTENERS.lock().map(|l| l.clone()).unwrap_or_default().into_iter().filter(|nm| nm.starts_with(&prefix)) {
-            out.push(Completion { replace: n - j, text: name.clone(), label: format!("@{name}  listening agent") });
+            out.push(Completion { back: 0, replace: n - j, text: name.clone(), label: format!("@{name}  listening agent") });
         }
         return out;
     }
@@ -742,9 +746,10 @@ pub fn complete(profile: &dyn Profile, before: &str, table: &dyn Symbols, kinds:
         if prefix.is_empty() && bs {
             return out;
         }
-        for (c, sym, how) in table.search(&prefix, 10) {
+        for h in table.search_text(&prefix, 10) {
+            let (c, sym, how) = (&h.text, &h.name, &h.how);
             let label = if how.is_empty() { format!("{c}  {sym}") } else { format!("{c}  {sym}  {how}") };
-            out.push(Completion { replace: n - start, text: c.to_string(), label });
+            out.push(Completion { back: h.text.chars().count().saturating_sub(h.caret), replace: n - start, text: h.text.clone(), label });
         }
         return out;
     }
@@ -759,7 +764,7 @@ pub fn complete(profile: &dyn Profile, before: &str, table: &dyn Symbols, kinds:
     abbrevs.sort_by(|a, b| b.0.cmp(&a.0));
     for (len, c, a) in abbrevs.into_iter().take(4) {
         if !out.iter().any(|o| o.text == c.to_string()) {
-            out.push(Completion { replace: len, text: c.to_string(), label: format!("{c}  {a}") });
+            out.push(Completion { back: 0, replace: len, text: c.to_string(), label: format!("{c}  {a}") });
         }
     }
     if !out.is_empty() {
@@ -782,11 +787,11 @@ pub fn complete(profile: &dyn Profile, before: &str, table: &dyn Symbols, kinds:
     let mut kws: Vec<&String> = kinds.keys().filter(|k| k.starts_with(&prefix) && k.len() > prefix.len()).collect();
     kws.sort_by_key(|k| (k.len(), k.to_string()));
     for k in kws.into_iter().take(4) {
-        out.push(Completion { replace: n - j, text: k.clone(), label: k.clone() });
+        out.push(Completion { back: 0, replace: n - j, text: k.clone(), label: k.clone() });
     }
     for w in words.iter().filter(|w| w.starts_with(&prefix) && w.len() > prefix.len()).take(8 - out.len().min(8)) {
         if !out.iter().any(|o| &o.text == w) {
-            out.push(Completion { replace: n - j, text: w.clone(), label: w.clone() });
+            out.push(Completion { back: 0, replace: n - j, text: w.clone(), label: w.clone() });
         }
     }
     out
@@ -889,6 +894,7 @@ impl Theory {
             stale_from: None,
             blocks: Vec::new(),
             docs: Vec::new(),
+            prose_maps: Vec::new(),
             doc_cache: HashMap::new(),
             block_editor: None,
             mode,
@@ -984,7 +990,7 @@ impl Theory {
         let chars: Vec<char> = text.chars().collect();
         let start = caret.saturating_sub(c.replace);
         let new: String = chars[..start].iter().chain(c.text.chars().collect::<Vec<_>>().iter()).chain(chars[caret..].iter()).collect();
-        let caret_after = start + c.text.chars().count();
+        let caret_after = (start + c.text.chars().count()).saturating_sub(c.back);
         if in_block {
             let be = self.block_editor.as_mut().unwrap();
             be.content = text_editor::Content::with_text(&new);
@@ -1141,15 +1147,102 @@ impl Theory {
         typed.into_iter().chain(stale).min()
     }
 
+    /// The source offset standing for byte `md` of the Markdown that block `i` renders as, if the
+    /// profile keeps the text (Lean's docstrings): where a click in the rendered paragraph, or a
+    /// mark on it, is in the file
+    pub fn source_of_markdown(&self, i: usize, md: usize) -> Option<usize> {
+        let (start, _) = self.blocks.get(i)?.body?;
+        Some(start + self.prose_maps.get(i)?.as_ref()?.source_char(md))
+    }
+
+    /// The source offset under a pointer over the rendered prose of block `i`: its Markdown block
+    /// `block` and the byte `offset` in that block's text, as the renderer reports them. Found by
+    /// matching the text under the pointer, in order, against the Markdown the block renders from
+    /// (so only for profiles with a prose map). Nearest the start of its block when the pointer
+    /// is on something that is not a word
+    pub fn source_of_hit(&self, i: usize, block: usize, offset: usize) -> Option<usize> {
+        use prose_render::markdown::Block as B;
+        let doc = self.docs.get(i)?.as_ref()?;
+        let map = self.prose_maps.get(i)?.as_ref()?;
+        let (body_start, _) = self.blocks.get(i)?.body?;
+        let linear = |b: &B| -> Option<String> {
+            match b {
+                B::Text(t) => Some(t.runs.iter().map(|r| r.text.as_str()).collect()),
+                B::Code { text, .. } => Some(text.clone()),
+                B::Math { latex, .. } => Some(latex.clone()),
+                _ => None,
+            }
+        };
+        let word = |s: &str| -> Option<String> {
+            let w: String = s.chars().skip_while(|c| !c.is_alphanumeric()).take_while(|c| c.is_alphanumeric()).collect();
+            (w.chars().count() >= 3).then_some(w)
+        };
+        // Where each block's text starts in the Markdown: its first word, after the last block's
+        let md = &map.markdown;
+        let mut from = 0;
+        let mut start = None;
+        for (k, b) in doc.blocks.iter().enumerate().take(block + 1) {
+            let Some(text) = linear(b) else { continue };
+            let Some(key) = word(&text) else { continue };
+            match md[from..].find(&key) {
+                Some(p) => {
+                    if k == block {
+                        start = Some(from + p);
+                    }
+                    from += p + key.len();
+                }
+                None if k == block => return None,
+                None => {}
+            }
+        }
+        let start = start?;
+        let text = linear(doc.blocks.get(block)?)?;
+        // The word under the pointer: the n-th of its kind in the block, the n-th after the start
+        let at = offset.min(text.len());
+        let at = (0..=at).rev().find(|&k| text.is_char_boundary(k)).unwrap_or(0);
+        let (ws, we) = {
+            let b: Vec<(usize, char)> = text.char_indices().collect();
+            let mut s = at;
+            while let Some(&(p, c)) = b.iter().rev().find(|(p, _)| *p < s) {
+                if c.is_alphanumeric() { s = p } else { break }
+            }
+            let e = text[at..].char_indices().find(|(_, c)| !c.is_alphanumeric()).map_or(text.len(), |(p, _)| at + p);
+            (s, e)
+        };
+        let w = &text[ws..we];
+        let md_at = if w.is_empty() {
+            start
+        } else {
+            let nth = text[..ws].matches(w).count();
+            md[start..].match_indices(w).nth(nth).map_or(start, |(p, _)| start + p) + (at - ws).min(w.len())
+        };
+        Some(body_start + map.source_char(md_at))
+    }
+
+    /// Open prose block `index` with the caret at source offset `at`, as the paragraph there
+    pub fn open_prose_at(&mut self, index: usize, at: usize, table: &dyn Symbols) {
+        self.open_block(index, table);
+        let Some((block, body)) = self.prose_block() else { return };
+        let at = at.clamp(body.0, body.1);
+        let paras = self.paragraphs(body);
+        let (ps, pe) = paras.iter().copied().find(|(s, e)| *s <= at && at <= *e).or_else(|| paras.iter().rev().copied().find(|(s, _)| *s <= at)).unwrap_or(body);
+        self.open_range(&block, ps, pe, at, table);
+    }
+
     /// Recompute blocks, rendered prose and highlighting after the text or the prover changed
     pub fn refresh(&mut self, table: &dyn Symbols) {
         let prover = self.local_prover();
         self.blocks = self.profile.blocks(&self.local, &prover.commands, &self.kinds);
         let chars: Vec<char> = self.local.chars().collect();
         let mut docs = Vec::with_capacity(self.blocks.len());
+        let mut maps = Vec::with_capacity(self.blocks.len());
         let mut cache = std::mem::take(&mut self.doc_cache);
         let mut used = HashMap::new();
         for block in &self.blocks {
+            maps.push(match (block.kind, block.body) {
+                (theory::Kind::Text, Some((s, e))) if s <= e && e <= chars.len() => self.profile.prose_map(&chars[s..e].iter().collect::<String>()),
+                _ => None,
+            });
             let doc = match (block.kind, block.body) {
                 (theory::Kind::Heading(level), Some((s, e))) | (theory::Kind::Heading(level), Some((s, e)))
                     if s <= e && e <= chars.len() =>
@@ -1173,6 +1266,7 @@ impl Theory {
         }
         self.doc_cache = used;
         self.docs = docs;
+        self.prose_maps = maps;
         self.compute_highlight(&prover);
         self.compute_block_views();
     }
@@ -1997,7 +2091,7 @@ mod prose_completion_tests {
         let li = LineIndex::new(&shown);
         let be = t.block_editor.as_mut().unwrap();
         place(&mut be.content, li.position(&shown, at));
-        t.completions = vec![Completion { replace: 6, text: "assignment".into(), label: "assignment".into() }];
+        t.completions = vec![Completion { back: 0, replace: 6, text: "assignment".into(), label: "assignment".into() }];
         t.accept_completion(0, &table);
         assert!(!t.local.contains('\u{200B}'), "no zero-width spaces in the source: {:?}", t.local);
         assert!(t.local.contains("the unstable\n  observation. Its final commitment applies a\n  total substitution, assignment"), "{:?}", t.local);

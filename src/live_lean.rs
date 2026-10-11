@@ -263,7 +263,7 @@ fn live_lean() {
                     let _ = app.update(m);
                 }
                 attempts += 1;
-                if attempts > 120 && same_file.is_some() {
+                if attempts > 60 && same_file.is_some() {
                     break 'scan;
                 }
                 let generation = app.hover_gen;
@@ -306,6 +306,26 @@ fn live_lean() {
         assert!(pump(&mut app, &mut stream, 90, |a| theory(a).path == file).await, "back");
         h.draw(&app, "lean-live-8-back");
         println!("and back");
+
+        // A definition in another file: `evalOne`, from the signature of the first theorem, is in
+        // CausalPaperSemantics.lean. The caret on it, Ctrl+click's lookup (what the click does after
+        // it has put the caret there): that file opens, and Back returns
+        let _ = app.update(Message::SetMode(Mode::Source));
+        let at = local(&app).find("(evalOne fuel static current expression time).annotation").map(|b| local(&app)[..b].chars().count() + 3).expect("evalOne in a signature");
+        caret_at(&mut app, at);
+        app.ctrl = true;
+        let _ = app.goto_definition();
+        app.ctrl = false;
+        assert!(pump(&mut app, &mut stream, 90, |a| theory(a).path.ends_with("CausalPaperSemantics.lean")).await, "went to CausalPaperSemantics.lean");
+        let t = theory(&app);
+        let name_at_cursor = t.local.chars().skip(t.cursor).take(7).collect::<String>();
+        println!("cross-file: now in {} at {:?}", t.path, name_at_cursor);
+        h.draw(&app, "lean-live-9-other-file");
+        assert!(name_at_cursor.starts_with("evalOne") || t.local[..t.local.char_indices().nth(t.cursor + 7).map_or(t.local.len(), |(b, _)| b)].ends_with("evalOne"), "at the definition: {name_at_cursor:?}");
+        let _ = app.update(Message::Back);
+        assert!(pump(&mut app, &mut stream, 90, |a| theory(a).path == file).await, "back to CausalCorrectness.lean");
+        h.draw(&app, "lean-live-10-back-again");
+        println!("cross-file and back");
 
         // The host's own view of the files: nothing was written but what the human typed
         let sid = app.workspace.as_ref().unwrap().sid.clone();

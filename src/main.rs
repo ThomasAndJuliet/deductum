@@ -39,6 +39,8 @@ mod snapshot_lean;
 mod live;
 #[cfg(test)]
 mod live_lean;
+#[cfg(test)]
+mod live_mixed;
 
 /// LaTeX's fonts, New Computer Modern, for the literate view's prose; see `res/fonts/README`
 pub const FONTS: [&[u8]; 5] = [
@@ -215,6 +217,8 @@ pub enum Message {
     InsertBlock(Option<usize>, &'static str),
     DeleteBlock(usize),
     ProsePointer(usize, cosmic::iced::Point),
+    /// Where in a rendered prose block's text (its Markdown block and offset in it) the pointer is
+    ProseHover(usize, prose_render::rich::Pos),
     /// A click replayed in the block editor once it is laid out (opening prose where it was clicked)
     BlockClickAt(cosmic::iced::Point),
     /// Ctrl and Alt held or not, for Ctrl+click and Alt+click
@@ -481,6 +485,7 @@ pub struct App {
     /// Where the pointer last was over a prose block (its index), so that a click there opens
     /// it with the caret at the click
     pub prose_pointer: Option<(usize, cosmic::iced::Point)>,
+    pub prose_hover: Option<(usize, prose_render::rich::Pos)>,
     /// Vim's block cursor is showing: the character under the caret, selected
     pub vim_block: bool,
     /// A placement for the proof state instead of the rule (comparing them in pictures)
@@ -1855,6 +1860,7 @@ impl cosmic::Application for App {
             hover_gen: 0,
             keyword_gen: 0,
             prose_pointer: None,
+            prose_hover: None,
             vim_block: false,
             goal_placement_override: None,
             sessions: BTreeMap::new(),
@@ -2171,15 +2177,21 @@ impl cosmic::Application for App {
                 let close_popout = self.popout.take().map(cosmic::iced::window::close::<cosmic::Action<Message>>);
                 if let Some(t) = self.workspace.as_mut().and_then(|w| w.theory.as_mut()) {
                     t.break_step();
-                    t.open_block(index, &*table);
+                    // Prose a profile can map back to the source opens where the pointer was over
+                    // the rendered text; else the click is replayed in the editor, below
+                    let landed = self.prose_hover.filter(|(i, _)| *i == index).and_then(|(i, pos)| t.source_of_hit(i, pos.block, pos.offset));
+                    match landed {
+                        Some(at) => t.open_prose_at(index, at, &*table),
+                        None => t.open_block(index, &*table),
+                    }
                     t.selected = Some(index);
                     // Prose opens in its own typography, laid out as it was shown: the click,
                     // replayed once the editor is laid out, lands where it was made
                     let replay = match (self.prose_pointer, &t.block_editor) {
-                        (Some((i, p)), Some(be)) if i == index && be.wrap.is_some() => Some(p),
+                        (Some((i, p)), Some(be)) if i == index && be.wrap.is_some() && landed.is_none() => Some(p),
                         _ => None,
                     };
-                    if replay.is_none() {
+                    if replay.is_none() && landed.is_none() {
                         t.narrow_to_paragraph(&*table);
                     }
                     let mut tasks = vec![widget::text_input::focus(view::block_editor_id()), self.schedule_state()];
@@ -2974,6 +2986,9 @@ impl cosmic::Application for App {
                 t.selected = Some(i.min(t.blocks.len().saturating_sub(1)));
                 self.status = Some("Block deleted (Ctrl+Z brings it back)".into());
                 return Task::batch([self.flush_edits(), view::centre_selected(), Self::unfocus_all()]);
+            }
+            Message::ProseHover(i, pos) => {
+                self.prose_hover = Some((i, pos));
             }
             Message::ProsePointer(i, p) => {
                 self.prose_pointer = Some((i, p));

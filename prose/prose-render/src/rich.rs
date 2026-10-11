@@ -653,6 +653,7 @@ pub struct RichText<'a, Message> {
     on_link: Option<Box<dyn Fn(String) -> Message + 'a>>,
     on_image: Option<Box<dyn Fn(PathBuf) -> Message + 'a>>,
     on_diagram: Option<Box<dyn Fn(String) -> Message + 'a>>,
+    on_hover: Option<Box<dyn Fn(Pos) -> Message + 'a>>,
 }
 
 pub fn rich_text<'a, Message>(doc: Arc<Doc>, typography: Arc<Typography>) -> RichText<'a, Message> {
@@ -666,6 +667,7 @@ pub fn rich_text<'a, Message>(doc: Arc<Doc>, typography: Arc<Typography>) -> Ric
         on_link: None,
         on_image: None,
         on_diagram: None,
+        on_hover: None,
     }
 }
 
@@ -690,6 +692,13 @@ impl<'a, Message> RichText<'a, Message> {
 
     pub fn on_select(mut self, f: impl Fn(Select) -> Message + 'a) -> Self {
         self.on_select = Some(Box::new(f));
+        self
+    }
+
+    /// Told where in the text the pointer is, as it moves over it (without taking the events: a
+    /// click goes on to whatever is around the text, which can then say where it landed)
+    pub fn on_hover(mut self, f: impl Fn(Pos) -> Message + 'a) -> Self {
+        self.on_hover = Some(Box::new(f));
         self
     }
 
@@ -1531,6 +1540,11 @@ impl<'a, Message> Widget<Message, cosmic::Theme, Renderer> for RichText<'a, Mess
     ) {
         let state = tree.state.downcast_mut::<State>();
         let bounds = layout.bounds();
+        if let (Some(on_hover), Event::Mouse(mouse::Event::CursorMoved { .. })) = (&self.on_hover, event)
+            && let Some(point) = cursor.position_in(bounds)
+        {
+            shell.publish(on_hover(state.hit(point)));
+        }
         match event {
             Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => {
                 let Some(point) = cursor.position_in(bounds) else { return };
