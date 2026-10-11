@@ -399,3 +399,25 @@ fn unsolved_goals_are_summarised_under_the_proof() {
     let png = h.draw(&app, "lean-unsolved-summary");
     assert!(ink(&png, 1100, 760, 100..1000, 200..400) > 1000);
 }
+
+#[test]
+fn long_hypotheses_wrap_inside_the_goal_card() {
+    // Lean prints a goal at its own width, not the panel's: a long hypothesis or target must
+    // wrap inside its card instead of running past its edge
+    let mut app = lean_app(Mode::Literate);
+    select(&mut app, "theorem append_nil_right", "induction");
+    {
+        let ws = app.workspace.as_mut().unwrap();
+        ws.panel = Panel::Output;
+        ws.goals.messages = goal_parts(&[(
+            "",
+            &[
+                "fuel : Nat",
+                "reported : InSupport origin (evalOne fuel static current expression time).annotation",
+            ],
+            "OperationalFootprint fuel static current expression time origin ∧ InSupport origin (evalOne fuel static current expression time).annotation",
+        )]);
+    }
+    let mut h = Harness::new(Size::new(1400.0, 900.0));
+    h.draw(&app, "lean-goal-long-lines");
+}
