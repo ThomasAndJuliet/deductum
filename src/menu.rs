@@ -18,6 +18,28 @@ use std::{collections::HashMap, sync::LazyLock};
 
 use crate::{Action, ColorSchemeId, ColorSchemeKind, Config, Message, fl};
 
+/// Whether Isabellum is installed, so its action is offered (its design C10).
+/// Set once at startup by [`check_isabellum`]
+pub static ISABELLUM_INSTALLED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Look for Isabellum on the host, in the background
+pub fn check_isabellum() {
+    std::thread::spawn(|| {
+        let script = "PATH=\"$PATH:$HOME/.local/bin\"; command -v isabellum >/dev/null 2>&1 || flatpak info dev.twright.Isabellum >/dev/null 2>&1";
+        let status = if std::path::Path::new("/.flatpak-info").exists() {
+            std::process::Command::new("flatpak-spawn").args(["--host", "sh", "-c", script]).status()
+        } else {
+            std::process::Command::new("sh").args(["-c", script]).status()
+        };
+        let found = status.is_ok_and(|s| s.success());
+        ISABELLUM_INSTALLED.store(found, std::sync::atomic::Ordering::Relaxed);
+    });
+}
+
+fn isabellum_installed() -> bool {
+    ISABELLUM_INSTALLED.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 static MENU_ID: LazyLock<cosmic::widget::Id> =
     LazyLock::new(|| cosmic::widget::Id::new("responsive-menu"));
 
@@ -165,6 +187,9 @@ pub fn tab_menu(
                 items.push(item(fl!("detach-session"), Action::TabClose));
                 items.push(item(fl!("move-to-new-window"), Action::TabPopOut));
                 items.push(item(fl!("end-remote-session"), Action::RemoteEnd));
+                if isabellum_installed() {
+                    items.push(item(fl!("open-in-isabellum"), Action::OpenInIsabellum));
+                }
                 // An agent's conversation, and its worktree, to another computer
                 let targets = destinations.get(&entity).map(Vec::as_slice).unwrap_or_default();
                 if !targets.is_empty() {
@@ -182,6 +207,9 @@ pub fn tab_menu(
                 items.push(item(fl!("move-to-new-window"), Action::TabPopOut));
                 items.push(item(fl!("end-remote-session"), Action::RemoteEnd));
                 items.push(item(fl!("rename-menu"), Action::SessionRename));
+                if isabellum_installed() {
+                    items.push(item(fl!("open-in-isabellum"), Action::OpenInIsabellum));
+                }
                 let targets = destinations.get(&entity).map(Vec::as_slice).unwrap_or_default();
                 if !targets.is_empty() {
                     items.push(MenuItem::Divider);
@@ -313,6 +341,9 @@ pub fn menu_bar<'a>(
         MenuItem::Button(fl!("open-in-zed"), None, Action::OpenInZed),
         MenuItem::Button(fl!("open-in-files"), None, Action::OpenInFiles),
     ]);
+    if isabellum_installed() {
+        session_items.push(MenuItem::Button(fl!("open-in-isabellum"), None, Action::OpenInIsabellum));
+    }
 
     responsive_menu_bar()
         .item_height(ItemHeight::Dynamic(40))

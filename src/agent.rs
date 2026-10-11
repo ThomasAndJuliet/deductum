@@ -921,6 +921,55 @@ pub async fn open_in_zed(process: TabProcess) -> Result<(), String> {
     run(command).await.map(|_| ())
 }
 
+/// Open, in Isabellum on this computer, the Isabelle session the agent in a
+/// tab is working in, or else its project. Isabellum's session host on the
+/// agent's computer says which session the agent used, by its Zellij session
+/// or its folder. `machine` is the computer's name, which Isabellum shares
+/// (Isabellum's design C10, `docs/isabellum-decisions.md`)
+pub async fn open_in_isabellum(process: TabProcess, machine: Option<String>) -> Result<(), String> {
+    let (host, dirs) = project_dirs(&process).await?;
+    let host_name = host.clone().unwrap_or_default();
+    let find = |arg: &str, value: &str| {
+        format!(
+            "python3 ~/.local/share/isabellum/host/isabellum_host.py find --{arg} {} 2>/dev/null\n",
+            sh_quote(value)
+        )
+    };
+    let first_session = |output: String| {
+        serde_json::from_str::<Vec<serde_json::Value>>(output.trim())
+            .ok()
+            .and_then(|found| found.first().and_then(|f| f["session"]["id"].as_str().map(str::to_string)))
+    };
+    let mut session = None;
+    if let TabProcess::Session(s) = &process {
+        session = first_session(run(session_exec(&host_name, &find("zellij", &s.name))).await.unwrap_or_default());
+    }
+    if session.is_none() {
+        session = first_session(run(session_exec(&host_name, &find("folder", &dirs[0]))).await.unwrap_or_default());
+    }
+    let mut args = Vec::new();
+    if host.is_some() {
+        args.push("--machine".to_string());
+        args.push(machine.unwrap_or(host_name));
+    }
+    match session {
+        Some(id) => args.extend(["--session".to_string(), id]),
+        None => args.push(dirs[0].clone()),
+    }
+    let mut command = host::command("sh");
+    command.args([
+        "-c",
+        "PATH=\"$PATH:$HOME/.local/bin\"\n\
+         command -v isabellum >/dev/null 2>&1 && exec setsid -f isabellum \"$@\"\n\
+         flatpak info dev.twright.Isabellum >/dev/null 2>&1 && exec setsid -f flatpak run dev.twright.Isabellum \"$@\"\n\
+         echo 'Isabellum is not installed' >&2; exit 127\n",
+        "isabellum",
+    ]);
+    command.args(&args);
+    log::info!("opening in Isabellum: {:?}", command.as_std());
+    run(command).await.map(|_| ())
+}
+
 /// A coding agent running in a tab, as `project-dirs.py --json` finds it
 #[derive(Clone, Debug, serde::Deserialize)]
 pub struct TabAgent {

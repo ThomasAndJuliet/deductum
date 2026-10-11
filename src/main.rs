@@ -535,6 +535,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         env::set_var("TERM", "xterm-256color");
     }
 
+    menu::check_isabellum();
+
     // Set settings
     let mut settings = Settings::default();
     settings = settings.theme(config.app_theme.theme());
@@ -661,6 +663,8 @@ pub enum Action {
     TabForkTo(ProfileId),
     OpenLocallyByMenu,
     OpenInZed,
+    /// The Isabelle session the tab's agent works in, in Isabellum
+    OpenInIsabellum,
     OpenInFiles,
     /// Rename the conversation of the tab in front
     SessionRename,
@@ -735,6 +739,7 @@ impl Action {
             Self::RemoteEnd => Message::RemoteEnd(entity_opt),
             Self::TabPopOut => Message::TabPopOut(entity_opt),
             Self::OpenInZed => Message::OpenInZed,
+            Self::OpenInIsabellum => Message::OpenInIsabellum(entity_opt),
             Self::OpenInFiles => Message::OpenInFiles,
             Self::SessionRename => Message::SessionRename(entity_opt),
             Self::SidebarToggle => Message::SidebarToggle,
@@ -1011,6 +1016,8 @@ pub enum Message {
     OpenLocallyByMenu,
     OpenLocallyResult(Result<(), String>),
     OpenInZedResult(Result<(), String>),
+    OpenInIsabellum(Option<segmented_button::Entity>),
+    OpenInIsabellumResult(Result<(), String>),
     NewTabMenuClose,
     NewTabMenuToggle,
     Opacity(u8),
@@ -7510,6 +7517,48 @@ impl Application for App {
                     return self.file_open_error(fl!("open-in-zed-failed", error = err.as_str()), err);
                 }
             }
+            Message::OpenInIsabellum(entity_opt) => {
+                if self.pending_commands.contains_key("open-isabellum") {
+                    return Task::none();
+                }
+                let process = match entity_opt {
+                    Some(entity) => self.pane_model.active().and_then(|tab_model| {
+                        if let Some(session) = tab_model.data::<agent::Session>(entity) {
+                            Some(agent::TabProcess::Session(session.clone()))
+                        } else {
+                            tab_model
+                                .data::<thread::tab::ThreadTab>(entity)
+                                .map(|thread| agent::TabProcess::Dir { host: thread.host.clone(), dir: thread.cwd.clone() })
+                        }
+                    }),
+                    None => self.active_process(),
+                };
+                if let Some(process) = process {
+                    let host = match &process {
+                        agent::TabProcess::Session(session) => session.host.clone(),
+                        agent::TabProcess::Dir { host, .. } => host.clone(),
+                        agent::TabProcess::Local(_) => String::new(),
+                    };
+                    // Isabellum knows the computer by the name it has here
+                    let machine = self
+                        .config
+                        .machines
+                        .values()
+                        .find(|m| !host.is_empty() && (m.destination() == host || m.host == host))
+                        .map(|m| m.name.clone());
+                    self.start_progress("open-isabellum", fl!("opening-isabellum"));
+                    return cosmic::task::future(async move {
+                        Message::OpenInIsabellumResult(agent::open_in_isabellum(process, machine).await)
+                    });
+                }
+            }
+            Message::OpenInIsabellumResult(result) => {
+                self.finish_progress("open-isabellum");
+                if let Err(err) = result {
+                    log::warn!("failed to open in Isabellum: {}", err);
+                    return self.file_open_error(fl!("open-in-isabellum-failed", error = err.as_str()), err);
+                }
+            }
             Message::RemoteEnded(entity, result) => {
                 self.finish_progress("end-session");
                 match result {
@@ -9025,7 +9074,7 @@ impl Application for App {
             if let Some(launcher) = tab_model.data::<Launcher>(entity) {
                 tab_column = tab_column.push(self.launcher_view(entity, launcher));
             } else if let Some(thread) = tab_model.data::<thread::tab::ThreadTab>(entity) {
-                tab_column = tab_column.push(thread::view::view(thread, &thread_style, cosmic::theme::is_dark()));
+                tab_column = tab_column.push(thread::view::view(thread, &thread_style));
             }
 
             //Only draw find in the currently focused pane

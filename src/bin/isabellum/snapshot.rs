@@ -1,0 +1,1375 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
+//! Isabellum's window drawn headless, as `src/thread/snapshot.rs` draws
+//! threads: the real view, laid out and rendered with tiny-skia. Set
+//! `CT_SNAPSHOTS` to a directory to keep the frames as PNG files.
+
+use std::collections::{BTreeMap, HashMap};
+use std::sync::Arc;
+
+use cosmic::iced::advanced::clipboard;
+use cosmic::iced::advanced::renderer::{Headless, Style};
+use cosmic::iced::runtime::user_interface::{Cache, UserInterface};
+use cosmic::iced::{Event, Font, Pixels, Size, mouse};
+use serde_json::json;
+
+use super::editor::{Mode, Theory};
+use super::symbols::Table;
+use super::{App, Link, Panel, QueryState, Workspace, link};
+
+pub const DEMO: &str = r#"theory Demo
+  imports Main
+begin
+
+section \<open>Natural numbers\<close>
+
+text \<open>We prove that addition with zero is the identity, so $x + 0 = x$ for every
+  @{typ nat}, and that @{term "a + b = b + a"}. The proof of the first is
+  \<^emph>\<open>by simplification\<close>; see \cite{Nipkow2002}.\<close>
+
+lemma add_zero: "\<forall>x::nat. x + 0 = x"
+  apply simp
+  done
+
+(* the second is left for Sledgehammer *)
+
+lemma add_comm: "(a::nat) + b = b + a"
+  sorry
+
+lemma broken: "(x::nat) < x"
+  by simp
+
+end
+"#;
+
+fn prover_json(text: &str) -> serde_json::Value {
+    let cmds = super::theory::lexical_commands(text, &HashMap::new());
+    let chars: Vec<char> = text.chars().collect();
+    let commands: Vec<serde_json::Value> = cmds
+        .iter()
+        .map(|c| {
+            let src: String = chars[c.start..c.end].iter().collect();
+            let status = if src.contains("broken") || (c.name == "by" && src.contains("by simp") && text[..].contains("broken")) && c.start > text.find("broken").map(|b| text[..b].chars().count()).unwrap_or(usize::MAX) { "failed" } else if c.name == "sorry" { "warned" } else { "finished" };
+            json!([c.start, c.end, c.name, status])
+        })
+        .collect();
+    let by = text.rfind("by simp").map(|b| text[..b].chars().count()).unwrap();
+    json!({
+        "revision": 1,
+        "status": {"finished": 14, "unprocessed": 0, "running": 0, "failed": 1, "consolidated": true},
+        "commands": commands,
+        "messages": [{"start": by, "end": by + 7, "kind": "error", "text": "Failed to finish proof\ngoal (1 subgoal):\n 1. False"}],
+    })
+}
+
+pub fn demo_app(mode: Mode) -> App {
+    let table = Arc::new(Table::fallback());
+    let doc = json!({"text": DEMO, "revision": 1, "prover": prover_json(DEMO), "dirty": false, "can_undo": true});
+    let mut theory = Theory::new("/home/me/Demo/Demo.thy".into(), &doc, &table, Arc::new(HashMap::new()), mode);
+    theory.cursor = DEMO.find("apply simp").unwrap() + 3;
+    let mut sessions = BTreeMap::new();
+    sessions.insert(
+        ("local".to_string(), "s1".to_string()),
+        json!({"id": "s1", "name": "Demo", "folder": "/home/me/Demo", "logic": "HOL", "lifecycle": "Running",
+               "activity": {"running": 0, "failed": 1}, "clients": [{"kind": "agent", "key": "claude:c1", "label": "Claude"}],
+               "grants": [{"id": "g1", "agent": "claude:c1", "label": "Claude", "scope": "theory", "path": "/home/me/Demo/Demo.thy"}]}),
+    );
+    sessions.insert(
+        ("local".to_string(), "s2".to_string()),
+        json!({"id": "s2", "name": "UTP", "folder": "/home/me/UTP", "logic": "Shallow-Expressions-Z", "lifecycle": "Paused",
+               "activity": {}, "clients": [], "grants": []}),
+    );
+    let info = json!({
+        "folder": "/home/me/Demo",
+        "theories": [{"path": "/home/me/Demo/Demo.thy", "status": {"failed": 1}, "dirty": false},
+                     {"path": "/home/me/Demo/More.thy", "status": {"consolidated": true}, "dirty": true}],
+        "seen": {"claude:c1": {"label": "Claude", "position": {"path": "/home/me/Demo/Demo.thy", "line": 18}}},
+    });
+    App {
+        core: cosmic::app::Core::default(),
+        links: vec![Link {
+            target: link::Target { key: "local".into(), destination: None },
+            name: "au-laptop".into(),
+            sender: None,
+            status: "connected".into(),
+            hello: None,
+            client_id: None,
+            symbols: table,
+        }],
+        ctrl: false,
+        alt: false,
+        back: Vec::new(),
+        references: Vec::new(),
+        entity: None,
+        hover_gen: 0,
+        keyword_gen: 0,
+        prose_pointer: None,
+        vim_block: false,
+        goal_placement_override: None,
+        sessions,
+        next_id: 0,
+        pending: HashMap::new(),
+        workspace: Some(Workspace {
+            machine: "local".into(),
+            sid: "s1".into(),
+            info: Some(info),
+            theory: Some(theory),
+            opening: None,
+            panel: Panel::Symbols,
+            output: Some(json!({"command": {"name": "apply", "status": "finished"}, "messages": [
+                {"kind": "state", "text": "proof (prove)\ngoal (1 subgoal):\n 1. \\<forall>x. x + 0 = x"}]})),
+            sledgehammer: QueryState { operation: "sledgehammer", ..Default::default() },
+            goals: QueryState {
+                operation: "isabellum_goals",
+                status: "finished".into(),
+                messages: [
+                    "#isabellum:fact 0\nlength xs = n",
+                    "#isabellum:count 2",
+                    "#isabellum:param 1\nxs :: 'a list",
+                    "#isabellum:prem 1\n0 < n",
+                    "#isabellum:concl 1\nxs \\<noteq> []",
+                    "#isabellum:param 2\nxs :: 'a list",
+                    "#isabellum:concl 2\nP n",
+                ]
+                .iter()
+                .map(|r| json!({"kind": "writeln", "raw": r, "text": r, "spans": []}))
+                .collect(),
+                ..Default::default()
+            },
+            goals_prev: QueryState { operation: "isabellum_goals", ..Default::default() },
+            state_text: false,
+            show_types: false,
+            all_goals: false,
+            theory_filter: String::new(),
+            notes: vec![json!({"id": "n1", "label": "Claude", "start": 330, "end": 360, "line": 18, "text": "This needs induction on a; simp alone will not do.", "replies": []})],
+            note_reply: Default::default(),
+            show_offer: None,
+            pending_goto: None,
+            hover: None,
+            sh_open: false,
+            tool_started: None,
+            gap_hover: None,
+            tools_stopping: false,
+            find: QueryState { operation: "find_theorems", ..Default::default() },
+            find_input: String::new(),
+            cex: QueryState { operation: "isabellum_command", ..Default::default() },
+            fill: super::FillState {
+                status: "done".into(),
+                candidates: vec![json!({"text": "by (simp add: add.commute)", "ok": true, "message": ""}),
+                                 json!({"text": "by auto", "ok": false, "message": "Failed to finish proof"})],
+                ..Default::default()
+            },
+            cex_params: String::new(),
+            views: HashMap::new(),
+            activity: Some(json!({"lifecycle": "Running", "prover": {"cpu": 385, "rss_mb": 3120},
+                "running": [{"path": "/home/me/Demo/Demo.thy", "line": 21, "name": "by", "seconds": 41}],
+                "theories": [{"path": "/home/me/Demo/Demo.thy", "theory": "Draft.Demo", "percentage": 80, "running": 1, "failed": 1, "consolidated": false, "total": 16, "imports": ["/home/me/Demo/Base.thy"]},
+                             {"path": "/home/me/Demo/Base.thy", "theory": "Draft.Base", "percentage": 45, "running": 2, "failed": 0, "consolidated": false, "total": 120, "imports": []}]})),
+            provers: String::new(),
+            sh_timeout: String::new(),
+            sh_isar: false,
+            sh_try0: true,
+            symbol_search: String::new(),
+            history: vec![json!({"id": 3, "author": {"kind": "agent", "label": "Claude"}, "kind": "edit", "line": 18, "summary": "−5 +'by simp'"}),
+                          json!({"id": 2, "author": {"kind": "human", "label": "You"}, "kind": "edit", "line": 7, "summary": "+'zero'"})],
+            follow: None,
+            log: vec!["Welcome".into()],
+            merge: None,
+        }),
+        new_session: None,
+        show_sidebar: true,
+        status: None,
+        state_gen: 0,
+        request: None,
+        kinds: Arc::new(HashMap::new()),
+        popout: None,
+        want_theory: None,
+        left: super::LeftMode::Sessions,
+        show_right: true,
+        left_width: 290.0,
+        right_width: 420.0,
+        dragging: None,
+        window_width: 1400.0,
+        vim: super::vim::Vim::default(),
+        vim_enabled: false,
+        mode_model: cosmic::widget::segmented_button::SingleSelectModel::default(),
+        mode_entities: [cosmic::widget::segmented_button::Entity::default(); 2],
+    }
+}
+
+pub fn draw(app: &App, name: &str, size: Size) -> Vec<u8> {
+    draw_element(super::view::view(app), name, size)
+}
+
+/// Views publish process-wide state as they are built (vim's mode, the zoom): tests that draw or
+/// drive the widgets take turns, so that one test's view does not change another's keys
+static UI: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+fn ui_turn() -> std::sync::MutexGuard<'static, ()> {
+    UI.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+pub fn draw_element(element: cosmic::Element<'_, super::Message>, name: &str, size: Size) -> Vec<u8> {
+    let _turn = ui_turn();
+    super::load_fonts();
+    let mut renderer = cosmic::iced::futures::executor::block_on(<cosmic::Renderer as Headless>::new(Font::default(), Pixels(14.0), Some("tiny-skia"))).expect("a headless renderer");
+    let theme = cosmic::theme::active();
+    let mut ui = UserInterface::build(element, size, Cache::default(), &mut renderer);
+    let _ = ui.update(
+        &[Event::Window(cosmic::iced::window::Event::RedrawRequested(std::time::Instant::now()))],
+        mouse::Cursor::Unavailable,
+        &mut renderer,
+        &mut clipboard::Null,
+        &mut Vec::new(),
+    );
+    let text: cosmic::iced::Color = theme.cosmic().on_bg_color().into();
+    ui.draw(&mut renderer, &theme, &Style { icon_color: text, text_color: text, scale_factor: 1.0 }, mouse::Cursor::Unavailable);
+    let physical = cosmic::iced::Size::new(size.width as u32, size.height as u32);
+    let rgba = renderer.screenshot(physical, 1.0, theme.cosmic().bg_color().into());
+    if let Some(dir) = std::env::var_os("CT_SNAPSHOTS").filter(|d| !d.is_empty()) {
+        image::RgbaImage::from_raw(physical.width, physical.height, rgba.clone())
+            .expect("a frame")
+            .save(std::path::Path::new(&dir).join(format!("{name}.png")))
+            .expect("saved");
+    }
+    rgba
+}
+
+#[test]
+fn draws_the_literate_view() {
+    let app = demo_app(Mode::Literate);
+    let frame = draw(&app, "isabellum-literate", Size::new(1400.0, 900.0));
+    assert!(frame.chunks(4).any(|p| p[0] > 200));
+}
+
+#[test]
+fn draws_the_source_view() {
+    let app = demo_app(Mode::Source);
+    draw(&app, "isabellum-source", Size::new(1400.0, 900.0));
+}
+
+#[test]
+fn draws_the_panels() {
+    let mut app = demo_app(Mode::Literate);
+    let ws = app.workspace.as_mut().unwrap();
+    ws.panel = Panel::Sledgehammer;
+    ws.sledgehammer = QueryState {
+        operation: "sledgehammer",
+        status: "finished".into(),
+        messages: vec![
+            json!({"kind": "writeln", "text": "e found a proof...", "sendbacks": []}),
+            json!({"kind": "writeln", "text": "e: Try this: by simp (6 ms)", "sendbacks": ["by simp"]}),
+            json!({"kind": "writeln", "text": "cvc5: Try this: by presburger (1 ms)", "sendbacks": ["by presburger"]}),
+        ],
+        replace: Some((10, 15)),
+        ..Default::default()
+    };
+    draw(&app, "isabellum-sledgehammer", Size::new(1400.0, 900.0));
+    app.workspace.as_mut().unwrap().panel = Panel::Agents;
+    draw(&app, "isabellum-agents", Size::new(1400.0, 900.0));
+    app.workspace.as_mut().unwrap().panel = Panel::History;
+    let t = app.workspace.as_mut().unwrap().theory.as_mut().unwrap();
+    t.open_block(4, &Table::fallback());
+    draw(&app, "isabellum-history-editing", Size::new(1400.0, 900.0));
+    // Editing prose shows its rendered preview; a proof pops out
+    let t = app.workspace.as_mut().unwrap().theory.as_mut().unwrap();
+    t.open_block(2, &Table::fallback());
+    draw(&app, "isabellum-prose-editing", Size::new(1400.0, 900.0));
+    let t = app.workspace.as_mut().unwrap().theory.as_mut().unwrap();
+    t.open_block(3, &Table::fallback());
+    let element = super::view::proof_window(&app);
+    let _ = element;
+}
+
+#[test]
+fn draws_the_proof_window() {
+    let mut app = demo_app(Mode::Literate);
+    let t = app.workspace.as_mut().unwrap().theory.as_mut().unwrap();
+    let i = t.blocks.iter().position(|b| b.name == "lemma").unwrap();
+    t.open_block(i, &Table::fallback());
+    draw_element(super::view::proof_window(&app), "isabellum-proof-window", Size::new(1000.0, 700.0));
+}
+
+#[test]
+fn draws_a_prose_preview_alone() {
+    let app = demo_app(Mode::Literate);
+    let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+    let i = t.blocks.iter().position(|b| b.kind == super::theory::Kind::Text).unwrap();
+    let doc = t.docs[i].clone().unwrap();
+    let typo = std::sync::Arc::new(super::view::typography(&cosmic::theme::active()));
+    let el: cosmic::Element<'_, super::Message> = super::thread::rich::rich_text(doc.clone(), typo.clone()).into();
+    draw_element(el, "isabellum-preview-alone", Size::new(700.0, 200.0));
+    let el2: cosmic::Element<'_, super::Message> = cosmic::widget::column::with_capacity(2)
+        .push(cosmic::widget::text_editor::text_editor(&t.source).height(cosmic::iced::Length::Fixed(80.0)))
+        .push(super::thread::rich::rich_text(doc, typo))
+        .into();
+    draw_element(el2, "isabellum-preview-under-editor", Size::new(700.0, 300.0));
+    let el3: cosmic::Element<'_, super::Message> = cosmic::widget::column::with_capacity(2)
+        .push(cosmic::iced::widget::stack![cosmic::widget::Space::new(), cosmic::widget::text_editor::text_editor(&t.source).height(cosmic::iced::Length::Fixed(80.0))])
+        .push(super::thread::rich::rich_text(t.docs[i].clone().unwrap(), std::sync::Arc::new(super::view::typography(&cosmic::theme::active()))))
+        .into();
+    draw_element(el3, "isabellum-preview-editor-layered", Size::new(700.0, 300.0));
+    let el4: cosmic::Element<'_, super::Message> = cosmic::widget::column::with_capacity(2)
+        .push(cosmic::iced::widget::text_editor(&t.source).height(cosmic::iced::Length::Fixed(80.0)))
+        .push(super::thread::rich::rich_text(t.docs[i].clone().unwrap(), std::sync::Arc::new(super::view::typography(&cosmic::theme::active()))))
+        .into();
+    draw_element(el4, "isabellum-preview-iced-editor", Size::new(700.0, 300.0));
+}
+
+/// Messages the view produces for a click at `at`
+pub fn click(app: &App, at: cosmic::iced::Point, size: Size) -> Vec<super::Message> {
+    let _turn = ui_turn();
+    super::load_fonts();
+    let mut renderer = cosmic::iced::futures::executor::block_on(<cosmic::Renderer as Headless>::new(Font::default(), Pixels(14.0), Some("tiny-skia"))).unwrap();
+    let mut ui = UserInterface::build(super::view::view(app), size, Cache::default(), &mut renderer);
+    let mut messages = Vec::new();
+    let cursor = mouse::Cursor::Available(at);
+    for event in [
+        Event::Mouse(mouse::Event::CursorMoved { position: at }),
+        Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)),
+        Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)),
+    ] {
+        let _ = ui.update(&[event], cursor, &mut renderer, &mut clipboard::Null, &mut messages);
+    }
+    messages
+}
+
+#[test]
+fn clicking_blocks_opens_their_source() {
+    let app = demo_app(Mode::Literate);
+    // the prose paragraph, and the first lemma, as drawn in isabellum-literate.png
+    let prose = click(&app, cosmic::iced::Point::new(500.0, 215.0), Size::new(1400.0, 900.0));
+    assert!(prose.iter().any(|m| matches!(m, super::Message::EditBlock(_))), "{prose:?}");
+    // A lemma takes the click itself, as text: it opens with the caret where the click landed
+    let mut app = app;
+    let lemma = click(&app, cosmic::iced::Point::new(500.0, 300.0), Size::new(1400.0, 900.0));
+    // the pointer's place (hover), then the press, which the shown block's own editor never sees
+    draw(&app, "isabellum-literate-click", Size::new(1400.0, 900.0));
+    for m in lemma.iter().filter(|m| matches!(m, super::Message::HoverMove(..))) {
+        let _ = cosmic::Application::update(&mut app, m.clone());
+    }
+    let Some(msg) = lemma.iter().find(|m| matches!(m, super::Message::ViewPress(_))).cloned() else { panic!("{lemma:?}") };
+    assert!(!lemma.iter().any(|m| matches!(m, super::Message::BlockViewAction(_, cosmic::widget::text_editor::Action::Click(_)))), "the view itself takes no click");
+    let _ = cosmic::Application::update(&mut app, msg);
+    let t = app.workspace.as_ref().and_then(|w| w.theory.as_ref()).unwrap();
+    let be = t.block_editor.as_ref().expect("the block opens");
+    let pos = be.content.cursor().position;
+    assert!(pos.line >= 1 && pos.column > 0, "caret at {pos:?}");
+    // Between blocks: finishes editing
+    let outside = click(&app, cosmic::iced::Point::new(900.0, 880.0), Size::new(1400.0, 900.0));
+    assert!(outside.iter().any(|m| matches!(m, super::Message::CloseBlock)), "{outside:?}");
+}
+
+#[test]
+fn draws_navigation_and_inline_goals() {
+    let mut app = demo_app(Mode::Literate);
+    app.left = super::LeftMode::Theorems;
+    draw(&app, "isabellum-theorems", Size::new(1400.0, 900.0));
+    app.left = super::LeftMode::Problems;
+    app.show_right = false;
+    draw(&app, "isabellum-problems-inline-goal", Size::new(1100.0, 900.0));
+    let mut app = demo_app(Mode::Source);
+    app.show_right = false;
+    draw(&app, "isabellum-source-inline-goal", Size::new(1100.0, 900.0));
+    // Wide enough: the goal sits beside the theory
+    let mut app = demo_app(Mode::Literate);
+    app.show_right = false;
+    draw(&app, "isabellum-goal-beside", Size::new(1700.0, 900.0));
+}
+
+#[test]
+fn sidebars_resize_and_the_header_shows_the_prover() {
+    let app = demo_app(Mode::Literate);
+    let pressed = click(&app, cosmic::iced::Point::new(292.0, 500.0), Size::new(1400.0, 900.0));
+    assert!(pressed.iter().any(|m| matches!(m, super::Message::DragStart(true))), "{pressed:?}");
+    let header: cosmic::Element<'_, super::Message> =
+        cosmic::widget::row::with_children(super::view::header_center(&app)).padding(8).into();
+    draw_element(header, "isabellum-header-status", Size::new(700.0, 48.0));
+}
+
+#[test]
+fn header_groups_keep_their_width() {
+    let mut app = demo_app(Mode::Literate);
+    let lit = app.mode_model.insert().text("Literate").id();
+    app.mode_model.insert().text("Source");
+    app.mode_model.activate(lit);
+    let start: cosmic::Element<'_, super::Message> = cosmic::widget::row::with_children(super::view::header_start(&app)).into();
+    draw_element(start, "isabellum-header-start", Size::new(900.0, 48.0));
+}
+
+/// `ISABELLUM_THY=path`: a real theory through both views
+#[test]
+fn draws_a_real_theory() {
+    let Ok(path) = std::env::var("ISABELLUM_THY") else { return };
+    let text = std::fs::read_to_string(&path).unwrap();
+    for (mode, name) in [(Mode::Source, "isabellum-real-source"), (Mode::Literate, "isabellum-real-literate")] {
+        let mut app = demo_app(mode);
+        let table = Arc::new(Table::fallback());
+        let doc = json!({"text": text, "revision": 1, "prover": {}});
+        let t = Theory::new(path.clone(), &doc, &table, Arc::new(HashMap::new()), mode);
+        app.workspace.as_mut().unwrap().theory = Some(t);
+        draw(&app, name, Size::new(1400.0, 900.0));
+        if mode == Mode::Literate {
+            // and its first prose block, being edited
+            let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+            if let Some(i) = t.blocks.iter().position(|b| b.kind == super::theory::Kind::Text) {
+                eprintln!("block {i}: {:?} body {:?}", t.blocks[i].kind, t.blocks[i].body);
+                let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(i));
+                let be = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().block_editor.as_ref().unwrap();
+                eprintln!("wrap {:?}\nshown {:?}", be.wrap, be.shown());
+                draw(&app, "isabellum-real-prose-editing", Size::new(1400.0, 900.0));
+            }
+        }
+    }
+}
+
+#[test]
+fn compares_superscript_glyphs() {
+    let rows = ["A  tr˃ = tr˂   ok˃  st˃", "B  trᐳ = trᐸ   okᐳ  stᐳ", "C  tr⪧ = tr⪦   ok⪧  st⪧", "D  tr﹥ = tr﹤   ok﹥  st﹥", "E  tr⃗ trᵃ  x¹ x²", "F  tr' = tr   ok'  st'", "G  tr⁾ tr⁽ trᵒ"];
+    let col = cosmic::widget::column::with_children(rows.iter().map(|r| cosmic::widget::text(r.to_string()).font(cosmic::font::mono()).size(16.0).into()).collect::<Vec<_>>()).padding(10);
+    draw_element(col.into(), "isabellum-sup-glyphs", Size::new(600.0, 220.0));
+}
+
+#[test]
+fn scripts_font_loads() {
+    super::load_fonts();
+    let mut fs = cosmic::iced::advanced::graphics::text::font_system().write().unwrap();
+    let found: Vec<String> = fs.raw().db().faces().flat_map(|f| f.families.iter().map(|(n, _)| n.clone())).filter(|n| n.contains("Isabellum")).collect();
+    println!("faces: {found:?}");
+    let ncm: Vec<String> = fs.raw().db().faces().flat_map(|f| f.families.iter().map(|(n, _)| n.clone())).filter(|n| n.contains("NewComputer")).collect();
+    println!("ncm: {}", ncm.len());
+    let data = include_bytes!("../../../res/isabellum/fonts/IsabellumScripts.ttf");
+    println!("ttf-parser: {:?}", cosmic_text::fontdb::Database::new().len());
+    let mut db = cosmic_text::fontdb::Database::new();
+    db.load_font_data(data.to_vec());
+    println!("own db faces: {:?}", db.faces().map(|f| f.families.clone()).collect::<Vec<_>>());
+    assert!(!found.is_empty(), "the scripts font is not in the database");
+}
+
+
+#[test]
+fn clicking_prose_puts_the_caret_there() {
+    let mut app = demo_app(Mode::Literate);
+    let size = Size::new(1400.0, 900.0);
+    // The middle of the paragraph's second line
+    let msgs = click(&app, cosmic::iced::Point::new(560.0, 187.0), size);
+    let pointer = msgs.iter().rev().find(|m| matches!(m, super::Message::ProsePointer(..))).cloned().expect("pointer over prose");
+    let open = msgs.iter().find(|m| matches!(m, super::Message::EditBlock(_))).cloned().expect("opens");
+    let _ = cosmic::Application::update(&mut app, pointer.clone());
+    let _ = cosmic::Application::update(&mut app, open);
+    // The editor is laid out when drawn; then the click is replayed
+    draw(&app, "isabellum-prose-click", size);
+    let super::Message::ProsePointer(_, p) = pointer else { unreachable!() };
+    let _ = cosmic::Application::update(&mut app, super::Message::BlockClickAt(cosmic::iced::Point::new(p.x, p.y - 2.0)));
+    let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+    let be = t.block_editor.as_ref().unwrap();
+    let pos = be.content.cursor().position;
+    let len = be.content.text().chars().count();
+    let li = super::editor::LineIndex::new(&be.content.text());
+    let at = li.offset(&be.content.text(), pos);
+    assert!(at > 10 && at + 10 < len, "caret at {at} of {len}");
+}
+
+#[test]
+fn inserts_and_deletes_blocks() {
+    let mut app = demo_app(Mode::Literate);
+    let before = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().local.clone();
+    let _ = cosmic::Application::update(&mut app, super::Message::InsertBlock(Some(1), "section"));
+    let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+    assert!(t.local.contains("section \\<open>\\<close>"), "{}", t.local);
+    let be = t.block_editor.as_ref().expect("the new section opens");
+    assert!(be.wrap.is_some(), "edited as its title");
+    let i = t.blocks.iter().position(|b| b.start <= be.start && be.start <= b.end).unwrap();
+    draw(&app, "isabellum-new-section", Size::new(1400.0, 900.0));
+    let _ = cosmic::Application::update(&mut app, super::Message::DeleteBlock(i));
+    let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+    assert_eq!(t.local, before);
+}
+
+#[test]
+fn vim_normal_mode_shows_a_block_cursor() {
+    let mut app = demo_app(Mode::Literate);
+    app.vim_enabled = true;
+    let i = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.kind == super::theory::Kind::Formal).unwrap();
+    let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(i));
+    app.vim.mode = super::vim::Mode::Normal;
+    // (an editor moves by its laid-out text: drawn, as in the app)
+    draw(&app, "isabellum-vim-block", Size::new(1400.0, 900.0));
+    let _ = cosmic::Application::update(&mut app, super::Message::Vim("0".into(), false));
+    draw(&app, "isabellum-vim-block", Size::new(1400.0, 900.0));
+    let _ = cosmic::Application::update(&mut app, super::Message::Vim("l".into(), false));
+    let be = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().block_editor.as_ref().unwrap();
+    let c = be.content.cursor();
+    assert_eq!(c.selection.map(|s| (s.line, s.column)), Some((0, 1)), "{c:?}");
+    assert_eq!((c.position.line, c.position.column), (0, 2));
+    // the next motion starts from the caret, not the block's end
+    draw(&app, "isabellum-vim-block", Size::new(1400.0, 900.0));
+    let _ = cosmic::Application::update(&mut app, super::Message::Vim("l".into(), false));
+    let be = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().block_editor.as_ref().unwrap();
+    assert_eq!(be.content.cursor().selection.map(|s| s.column), Some(2));
+    // insert mode: a thin caret
+    let _ = cosmic::Application::update(&mut app, super::Message::Vim("i".into(), false));
+    let be = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().block_editor.as_ref().unwrap();
+    assert!(be.content.cursor().selection.is_none());
+}
+
+#[test]
+fn a_typed_sledgehammer_leaves_the_proof_unfinished_not_failed() {
+    let text = "theory T imports Main begin\n\nlemma \"x = x\"\nproof -\n  show ?thesis\n    sledgehammer\nqed\n\nend\n";
+    let at = |s: &str| text[..text.find(s).unwrap()].chars().count();
+    let len = |s: &str| s.chars().count();
+    let cmd = |s: &str, name: &str, status: &str| json!([at(s), at(s) + len(s), name, status]);
+    let prover = json!({
+        "revision": 1,
+        "status": {"consolidated": true},
+        "commands": [
+            cmd("theory T imports Main begin", "theory", "finished"),
+            cmd("lemma \"x = x\"", "lemma", "finished"),
+            cmd("proof -", "proof", "finished"),
+            cmd("show ?thesis", "show", "finished"),
+            cmd("sledgehammer", "sledgehammer", "finished"),
+            cmd("qed", "qed", "failed"),
+            cmd("end", "end", "finished"),
+        ],
+        "messages": [{"start": at("qed"), "end": at("qed") + 3, "kind": "error", "text": "Illegal application of proof command in \"prove\" mode"}],
+    });
+    let doc = json!({"text": text, "revision": 1, "prover": prover});
+    let table = Arc::new(Table::fallback());
+    let t = Theory::new("/tmp/T.thy".into(), &doc, &table, Arc::new(HashMap::new()), Mode::Literate);
+    let b = t.blocks.iter().find(|b| b.name == "lemma").expect("the lemma");
+    assert_eq!(b.status, super::theory::Status::Failed);
+    assert_eq!(t.shown_status(b.start, b.end, b.status), super::theory::Status::Warned);
+    assert!(t.messages_in(b.start, b.end).iter().all(|m| t.expected_error(m)));
+}
+
+/// The window as the app runs it, without a compositor: the real view, laid out and drawn by the
+/// real renderer, with its widget state (focus, carets, scrolling) kept between frames, and
+/// mouse and keyboard events going through the widgets as they do in the app
+pub struct Harness {
+    _turn: std::sync::MutexGuard<'static, ()>,
+    renderer: cosmic::Renderer,
+    cache: Option<Cache>,
+    pub size: Size,
+    cursor: mouse::Cursor,
+}
+
+impl Harness {
+    pub fn new(size: Size) -> Self {
+        super::load_fonts();
+        let renderer = cosmic::iced::futures::executor::block_on(<cosmic::Renderer as Headless>::new(Font::default(), Pixels(14.0), Some("tiny-skia"))).expect("a headless renderer");
+        Self { _turn: ui_turn(), renderer, cache: None, size, cursor: mouse::Cursor::Unavailable }
+    }
+
+    /// Events through the widgets; the messages they publish
+    pub fn events(&mut self, app: &App, events: &[Event]) -> Vec<super::Message> {
+        let mut ui = UserInterface::build(super::view::view(app), self.size, self.cache.take().unwrap_or_default(), &mut self.renderer);
+        let mut messages = Vec::new();
+        let _ = ui.update(events, self.cursor, &mut self.renderer, &mut clipboard::Null, &mut messages);
+        self.cache = Some(ui.into_cache());
+        messages
+    }
+
+    /// What a focus task does in the app
+    pub fn focus(&mut self, app: &App, id: cosmic::widget::Id) {
+        let mut ui = UserInterface::build(super::view::view(app), self.size, self.cache.take().unwrap_or_default(), &mut self.renderer);
+        ui.operate(&self.renderer, &mut cosmic::iced::advanced::widget::operation::focusable::focus::<()>(id));
+        self.cache = Some(ui.into_cache());
+    }
+
+    pub fn move_to(&mut self, app: &App, at: cosmic::iced::Point) -> Vec<super::Message> {
+        self.cursor = mouse::Cursor::Available(at);
+        self.events(app, &[Event::Mouse(mouse::Event::CursorMoved { position: at })])
+    }
+
+    pub fn click(&mut self, app: &App, at: cosmic::iced::Point) -> Vec<super::Message> {
+        let mut out = self.move_to(app, at);
+        out.extend(self.events(app, &[Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left))]));
+        out.extend(self.events(app, &[Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left))]));
+        out
+    }
+
+    /// A key as the keyboard sends it (a character, or a named key such as Escape)
+    pub fn key(&mut self, app: &App, key: cosmic::iced::keyboard::Key, text: Option<&str>) -> Vec<super::Message> {
+        use cosmic::iced::keyboard::{Event as K, Location, Modifiers, key::{NativeCode, Physical}};
+        let physical = Physical::Unidentified(NativeCode::Unidentified);
+        let mut out = self.events(app, &[Event::Keyboard(K::KeyPressed {
+            key: key.clone(),
+            modified_key: key.clone(),
+            physical_key: physical,
+            location: Location::Standard,
+            modifiers: Modifiers::empty(),
+            text: text.map(Into::into),
+            repeat: false,
+        })]);
+        out.extend(self.events(app, &[Event::Keyboard(K::KeyReleased { key: key.clone(), modified_key: key, physical_key: physical, location: Location::Standard, modifiers: Modifiers::empty() })]));
+        out
+    }
+
+    pub fn type_text(&mut self, app: &App, text: &str) -> Vec<super::Message> {
+        let mut out = Vec::new();
+        for c in text.chars() {
+            let s = c.to_string();
+            out.extend(self.key(app, cosmic::iced::keyboard::Key::Character(s.clone().into()), Some(&s)));
+        }
+        out
+    }
+
+    /// A frame, saved under `CT_SNAPSHOTS` as `name.png`
+    pub fn draw(&mut self, app: &App, name: &str) -> Vec<u8> {
+        let theme = cosmic::theme::active();
+        let mut ui = UserInterface::build(super::view::view(app), self.size, self.cache.take().unwrap_or_default(), &mut self.renderer);
+        let _ = ui.update(
+            &[Event::Window(cosmic::iced::window::Event::RedrawRequested(std::time::Instant::now()))],
+            self.cursor,
+            &mut self.renderer,
+            &mut clipboard::Null,
+            &mut Vec::new(),
+        );
+        let text: cosmic::iced::Color = theme.cosmic().on_bg_color().into();
+        ui.draw(&mut self.renderer, &theme, &Style { icon_color: text, text_color: text, scale_factor: 1.0 }, self.cursor);
+        self.cache = Some(ui.into_cache());
+        let physical = cosmic::iced::Size::new(self.size.width as u32, self.size.height as u32);
+        let rgba = self.renderer.screenshot(physical, 1.0, theme.cosmic().bg_color().into());
+        if let Some(dir) = std::env::var_os("CT_SNAPSHOTS").filter(|d| !d.is_empty()) {
+            image::RgbaImage::from_raw(physical.width, physical.height, rgba.clone())
+                .expect("a frame")
+                .save(std::path::Path::new(&dir).join(format!("{name}.png")))
+                .expect("saved");
+        }
+        rgba
+    }
+}
+
+#[test]
+fn vim_visual_mode_selects_through_the_widgets() {
+    let mut app = demo_app(Mode::Literate);
+    app.vim_enabled = true;
+    let mut h = Harness::new(Size::new(1400.0, 900.0));
+    let i = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.kind == super::theory::Kind::Formal).unwrap();
+    let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(i));
+    h.focus(&app, super::view::block_editor_id());
+    h.draw(&app, "vim-visual-0");
+    let mut feed = |app: &mut App, h: &mut Harness, keys: &str| {
+        for m in h.type_text(app, keys) {
+            let _ = cosmic::Application::update(app, m);
+        }
+        h.draw(app, "vim-visual");
+    };
+    feed(&mut app, &mut h, "0vll");
+    let be = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().block_editor.as_ref().unwrap();
+    let sel = be.content.selection();
+    eprintln!("mode {:?} cursor {:?} selection {sel:?}", app.vim.mode, be.content.cursor());
+    assert_eq!(app.vim.mode, super::vim::Mode::Visual);
+    assert_eq!(sel.as_deref(), Some("lem"), "v selects the character under the cursor, as vim does");
+    feed(&mut app, &mut h, "y");
+    assert_eq!(app.vim.mode, super::vim::Mode::Normal);
+    assert_eq!(app.vim.register, "lem");
+    feed(&mut app, &mut h, "0vlld");
+    let text = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().block_editor.as_ref().unwrap().content.text();
+    assert!(!text.starts_with("lem"), "deleted the selection: {text:?}");
+}
+
+#[test]
+fn a_tooltip_does_not_take_the_editors_focus() {
+    let mut app = demo_app(Mode::Literate);
+    let mut h = Harness::new(Size::new(1400.0, 900.0));
+    let i = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.kind == super::theory::Kind::Formal).unwrap();
+    let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(i));
+    h.focus(&app, super::view::block_editor_id());
+    h.draw(&app, "focus-0");
+    // the prover's tooltip arrives for the open block
+    let generation = 7;
+    app.workspace.as_mut().unwrap().hover = Some(super::Hover {
+        target: super::HoverTarget::Block,
+        point: cosmic::iced::Point::new(40.0, 10.0),
+        offset: 0,
+        generation,
+        info: Some(json!({"tooltip": {"items": [{"raw": ":: nat", "text": ":: nat", "spans": []}]}})),
+    });
+    h.draw(&app, "focus-1-tooltip");
+    let before = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().local.clone();
+    for m in h.type_text(&app, "xyz") {
+        let _ = cosmic::Application::update(&mut app, m);
+    }
+    let after = &app.workspace.as_ref().unwrap().theory.as_ref().unwrap().local;
+    assert!(after.contains("xyz") && *after != before, "typing still reaches the editor");
+}
+
+#[test]
+fn the_open_editor_keeps_focus_as_the_page_changes_around_it() {
+    let mut app = demo_app(Mode::Literate);
+    app.show_right = false;
+    let output = app.workspace.as_mut().unwrap().output.take();
+    let mut h = Harness::new(Size::new(1800.0, 900.0));
+    let blocks = &app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks;
+    let formal: Vec<usize> = blocks.iter().enumerate().filter(|(_, b)| b.kind == super::theory::Kind::Formal).map(|(i, _)| i).collect();
+    // another block selected above, with its actions row
+    app.workspace.as_mut().unwrap().theory.as_mut().unwrap().selected = Some(1);
+    h.draw(&app, "keep-0");
+    let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(formal[1]));
+    h.focus(&app, super::view::block_editor_id());
+    h.draw(&app, "keep-1-open");
+    // the proof state arrives: it goes beside the block (the page's shape around the editor changes)
+    app.workspace.as_mut().unwrap().output = output;
+    h.draw(&app, "keep-2-goal-beside");
+    for m in h.type_text(&app, "qq") {
+        let _ = cosmic::Application::update(&mut app, m);
+    }
+    assert!(app.workspace.as_ref().unwrap().theory.as_ref().unwrap().local.contains("qq"), "typing still reaches the editor");
+}
+
+#[test]
+fn draws_the_goal_beside_the_source() {
+    let mut app = demo_app(Mode::Source);
+    app.show_right = false;
+    let t = app.workspace.as_mut().unwrap().theory.as_mut().unwrap();
+    let line = t.decoded.text.lines().position(|l| l.contains("apply simp")).unwrap();
+    super::editor::place(&mut t.source, cosmic::widget::text_editor::Position { line, column: 4 });
+    draw(&app, "isabellum-source-goal-beside", Size::new(1800.0, 900.0));
+}
+
+#[test]
+fn places_the_goal_by_the_construct_in_a_long_proof() {
+    let text = "theory Long imports Main begin\n\nlemma long: \"(a::nat) + b + c = c + b + a\"\nproof -\n  have one: \"a + b = b + a\"\n    by simp\n  have two: \"(b + a) + c = c + (b + a)\"\n    by simp\n  have three: \"c + (b + a) = c + b + a\"\n    by simp\n  have four: \"a + b + c = (b + a) + c\"\n    using one\n    by simp\n  have five: \"True\"\n    by simp\n  have six: \"True\"\n    by simp\n  show ?thesis\n    using one two three four\n    by simp\nqed\n\nend\n";
+    let mut app = demo_app(Mode::Literate);
+    let doc = json!({"text": text, "revision": 1, "prover": prover_json(text)});
+    let t = Theory::new("/tmp/Long.thy".into(), &doc, &Arc::new(Table::fallback()), Arc::new(HashMap::new()), Mode::Literate);
+    app.workspace.as_mut().unwrap().theory = Some(t);
+    app.show_right = false;
+    let i = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.name == "lemma").unwrap();
+    let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(i));
+    let t = app.workspace.as_mut().unwrap().theory.as_mut().unwrap();
+    let at = text[..text.find("have three").unwrap()].chars().count() + 3;
+    t.cursor = at;
+    let (cs, ce) = t.construct_at(t.block_editor.as_ref().unwrap().start, t.block_editor.as_ref().unwrap().end).expect("a construct");
+    let construct: String = text.chars().skip(cs).take(ce - cs).collect();
+    assert!(construct.starts_with("have three") && construct.contains("by simp") && !construct.contains("four"), "{construct:?}");
+    draw(&app, "goal-long-narrow", Size::new(1100.0, 900.0));
+    draw(&app, "goal-long-wide", Size::new(1800.0, 900.0));
+}
+
+#[test]
+fn prose_is_edited_a_paragraph_at_a_time() {
+    let text = "theory P imports Main begin\n\ntext \\<open>The first paragraph says one thing\n  over two lines.\n\n  The second says $x^2$ another.\n\n  The third ends it.\\<close>\n\nlemma \"True\"\n  by simp\n\nend\n";
+    let mut app = demo_app(Mode::Literate);
+    let doc = json!({"text": text, "revision": 1, "prover": prover_json(text)});
+    app.workspace.as_mut().unwrap().theory = Some(Theory::new("/tmp/P.thy".into(), &doc, &Arc::new(Table::fallback()), Arc::new(HashMap::new()), Mode::Literate));
+    let i = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.kind == super::theory::Kind::Text).unwrap();
+    let mut h = Harness::new(Size::new(1400.0, 900.0));
+    let t = app.workspace.as_mut().unwrap().theory.as_mut().unwrap();
+    t.cursor = text[..text.find("second").unwrap()].chars().count();
+    let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(i));
+    let be = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().block_editor.as_ref().unwrap();
+    assert_eq!(be.content.text(), "The third ends it.", "opened at the end: the last paragraph");
+    // j at the top of the third paragraph goes up to the second, then the first
+    app.vim_enabled = true;
+    h.focus(&app, super::view::block_editor_id());
+    for m in h.type_text(&app, "k") {
+        let _ = cosmic::Application::update(&mut app, m);
+    }
+    let be = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().block_editor.as_ref().unwrap();
+    // its maths reads as Unicode, the caret being elsewhere
+    assert_eq!(be.content.text().replace('\u{200B}', ""), "The second says x² another.");
+    h.draw(&app, "prose-paragraph");
+    // the caret moved into the formula: its source, to edit
+    for m in h.type_text(&app, "0") {
+        let _ = cosmic::Application::update(&mut app, m);
+    }
+    for _ in 0.."The second says $".len() {
+        let _ = cosmic::Application::update(&mut app, super::Message::BlockAction(cosmic::widget::text_editor::Action::Move(cosmic::widget::text_editor::Motion::Right)));
+    }
+    let be = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().block_editor.as_ref().unwrap();
+    assert!(be.content.text().starts_with("The second says $x^2$"), "{:?}", be.content.text());
+    h.draw(&app, "prose-paragraph-in-maths");
+    // typing in it changes that paragraph only, in the source
+    let _ = cosmic::Application::update(&mut app, super::Message::BlockAction(cosmic::widget::text_editor::Action::Move(cosmic::widget::text_editor::Motion::DocumentStart)));
+    let _ = cosmic::Application::update(&mut app, super::Message::BlockAction(cosmic::widget::text_editor::Action::Edit(cosmic::widget::text_editor::Edit::Insert('Q'))));
+    let local = &app.workspace.as_ref().unwrap().theory.as_ref().unwrap().local;
+    assert!(local.contains("QThe second") && local.contains("The first paragraph says one thing\n  over two lines."), "{local}");
+}
+
+#[test]
+fn hovering_a_shown_block_follows_the_pointer() {
+    let mut app = demo_app(Mode::Literate);
+    let mut h = Harness::new(Size::new(1400.0, 900.0));
+    h.draw(&app, "hover-shown");
+    let mut offsets = Vec::new();
+    for x in [380.0, 420.0, 460.0, 500.0, 540.0] {
+        for m in h.move_to(&app, cosmic::iced::Point::new(x, 253.0)) {
+            let _ = cosmic::Application::update(&mut app, m);
+        }
+        offsets.push(app.workspace.as_ref().unwrap().hover.as_ref().map(|h| (h.target, h.offset)));
+    }
+    eprintln!("{offsets:?}");
+    let distinct: std::collections::HashSet<_> = offsets.iter().flatten().map(|(_, o)| *o).collect();
+    assert!(distinct.len() >= 3, "{offsets:?}");
+}
+
+#[test]
+fn the_header_stop_button_stops_a_running_sledgehammer() {
+    let _turn = ui_turn();
+    super::load_fonts();
+    let mut app = demo_app(Mode::Literate);
+    app.workspace.as_mut().unwrap().activity = Some(json!({
+        "theories": [], "prover": {"cpu": 90},
+        "running": [{"name": "sledgehammer", "seconds": 14, "path": "/home/me/Demo/Demo.thy"}],
+    }));
+    app.sessions.values_mut().for_each(|s| s["lifecycle"] = json!("Running"));
+    let size = Size::new(900.0, 40.0);
+    let mut renderer = cosmic::iced::futures::executor::block_on(<cosmic::Renderer as Headless>::new(Font::default(), Pixels(14.0), Some("tiny-skia"))).unwrap();
+    let mut found = None;
+    for x in (0..900).step_by(6) {
+        let header = cosmic::widget::row::with_children(super::view::header_center(&app));
+        let mut ui = UserInterface::build(header, size, Cache::default(), &mut renderer);
+        let at = cosmic::iced::Point::new(x as f32, 20.0);
+        let mut msgs = Vec::new();
+        for e in [Event::Mouse(mouse::Event::CursorMoved { position: at }), Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)), Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left))] {
+            let _ = ui.update(&[e], mouse::Cursor::Available(at), &mut renderer, &mut clipboard::Null, &mut msgs);
+        }
+        if msgs.iter().any(|m| matches!(m, super::Message::StopTools)) {
+            found = Some(x);
+            break;
+        }
+        assert!(!msgs.iter().any(|m| matches!(m, super::Message::Lifecycle("cancel"))), "only sledgehammer running: no general Interrupt");
+    }
+    assert!(found.is_some(), "a stop button for the running sledgehammer in the header");
+    // pressing it: stopping, asked again until it has stopped
+    let _ = cosmic::Application::update(&mut app, super::Message::StopTools);
+    assert!(app.workspace.as_ref().unwrap().tools_stopping);
+}
+
+#[test]
+#[ignore]
+fn goal_placement_pictures() {
+    let text = "theory Long imports Main begin\n\ntext \\<open>A short proof and a long one.\\<close>\n\nlemma short: \"(a::nat) + 0 = a\"\n  by simp\n\nlemma long: \"(a::nat) + b + c = c + b + a\"\nproof -\n  have one: \"a + b = b + a\"\n    by simp\n  have two: \"(b + a) + c = c + (b + a)\"\n    by simp\n  have three: \"c + (b + a) = c + b + a\"\n    by simp\n  have four: \"a + b + c = (b + a) + c\"\n    using one\n    by simp\n  have five: \"True\"\n    by simp\n  have six: \"True\"\n    by simp\n  have seven: \"True\"\n    by simp\n  have eight: \"True\"\n    by simp\n  have nine: \"True\"\n    by simp\n  have ten: \"True\"\n    by simp\n  have eleven: \"True\"\n    by simp\n  show ?thesis\n    using one two three four\n    by simp\nqed\n\nend\n";
+    let shot = |name: &str, lemma: &str, at: &str, size: Size, placement: Option<super::view::GoalPlacement>| {
+        let mut app = demo_app(Mode::Literate);
+        let doc = json!({"text": text, "revision": 1, "prover": prover_json(text)});
+        app.workspace.as_mut().unwrap().theory = Some(Theory::new("/tmp/Long.thy".into(), &doc, &Arc::new(Table::fallback()), Arc::new(HashMap::new()), Mode::Literate));
+        app.show_right = false;
+        app.show_sidebar = false;
+        app.goal_placement_override = placement;
+        let i = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.source_start_is(text, lemma)).unwrap();
+        let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(i));
+        let t = app.workspace.as_mut().unwrap().theory.as_mut().unwrap();
+        t.cursor = text[..text.find(at).unwrap()].chars().count() + 2;
+        draw(&app, name, size);
+    };
+    let wide = Size::new(1700.0, 900.0);
+    let narrow = Size::new(1000.0, 900.0);
+    shot("place-1-wide-short", "lemma short", "by simp", wide, None);
+    shot("place-2-wide-long", "lemma long", "have eight", wide, None);
+    shot("place-3-narrow-short", "lemma short", "by simp", narrow, None);
+    shot("place-4-narrow-long", "lemma long", "have eight", narrow, None);
+    shot("place-5-wide-long-pinned", "lemma long", "have eight", wide, Some(super::view::GoalPlacement::Pinned));
+}
+
+#[test]
+fn the_goal_opens_a_gap_in_a_long_proof_and_clicks_below_it_land_right() {
+    let text = "theory Long imports Main begin\n\nlemma long: \"(a::nat) + b + c = c + b + a\"\nproof -\n  have one: \"a + b = b + a\"\n    by simp\n  have two: \"(b + a) + c = c + (b + a)\"\n    by simp\n  have three: \"c + (b + a) = c + b + a\"\n    by simp\n  have four: \"True\"\n    by simp\n  have five: \"True\"\n    by simp\n  have six: \"True\"\n    by simp\n  have seven: \"True\"\n    by simp\n  have eight: \"True\"\n    by simp\n  have nine: \"True\"\n    by simp\n  have ten: \"True\"\n    by simp\n  have eleven: \"True\"\n    by simp\n  show ?thesis\n    using one two three\n    by simp\nqed\n\nend\n";
+    let mut app = demo_app(Mode::Literate);
+    let doc = json!({"text": text, "revision": 1, "prover": prover_json(text)});
+    app.workspace.as_mut().unwrap().theory = Some(Theory::new("/tmp/Long.thy".into(), &doc, &Arc::new(Table::fallback()), Arc::new(HashMap::new()), Mode::Literate));
+    app.show_right = false;
+    app.show_sidebar = false;
+    let i = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.name == "lemma").unwrap();
+    let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(i));
+    app.workspace.as_mut().unwrap().theory.as_mut().unwrap().cursor = text[..text.find("have three").unwrap()].chars().count() + 3;
+    let mut h = Harness::new(Size::new(1000.0, 900.0));
+    h.focus(&app, super::view::block_editor_id());
+    h.draw(&app, "gap-narrow-long");
+    // Click down the left of the proof until the caret lands on "have ten"'s line (below the gap)
+    let want = text.lines().skip(2).position(|l| l.contains("have ten")).unwrap();
+    let mut landed = None;
+    for y in (150..880).step_by(6) {
+        let msgs = h.click(&app, cosmic::iced::Point::new(130.0, y as f32));
+        // (only what reaches the open editor: a click outside the proof would close it)
+        for m in msgs.into_iter().filter(|m| matches!(m, super::Message::BlockAction(_))) {
+            let _ = cosmic::Application::update(&mut app, m);
+        }
+        let be = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().block_editor.as_ref().unwrap();
+        if be.content.cursor().position.line == want {
+            landed = Some(y);
+            break;
+        }
+        // (keep the caret in "have three" for the gap to stay where it is)
+        app.workspace.as_mut().unwrap().theory.as_mut().unwrap().cursor = text[..text.find("have three").unwrap()].chars().count() + 3;
+    }
+    let y = landed.expect("a click lands on have ten's line");
+    // drawn where the click was: the row of "have ten" in the picture is below the gap
+    eprintln!("have ten clicked at y = {y}");
+    assert!(y > 450, "below the goal's gap, not where it would be without it (y = {y})");
+}
+
+/// A reference window: the whole theory read-only at the definition, which is tinted; Ctrl+click
+/// in it moves it (Back returns), names in a library theory are looked up by name
+#[test]
+fn a_reference_window_shows_its_theory_and_moves_on_ctrl_click() {
+    use super::{Pending, RefUse};
+    let mut text = String::from("theory Lib imports Main begin\n\n");
+    text.push_str("datatype 'a tree = Leaf | Node \"'a tree\" 'a \"'a tree\"\n\n");
+    text.push_str("primrec mirror :: \"'a tree \\<Rightarrow> 'a tree\" where\n  \"mirror Leaf = Leaf\"\n| \"mirror (Node l x r) = Node (mirror r) x (mirror l)\"\n\n");
+    for i in 0..3000 {
+        text.push_str(&format!("lemma filler_{i}: \"mirror (mirror t) = t\"\n  by (induct t) simp_all\n\n"));
+    }
+    text.push_str("end\n");
+    let mut app = demo_app(Mode::Source);
+    let doc = json!({"ok": true, "doc": {"path": "/isa/src/HOL/Lib.thy", "text": text, "revision": 0, "prover": null, "library": true}});
+    let d = json!({"file": "/isa/src/HOL/Lib.thy", "line": 5, "name": "Lib.mirror"});
+    let started = std::time::Instant::now();
+    let _ = app.on_reply("local".into(), Pending::RefRead(d, None), doc.clone());
+    eprintln!("a 9000-line theory read for its window in {:?}", started.elapsed());
+    assert_eq!(app.references.len(), 1);
+    let id = app.references[0].0;
+    let r = &app.references[0].1;
+    assert!(r.library);
+    assert_eq!((r.line, r.title.as_str()), (4, "Lib.mirror — Lib.thy, line 5"));
+    assert!(r.theory.local[r.start..].starts_with("primrec mirror"));
+    draw_element(super::view::reference_window(&app, id), "isabellum-reference", Size::new(820.0, 420.0));
+    // The name under the pointer (the hover looks it up by it)
+    let hover_at = r.theory.local.find("Node (mirror r)").unwrap() + 7;
+    assert_eq!(super::editor::name_at(&r.theory.local, hover_at).as_deref(), Some("mirror"));
+    // Ctrl+click on a name found elsewhere: this window moves there, and Back knows where it was
+    let info = super::editor::entity_info(&[json!({"raw": "#isabellum:entity type\nLib.tree\n/isa/src/HOL/Lib.thy\n3\ntype tree"})]);
+    let _ = app.ref_found(id, RefUse::Goto(false), info);
+    let before = app.references[0].1.theory.highlight.0.generation;
+    let d2 = json!({"file": "/isa/src/HOL/Lib.thy", "line": 3, "name": "Lib.tree"});
+    let _ = app.on_reply("local".into(), Pending::RefRead(d2, Some(id)), doc.clone());
+    // (its editor keeps its highlighter while the number is the same: a new one, so the new
+    // theory's colours, not the old one's)
+    assert_ne!(app.references[0].1.theory.highlight.0.generation, before);
+    assert_eq!(app.references.len(), 1, "Ctrl+click moves the window, it opens no other");
+    let r = &app.references[0].1;
+    assert_eq!((r.line, r.back.len()), (2, 1));
+    assert_eq!(r.back[0]["name"], "Lib.mirror");
+    // Alt+click: another window
+    let d3 = json!({"file": "/isa/src/HOL/Lib.thy", "line": 12, "name": "Lib.filler_1"});
+    let _ = app.on_reply("local".into(), Pending::RefRead(d3, None), doc);
+    assert_eq!(app.references.len(), 2);
+    // Typing in it does nothing
+    let before = app.references[0].1.theory.local.clone();
+    let _ = cosmic::Application::update(&mut app, super::Message::RefAction(id, cosmic::widget::text_editor::Action::Edit(cosmic::widget::text_editor::Edit::Insert('x'))));
+    assert_eq!(app.references[0].1.theory.local, before);
+}
+
+/// The arrow keys run on past a block's last line into the next block (and back up), as j and k
+/// do, without vim
+#[test]
+fn arrow_keys_move_between_blocks() {
+    use cosmic::iced::keyboard::{Key, key::Named};
+    let mut app = demo_app(Mode::Literate);
+    app.show_right = false;
+    let blocks = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.clone();
+    let i = blocks.iter().position(|b| b.name == "lemma").unwrap();
+    let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(i));
+    let mut h = Harness::new(Size::new(1000.0, 900.0));
+    h.focus(&app, super::view::block_editor_id());
+    let open = |app: &App| {
+        let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+        let be = t.block_editor.as_ref().unwrap();
+        t.blocks.iter().position(|b| b.start <= be.start && be.start <= b.end).unwrap()
+    };
+    let press = |h: &mut Harness, app: &mut App, named: Named| {
+        for m in h.key(app, Key::Named(named), None) {
+            let _ = cosmic::Application::update(app, m);
+        }
+    };
+    let lines = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().block_editor.as_ref().unwrap().content.line_count();
+    for _ in 0..lines {
+        press(&mut h, &mut app, Named::ArrowDown);
+    }
+    assert!(open(&app) > i, "down off the last line opens the next block (still in {})", open(&app));
+    let next = open(&app);
+    press(&mut h, &mut app, Named::ArrowUp);
+    assert!(open(&app) < next, "up off the first line goes back");
+    let be = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().block_editor.as_ref().unwrap();
+    assert_eq!(be.content.cursor().position.line + 1, be.content.line_count(), "onto the last line of the block above");
+}
+
+/// Beside the text, the goal is level with the construct the caret is in, and moves up only as
+/// far as it must to stay in the window (not to the top of the window, as an overlay did)
+#[test]
+fn the_goal_beside_stays_level_with_its_construct() {
+    let mut text = String::from("theory Low imports Main begin\n\n");
+    for i in 0..7 {
+        text.push_str(&format!("lemma filler_{i}: \"(a::nat) + {i} = {i} + a\"\n  by simp\n\n"));
+    }
+    text.push_str("lemma low: \"(a::nat) + b + c = c + b + a\"\nproof -\n  have one: \"a + b = b + a\"\n    by simp\n  show ?thesis\n    using one\n    by simp\nqed\n\nend\n");
+    let mut app = demo_app(Mode::Literate);
+    let doc = json!({"text": text, "revision": 1, "prover": prover_json(&text)});
+    app.workspace.as_mut().unwrap().theory = Some(Theory::new("/tmp/Low.thy".into(), &doc, &Arc::new(Table::fallback()), Arc::new(HashMap::new()), Mode::Literate));
+    app.show_right = false;
+    app.show_sidebar = false;
+    let i = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().rposition(|b| b.name == "lemma").unwrap();
+    let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(i));
+    app.workspace.as_mut().unwrap().theory.as_mut().unwrap().cursor = text[..text.find("show ?thesis").unwrap()].chars().count() + 3;
+    let mut h = Harness::new(Size::new(1460.0, 966.0));
+    h.focus(&app, super::view::block_editor_id());
+    let png = h.draw(&app, "goal-beside-low");
+    // Where the goal card's top is: the first row, right of the text column, that is not the
+    // page's background
+    let img = image::RgbaImage::from_raw(1460, 966, png).expect("the frame's pixels");
+    let bg = *img.get_pixel(1440, 5);
+    let x = 1100;
+    let top = (0..img.height()).find(|&y| img.get_pixel(x, y) != &bg);
+    eprintln!("goal card top at {top:?}");
+    let top = top.expect("a goal beside") as f32;
+    assert!(top > 300.0, "not jumped to the top of the window (top = {top})");
+}
+
+/// The source view has a pop-out button at the top right of the proof the caret is in, and the
+/// proof window tints the construct the goal is for
+#[test]
+fn the_source_view_pops_out_its_proof_with_the_construct_tinted() {
+    let text = "theory Pop imports Main begin\n\nlemma pop: \"(a::nat) + b + c = c + b + a\"\nproof -\n  have one: \"a + b = b + a\"\n    by simp\n  show ?thesis\n    using one\n    by simp\nqed\n\nend\n";
+    let mut app = demo_app(Mode::Source);
+    let doc = json!({"text": text, "revision": 1, "prover": prover_json(text)});
+    app.workspace.as_mut().unwrap().theory = Some(Theory::new("/tmp/Pop.thy".into(), &doc, &Arc::new(Table::fallback()), Arc::new(HashMap::new()), Mode::Source));
+    app.show_right = false;
+    app.show_sidebar = false;
+    app.workspace.as_mut().unwrap().theory.as_mut().unwrap().cursor = text[..text.find("have one").unwrap()].chars().count() + 3;
+    let mut h = Harness::new(Size::new(1300.0, 700.0));
+    h.draw(&app, "source-popout-button");
+    // Click about where the button is drawn (at the right of the proof's first line)
+    let mut popped = false;
+    'find: for y in (70..96).step_by(4) {
+        for x in (630..672).step_by(6) {
+            if h.click(&app, cosmic::iced::Point::new(x as f32, y as f32)).iter().any(|m| matches!(m, super::Message::PopOut)) {
+                popped = true;
+                break 'find;
+            }
+        }
+    }
+    assert!(popped, "a pop-out button by the proof");
+    drop(h);
+    let _ = cosmic::Application::update(&mut app, super::Message::PopOut);
+    let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+    assert!(app.popout.is_some() && t.block_editor.as_ref().is_some_and(|be| be.start == t.blocks.iter().find(|b| b.name == "lemma").unwrap().start));
+    let px = draw_element(super::view::proof_window(&app), "popout-tinted", Size::new(1000.0, 600.0));
+    // The tint: a row in the editor's area that is neither the window's background nor text
+    let img = image::RgbaImage::from_raw(1000, 600, px).unwrap();
+    let bg = *img.get_pixel(5, 300);
+    let tinted = (60..400).filter(|&y| { let p = img.get_pixel(400, y); p != &bg && p[3] == 255 && (p[1] as i32 - bg[1] as i32).abs() < 40 }).count();
+    assert!(tinted > 10, "a tinted band in the proof window ({tinted} rows)");
+}
+
+/// Vim's block cursor on a character of several bytes (Isabelle symbols, the zero-width spaces
+/// prose maths is shown with) covers the whole character: it crashed the window before
+#[test]
+fn the_vim_block_cursor_covers_a_whole_character() {
+    let text = "theory Z imports Main begin\n\nlemma z: \"x \\<Rightarrow> \u{200b}y\"\n  by simp\n\nend\n";
+    let mut app = demo_app(Mode::Source);
+    let doc = json!({"text": text, "revision": 1, "prover": prover_json(text)});
+    app.workspace.as_mut().unwrap().theory = Some(Theory::new("/tmp/Z.thy".into(), &doc, &Arc::new(Table::fallback()), Arc::new(HashMap::new()), Mode::Source));
+    app.vim_enabled = true;
+    app.vim.mode = super::vim::Mode::Normal;
+    let t = app.workspace.as_mut().unwrap().theory.as_mut().unwrap();
+    let line = t.decoded.text.split('\n').nth(2).unwrap().to_string();
+    for (byte, c) in line.char_indices().filter(|(_, c)| c.len_utf8() > 1) {
+        let t = app.workspace.as_mut().unwrap().theory.as_mut().unwrap();
+        super::editor::place(&mut t.source, cosmic::widget::text_editor::Position { line: 2, column: byte });
+        app.vim_caret(true);
+        let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+        let cur = t.source.cursor();
+        assert_eq!(cur.position.column, byte + c.len_utf8(), "the block over {c:?} ends after it");
+        // and the caret's offset maps without panicking
+        let _ = t.lines.offset(&t.decoded.text, cur.position);
+    }
+}
+
+/// A claude/codex job's proofs and a tool's findings belong to their cell: another cell does not
+/// show them (moving back shows the job's proofs again)
+#[test]
+fn results_stay_with_their_cell() {
+    let mut app = demo_app(Mode::Literate);
+    let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+    let lemmas: Vec<(usize, usize)> = t.blocks.iter().filter(|b| b.name == "lemma").map(|b| (b.start, b.end)).collect();
+    assert!(lemmas.len() >= 2);
+    let (a, b) = (lemmas[0], lemmas[1]);
+    let ws = app.workspace.as_mut().unwrap();
+    ws.fill = super::FillState { job: Some("j".into()), replace: Some((a.0 + 2, a.0 + 8)), status: "checking".into(), ..Default::default() };
+    ws.output = Some(json!({"command": {"start": a.0 + 1, "end": a.0 + 5, "name": "sledgehammer"}, "messages": [{"kind": "writeln", "text": "Try this: by simp"}]}));
+    ws.theory.as_mut().unwrap().cursor = a.0 + 3;
+    assert!(super::view::fill_here(app.workspace.as_ref().unwrap()));
+    // to the other lemma
+    app.workspace.as_mut().unwrap().theory.as_mut().unwrap().cursor = b.0 + 3;
+    assert!(!super::view::fill_here(app.workspace.as_ref().unwrap()), "not the other cell's proofs");
+    let _ = app.schedule_state();
+    assert!(app.workspace.as_ref().unwrap().output.is_none(), "not the other cell's findings");
+    // and back: the job's proofs again
+    app.workspace.as_mut().unwrap().theory.as_mut().unwrap().cursor = a.0 + 3;
+    assert!(super::view::fill_here(app.workspace.as_ref().unwrap()));
+}
+
+/// `ISABELLUM_SYMBOLS=/tmp/isa-symbols.json`: a UTP library theory in a reference window, with
+/// the prover's real symbol table (scripts with no Unicode form are private-use characters)
+#[test]
+fn a_utp_reference_window_with_the_real_symbols() {
+    let (Ok(sym), Ok(text)) = (std::env::var("ISABELLUM_SYMBOLS"), std::fs::read_to_string("/tmp/isa-utp_rea_prog.thy")) else { return };
+    let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(sym).unwrap()).unwrap();
+    let table = Arc::new(Table::new(serde_json::from_value(v["symbols"].clone()).unwrap()));
+    let mut app = demo_app(Mode::Source);
+    if let Some(l) = app.links.first_mut() {
+        l.symbols = table.clone();
+    }
+    let doc = json!({"ok": true, "doc": {"path": "/isa/utp_rea_prog.thy", "text": text, "revision": 0, "prover": null, "library": true}});
+    let d = json!({"file": "/isa/utp_rea_prog.thy", "line": 203, "name": "utp_rea_prog.lift_cond_srea_def"});
+    let _ = app.on_reply("local".into(), super::Pending::RefRead(d, None), doc);
+    let (id, r) = (app.references[0].0, &app.references[0].1);
+    let t = &r.theory;
+    // the keyword `lemma` of `lemma unrest_lift_cond_srea`: classed as a keyword at its own characters
+    let at = t.local.find("lemma unrest_lift_cond_srea").unwrap();
+    let at = t.local[..at].chars().count();
+    let d0 = t.decoded.to_decoded(at);
+    let shown: String = t.decoded.text.chars().skip(d0).take(5).collect();
+    eprintln!("decoded there: {shown:?}; classes {:?}", (d0..d0 + 7).map(|i| t.classes.get(i).copied().flatten()).collect::<Vec<_>>());
+    // a reference scrolled to line 196 for the picture
+    let mut r2 = std::mem::replace(&mut app.references[0].1.line, 0);
+    r2 = r2.max(0);
+    let _ = r2;
+    draw_element(super::view::reference_window(&app, id), "utp-reference", Size::new(960.0, 4400.0));
+}
+
+/// Double-click selects a word in the open editor (vim off, or in insert mode), and the selection
+/// stays: moving the pointer after it (hover) and the state that follows do not clear it
+#[test]
+fn double_click_selects_a_word_and_it_stays() {
+  for width in [1700.0f32, 1000.0] {
+    eprintln!("window {width} wide");
+    let mut app = demo_app(Mode::Literate);
+    app.show_right = false;
+    app.show_sidebar = false;
+    let i = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.name == "lemma").unwrap();
+    let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(i));
+    let mut h = Harness::new(Size::new(width, 900.0));
+    h.focus(&app, super::view::block_editor_id());
+    let selection = |app: &App| app.workspace.as_ref().unwrap().theory.as_ref().unwrap().block_editor.as_ref().unwrap().content.selection();
+    // find a point on a word: down the first line until a click lands in the editor
+    let mut at = None;
+    'find: for y in (60..400).step_by(6) {
+        for x in (100..(width as i32 - 100)).step_by(50).map(|x| x as f32) {
+            let msgs = h.click(&app, cosmic::iced::Point::new(x, y as f32));
+            if msgs.iter().any(|m| matches!(m, super::Message::BlockAction(cosmic::widget::text_editor::Action::Click(_)))) {
+                for m in msgs {
+                    eprintln!("first: {m:?}");
+                    let _ = cosmic::Application::update(&mut app, m);
+                }
+                at = Some(cosmic::iced::Point::new(x, y as f32));
+                break 'find;
+            }
+        }
+    }
+    let at = at.expect("a point in the open editor");
+    // the second click of a double click
+    for m in h.click(&app, at) {
+        eprintln!("double: {m:?}");
+        let _ = cosmic::Application::update(&mut app, m);
+    }
+    let picked = selection(&app);
+    eprintln!("selected after the double click: {picked:?}");
+    assert!(picked.as_ref().is_some_and(|s| !s.trim().is_empty()), "a word selected");
+    // the pointer moves on (hover), the state comes
+    for dx in [3.0, 6.0, 30.0] {
+        for m in h.move_to(&app, cosmic::iced::Point::new(at.x + dx, at.y)) {
+            let label = format!("{m:?}");
+            let _ = cosmic::Application::update(&mut app, m);
+            eprintln!("after {label}: {:?}", selection(&app));
+        }
+        let g = app.hover_gen;
+        let _ = cosmic::Application::update(&mut app, super::Message::HoverTick(g));
+        eprintln!("after hover tick: {:?}", selection(&app));
+    }
+    let _ = app.schedule_state();
+    assert_eq!(selection(&app), picked, "the selection stays");
+  }
+}
+
+/// An error under a block says what went wrong without the goal it lists (the goal view shows
+/// that), and its scripts are drawn in the scripts font, not as missing glyphs
+#[test]
+fn block_errors_are_short_and_draw_their_scripts() {
+    assert_eq!(
+        super::view::message_summary_pub("Failed to finish proof\\<^here>:\ngoal (2 subgoals):\n 1. \\<And>ok. ok\\<^sup>> = ok"),
+        "Failed to finish proof"
+    );
+    assert_eq!(super::view::message_summary_pub("Undefined fact: \"foo\"\\<^here>"), "Undefined fact: \"foo\"");
+}
+
+
+/// The views in COSMIC's light theme: every text readable on its background (a picture of each;
+/// the syntax colours' contrast is checked in the editor's tests)
+#[test]
+fn the_views_in_light_mode() {
+    let mut app = demo_app(Mode::Literate);
+    app.show_right = false;
+    app.show_sidebar = false;
+    let i = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.name == "lemma").unwrap();
+    let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(i));
+    let mut h = Harness::new(Size::new(1500.0, 900.0));
+    cosmic::theme::set_active(cosmic::theme::ThemeType::Light);
+    h.focus(&app, super::view::block_editor_id());
+    h.draw(&app, "light-literate-open");
+    let _ = cosmic::Application::update(&mut app, super::Message::CloseBlock);
+    app.workspace.as_mut().unwrap().theory.as_mut().unwrap().selected = Some(i);
+    h.draw(&app, "light-literate-selected");
+    let _ = cosmic::Application::update(&mut app, super::Message::SetMode(Mode::Source));
+    h.draw(&app, "light-source");
+    cosmic::theme::set_active(cosmic::theme::ThemeType::Dark);
+}
+
+/// Vim's normal mode shows a block cursor (the character under the caret selected) as soon as a
+/// block opens and after a click, not only after a vim key
+#[test]
+fn vim_normal_mode_shows_a_block_cursor_after_opening_and_clicking() {
+    let mut app = demo_app(Mode::Literate);
+    app.vim_enabled = true;
+    app.vim.mode = super::vim::Mode::Normal;
+    let i = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.name == "lemma").unwrap();
+    let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(i));
+    let block = |app: &App| {
+        let be = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().block_editor.as_ref().unwrap();
+        be.content.selection().map(|s| s.chars().count())
+    };
+    assert_eq!(block(&app), Some(1), "a block cursor when the block opens");
+    let _ = cosmic::Application::update(&mut app, super::Message::BlockAction(cosmic::widget::text_editor::Action::Click(cosmic::iced::Point::new(40.0, 4.0))));
+    assert_eq!(block(&app), Some(1), "and after a click");
+}
+
+/// Beside the text, the goal never runs into it: whatever the page shows (long paragraphs and a
+/// heading around a small lemma, a note card, a block with a very long line), nothing reaches
+/// past the text column into the gap before the goal, on any row of the window
+#[test]
+fn nothing_on_the_page_runs_into_the_goal_beside_it() {
+    let para = "We prove that the reactive design is healthy, and that its refinement follows from the refinement of its pre and postconditions, which is the main theorem of this section and is used throughout the rest of the development without further comment.";
+    let long = "lemma long_line: \"(a::nat) + b + c + d + e + f + g + h + i + j + k + l + m + n + o + p + q + r + s + t + u + v + w + x + y + z = z + y + x + w + v + u + t + s + r + q + p\"\n  by simp\n\n";
+    for (name, with_long) in [("narrow-code", false), ("long-line", true)] {
+        let mut text = format!("theory Fit imports Main begin\n\nsection \\<open>A rather long heading for a section about the healthiness of reactive designs and contracts\\<close>\n\ntext \\<open>{para}\\<close>\n\nlemma small: \"True\"\n  by simp\n\ntext \\<open>{para} {para}\\<close>\n\n");
+        if with_long {
+            text.push_str(long);
+        }
+        text.push_str(&format!("text \\<open>{para}\\<close>\n\nend\n"));
+        let mut app = demo_app(Mode::Literate);
+        let doc = json!({"text": text, "revision": 1, "prover": prover_json(&text)});
+        app.workspace.as_mut().unwrap().theory = Some(Theory::new("/tmp/Fit.thy".into(), &doc, &Arc::new(Table::fallback()), Arc::new(HashMap::new()), Mode::Literate));
+        app.show_right = false;
+        app.show_sidebar = false;
+        let small = text.find("lemma small").unwrap();
+        app.workspace.as_mut().unwrap().notes = vec![json!({"id": "n1", "label": "Claude", "line": 7, "start": small, "end": small + 5, "text": "This could also be done by auto; it is here to show a note card next to a small lemma in a narrow column.", "replies": []})];
+        let i = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.start == small || (b.start <= small && small < b.end)).unwrap();
+        let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(i));
+        let (w, h) = (1500u32, 1400u32);
+        let mut hh = Harness::new(Size::new(w as f32, h as f32));
+        hh.focus(&app, super::view::block_editor_id());
+        let png = hh.draw(&app, &format!("fit-{name}"));
+        drop(hh);
+        let img = image::RgbaImage::from_raw(w, h, png).unwrap();
+        let bg = *img.get_pixel(w - 30, h - 5);
+        // the goal card: left of its accent "Goals" button (the leftmost accent pixel in the
+        // right half), less its padding
+        let accent = |p: &image::Rgba<u8>| p[2] > 170 && p[1] > 150 && p[0] < 150;
+        let button = (w / 2..w - 40).find(|&x| (0..h).any(|y| accent(img.get_pixel(x, y)))).expect("the goal beside");
+        let by = (0..h).find(|&y| accent(img.get_pixel(button, y))).unwrap();
+        // (left from the button, to where the card's background ends)
+        let card = (0..button).rev().find(|&x| img.get_pixel(x, by) == &bg).map_or(button, |x| x + 1);
+        // the gap before it: background on every row
+        let strip = card - super::view::GOAL_GAP_PUB as u32 + 1..card - 1;
+        let crossing: Vec<(u32, u32)> = strip.clone().flat_map(|x| (0..h).map(move |y| (x, y))).filter(|&(x, y)| img.get_pixel(x, y) != &bg).take(5).collect();
+        eprintln!("{name}: goal card at x = {card}; strip {strip:?}; crossing {crossing:?}");
+        assert!(crossing.is_empty(), "{name}: something on the page reaches into the goal's gap at {crossing:?}");
+    }
+}
+
+/// `CT_SNAPSHOTS`: the literate view in a narrow window and a wide one, for the margins
+#[test]
+fn margins_pictures() {
+    if std::env::var("CT_SNAPSHOTS").is_err() {
+        return;
+    }
+    for (w, name) in [(720.0f32, "margins-narrow"), (1500.0, "margins-wide")] {
+        let mut app = demo_app(Mode::Literate);
+        app.show_right = false;
+        app.show_sidebar = false;
+        let i = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.name == "lemma").unwrap();
+        let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(i));
+        let mut h = Harness::new(Size::new(w, 700.0));
+        h.draw(&app, name);
+    }
+}
+
+/// The user's window (about 1344 px wide, code about 85 columns): the margins give way so that
+/// the goal goes beside the code, and they give way before the goal does in narrower windows
+#[test]
+fn the_margins_collapse_before_the_goal_goes_under() {
+    let wide_line = "lemma wide: \"timed_contract_wf true\\<^sub>r skip_unstable (timed_assign_final f) \\<and> timed_reactive P\"\n  by simp\n\n";
+    let text = format!("theory W imports Main begin\n\n{wide_line}lemma low: \"(a::nat) + b = b + a\"\nproof -\n  show ?thesis\n    by simp\nqed\n\nend\n");
+    for (w, beside) in [(1320.0f32, true), (1100.0, true), (1000.0, false)] {
+        let mut app = demo_app(Mode::Literate);
+        let doc = json!({"text": text, "revision": 1, "prover": prover_json(&text)});
+        app.workspace.as_mut().unwrap().theory = Some(Theory::new("/tmp/W.thy".into(), &doc, &Arc::new(Table::fallback()), Arc::new(HashMap::new()), Mode::Literate));
+        app.show_right = false;
+        app.show_sidebar = false;
+        let i = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().rposition(|b| b.name == "lemma").unwrap();
+        let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(i));
+        let mut h = Harness::new(Size::new(w, 900.0));
+        h.draw(&app, &format!("collapse-{}", w as u32));
+        drop(h);
+        assert_eq!(super::view::last_wide(), beside, "{w} px: goal beside = {beside}");
+    }
+}
+
+/// Blocks go when there is nothing left of them: Backspace in an emptied block, `dd` on a block's
+/// only line (vim), and an empty block left behind
+#[test]
+fn empty_blocks_go() {
+    use cosmic::widget::text_editor::{Action as A, Edit as E};
+    let text = "theory G imports Main begin\n\nlemma one: \"True\" by simp\n\nlemma two: \"(a::nat) + b = b + a\"\n  by simp\n\nend\n";
+    let fresh = |text: &str| {
+        let mut app = demo_app(Mode::Literate);
+        let doc = json!({"text": text, "revision": 1, "prover": prover_json(text)});
+        app.workspace.as_mut().unwrap().theory = Some(Theory::new("/tmp/G.thy".into(), &doc, &Arc::new(Table::fallback()), Arc::new(HashMap::new()), Mode::Literate));
+        app
+    };
+    let local = |app: &App| app.workspace.as_ref().unwrap().theory.as_ref().unwrap().local.clone();
+    let index = |app: &App, name: &str| {
+        let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+        t.blocks.iter().position(|b| t.local.chars().skip(b.start).take(name.len()).collect::<String>() == name).unwrap()
+    };
+    // 1. Backspace in an emptied block: it goes, and the caret is at the end of the one before
+    let mut app = fresh(text);
+    let i = index(&app, "lemma two");
+    let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(i));
+    let _ = cosmic::Application::update(&mut app, super::Message::BlockAction(A::SelectAll));
+    let _ = cosmic::Application::update(&mut app, super::Message::BlockAction(A::Edit(E::Delete)));
+    let _ = cosmic::Application::update(&mut app, super::Message::BlockAction(A::Edit(E::Backspace)));
+    assert_eq!(local(&app), "theory G imports Main begin\n\nlemma one: \"True\" by simp\n\nend\n", "the emptied block and its blank line gone");
+    let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+    let be = t.block_editor.as_ref().expect("the block before it open");
+    assert!(t.local[..].chars().skip(be.start).collect::<String>().starts_with("lemma one"));
+    // 2. dd on a block's only line (vim normal mode)
+    let mut app = fresh(text);
+    app.vim_enabled = true;
+    app.vim.mode = super::vim::Mode::Normal;
+    let i = index(&app, "lemma one");
+    let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(i));
+    let _ = cosmic::Application::update(&mut app, super::Message::Vim("d".into(), false));
+    let _ = cosmic::Application::update(&mut app, super::Message::Vim("d".into(), false));
+    assert!(!local(&app).contains("lemma one"), "dd took the one-line block away: {:?}", local(&app));
+    assert!(local(&app).contains("lemma two"));
+    // 3. An empty block, left, goes: a new text block, left at once
+    let mut app = fresh(text);
+    let before = local(&app);
+    let i = index(&app, "lemma one");
+    let _ = cosmic::Application::update(&mut app, super::Message::InsertBlock(Some(i), "text"));
+    assert_ne!(local(&app), before);
+    let _ = cosmic::Application::update(&mut app, super::Message::CloseBlock);
+    assert_eq!(local(&app), before, "the empty text block went when left");
+    // and an emptied proof block, left for another block
+    let mut app = fresh(text);
+    let i = index(&app, "lemma two");
+    let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(i));
+    let _ = cosmic::Application::update(&mut app, super::Message::BlockAction(A::SelectAll));
+    let _ = cosmic::Application::update(&mut app, super::Message::BlockAction(A::Edit(E::Delete)));
+    let j = index(&app, "lemma one");
+    let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(j));
+    assert_eq!(local(&app), "theory G imports Main begin\n\nlemma one: \"True\" by simp\n\nend\n");
+}

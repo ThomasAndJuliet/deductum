@@ -238,50 +238,11 @@ fn open_by_default(name: &str, status: ToolStatus) -> bool {
     matches!(name, "Edit" | "MultiEdit" | "Write" | "TodoWrite") || (status == ToolStatus::Asking && name != "AskUserQuestion")
 }
 
-pub fn view<'a>(tab: &'a ThreadTab, style: &ThreadStyle, dark: bool) -> Element<'a, Message> {
+pub fn view<'a>(tab: &'a ThreadTab, style: &ThreadStyle) -> Element<'a, Message> {
     let id = tab.id;
     let cosmic = theme::active();
     let spacing = cosmic.cosmic().spacing;
     let msg = move |m: Msg| Message::Thread(id, m);
-
-    // The header: what it is, where it runs, and the view's switches
-    let mut status = Vec::new();
-    if tab.is_working() {
-        status.push(fl!("thread-working"));
-    }
-    if let Some(entries) = &tab.entries
-        && let Some(tokens) = entries.context_tokens
-    {
-        status.push(fl!("thread-context", tokens = format!("{}k", tokens / 1000)));
-    }
-    let place = if tab.host.is_empty() { tab.cwd.clone() } else { format!("{}:{}", tab.host, tab.cwd) };
-    let header = widget::row::with_children(vec![
-        widget::column::with_children(vec![
-            widget::text::heading(tab.title.clone()).into(),
-            widget::text::caption(place).into(),
-        ])
-        .width(Length::Fill)
-        .into(),
-        widget::text::caption(status.join(" · ")).into(),
-        widget::tooltip(
-            icon_button("x-office-document-symbolic")
-                .selected(style.paper)
-                .on_press(Message::ThreadPaper(!style.paper)),
-            widget::text::body(fl!("thread-paper")),
-            widget::tooltip::Position::Bottom,
-        )
-        .into(),
-        widget::tooltip(
-            icon_button(if dark { "weather-clear-symbolic" } else { "weather-clear-night-symbolic" })
-                .on_press(Message::ToggleDarkMode),
-            widget::text::body(if dark { fl!("light-mode") } else { fl!("dark-mode") }),
-            widget::tooltip::Position::Bottom,
-        )
-        .into(),
-    ])
-    .align_y(Alignment::Center)
-    .spacing(spacing.space_xs)
-    .padding([spacing.space_xxs, spacing.space_s]);
 
     // The entries
     let mut items: Vec<Element<'a, Message>> = Vec::new();
@@ -445,7 +406,7 @@ pub fn view<'a>(tab: &'a ThreadTab, style: &ThreadStyle, dark: bool) -> Element<
         .width(Length::Fill);
     let scroll = widget::context_menu(scroll, Some(crate::menu::thread_context_menu(tab.has_selection(), style.paper)));
 
-    let mut column = vec![header.into(), widget::divider::horizontal::default().into(), scroll.into()];
+    let mut column = vec![scroll.into()];
     if let Some(bar) = activity(tab, style) {
         column.push(bar);
     }

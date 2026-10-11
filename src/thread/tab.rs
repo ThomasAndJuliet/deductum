@@ -162,6 +162,9 @@ pub struct ThreadTab {
     /// Whether the view follows new output, as it does while scrolled to
     /// the end
     pub follow: bool,
+    /// Last viewport offset, to distinguish scrolling down from a layout
+    /// change that happens to expose the end of the transcript.
+    scroll_offset: f32,
     /// The height of the scrolled view, for paging
     pub page_height: f32,
     /// The height of what it scrolls, for finding
@@ -232,6 +235,7 @@ impl ThreadTab {
             expanded: HashSet::new(),
             scroll_id: widget::Id::unique(),
             follow: true,
+            scroll_offset: 0.0,
             page_height: 0.0,
             content_height: 0.0,
             model: String::new(),
@@ -709,11 +713,17 @@ impl ThreadTab {
                 let bounds = viewport.bounds();
                 let content = viewport.content_bounds();
                 let offset = viewport.absolute_offset();
-                self.follow = offset.y + bounds.height >= content.height - 24.0;
+                let at_end = offset.y + bounds.height >= content.height - 0.5;
+                let moved_down = offset.y > self.scroll_offset + 0.5;
+                self.follow = at_end && (self.follow || moved_down);
+                self.scroll_offset = offset.y;
                 self.page_height = bounds.height;
                 self.content_height = content.height;
             }
             Msg::Page(pages) => {
+                if pages < 0.0 {
+                    self.follow = false;
+                }
                 // A little of the last page stays in sight, to read on from
                 let page = if self.page_height > 0.0 { self.page_height * 0.9 } else { 400.0 };
                 return scrollable::scroll_by(self.scroll_id.clone(), scrollable::AbsoluteOffset { x: 0.0, y: pages * page });

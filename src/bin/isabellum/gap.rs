@@ -1,0 +1,550 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
+//! An editor with a gap between two of its lines, holding another element (the proof state, just
+//! after the construct the caret is in). The editor stays one editor: above the gap it is drawn
+//! as it is, below the gap it is drawn moved down by the gap's height, and the pointer's position
+//! below the gap is moved back up before the editor sees it, so clicks, drags and hovers land on
+//! the characters drawn under them.
+
+use cosmic::iced::advanced::layout::{self, Layout};
+use cosmic::iced::advanced::renderer;
+use cosmic::iced::advanced::widget::{self, Operation, Tree, Widget};
+use cosmic::iced::advanced::{Clipboard, Shell, mouse, overlay};
+use cosmic::iced::{Element, Event, Length, Rectangle, Size, Vector};
+
+pub struct Gap<'a, Message, Theme, Renderer> {
+    editor: Element<'a, Message, Theme, Renderer>,
+    inset: Element<'a, Message, Theme, Renderer>,
+    /// Where the gap opens, below the editor's top
+    at: f32,
+    /// A band of the editor's text tinted (from, to, below its top; the colour): the construct the
+    /// proof state is for
+    band: Option<(f32, f32, cosmic::iced::Color)>,
+}
+
+impl<'a, Message, Theme, Renderer> Gap<'a, Message, Theme, Renderer> {
+    pub fn new(editor: impl Into<Element<'a, Message, Theme, Renderer>>, inset: impl Into<Element<'a, Message, Theme, Renderer>>, at: f32) -> Self {
+        Self { editor: editor.into(), inset: inset.into(), at, band: None }
+    }
+
+    /// Tint the editor's text from `from` to `to` below its top
+    pub fn band(mut self, from: f32, to: f32, color: cosmic::iced::Color) -> Self {
+        self.band = Some((from, to, color));
+        self
+    }
+}
+
+/// Where things are, from the layout: the editor's bounds, the inset's, where the gap opens and
+/// how tall it is
+fn parts(layout: Layout<'_>) -> (Rectangle, Rectangle, f32, f32) {
+    let mut children = layout.children();
+    let editor = children.next().map(|l| l.bounds()).unwrap_or_default();
+    let inset = children.next().map(|l| l.bounds()).unwrap_or_default();
+    (editor, inset, inset.y - editor.y, inset.height)
+}
+
+impl<Message, Theme, Renderer> Widget<Message, Theme, Renderer> for Gap<'_, Message, Theme, Renderer>
+where
+    Renderer: renderer::Renderer,
+{
+    fn children(&self) -> Vec<Tree> {
+        vec![Tree::new(&self.editor), Tree::new(&self.inset)]
+    }
+
+    fn diff(&mut self, tree: &mut Tree) {
+        tree.diff_children(&mut [&mut self.editor, &mut self.inset]);
+    }
+
+    fn size(&self) -> Size<Length> {
+        Size::new(self.editor.as_widget().size().width, Length::Shrink)
+    }
+
+    fn layout(&mut self, tree: &mut Tree, renderer: &Renderer, limits: &layout::Limits) -> layout::Node {
+        let editor = self.editor.as_widget_mut().layout(&mut tree.children[0], renderer, limits);
+        let width = editor.size().width;
+        let inset = self.inset.as_widget_mut().layout(&mut tree.children[1], renderer, &layout::Limits::new(Size::ZERO, Size::new(width, f32::INFINITY)));
+        let at = self.at.clamp(0.0, editor.size().height);
+        let gap = inset.size().height;
+        let size = Size::new(width, editor.size().height + gap);
+        layout::Node::with_children(size, vec![editor, inset.move_to((0.0, at))])
+    }
+
+    fn draw(
+        &self,
+        tree: &Tree,
+        renderer: &mut Renderer,
+        theme: &Theme,
+        style: &renderer::Style,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        viewport: &Rectangle,
+    ) {
+        let mut children = layout.children();
+        let (Some(editor_layout), Some(inset_layout)) = (children.next(), children.next()) else { return };
+        let (editor, _, at, gap) = parts(layout);
+        let moved = |c: mouse::Cursor| match c.position() {
+            Some(p) if p.y >= editor.y + at + gap => mouse::Cursor::Available(p - Vector::new(0.0, gap)),
+            Some(p) if p.y >= editor.y + at => mouse::Cursor::Unavailable,
+            _ => c,
+        };
+        // Above the gap: as it is
+        renderer.with_layer(Rectangle { height: at, ..editor }, |r| {
+            self.editor.as_widget().draw(&tree.children[0], r, theme, style, editor_layout, moved(cursor), viewport);
+        });
+        // Below it: moved down by the gap
+        renderer.with_layer(Rectangle { y: editor.y + at + gap, height: (editor.height - at).max(0.0), ..editor }, |r| {
+            r.with_translation(Vector::new(0.0, gap), |r| {
+                self.editor.as_widget().draw(&tree.children[0], r, theme, style, editor_layout, moved(cursor), viewport);
+            });
+        });
+        // The construct's band, over the text (where the gap opens in it, its lower part moves down)
+        if let Some((from, to, color)) = self.band {
+            let mut tint = |y0: f32, y1: f32| {
+                if y1 > y0 {
+                    // (in a layer of its own, over the editor's background)
+                    let bounds = Rectangle { y: y0, height: y1 - y0, ..editor };
+                    renderer.with_layer(bounds, |r| {
+                        r.fill_quad(renderer::Quad { bounds, ..Default::default() }, cosmic::iced::Background::Color(color));
+                    });
+                }
+            };
+            tint(editor.y + from.min(at), editor.y + to.min(at));
+            tint(editor.y + from.max(at) + gap, editor.y + to.max(at) + gap);
+        }
+        self.inset.as_widget().draw(&tree.children[1], renderer, theme, style, inset_layout, cursor, viewport);
+    }
+
+    fn update(
+        &mut self,
+        tree: &mut Tree,
+        event: &Event,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        renderer: &Renderer,
+        clipboard: &mut dyn Clipboard,
+        shell: &mut Shell<'_, Message>,
+        viewport: &Rectangle,
+    ) {
+        let mut children = layout.children();
+        let (Some(editor_layout), Some(inset_layout)) = (children.next(), children.next()) else { return };
+        let (editor, _, at, gap) = parts(layout);
+        // The inset first: over the gap, the pointer is its
+        self.inset.as_widget_mut().update(&mut tree.children[1], event, inset_layout, cursor, renderer, clipboard, shell, viewport);
+        if shell.is_event_captured() {
+            return;
+        }
+        let editor_cursor = match cursor.position() {
+            Some(p) if p.y >= editor.y + at + gap => mouse::Cursor::Available(p - Vector::new(0.0, gap)),
+            // over the gap: not over the editor (a click there is not in the text)
+            Some(p) if p.y >= editor.y + at => mouse::Cursor::Available(cosmic::iced::Point::new(p.x, f32::MAX / 4.0)),
+            _ => cursor,
+        };
+        self.editor.as_widget_mut().update(&mut tree.children[0], event, editor_layout, editor_cursor, renderer, clipboard, shell, viewport);
+    }
+
+    fn mouse_interaction(&self, tree: &Tree, layout: Layout<'_>, cursor: mouse::Cursor, viewport: &Rectangle, renderer: &Renderer) -> mouse::Interaction {
+        let mut children = layout.children();
+        let (Some(editor_layout), Some(inset_layout)) = (children.next(), children.next()) else { return mouse::Interaction::None };
+        let (editor, _, at, gap) = parts(layout);
+        match cursor.position() {
+            Some(p) if p.y >= editor.y + at && p.y < editor.y + at + gap => {
+                self.inset.as_widget().mouse_interaction(&tree.children[1], inset_layout, cursor, viewport, renderer)
+            }
+            Some(p) if p.y >= editor.y + at + gap => self.editor.as_widget().mouse_interaction(
+                &tree.children[0],
+                editor_layout,
+                mouse::Cursor::Available(p - Vector::new(0.0, gap)),
+                viewport,
+                renderer,
+            ),
+            _ => self.editor.as_widget().mouse_interaction(&tree.children[0], editor_layout, cursor, viewport, renderer),
+        }
+    }
+
+    fn operate(&mut self, tree: &mut Tree, layout: Layout<'_>, renderer: &Renderer, operation: &mut dyn Operation) {
+        let mut children = layout.children();
+        let (Some(editor_layout), Some(inset_layout)) = (children.next(), children.next()) else { return };
+        operation.traverse(&mut |operation| {
+            self.editor.as_widget_mut().operate(&mut tree.children[0], editor_layout, renderer, operation);
+            self.inset.as_widget_mut().operate(&mut tree.children[1], inset_layout, renderer, operation);
+        });
+    }
+
+    fn overlay<'b>(
+        &'b mut self,
+        tree: &'b mut Tree,
+        layout: Layout<'b>,
+        renderer: &Renderer,
+        viewport: &Rectangle,
+        translation: Vector,
+    ) -> Option<overlay::Element<'b, Message, Theme, Renderer>> {
+        let mut children = layout.children();
+        let (editor_layout, inset_layout) = (children.next()?, children.next()?);
+        let (editor_tree, inset_tree) = tree.children.split_at_mut(1);
+        let editor = self.editor.as_widget_mut().overlay(&mut editor_tree[0], editor_layout, renderer, viewport, translation);
+        let inset = self.inset.as_widget_mut().overlay(&mut inset_tree[0], inset_layout, renderer, viewport, translation);
+        match (editor, inset) {
+            (Some(a), Some(b)) => Some(overlay::Group::with_children(vec![a, b]).into()),
+            (a, b) => a.or(b),
+        }
+    }
+}
+
+impl<'a, Message, Theme, Renderer> From<Gap<'a, Message, Theme, Renderer>> for Element<'a, Message, Theme, Renderer>
+where
+    Message: 'a,
+    Theme: 'a,
+    Renderer: renderer::Renderer + 'a,
+{
+    fn from(gap: Gap<'a, Message, Theme, Renderer>) -> Self {
+        Element::new(gap)
+    }
+}
+
+#[allow(dead_code)]
+fn _uses(_: &dyn Fn(&mut widget::Tree)) {}
+
+/// An element with another beside it, at an offset from its top left, drawn over whatever is
+/// there without taking room: the page does not move for it (as it would for a column of its
+/// own), and it scrolls with the page, level with what it belongs to (an overlay is kept inside
+/// the window instead, and jumps up when it does not fit below). It moves only as far as it
+/// must to stay in sight: up when it would run off the bottom (not above the element's top or
+/// the view's), down when what it belongs to has scrolled up out of the view
+pub struct Beside<'a, Message, Theme, Renderer> {
+    main: Element<'a, Message, Theme, Renderer>,
+    side: Element<'a, Message, Theme, Renderer>,
+    at: Vector,
+    /// `at.x` from the main element's right edge, inward, rather than from its left
+    right: bool,
+}
+
+impl<'a, Message, Theme, Renderer> Beside<'a, Message, Theme, Renderer> {
+    pub fn new(main: impl Into<Element<'a, Message, Theme, Renderer>>, side: impl Into<Element<'a, Message, Theme, Renderer>>, at: Vector) -> Self {
+        Self { main: main.into(), side: side.into(), at, right: false }
+    }
+
+    /// Placed from the main element's top right corner (inward by `at.x`), as laid out
+    pub fn right(mut self) -> Self {
+        self.right = true;
+        self
+    }
+}
+
+/// How far the side moves from its place to stay in sight
+fn nudge(main: Rectangle, side: Rectangle, viewport: &Rectangle) -> f32 {
+    const MARGIN: f32 = 8.0;
+    let (top, bottom) = (viewport.y + MARGIN, viewport.y + viewport.height - MARGIN);
+    let mut y = side.y;
+    if y + side.height > bottom {
+        y = (bottom - side.height).max(top.max(main.y).min(side.y));
+    }
+    if y < top {
+        // (scrolled past its place: follows down, while what it belongs to is still in sight)
+        y = top.min((main.y + main.height - side.height.min(48.0)).max(side.y));
+    }
+    y - side.y
+}
+
+impl<Message, Theme, Renderer> Widget<Message, Theme, Renderer> for Beside<'_, Message, Theme, Renderer>
+where
+    Renderer: renderer::Renderer,
+{
+    fn children(&self) -> Vec<Tree> {
+        vec![Tree::new(&self.main), Tree::new(&self.side)]
+    }
+
+    fn diff(&mut self, tree: &mut Tree) {
+        tree.diff_children(&mut [&mut self.main, &mut self.side]);
+    }
+
+    fn size(&self) -> Size<Length> {
+        self.main.as_widget().size()
+    }
+
+    fn layout(&mut self, tree: &mut Tree, renderer: &Renderer, limits: &layout::Limits) -> layout::Node {
+        let main = self.main.as_widget_mut().layout(&mut tree.children[0], renderer, limits);
+        let side = self.side.as_widget_mut().layout(&mut tree.children[1], renderer, &layout::Limits::new(Size::ZERO, Size::new(f32::INFINITY, f32::INFINITY)));
+        let x = if self.right { main.size().width - side.size().width - self.at.x } else { self.at.x };
+        layout::Node::with_children(main.size(), vec![main, side.move_to((x, self.at.y))])
+    }
+
+    fn draw(&self, tree: &Tree, renderer: &mut Renderer, theme: &Theme, style: &renderer::Style, layout: Layout<'_>, cursor: mouse::Cursor, viewport: &Rectangle) {
+        let mut children = layout.children();
+        let (Some(main), Some(side)) = (children.next(), children.next()) else { return };
+        self.main.as_widget().draw(&tree.children[0], renderer, theme, style, main, cursor, viewport);
+        let dy = nudge(main.bounds(), side.bounds(), viewport);
+        let cursor = match cursor.position() {
+            Some(p) => mouse::Cursor::Available(p - Vector::new(0.0, dy)),
+            None => cursor,
+        };
+        // (in a layer of its own: over what the main element draws in its layers, such as an editor)
+        renderer.with_layer(*viewport, |r| {
+            r.with_translation(Vector::new(0.0, dy), |r| {
+                self.side.as_widget().draw(&tree.children[1], r, theme, style, side, cursor, &Rectangle { y: viewport.y - dy, ..*viewport });
+            });
+        });
+    }
+
+    fn update(
+        &mut self,
+        tree: &mut Tree,
+        event: &Event,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        renderer: &Renderer,
+        clipboard: &mut dyn Clipboard,
+        shell: &mut Shell<'_, Message>,
+        viewport: &Rectangle,
+    ) {
+        let mut children = layout.children();
+        let (Some(main), Some(side)) = (children.next(), children.next()) else { return };
+        let dy = nudge(main.bounds(), side.bounds(), viewport);
+        let moved = |c: mouse::Cursor| match c.position() {
+            Some(p) => mouse::Cursor::Available(p - Vector::new(0.0, dy)),
+            None => c,
+        };
+        self.side.as_widget_mut().update(&mut tree.children[1], event, side, moved(cursor), renderer, clipboard, shell, viewport);
+        if shell.is_event_captured() {
+            return;
+        }
+        // (over the side, the pointer is not over what is under it)
+        let main_cursor = match moved(cursor).position() {
+            Some(p) if side.bounds().contains(p) => mouse::Cursor::Unavailable,
+            _ => cursor,
+        };
+        self.main.as_widget_mut().update(&mut tree.children[0], event, main, main_cursor, renderer, clipboard, shell, viewport);
+    }
+
+    fn mouse_interaction(&self, tree: &Tree, layout: Layout<'_>, cursor: mouse::Cursor, viewport: &Rectangle, renderer: &Renderer) -> mouse::Interaction {
+        let mut children = layout.children();
+        let (Some(main), Some(side)) = (children.next(), children.next()) else { return mouse::Interaction::None };
+        let dy = nudge(main.bounds(), side.bounds(), viewport);
+        match cursor.position().map(|p| p - Vector::new(0.0, dy)) {
+            Some(p) if side.bounds().contains(p) => {
+                self.side.as_widget().mouse_interaction(&tree.children[1], side, mouse::Cursor::Available(p), viewport, renderer)
+            }
+            _ => self.main.as_widget().mouse_interaction(&tree.children[0], main, cursor, viewport, renderer),
+        }
+    }
+
+    fn operate(&mut self, tree: &mut Tree, layout: Layout<'_>, renderer: &Renderer, operation: &mut dyn Operation) {
+        let mut children = layout.children();
+        let (Some(main), Some(side)) = (children.next(), children.next()) else { return };
+        operation.traverse(&mut |operation| {
+            self.main.as_widget_mut().operate(&mut tree.children[0], main, renderer, operation);
+            self.side.as_widget_mut().operate(&mut tree.children[1], side, renderer, operation);
+        });
+    }
+
+    fn overlay<'b>(
+        &'b mut self,
+        tree: &'b mut Tree,
+        layout: Layout<'b>,
+        renderer: &Renderer,
+        viewport: &Rectangle,
+        translation: Vector,
+    ) -> Option<overlay::Element<'b, Message, Theme, Renderer>> {
+        let mut children = layout.children();
+        let (main, side) = (children.next()?, children.next()?);
+        let (main_tree, side_tree) = tree.children.split_at_mut(1);
+        let a = self.main.as_widget_mut().overlay(&mut main_tree[0], main, renderer, viewport, translation);
+        let b = self.side.as_widget_mut().overlay(&mut side_tree[0], side, renderer, viewport, translation);
+        match (a, b) {
+            (Some(a), Some(b)) => Some(overlay::Group::with_children(vec![a, b]).into()),
+            (a, b) => a.or(b),
+        }
+    }
+}
+
+impl<'a, Message, Theme, Renderer> From<Beside<'a, Message, Theme, Renderer>> for Element<'a, Message, Theme, Renderer>
+where
+    Message: 'a,
+    Theme: 'a,
+    Renderer: renderer::Renderer + 'a,
+{
+    fn from(b: Beside<'a, Message, Theme, Renderer>) -> Self {
+        Element::new(b)
+    }
+}
+
+/// A page (a column of items, each a column of rows whose first element holds what the item
+/// shows) with the goal drawn beside one of its items, level with what it is for: just past the
+/// items level with it, however wide they are drawn (so close to a code block among code blocks,
+/// past a paragraph where one is beside it), never over any of them. It takes no room in the page
+/// and moves only as far as it must to stay in sight
+pub struct GoalLayer<'a, Message, Theme, Renderer> {
+    page: Element<'a, Message, Theme, Renderer>,
+    goal: Element<'a, Message, Theme, Renderer>,
+    /// The item the goal is for, and how far below its top
+    anchor: Option<(usize, f32)>,
+    gap: f32,
+}
+
+impl<'a, Message, Theme, Renderer> GoalLayer<'a, Message, Theme, Renderer> {
+    pub fn new(page: impl Into<Element<'a, Message, Theme, Renderer>>, goal: impl Into<Element<'a, Message, Theme, Renderer>>, anchor: Option<(usize, f32)>, gap: f32) -> Self {
+        Self { page: page.into(), goal: goal.into(), anchor, gap }
+    }
+}
+
+/// How far right an item's content reaches: the widest element its rows show
+fn item_right(item: Layout<'_>) -> f32 {
+    let mut right = f32::MIN;
+    for row in item.children() {
+        // (a row's first element holds what it shows; spacers and reserved room hold nothing)
+        if let Some(holder) = row.children().next()
+            && let Some(shown) = holder.children().next()
+        {
+            right = right.max(shown.bounds().x + shown.bounds().width);
+        }
+    }
+    right
+}
+
+impl<Message, Theme, Renderer> GoalLayer<'_, Message, Theme, Renderer>
+where
+    Renderer: renderer::Renderer,
+{
+    /// Where the goal goes (its offset from where it was laid out), in this viewport
+    fn place(&self, layout: Layout<'_>, viewport: &Rectangle) -> Option<Vector> {
+        let (index, top) = self.anchor?;
+        let mut children = layout.children();
+        let (page, goal) = (children.next()?, children.next()?);
+        let items: Vec<Layout<'_>> = page.children().collect();
+        let anchor = *items.get(index)?;
+        let (gw, gh) = (goal.bounds().width, goal.bounds().height);
+        let wanted = Rectangle { x: goal.bounds().x, y: anchor.bounds().y + top, width: gw, height: gh };
+        let y = wanted.y + nudge(anchor.bounds(), wanted, viewport);
+        // past whatever is level with it
+        let right = items
+            .iter()
+            .filter(|it| it.bounds().y < y + gh && y < it.bounds().y + it.bounds().height)
+            .map(|it| item_right(*it))
+            .fold(anchor.bounds().x, f32::max);
+        Some(Vector::new(right + self.gap - goal.bounds().x, y - goal.bounds().y))
+    }
+}
+
+impl<Message, Theme, Renderer> Widget<Message, Theme, Renderer> for GoalLayer<'_, Message, Theme, Renderer>
+where
+    Renderer: renderer::Renderer,
+{
+    fn children(&self) -> Vec<Tree> {
+        vec![Tree::new(&self.page), Tree::new(&self.goal)]
+    }
+
+    fn diff(&mut self, tree: &mut Tree) {
+        tree.diff_children(&mut [&mut self.page, &mut self.goal]);
+    }
+
+    fn size(&self) -> Size<Length> {
+        self.page.as_widget().size()
+    }
+
+    fn layout(&mut self, tree: &mut Tree, renderer: &Renderer, limits: &layout::Limits) -> layout::Node {
+        let page = self.page.as_widget_mut().layout(&mut tree.children[0], renderer, limits);
+        let goal = self.goal.as_widget_mut().layout(&mut tree.children[1], renderer, &layout::Limits::new(Size::ZERO, Size::new(f32::INFINITY, f32::INFINITY)));
+        layout::Node::with_children(page.size(), vec![page, goal])
+    }
+
+    fn draw(&self, tree: &Tree, renderer: &mut Renderer, theme: &Theme, style: &renderer::Style, layout: Layout<'_>, cursor: mouse::Cursor, viewport: &Rectangle) {
+        let mut children = layout.children();
+        let (Some(page), Some(goal)) = (children.next(), children.next()) else { return };
+        self.page.as_widget().draw(&tree.children[0], renderer, theme, style, page, cursor, viewport);
+        let Some(at) = self.place(layout, viewport) else { return };
+        let cursor = match cursor.position() {
+            Some(p) => mouse::Cursor::Available(p - at),
+            None => cursor,
+        };
+        // (in a layer of its own: over the editors' layers)
+        renderer.with_layer(*viewport, |r| {
+            r.with_translation(at, |r| {
+                self.goal.as_widget().draw(&tree.children[1], r, theme, style, goal, cursor, &Rectangle { x: viewport.x - at.x, y: viewport.y - at.y, ..*viewport });
+            });
+        });
+    }
+
+    fn update(
+        &mut self,
+        tree: &mut Tree,
+        event: &Event,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        renderer: &Renderer,
+        clipboard: &mut dyn Clipboard,
+        shell: &mut Shell<'_, Message>,
+        viewport: &Rectangle,
+    ) {
+        let at = self.place(layout, viewport);
+        let mut children = layout.children();
+        let (Some(page), Some(goal)) = (children.next(), children.next()) else { return };
+        let over_goal = |p: cosmic::iced::Point| at.is_some_and(|at| goal.bounds().contains(p - at));
+        if let Some(at) = at {
+            let moved = match cursor.position() {
+                Some(p) => mouse::Cursor::Available(p - at),
+                None => cursor,
+            };
+            self.goal.as_widget_mut().update(&mut tree.children[1], event, goal, moved, renderer, clipboard, shell, viewport);
+            if shell.is_event_captured() {
+                return;
+            }
+        }
+        // (over the goal, the pointer is not over the page under it)
+        let page_cursor = match cursor.position() {
+            Some(p) if over_goal(p) => mouse::Cursor::Unavailable,
+            _ => cursor,
+        };
+        self.page.as_widget_mut().update(&mut tree.children[0], event, page, page_cursor, renderer, clipboard, shell, viewport);
+    }
+
+    fn mouse_interaction(&self, tree: &Tree, layout: Layout<'_>, cursor: mouse::Cursor, viewport: &Rectangle, renderer: &Renderer) -> mouse::Interaction {
+        let at = self.place(layout, viewport);
+        let mut children = layout.children();
+        let (Some(page), Some(goal)) = (children.next(), children.next()) else { return mouse::Interaction::None };
+        match (cursor.position(), at) {
+            (Some(p), Some(at)) if goal.bounds().contains(p - at) => {
+                self.goal.as_widget().mouse_interaction(&tree.children[1], goal, mouse::Cursor::Available(p - at), viewport, renderer)
+            }
+            _ => self.page.as_widget().mouse_interaction(&tree.children[0], page, cursor, viewport, renderer),
+        }
+    }
+
+    fn operate(&mut self, tree: &mut Tree, layout: Layout<'_>, renderer: &Renderer, operation: &mut dyn Operation) {
+        let mut children = layout.children();
+        let (Some(page), Some(goal)) = (children.next(), children.next()) else { return };
+        operation.traverse(&mut |operation| {
+            self.page.as_widget_mut().operate(&mut tree.children[0], page, renderer, operation);
+            self.goal.as_widget_mut().operate(&mut tree.children[1], goal, renderer, operation);
+        });
+    }
+
+    fn overlay<'b>(
+        &'b mut self,
+        tree: &'b mut Tree,
+        layout: Layout<'b>,
+        renderer: &Renderer,
+        viewport: &Rectangle,
+        translation: Vector,
+    ) -> Option<overlay::Element<'b, Message, Theme, Renderer>> {
+        let at = self.place(layout, viewport).unwrap_or(Vector::ZERO);
+        let mut children = layout.children();
+        let (page, goal) = (children.next()?, children.next()?);
+        let (page_tree, goal_tree) = tree.children.split_at_mut(1);
+        let a = self.page.as_widget_mut().overlay(&mut page_tree[0], page, renderer, viewport, translation);
+        let b = self.goal.as_widget_mut().overlay(&mut goal_tree[0], goal, renderer, viewport, translation + at);
+        match (a, b) {
+            (Some(a), Some(b)) => Some(overlay::Group::with_children(vec![a, b]).into()),
+            (a, b) => a.or(b),
+        }
+    }
+}
+
+impl<'a, Message, Theme, Renderer> From<GoalLayer<'a, Message, Theme, Renderer>> for Element<'a, Message, Theme, Renderer>
+where
+    Message: 'a,
+    Theme: 'a,
+    Renderer: renderer::Renderer + 'a,
+{
+    fn from(g: GoalLayer<'a, Message, Theme, Renderer>) -> Self {
+        Element::new(g)
+    }
+}
