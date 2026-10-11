@@ -156,7 +156,7 @@ pub fn goal_completions(prefix: &str, replace: usize, goal: &Goal) -> Vec<Comple
     steps
         .into_iter()
         .filter(|(kw, _)| prefix.len() >= 2 && kw.starts_with(prefix))
-        .map(|(_, text)| Completion { replace, label: format!("{text}   (from the goal)"), text })
+        .map(|(_, text)| Completion { back: 0, replace, label: format!("{text}   (from the goal)"), text })
         .collect()
 }
 

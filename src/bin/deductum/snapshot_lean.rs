@@ -346,3 +346,31 @@ fn clicking_a_lean_paragraph_puts_the_caret_there() {
     assert!(results.windows(2).all(|w| w[0].1 < w[1].1), "{results:?}");
     assert!(results[0].1 < 12 && results[3].1 > 30, "{results:?}");
 }
+
+#[test]
+fn a_bracket_abbreviation_puts_the_caret_between() {
+    let mut app = lean_app(Mode::Source);
+    let symbols = super::prover::LEAN.symbols(None);
+    let c = super::editor::complete(&super::prover::LEAN, "exact \\<>", &*symbols, &HashMap::new(), &[], None);
+    assert_eq!((c[0].text.as_str(), c[0].back, c[0].replace), ("⟨⟩", 1, 3), "{c:?}");
+    let c = super::editor::complete(&super::prover::LEAN, "x \\floor", &*symbols, &HashMap::new(), &[], None);
+    assert_eq!((c[0].text.as_str(), c[0].back), ("⌊⌋", 1), "{c:?}");
+    let c = super::editor::complete(&super::prover::LEAN, "x \\ennreal", &*symbols, &HashMap::new(), &[], None);
+    assert_eq!((c[0].text.as_str(), c[0].back), ("ℝ≥0∞", 0), "{c:?}");
+    // accepted in the source, the caret is between the brackets
+    let t = app.workspace.as_mut().unwrap().theory.as_mut().unwrap();
+    let at = t.local.find("exact hq").map(|b| t.local[..b].chars().count()).unwrap_or(t.local.chars().count());
+    let text = t.decoded.text.clone();
+    let c = super::editor::complete(&super::prover::LEAN, "exact \\<>", &*symbols, &HashMap::new(), &[], None);
+    // (insert the typed abbreviation, then accept)
+    t.insert(at, "\\<>", &*symbols);
+    let pos = t.lines.position(&t.decoded.text.clone(), at + 3);
+    super::editor::place(&mut t.source, pos);
+    t.completions = c;
+    t.accept_completion(0, &*symbols);
+    assert!(t.local.contains("⟨⟩") && !t.local.contains("\\<>"), "{:?}", &t.local[..200.min(t.local.len())]);
+    let _ = text;
+    let caret = t.source.cursor().position;
+    let line: String = t.decoded.text.lines().nth(caret.line).unwrap().to_string();
+    assert_eq!(&line[..caret.column].chars().last(), &Some('⟨'), "the caret sits after ⟨: {line:?} col {}", caret.column);
+}

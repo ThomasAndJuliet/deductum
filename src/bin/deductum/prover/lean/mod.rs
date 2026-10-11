@@ -101,6 +101,16 @@ impl Input for LeanSymbols {
             .collect()
     }
 
+    fn search_text(&self, query: &str, limit: usize) -> Vec<crate::input::Hit> {
+        abbrev::search(query, limit)
+            .into_iter()
+            .map(|h| {
+                let how = h.aliases.iter().take(3).map(|a| format!("\\{a}")).collect::<Vec<_>>().join(" ");
+                crate::input::Hit { text: h.text, caret: h.cursor, name: format!("\\{}", h.abbrev), how }
+            })
+            .collect()
+    }
+
     fn abbreviations(&self) -> Vec<(char, &str)> {
         // (Lean source is typed with `\`; ASCII like `->` is Lean syntax, not a shortcut)
         Vec::new()
@@ -390,7 +400,7 @@ impl Profile for Lean {
             .filter_map(|v| v.split_once(" : ").map(|(n, t)| (n.to_string(), t.to_string())))
             .collect();
         let g = edit::Goal { case: None, hyps, target: goal.conclusion.clone() };
-        edit::goal_completions(prefix, replace, &g).into_iter().map(|c| Completion { replace: c.replace, text: c.text, label: c.label }).collect()
+        edit::goal_completions(prefix, replace, &g).into_iter().map(|c| Completion { back: 0, replace: c.replace, text: c.text, label: c.label }).collect()
     }
 
     fn in_term(&self, _before: &str) -> bool {

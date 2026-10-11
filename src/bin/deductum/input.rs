@@ -5,11 +5,29 @@
 //! and the Symbols panel lists them by group. The table is the backend's
 //! (Isabelle's `etc/symbols`, Lean's abbreviations); the fuzzy match is shared.
 
+/// Something a `\` query found to insert
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Hit {
+    pub text: String,
+    /// Where the caret goes in it, in characters from its start
+    pub caret: usize,
+    /// Its name as the backend writes it
+    pub name: String,
+    /// What matched
+    pub how: String,
+}
+
 /// A backend's input table
 pub trait Input: Send + Sync {
     /// Characters matching a `\` query by name, LaTeX name or abbreviation, best first:
     /// (character, its name as the backend writes it, what matched)
     fn search(&self, query: &str, limit: usize) -> Vec<(char, String, String)>;
+
+    /// What a `\` query finds, as text to insert: the same as [`Input::search`] where each is one
+    /// character; a table with longer ones (Lean's `\<>` for `⟨⟩`) says where the caret goes
+    fn search_text(&self, query: &str, limit: usize) -> Vec<Hit> {
+        self.search(query, limit).into_iter().map(|(c, name, how)| Hit { text: c.to_string(), caret: 1, name, how }).collect()
+    }
 
     /// Abbreviations, in table order: (character, abbreviation)
     fn abbreviations(&self) -> Vec<(char, &str)>;
