@@ -20,7 +20,7 @@ use cosmic::widget::text_editor::{self, Action, Cursor, Position};
 use super::ot::{self, Change};
 use super::symbols::{Decoded, Table};
 use super::theory::{self, Block, Command, Status};
-use super::thread::markdown::{self, Doc};
+use prose_render::markdown::{self, Doc};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ProverMessage {

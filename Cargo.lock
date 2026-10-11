@@ -1876,14 +1876,9 @@ dependencies = [
  "libcosmic",
  "libm",
  "log",
- "merman",
  "open",
  "paste",
- "pulldown-cmark",
- "ratex-layout",
- "ratex-parser",
- "ratex-svg",
- "ratex-types",
+ "prose-render",
  "regex",
  "ron 0.11.0",
  "rust-embed",
@@ -1895,7 +1890,6 @@ dependencies = [
  "thiserror 2.0.21",
  "tokio",
  "url",
- "usvg",
  "xdgen",
  "zbus",
  "zeroize",
@@ -6832,6 +6826,25 @@ checksum = "4488a4a36b9a4ba6b9334a32a39971f77c1436ec82c38707bce707699cc3bbcb"
 dependencies = [
  "quote",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "prose-render"
+version = "0.1.0"
+dependencies = [
+ "chartgen",
+ "cosmic-text",
+ "image",
+ "libcosmic",
+ "log",
+ "merman",
+ "pulldown-cmark",
+ "ratex-layout",
+ "ratex-parser",
+ "ratex-svg",
+ "ratex-types",
+ "serde_json",
+ "usvg",
 ]
 
 [[package]]

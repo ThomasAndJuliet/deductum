@@ -14,25 +14,10 @@ use std::path::PathBuf;
 
 use serde_json::Value;
 
+pub use prose_render::images::{dimensions, is_svg};
+
 /// Files not used for this long are removed when the terminal starts
 const KEEP_DAYS: u64 = 14;
-
-/// Whether the image at `path` is an SVG drawing, by its name
-pub fn is_svg(path: &std::path::Path) -> bool {
-    path.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("svg") || ext.eq_ignore_ascii_case("svgz"))
-}
-
-/// An image's size in pixels, reading no more of it than that needs: for a
-/// drawing, its size in CSS pixels
-pub fn dimensions(path: &std::path::Path) -> Option<(u32, u32)> {
-    if !is_svg(path) {
-        return image::image_dimensions(path).ok();
-    }
-    let data = std::fs::read(path).ok()?;
-    let tree = usvg::Tree::from_data(&data, &usvg::Options::default()).ok()?;
-    let size = tree.size().to_int_size();
-    Some((size.width(), size.height()))
-}
 
 pub fn cache_dir() -> PathBuf {
     let cache = std::env::var_os("XDG_CACHE_HOME")
@@ -87,38 +72,12 @@ fn write(media_type: &str, data: &str) -> Result<PathBuf, String> {
         let partial = path.with_extension("part");
         std::fs::write(&partial, &bytes).map_err(|err| err.to_string())?;
         std::fs::rename(&partial, &path).map_err(|err| err.to_string())?;
-        make_thumbnail(&path);
+        prose_render::images::make_thumbnail(&path);
     } else {
         // Touched, so that pruning keeps it
         let _ = std::fs::File::options().append(true).open(&path).and_then(|file| file.set_modified(std::time::SystemTime::now()));
     }
     Ok(path)
-}
-
-/// Where a large image's thumbnail is kept
-pub fn thumbnail_path(path: &std::path::Path) -> PathBuf {
-    let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("image");
-    path.with_file_name(format!("{stem}.thumb.png"))
-}
-
-/// Images wider or taller than this get a thumbnail for the thread
-const THUMBNAIL_SIZE: u32 = 960;
-
-/// Write a thumbnail of a large image, so that the thread decodes a small
-/// one; only the image's own window decodes it whole
-fn make_thumbnail(path: &std::path::Path) {
-    let Ok((w, h)) = image::image_dimensions(path) else { return };
-    if w <= THUMBNAIL_SIZE && h <= THUMBNAIL_SIZE {
-        return;
-    }
-    let result = image::open(path).and_then(|image| {
-        image
-            .thumbnail(THUMBNAIL_SIZE, THUMBNAIL_SIZE)
-            .save_with_format(thumbnail_path(path), image::ImageFormat::Png)
-    });
-    if let Err(err) = result {
-        log::warn!("no thumbnail for {}: {err}", path.display());
-    }
 }
 
 /// The base64 of an image file and its media type, to send to the agent

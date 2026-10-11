@@ -21,31 +21,6 @@ mod theory;
 mod view;
 mod vim;
 
-// The thread view's rendering, shared with Terminal Agents
-#[allow(dead_code)]
-#[path = "../../thread/chart.rs"]
-mod chart;
-#[allow(dead_code)]
-#[path = "../../thread/diagram.rs"]
-mod diagram;
-#[allow(dead_code)]
-#[path = "../../thread/images.rs"]
-mod images;
-#[allow(dead_code)]
-#[path = "../../thread/markdown.rs"]
-mod markdown;
-#[allow(dead_code)]
-#[path = "../../thread/math.rs"]
-mod math;
-#[allow(dead_code)]
-#[path = "../../thread/rich.rs"]
-mod rich;
-
-/// Where Terminal Agents keeps them
-mod thread {
-    pub(crate) use super::{markdown, rich};
-}
-
 #[cfg(test)]
 mod snapshot;
 #[cfg(test)]
