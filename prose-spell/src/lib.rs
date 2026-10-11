@@ -1,4 +1,5 @@
-//! Spelling and light grammar checking for chat messages, backed by Harper.
+//! Spelling and grammar checking, backed by Harper, for chat messages and
+//! for Markdown documents.
 //!
 //! Harper's linters are not cheap to build and a check can take a few
 //! milliseconds on a long message, so all work runs on one dedicated thread
@@ -6,8 +7,9 @@
 //! checks queue up faster than they finish, only the newest one is run and the
 //! older callers see [`None`].
 //!
-//! Discord syntax (code, links, mentions, custom emoji, `:shortcodes:`) is
-//! masked out before checking so it is never reported.
+//! Syntax is masked out before checking so it is never reported: Discord's
+//! (code, links, mentions, custom emoji, `:shortcodes:`) by [`Checker::check`],
+//! or Markdown's (everything but prose) by [`Checker::check_markdown`].
 
 use std::sync::Arc;
 use std::sync::mpsc;
@@ -18,8 +20,10 @@ use harper_core::spell::{FstDictionary, MergedDictionary, MutableDictionary};
 use harper_core::{Dialect, DictWordMetadata, Document};
 use tokio::sync::oneshot;
 
+mod markdown;
 mod mask;
 
+pub use markdown::mask_markdown;
 pub use mask::mask_discord_syntax;
 
 /// The English variety the checker accepts.
@@ -79,17 +83,21 @@ pub enum Strictness {
     /// Spelling, typos and clear grammar mistakes; no style advice. Suits chat.
     #[default]
     Light,
+    /// Spelling and grammar, as for a document: sentence capitals, spacing and
+    /// quotes too; no style advice.
+    Grammar,
     /// Everything Harper checks, including style and readability.
     Full,
 }
 
 impl Strictness {
-    pub const ALL: [Strictness; 3] = [Self::Spelling, Self::Light, Self::Full];
+    pub const ALL: [Strictness; 4] = [Self::Spelling, Self::Light, Self::Grammar, Self::Full];
 
     pub fn label(self) -> &'static str {
         match self {
             Self::Spelling => "Spelling only",
             Self::Light => "Spelling and light grammar",
+            Self::Grammar => "Spelling and grammar",
             Self::Full => "Spelling, grammar and style",
         }
     }
@@ -98,6 +106,7 @@ impl Strictness {
         match self {
             Self::Spelling => "spelling",
             Self::Light => "light",
+            Self::Grammar => "grammar",
             Self::Full => "full",
         }
     }
@@ -202,7 +211,7 @@ impl Checker {
                     linter.config.set_rule_enabled(rule, false);
                 }
             }
-            Strictness::Full => {}
+            Strictness::Grammar | Strictness::Full => {}
         }
         Self { settings, dictionary, linter }
     }
@@ -211,12 +220,22 @@ impl Checker {
         &self.settings
     }
 
-    /// The issues in `text`, in order of position.
+    /// The issues in `text`, a chat message, in order of position.
     pub fn check(&mut self, text: &str) -> Vec<Issue> {
-        if text.trim().is_empty() {
+        self.check_masked(text, &mask_discord_syntax(text))
+    }
+
+    /// The issues in `text`, a Markdown document, in order of position.
+    pub fn check_markdown(&mut self, text: &str) -> Vec<Issue> {
+        self.check_masked(text, &mask_markdown(text))
+    }
+
+    /// The issues in `text`, checking `masked`: `text` with what is not to be
+    /// checked replaced by spaces, char for char.
+    pub fn check_masked(&mut self, text: &str, masked: &str) -> Vec<Issue> {
+        if masked.trim().is_empty() {
             return Vec::new();
         }
-        let masked = mask_discord_syntax(text);
         let chars: Vec<char> = masked.chars().collect();
         // Byte offset of each char index in the original text (masking keeps
         // char positions but may change byte lengths).
@@ -284,7 +303,7 @@ fn severity(kind: LintKind, strictness: Strictness) -> Option<Severity> {
     match (strictness, s) {
         (Strictness::Spelling, Severity::Spelling) => Some(s),
         (Strictness::Spelling, _) => None,
-        (Strictness::Light, Severity::Style) => None,
+        (Strictness::Light | Strictness::Grammar, Severity::Style) => None,
         _ => Some(s),
     }
 }
@@ -302,8 +321,15 @@ fn capitalise(word: &str) -> String {
     }
 }
 
+/// What a checked text is written in
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Syntax {
+    Discord,
+    Markdown,
+}
+
 enum Request {
-    Check { text: String, reply: oneshot::Sender<Vec<Issue>> },
+    Check { text: String, syntax: Syntax, reply: oneshot::Sender<Vec<Issue>> },
     Configure(Settings),
 }
 
@@ -334,8 +360,17 @@ impl SpellService {
     /// Checks `text`. Resolves to `None` if a newer check superseded this one
     /// or the thread is gone.
     pub async fn check(&self, text: String) -> Option<Vec<Issue>> {
+        self.request(text, Syntax::Discord).await
+    }
+
+    /// Checks `text`, a Markdown document, as [`Self::check`] does a message.
+    pub async fn check_markdown(&self, text: String) -> Option<Vec<Issue>> {
+        self.request(text, Syntax::Markdown).await
+    }
+
+    async fn request(&self, text: String, syntax: Syntax) -> Option<Vec<Issue>> {
         let (reply, rx) = oneshot::channel();
-        self.tx.send(Request::Check { text, reply }).ok()?;
+        self.tx.send(Request::Check { text, syntax, reply }).ok()?;
         rx.await.ok()
     }
 
@@ -356,7 +391,7 @@ fn run(settings: Settings, rx: mpsc::Receiver<Request>) {
         let mut pending_settings = None;
         for request in std::iter::once(first).chain(rx.try_iter()) {
             match request {
-                Request::Check { text, reply } => pending_check = Some((text, reply)),
+                Request::Check { text, syntax, reply } => pending_check = Some((text, syntax, reply)),
                 Request::Configure(s) => pending_settings = Some(s),
             }
         }
@@ -365,10 +400,14 @@ fn run(settings: Settings, rx: mpsc::Receiver<Request>) {
         {
             checker = Checker::new(s);
         }
-        if let Some((text, reply)) = pending_check
+        if let Some((text, syntax, reply)) = pending_check
             && !reply.is_closed()
         {
-            let _ = reply.send(checker.check(&text));
+            let issues = match syntax {
+                Syntax::Discord => checker.check(&text),
+                Syntax::Markdown => checker.check_markdown(&text),
+            };
+            let _ = reply.send(issues);
         }
     }
 }
@@ -450,5 +489,22 @@ mod tests {
         let svc = SpellService::spawn(Settings::default());
         let issues = svc.check("teh cat".into()).await.expect("reply");
         assert!(!issues.is_empty());
+    }
+
+    #[test]
+    fn markdown_prose_is_checked_and_its_syntax_is_not() {
+        let mut c = Checker::new(Settings { strictness: Strictness::Grammar, ..Settings::default() });
+        let text = "# Notes\n\nI **recieved** it; see `fooo_barr` and [the sitee](https://exmple.org).\n\n```\nqwzx\n```\n";
+        let issues = c.check_markdown(text);
+        let words: Vec<&str> = issues.iter().map(|i| &text[i.start..i.end]).collect();
+        assert!(words.contains(&"recieved"), "{issues:?}");
+        assert!(words.contains(&"sitee"), "{issues:?}");
+        assert!(!words.iter().any(|w| w.contains("fooo") || w.contains("exmple") || w.contains("qwzx")), "{issues:?}");
+    }
+
+    #[test]
+    fn grammar_strictness_wants_sentence_capitals() {
+        let mut c = Checker::new(Settings { strictness: Strictness::Grammar, ..Settings::default() });
+        assert!(!c.check_markdown("the cat sat. it was happy.").is_empty());
     }
 }

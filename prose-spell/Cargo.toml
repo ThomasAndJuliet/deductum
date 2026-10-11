@@ -9,6 +9,7 @@ description = "Spelling and grammar checking with Harper, off the UI thread"
 harper-core = "2.11"
 log = "0.4"
 tokio = { version = "1", features = ["sync"] }
+pulldown-cmark = { version = "0.13", default-features = false }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["sync", "rt", "macros"] }
