@@ -1765,6 +1765,12 @@ pub fn message_key(m: &Value) -> u64 {
 }
 
 impl Workspace {
+    /// Where Lean's search looks: `public` (loogle.lean-lang.org), `local` (a loogle program) or
+    /// `off`. The settings page sets it (key `loogle.source`); until it does, public (C17e)
+    pub fn loogle_source(&self) -> String {
+        self.tool_settings.get("loogle.source").filter(|s| matches!(s.as_str(), "public" | "local" | "off")).cloned().unwrap_or_else(|| "public".into())
+    }
+
     /// Code views for the messages on show: the proof state and the queries' output
     pub fn rebuild_views(&mut self, table: &dyn Symbols) {
         let mut wanted: Vec<&Value> = Vec::new();
@@ -2385,7 +2391,12 @@ impl cosmic::Application for App {
                 let Some(search) = ws.caps.search.clone() else { return Task::none() };
                 let (machine, sid, path, rev, query) = (ws.machine.clone(), ws.sid.clone(), t.path.clone(), t.confirmed_rev, ws.find_input.clone());
                 ws.find = QueryState { operation: "find_theorems", status: "starting".into(), ..Default::default() };
-                let args: Vec<String> = search.args.iter().cloned().chain([query]).collect();
+                // (Loogle takes its source after the query: the setting's, public until the settings page has one)
+                let args: Vec<String> = if search.operation == "loogle" {
+                    vec![query, ws.loogle_source()]
+                } else {
+                    search.args.iter().cloned().chain([query]).collect()
+                };
                 self.send(
                     &machine,
                     "query",

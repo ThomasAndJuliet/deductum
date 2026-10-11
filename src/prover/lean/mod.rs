@@ -22,6 +22,8 @@
 //!   (semantic tokens) replace them when they arrive.
 
 pub mod abbrev;
+#[cfg(test)]
+pub mod demo;
 pub mod blocks;
 pub mod docs;
 pub mod edit;
@@ -467,5 +469,258 @@ impl Profile for Lean {
             documents: vec![s(".lean")],
             project_files: ["lakefile.lean", "lakefile.toml", "lean-toolchain", "lake-manifest.json"].map(s).to_vec(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::demo::{DEMO, goal_parts};
+    use super::*;
+    use crate::goals::Goals;
+    use crate::prover::{self, profile};
+    use serde_json::json;
+
+    fn text_of(text: &str, s: usize, e: usize) -> String {
+        text.chars().skip(s).take(e - s).collect()
+    }
+
+    fn demo_blocks() -> Vec<Block> {
+        profile(Some("lean")).blocks(DEMO, &[], &HashMap::new())
+    }
+
+    #[test]
+    fn the_profile_is_registered() {
+        assert_eq!(profile(Some("lean")).backend(), "lean");
+        assert_eq!(profile(None).backend(), "isabelle");
+        assert!(prover::profiles().iter().any(|p| p.is_document("/x/DSRV/A.lean")));
+        assert!(!profile(Some("lean")).is_document("/x/A.thy"));
+        assert_eq!(profile(Some("lean")).document_name("Causal.lean"), "Causal");
+    }
+
+    #[test]
+    fn the_demo_splits_into_blocks_that_read_right() {
+        let bs = demo_blocks();
+        let kinds: Vec<(Kind, String)> = bs.iter().map(|b| (b.kind, b.name.clone())).collect();
+        // the imports are formal code, not a "Theory" header
+        assert_eq!(kinds[0], (Kind::Formal, "import".into()));
+        assert!(bs.iter().all(|b| b.kind != Kind::Header));
+        // the module doc is prose with a heading in it
+        assert_eq!(bs[1].kind, Kind::Text);
+        let (s, e) = bs[1].body.unwrap();
+        assert!(text_of(DEMO, s, e).trim_start().starts_with("# Timed provenance"));
+        // a docstring is a prose block above its declaration
+        let st = bs.iter().position(|b| b.name == "structure").unwrap();
+        assert_eq!(bs[st - 1].kind, Kind::Text);
+        let (s, e) = bs[st - 1].body.unwrap();
+        assert!(text_of(DEMO, s, e).contains("```lean"));
+        assert_eq!(text_of(DEMO, bs[st - 1].start, bs[st - 1].end).chars().take(4).collect::<String>(), "/-- ");
+        assert!(text_of(DEMO, bs[st].start, bs[st].end).ends_with("deriving Repr, DecidableEq"));
+        // blocks are ordered and only whitespace is between them
+        let chars: Vec<char> = DEMO.chars().collect();
+        let mut at = 0;
+        for b in &bs {
+            assert!(b.start >= at);
+            assert!(chars[at..b.start].iter().all(|c| c.is_whitespace()), "dropped {:?}", text_of(DEMO, at, b.start));
+            at = b.end;
+        }
+        assert!(bs.iter().any(|b| b.kind == Kind::Comment));
+        // theorems are statements
+        let p = profile(Some("lean"));
+        let theorems: Vec<&Block> = bs.iter().filter(|b| p.is_statement(b, &HashMap::new())).collect();
+        assert_eq!(theorems.len(), 5);
+    }
+
+    #[test]
+    fn a_module_doc_of_one_heading_is_a_heading_whose_body_is_the_title() {
+        let text = "/-!\n## The section\n-/\n\ndef x := 1\n";
+        let bs = profile(Some("lean")).blocks(text, &[], &HashMap::new());
+        assert_eq!(bs[0].kind, Kind::Heading(2));
+        let (s, e) = bs[0].body.unwrap();
+        assert_eq!(text_of(text, s, e), "The section");
+        assert!(profile(Some("lean")).bare_prose(&text_of(text, bs[0].start, s)));
+        assert!(profile(Some("lean")).bare_prose("/-!\n"));
+        assert!(!profile(Some("lean")).bare_prose("/-! hello"));
+    }
+
+    #[test]
+    fn commands_are_the_lexical_ones_and_the_provers_win() {
+        let p = profile(Some("lean"));
+        let lexical = p.lexical_commands(DEMO, &HashMap::new());
+        let names: Vec<&str> = lexical.iter().map(|c| c.name.as_str()).collect();
+        assert!(names.contains(&"theorem") && names.contains(&"induction") && names.contains(&"sorry") && names.contains(&"·"));
+        // statuses from the prover are the block's
+        let mut known = lexical.clone();
+        for c in &mut known {
+            c.status = if c.name == "sorry" { Status::Warned } else { Status::Finished };
+        }
+        let bs = p.blocks(DEMO, &known, &HashMap::new());
+        let later = bs.iter().find(|b| b.name == "theorem" && text_of(DEMO, b.start, b.end).contains("theorem later")).unwrap();
+        assert_eq!(later.status, Status::Warned);
+        assert_eq!(later.commands.len(), 2);
+        let first = bs.iter().find(|b| b.name == "import").unwrap();
+        assert_eq!(first.status, Status::Finished);
+        // without the prover's, blocks are unprocessed
+        assert!(demo_blocks().iter().filter(|b| b.kind == Kind::Formal).all(|b| b.status == Status::Unprocessed));
+    }
+
+    #[test]
+    fn the_goal_goes_with_the_tactic_among_the_blocks_commands() {
+        let p = profile(Some("lean"));
+        let lexical = p.lexical_commands(DEMO, &HashMap::new());
+        let bs = demo_blocks();
+        let b = bs.iter().find(|b| text_of(DEMO, b.start, b.end).starts_with("theorem and_swap'")).unwrap();
+        let cmds: Vec<&Command> = lexical.iter().filter(|c| c.start >= b.start && c.end <= b.end).collect();
+        let at = DEMO.find("exact hq").map(|i| DEMO[..i].chars().count()).unwrap();
+        let (s, e) = p.construct_at(DEMO, &cmds, at + 2).unwrap();
+        assert_eq!(text_of(DEMO, s, e), "· exact hq");
+        let (s, e) = p.construct_at(DEMO, &cmds, b.start + 3).unwrap();
+        assert!(text_of(DEMO, s, e).ends_with(":= by"));
+    }
+
+    #[test]
+    fn goals_are_shown_as_the_infoview_shows_them() {
+        let msgs = goal_parts(&[("cons", &["x : Nat", "xs : List Nat", "ih : xs ++ [] = xs"], "x :: xs ++ [] = x :: xs")]);
+        let goals = Goals::parse(&msgs);
+        let sg = &goals.subgoals[0];
+        let shown = Lean.present_goal(sg);
+        assert_eq!(shown.heading.as_deref(), Some("case cons"));
+        assert_eq!(shown.sections.len(), 2);
+        assert_eq!(shown.sections[0].label, None, "hypotheses are unlabelled");
+        assert!(matches!(shown.sections[0].body, GoalBody::Many(p) if p.len() == 3));
+        assert_eq!(shown.sections[1].label, Some("⊢"));
+        // a goal without a case tag has no heading
+        let goals = Goals::parse(&goal_parts(&[("", &["h : p"], "p")]));
+        assert_eq!(Lean.present_goal(&goals.subgoals[0]).heading, None);
+    }
+
+    #[test]
+    fn goal_completions_read_the_hypotheses_back() {
+        let g = Lean.parse_goal("case succ\nn : Nat\nh : ∃ k, n = 2 * k\n⊢ n + 1 ≠ 0").unwrap();
+        let got: Vec<String> = Lean.goal_completions("ob", 2, &g).into_iter().map(|c| c.text).collect();
+        assert_eq!(got, vec!["obtain ⟨k, hk⟩ := h"]);
+        let got: Vec<String> = Lean.goal_completions("in", 2, &g).into_iter().map(|c| c.text).collect();
+        assert_eq!(got, vec!["intro h"]);
+        assert!(Lean.parse_goal("no goals").is_none());
+    }
+
+    #[test]
+    fn symbols_complete_with_the_lean_abbreviations() {
+        let s = Lean.symbols(None);
+        let found = s.search("forall", 5);
+        assert_eq!(found[0].0, '∀');
+        assert_eq!(found[0].1, "\\forall");
+        assert_eq!(s.search("to", 3)[0].0, '→');
+        assert!(s.search("<", 5).iter().all(|(c, _, _)| *c != '\u{0}'));
+        // source is shown as written
+        let d = s.decode("∀ x, α → β");
+        assert_eq!(d.text, "∀ x, α → β");
+        assert_eq!(d.to_source(3), 3);
+        assert_eq!(s.encode("→"), "→");
+        assert!(Lean.has_symbol_table());
+        let groups = s.groups();
+        assert!(groups.iter().any(|(g, cs)| g == "logic" && cs.iter().any(|(c, _)| *c == '∀')));
+        assert!(groups.iter().all(|(_, cs)| !cs.is_empty()));
+        assert!(s.abbreviations().is_empty());
+    }
+
+    #[test]
+    fn prose_is_markdown_without_the_indent() {
+        let md = Lean.prose("\n  # Title\n\n  Some `code` and $x^2$.\n", &Plain);
+        assert_eq!(md, "# Title\n\nSome `code` and $x^2$.");
+        assert_eq!(Lean.snippet_at("so $x + 0 = x$ here", 5).as_deref(), Some("$x + 0 = x$"));
+        let c = Lean.prose_code_classes("a `b` and $c$");
+        assert_eq!(c[3], Some(Hl::Sem(Sem::Free)));
+        assert_eq!(c[11], Some(Hl::Sem(Sem::Skolem)));
+        assert_eq!(c[0], None);
+    }
+
+    #[test]
+    fn lexical_colours_and_comments() {
+        let text = "theorem t : Nat := by\n  sorry -- later\n/-- doc -/\n";
+        let cs = Lean.lexical_colours(text);
+        let at = |w: &str| text[..text.find(w).unwrap()].chars().count();
+        assert!(cs.contains(&(0, 7, Hl::Sem(Sem::Keyword1))));
+        assert!(cs.contains(&(at("Nat"), at("Nat") + 3, Hl::Sem(Sem::TFree))));
+        assert!(cs.contains(&(at("sorry"), at("sorry") + 5, Hl::Warning)));
+        let comments = Lean.comments(text);
+        assert_eq!(comments.len(), 2);
+        assert_eq!(comments[0].0, at("--"));
+    }
+
+    #[test]
+    fn keyword_lines_and_the_palette() {
+        assert!(Lean.keyword_line("  claude"));
+        assert!(Lean.keyword_line("  intro h; claude[opus]"));
+        assert!(!Lean.keyword_line("  exact @foo _"));
+        assert_eq!(Lean.keyword_tokens("  codex\n"), vec![(2, 7)]);
+        let caps = Lean.default_capabilities();
+        let proof = Lean.palette(InsertContext::Proof, &caps);
+        assert!(proof.iter().any(|e| e.label == "have" && e.before == "have h : " && e.after == " := by\n  "));
+        assert!(proof.iter().any(|e| e.label == "exact?"));
+        let mut no_omega = caps.clone();
+        no_omega.tools.retain(|t| t.name != "omega");
+        assert!(!Lean.palette(InsertContext::Proof, &no_omega).iter().any(|e| e.label == "omega"));
+        assert!(Lean.palette(InsertContext::Prose, &caps).iter().any(|e| e.label == "maths" && e.before == "$"));
+        assert!(Lean.palette(InsertContext::Symbols, &caps).iter().any(|e| e.label == "∀"));
+        let in_list = Lean.lists("  3. three", &LeanSymbols);
+        assert_eq!(in_list[0].before, "\n  4. ");
+        assert_eq!(Lean.lists("plain", &LeanSymbols)[0].label, "bullet list");
+        assert_eq!(Lean.facts_line(&["a".into(), "b".into()], "  "), "simp [a, b]");
+        assert_eq!(Lean.name_at("exact Nat.add_comm a b", 9).as_deref(), Some("Nat.add_comm"));
+        assert_eq!(Lean.name_at("x := 12", 6), None);
+    }
+
+    #[test]
+    fn templates_match_the_template_module() {
+        let t = Lean.block_templates();
+        assert_eq!(t[0].body, templates::text().text);
+        assert_eq!(t[1].body, templates::section(1).text);
+        assert_eq!(t[2].body, templates::lemma("name").text);
+        assert_eq!(t[2].caret, Some((0, "theorem ".len())));
+    }
+
+    #[test]
+    fn the_hosts_capabilities_and_the_defaults_agree() {
+        // what LeanDriver.capabilities() sends for a project without Mathlib
+        let summary = json!({"capabilities": {
+            "checking": "continuous", "pause": "close_documents", "interrupt": true,
+            "goals": {"structured": true, "term_goal": true, "facts": false, "case_tags": true},
+            "hover": true, "definition": true, "spans": "lexical",
+            "tools": [{"name": "exact?", "typed": "exact?", "kind": "prove", "stop": false}],
+            "counterexamples": [],
+            "search": {"label": "Search", "syntax": "loogle", "operation": "loogle", "sources": ["exact?", "apply?", "loogle"]},
+            "command": ["#check"], "check_candidates": "scratch",
+            "project_actions": [{"name": "build", "label": "Build (lake build)"}],
+            "semantic_colours": true, "documents": [".lean"], "project_files": ["lakefile.toml"],
+            "placeholder": "sorry", "facts_line": "simp [{facts}]", "goal_style": "lean"}});
+        let caps = Capabilities::from_summary(Some(&summary), Lean.default_capabilities());
+        assert_eq!(caps.spans, "lexical");
+        assert!(caps.goals.term_goal && !caps.goals.facts);
+        assert_eq!(caps.typed_tools(), vec!["exact?".to_string()]);
+        let search = caps.search.unwrap();
+        assert_eq!(search.operation, "loogle");
+        assert_eq!(search.short(), "Search");
+        assert!(search.sources.contains(&"apply?".to_string()));
+        assert!(!search.placeholder.is_empty(), "presentation from the profile");
+        // a tool's settings from the host are a list, or ignored
+        let odd = json!({"capabilities": {"tools": [{"name": "exact?", "settings": {"type": "object"}}]}});
+        let caps = Capabilities::from_summary(Some(&odd), Lean.default_capabilities());
+        assert!(caps.tool("exact?").unwrap().settings.is_empty());
+    }
+
+    #[test]
+    fn code_in_docstrings_is_coloured_by_the_lexer() {
+        use prose_render::highlight::Class;
+        let code = "theorem t : Nat := by\n  simp -- é\n";
+        let got = highlight(code);
+        assert_eq!(got[0], (0..7, Class::Keyword));
+        assert!(got.iter().any(|(r, c)| *c == Class::Type && &code[r.clone()] == "Nat"));
+        assert!(got.iter().any(|(r, c)| *c == Class::Comment && code[r.clone()].starts_with("-- é")));
+        assert!(!got.is_empty());
+        prover::register_highlighters();
+        assert!(prose_render::highlight::knows("lean"));
+        assert!(prose_render::highlight::knows("Isabelle"));
+        let thy = prover::isabelle::highlight("lemma \"a = a\" (* c *)\n  by simp");
+        assert!(thy.iter().any(|(_, c)| *c == Class::Keyword) && thy.iter().any(|(_, c)| *c == Class::Comment) && thy.iter().any(|(_, c)| *c == Class::String));
     }
 }
