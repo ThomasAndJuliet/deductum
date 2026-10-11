@@ -565,19 +565,17 @@ pub struct Halo<'a, Message, Theme, Renderer> {
     content: Element<'a, Message, Theme, Renderer>,
     /// How far the region reaches past the content: left, right, and above and below
     reach: (f32, f32, f32),
-    color: cosmic::iced::Color,
-    /// An accent bar down the region's left edge, if any (its colour)
-    bar: Option<cosmic::iced::Color>,
+    /// The region's colour and its bar's (down its left edge), from the theme it is drawn in
+    colors: Box<dyn Fn(&Theme) -> (cosmic::iced::Color, Option<cosmic::iced::Color>) + 'a>,
 }
 
 impl<'a, Message, Theme, Renderer> Halo<'a, Message, Theme, Renderer> {
-    pub fn new(content: impl Into<Element<'a, Message, Theme, Renderer>>, reach: (f32, f32, f32), color: cosmic::iced::Color) -> Self {
-        Self { content: content.into(), reach, color, bar: None }
-    }
-
-    pub fn bar(mut self, color: cosmic::iced::Color) -> Self {
-        self.bar = Some(color);
-        self
+    pub fn new(
+        content: impl Into<Element<'a, Message, Theme, Renderer>>,
+        reach: (f32, f32, f32),
+        colors: impl Fn(&Theme) -> (cosmic::iced::Color, Option<cosmic::iced::Color>) + 'a,
+    ) -> Self {
+        Self { content: content.into(), reach, colors: Box::new(colors) }
     }
 }
 
@@ -607,11 +605,12 @@ where
         let b = content.bounds();
         let (left, right, down) = self.reach;
         let region = Rectangle { x: b.x - left, y: b.y - down, width: b.width + left + right, height: b.height + 2.0 * down };
+        let (color, bar) = (self.colors)(theme);
         renderer.fill_quad(
             renderer::Quad { bounds: region, border: cosmic::iced::Border { radius: 6.0.into(), ..Default::default() }, ..Default::default() },
-            cosmic::iced::Background::Color(self.color),
+            cosmic::iced::Background::Color(color),
         );
-        if let Some(bar) = self.bar {
+        if let Some(bar) = bar {
             renderer.fill_quad(
                 renderer::Quad { bounds: Rectangle { width: 3.0, ..region }, border: cosmic::iced::Border { radius: 2.0.into(), ..Default::default() }, ..Default::default() },
                 cosmic::iced::Background::Color(bar),

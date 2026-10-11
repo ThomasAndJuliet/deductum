@@ -87,9 +87,21 @@ fn cell_color(theme: &cosmic::Theme) -> Color {
     if c.is_dark { c.bg_component_color().into() } else { c.secondary_container_color().into() }
 }
 
-/// Secondary text (a line number, a time, a hint): the text's colour, fainter
-fn muted_text() -> Color {
-    Color { a: 0.65, ..Color::from(theme::active().cosmic().on_bg_color()) }
+/// The region behind a paragraph being edited or selected, and its bar: a faint wash of the
+/// accent, the bar in the accent
+fn marked_region(theme: &cosmic::Theme) -> (Color, Option<Color>) {
+    let c = theme.cosmic();
+    let accent = Color::from(c.accent_color());
+    (Color { a: if c.is_dark { 0.07 } else { 0.09 }, ..accent }, Some(accent))
+}
+
+/// Secondary text (a line number, a time, a hint): the text's colour, fainter. Taken from the
+/// theme as the text is drawn, not as the view is built, so it follows the theme it is drawn in
+fn muted() -> theme::Text {
+    theme::Text::Custom(|theme| {
+        let c = theme.cosmic();
+        iced::widget::text::Style { color: Some(Color { a: 0.65, ..Color::from(c.on_bg_color()) }), selected_fill: Color { a: 0.32, ..Color::from(c.accent.base) }, selected_text_color: None }
+    })
 }
 
 /// A vertical scroll view with a thin bar and no rail, a little in from the edge (COSMIC's own is
@@ -447,7 +459,7 @@ fn theorems<'a>(app: &'a App, t: &'a Theory) -> Element<'a, Message> {
             .push(dot)
             .push(one_line(name, false).font(cosmic::iced::Font { weight: cosmic::iced::font::Weight::Semibold, ..cosmic::font::default() }));
         if !rest.is_empty() {
-            row = row.push(one_line(rest, true).class(theme::Text::Color(muted_text())).width(Length::Fill));
+            row = row.push(one_line(rest, true).class(muted()).width(Length::Fill));
         }
         let tip = if sorry { format!("{first}  (unfinished)") } else { first };
         col = col.push(widget::tooltip(
@@ -1596,7 +1608,7 @@ fn message_strip<'a>(t: &Theory, kind: &str, start: usize, text: &str, table: &d
         .spacing(z(8.0))
         .push(widget::container(icon).padding(Padding { top: z(1.0), ..Padding::ZERO }))
         .push(widget::container(symbol_text(&t.profile.message_summary(text), table, z(12.0))).width(Length::Fill))
-        .push(widget::text::caption(format!("line {line}")).class(theme::Text::Color(muted_text())));
+        .push(widget::text::caption(format!("line {line}")).class(muted()));
     let body = widget::container(body).padding([z(4.0), CODE_PADDING.left]).width(Length::Fill).class(theme::Container::custom(move |theme| {
         let c = theme.cosmic();
         iced::widget::container::Style {
@@ -1821,7 +1833,7 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
                 };
                 widget::column::with_capacity(2)
                     .push(widget::text(title).size(z(26.0)).font(cosmic::iced::Font { weight: cosmic::iced::font::Weight::Bold, ..cosmic::font::default() }))
-                    .push(widget::text(rest).size(z(13.0)).class(theme::Text::Color(muted_text())))
+                    .push(widget::text(rest).size(z(13.0)).class(muted()))
                     .into()
             }
             Kind::Heading(_) | Kind::Text => match t.docs.get(i).cloned().flatten() {
@@ -1850,9 +1862,7 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
             // takes no room, so that selecting it moves nothing; a formal block is marked by
             // its own background and strip)
             let marked: Element<'a, Message> = if block.kind != Kind::Formal {
-                let theme = theme::active();
-                let accent = Color::from(theme.cosmic().accent_color());
-                super::gap::Halo::new(content, (z(10.0), z(4.0), z(4.0)), Color { a: if theme.cosmic().is_dark { 0.07 } else { 0.09 }, ..accent }).bar(accent).into()
+                super::gap::Halo::new(content, (z(10.0), z(2.0), z(4.0)), marked_region).into()
             } else {
                 content
             };
@@ -2266,9 +2276,7 @@ fn prose_editor<'a>(t: &'a Theory, be: &'a super::editor::BlockEditor, vim_mode:
             }
         })
         .highlight_with::<super::editor::Highlighter>(t.block_highlight.themed(), prose_format);
-    let theme = theme::active();
-    let region = Color { a: if theme.cosmic().is_dark { 0.07 } else { 0.09 }, ..Color::from(theme.cosmic().accent_color()) };
-    let editor: Element<'a, Message> = super::gap::Halo::new(editor, (z(10.0), z(2.0), z(4.0)), region).bar(theme.cosmic().accent_color().into()).into();
+    let editor: Element<'a, Message> = super::gap::Halo::new(editor, (z(10.0), z(2.0), z(4.0)), marked_region).into();
     // The block's other paragraphs stay as they read, above and below the one being edited
     let (before, after) = t
         .blocks
@@ -2480,7 +2488,7 @@ fn window_footer<'a>(parts: Vec<String>) -> Element<'a, Message> {
     let text = parts.into_iter().filter(|p| !p.is_empty()).collect::<Vec<_>>().join("  ·  ");
     widget::column::with_capacity(2)
         .push(widget::divider::horizontal::light())
-        .push(widget::container(widget::text::caption(text).class(theme::Text::Color(muted_text()))).padding([sp.space_xxs, sp.space_s]).width(Length::Fill))
+        .push(widget::container(widget::text::caption(text).class(muted())).padding([sp.space_xxs, sp.space_s]).width(Length::Fill))
         .into()
 }
 
@@ -2780,7 +2788,7 @@ fn insert_palette<'a>(ws: &'a Workspace, t: &'a Theory, table: &dyn super::codec
         InsertContext::Proof if selected => ("Insert in the proof", "Wraps the selection"),
         InsertContext::Proof => ("Insert in the proof", "At the caret"),
     };
-    col = col.push(widget::row::with_capacity(2).align_y(Alignment::Center).push(widget::text::heading(title).width(Length::Fill)).push(widget::text::caption(hint).class(theme::Text::Color(muted_text()))));
+    col = col.push(widget::row::with_capacity(2).align_y(Alignment::Center).push(widget::text::heading(title).width(Length::Fill)).push(widget::text::caption(hint).class(muted())));
     col = col.push(widget::container(widget::search_input("Search", &ws.palette_query).on_input(Message::PaletteQuery).on_clear(Message::PaletteQuery(String::new()))).padding([sp.space_xxxs, 0]));
     // (each group: its heading, and its entries: a label, and what goes before and after the
     // selection or the caret)
@@ -2809,7 +2817,7 @@ fn insert_palette<'a>(ws: &'a Workspace, t: &'a Theory, table: &dyn super::codec
         col = col.push(widget::container(widget::text::body(format!("Nothing matches “{}”.", ws.palette_query.trim()))).padding([sp.space_xxs, 0]));
     }
     for (heading, items) in groups {
-        col = col.push(widget::container(widget::text::caption_heading(heading).class(theme::Text::Color(muted_text()))).padding(Padding { top: sp.space_xxs as f32, ..Padding::ZERO }));
+        col = col.push(widget::container(widget::text::caption_heading(heading).class(muted())).padding(Padding { top: sp.space_xxs as f32, ..Padding::ZERO }));
         let buttons: Vec<Element<'a, Message>> = items
             .into_iter()
             .map(|(label, before, after)| widget::button::text(label).class(theme::Button::Standard).on_press(Message::Wrap(before, after)).into())
@@ -3465,7 +3473,7 @@ fn subgoal_card<'a>(ws: &'a Workspace, sg: &super::goals::Subgoal, first: bool, 
     let mut head = widget::row::with_capacity(2).spacing(sp.space_xs).push(widget::text::caption(format!("Subgoal {}", sg.n)));
     // (the first is tinted: it is the one the next step works on, which says so)
     if first {
-        head = head.push(widget::text::caption("· next").class(theme::Text::Color(muted_text())));
+        head = head.push(widget::text::caption("· next").class(muted()));
     }
     if new {
         head = head.push(widget::text::caption("· new").class(theme::Text::Accent));
@@ -3629,7 +3637,7 @@ fn tool_panel<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Eleme
                 .push(widget::button::suggested("Run").on_press(Message::RunTool(tool.name.clone()))),
         );
         if !tool.typed_note.is_empty() {
-            col = col.push(widget::text::caption(tool.typed_note.as_str()).class(theme::Text::Color(muted_text())));
+            col = col.push(widget::text::caption(tool.typed_note.as_str()).class(muted()));
         }
         if !q.status.is_empty() {
             let status = match q.status.as_str() {
@@ -3661,7 +3669,7 @@ fn tool_panel<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Eleme
             for (n, (p, by)) in found.into_iter().enumerate() {
                 let mut text = widget::column::with_capacity(2).push(widget::text(table.decode(&p).text).font(cosmic::font::mono()).size(z(13.0)));
                 if !by.is_empty() {
-                    text = text.push(widget::text::caption(format!("found by {}", by.join("; "))).class(theme::Text::Color(muted_text())));
+                    text = text.push(widget::text::caption(format!("found by {}", by.join("; "))).class(muted()));
                 }
                 // (the first, the fastest found, is the one to take)
                 let insert = if n == 0 { widget::button::suggested("Insert") } else { widget::button::standard("Insert") };
@@ -3737,7 +3745,7 @@ fn fill_results<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Ele
         let ok = c["ok"].as_bool();
         let mut what = widget::column::with_capacity(2).push(widget::text(table.decode(&text).text).font(cosmic::font::mono()).size(z(13.0)));
         if let Some(m) = c["message"].as_str().filter(|m| !m.is_empty()) {
-            what = what.push(widget::text::caption(m.to_string()).class(theme::Text::Color(muted_text())));
+            what = what.push(widget::text::caption(m.to_string()).class(muted()));
         }
         let row = widget::row::with_capacity(3)
             .spacing(sp.space_xs)
@@ -3855,7 +3863,7 @@ fn agents_panel<'a>(app: &'a App, ws: &'a Workspace) -> Element<'a, Message> {
             head = head.push(widget::text::caption("attached").class(theme::Text::Accent));
         }
         card = card.push(head);
-        card = card.push(widget::text::caption(format!("{key}{}", if where_.is_empty() { String::new() } else { format!(" · at {where_}") })).class(theme::Text::Color(muted_text())));
+        card = card.push(widget::text::caption(format!("{key}{}", if where_.is_empty() { String::new() } else { format!(" · at {where_}") })).class(muted()));
         // Its rights, each with Revoke
         let mine: Vec<&Value> = grants.iter().filter(|g| g["agent"].as_str() == Some(key.as_str())).collect();
         card = card.push(widget::container(widget::text::caption_heading("Editing rights")).padding(Padding { top: sp.space_xxs as f32, ..Padding::ZERO }));
@@ -3895,7 +3903,7 @@ fn agents_panel<'a>(app: &'a App, ws: &'a Workspace) -> Element<'a, Message> {
                 .push(
                     widget::column::with_capacity(2)
                         .push(widget::text::body("Follow this agent"))
-                        .push(widget::text::caption("Go where it shows you, as it does").class(theme::Text::Color(muted_text())))
+                        .push(widget::text::caption("Go where it shows you, as it does").class(muted()))
                         .width(Length::Fill),
                 )
                 .push(widget::toggler(following).on_toggle(move |on| Message::Follow(on.then(|| key.clone())))),
@@ -3944,12 +3952,12 @@ fn history_panel(ws: &Workspace) -> Element<'_, Message> {
                 widget::row::with_capacity(2)
                     .spacing(sp.space_xxs)
                     .push(widget::text::body(author).font(cosmic::iced::Font { weight: cosmic::iced::font::Weight::Semibold, ..cosmic::font::default() }))
-                    .push(widget::text::body(what).class(theme::Text::Color(muted_text()))),
+                    .push(widget::text::body(what).class(muted())),
             )
             .push(widget::text(h["summary"].as_str().unwrap_or("").to_string()).font(cosmic::font::mono()).size(z(12.0)))
             .width(Length::Fill);
         if reverted {
-            text = text.push(widget::text::caption("reverted").class(theme::Text::Color(muted_text())));
+            text = text.push(widget::text::caption("reverted").class(muted()));
         }
         let mut row = widget::row::with_capacity(2).spacing(sp.space_xs).align_y(Alignment::Center).push(text);
         if agent && !reverted
