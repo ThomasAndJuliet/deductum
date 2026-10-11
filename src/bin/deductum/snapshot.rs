@@ -1281,8 +1281,10 @@ fn nothing_on_the_page_runs_into_the_goal_beside_it() {
         // the goal card: left of its accent "Goals" button (the leftmost accent pixel in the
         // right half), less its padding
         let accent = |p: &image::Rgba<u8>| p[2] > 170 && p[1] > 150 && p[0] < 150;
-        let button = (w / 2..w - 40).find(|&x| (0..h).any(|y| accent(img.get_pixel(x, y)))).expect("the goal beside");
-        let by = (0..h).find(|&y| accent(img.get_pixel(button, y))).unwrap();
+        // (the pill filled with the accent, not accent-coloured text such as a note's Resolve)
+        let pill = |x: u32, y: u32| (x..x + 20).all(|xx| accent(img.get_pixel(xx, y)));
+        let button = (w / 2..w - 40).find(|&x| (0..h).any(|y| pill(x, y))).expect("the goal beside");
+        let by = (0..h).find(|&y| pill(button, y)).unwrap();
         // (left from the button, to where the card's background ends)
         let card = (0..button).rev().find(|&x| img.get_pixel(x, by) == &bg).map_or(button, |x| x + 1);
         // the gap before it: background on every row
@@ -1641,9 +1643,12 @@ fn the_layout_keeps_its_place_and_the_centred_column_is_wide_enough() {
     app.workspace.as_mut().unwrap().output = output;
     let _ = cosmic::Application::update(&mut app, super::Message::ToggleGoalBeside);
     let centred = edges(h.draw(&app, "keep-centred"));
+    // (the column as laid out: what is drawn in it need not reach its edge, a ragged paragraph
+    // or a note as wide as its cell)
+    let column = super::view::last_column();
     let _ = cosmic::Application::update(&mut app, super::Message::ToggleGoalBeside);
-    eprintln!("with goal {with_goal:?}, without {without:?}, centred {centred:?}");
-    assert!(centred.1 - centred.0 >= 540, "the centred column is wide enough ({centred:?})");
+    eprintln!("with goal {with_goal:?}, without {without:?}, centred {centred:?}, column {column}");
+    assert!(column >= 540.0, "the centred column is wide enough ({column}, drawn {centred:?})");
 }
 
 /// Beside the block being edited, with no goal: what can be inserted there, by context
@@ -1934,3 +1939,4 @@ fn no_duplicate_actions_after_the_last_block() {
     eprintln!("heights offering + Text: {ys:?} ({rows} rows)");
     assert_eq!(rows, 1, "one row of actions after the last block ({ys:?})");
 }
+

@@ -53,11 +53,52 @@ fn status_color(status: Status, theme: &cosmic::Theme) -> Color {
     let c = theme.cosmic();
     match status {
         Status::Finished => Color { a: 0.35, ..Color::from(c.success_color()) },
-        Status::Warned => c.warning_color().into(),
+        Status::Warned => sorry_color(theme),
         Status::Unprocessed => Color { a: 0.3, ..Color::from(c.on_bg_color()) },
         Status::Running => c.accent_color().into(),
-        Status::Failed => c.destructive_color().into(),
+        Status::Failed => error_color(theme),
     }
+}
+
+/// An unfinished proof (a `sorry`): amber. COSMIC's warning and destructive colours are almost
+/// the same salmon in its dark theme, so a cell left unfinished and one that fails read alike;
+/// these two are told apart by hue in both themes
+fn sorry_color(theme: &cosmic::Theme) -> Color {
+    if theme.cosmic().is_dark { Color::from_rgb8(0xf0, 0xb4, 0x29) } else { Color::from_rgb8(0xa8, 0x62, 0x00) }
+}
+
+/// A failure: red, as against [`sorry_color`]'s amber
+fn error_color(theme: &cosmic::Theme) -> Color {
+    if theme.cosmic().is_dark { Color::from_rgb8(0xf2, 0x5f, 0x5c) } else { Color::from_rgb8(0xc0, 0x1c, 0x28) }
+}
+
+/// The page the theory is set on. In the dark theme COSMIC's background; in the light one its
+/// primary container, the lighter layer COSMIC sets content on (its background is a mid grey
+/// meant for the frame around content)
+fn page_color(theme: &cosmic::Theme) -> Color {
+    let c = theme.cosmic();
+    if c.is_dark { c.bg_color().into() } else { c.primary_container_color().into() }
+}
+
+/// A cell (code, goals, notes) on the page: one layer up, lighter than the page in both themes,
+/// as COSMIC's layers are
+fn cell_color(theme: &cosmic::Theme) -> Color {
+    let c = theme.cosmic();
+    if c.is_dark { c.bg_component_color().into() } else { c.secondary_container_color().into() }
+}
+
+/// Secondary text (a line number, a time, a hint): the text's colour, fainter
+fn muted_text() -> Color {
+    Color { a: 0.65, ..Color::from(theme::active().cosmic().on_bg_color()) }
+}
+
+/// A vertical scroll view with a thin bar and no rail, a little in from the edge (COSMIC's own is
+/// an 8 px bar on a permanent rail, with 8 px of padding around the content)
+fn thin<'a>(content: impl Into<Element<'a, Message>>) -> iced::widget::Scrollable<'a, Message, cosmic::Theme, cosmic::Renderer> {
+    use iced::widget::scrollable::{Direction, Scrollbar};
+    iced::widget::scrollable(content)
+        .direction(Direction::Vertical(Scrollbar::new().width(6.0).scroller_width(6.0).margin(3.0)))
+        .class(theme::iced::Scrollable::Minimal)
 }
 
 pub fn typography(theme: &cosmic::Theme) -> Typography {
@@ -76,8 +117,8 @@ pub fn typography(theme: &cosmic::Theme) -> Typography {
         muted: Color { a: 0.68, ..text },
         link: cosmic.accent_text_color().into(),
         code: text,
-        code_background: cosmic.bg_component_color().into(),
-        page: cosmic.bg_color().into(),
+        code_background: cell_color(theme),
+        page: page_color(theme),
         rule: Color { a: 0.25, ..text },
         selection: Color { a: 0.32, ..Color::from(cosmic.accent.base) },
         error: cosmic.destructive_text_color().into(),
@@ -241,7 +282,7 @@ fn layout(app: &App, width: f32) -> Element<'_, Message> {
         .width(Length::Fill)
         .height(Length::Fill)
         .class(theme::Container::custom(|theme| iced::widget::container::Style {
-            background: Some(Color { a: 1.0, ..Color::from(theme.cosmic().bg_color()) }.into()),
+            background: Some(page_color(theme).into()),
             text_color: Some(theme.cosmic().on_bg_color().into()),
             ..Default::default()
         }))
@@ -692,7 +733,9 @@ fn workspace<'a>(app: &'a App, ws: &'a Workspace, right: bool, main_width: f32) 
             // Beside when the text column, the gap and a goal of at least its minimum width fit
             // (room for the scroll bar kept); the side margins go first, before the goal goes under
             let room = main_width - SCROLLBAR_ROOM - beside_width - GOAL_GAP;
-            let goal_width = preferred_goal.min(room).max(z(320.0));
+            // (the goal narrows to keep side margins of at least PAGE_MARGIN; below its minimum
+            // width the margins give way first, and only then does the goal go under)
+            let goal_width = preferred_goal.min(room - 2.0 * z(PAGE_MARGIN)).max(z(320.0));
             let fits = room >= z(320.0) && goal_beside_on();
             let gutter = ((room - goal_width) / 2.0).clamp(0.0, sp.space_l as f32);
             PAGE_GUTTER.store(gutter.to_bits(), std::sync::atomic::Ordering::Relaxed);
@@ -709,7 +752,7 @@ fn workspace<'a>(app: &'a App, ws: &'a Workspace, right: bool, main_width: f32) 
                 Mode::Literate if beside && goal_placement(true, 0) == GoalPlacement::Pinned => {
                     // the goal column beside the page, at the top of the view, not scrolling
                     let goal: Element<'_, Message> = match inline_goal(Some(ws), &*app.table(&ws.machine)) {
-                        Some(g) => widget::container(widget::scrollable(g)).width(Length::Fixed(goal_width)).into(),
+                        Some(g) => widget::container(thin(g)).width(Length::Fixed(goal_width)).into(),
                         None => widget::Space::new().width(Length::Fixed(goal_width)).into(),
                     };
                     widget::row::with_capacity(2)
@@ -783,46 +826,74 @@ fn request_banner<'a>(r: &Value) -> Element<'a, Message> {
     widget::container(row).padding(sp.space_xs).class(theme::Container::Card).width(Length::Fill).into()
 }
 
-/// An agent's note on the text: who, what, the replies so far, and a reply or Resolve
-fn note_card<'a>(ws: &'a Workspace, n: &Value) -> Element<'a, Message> {
+/// An agent's note: violet, apart from the statuses' green, amber and red and from the accent
+fn note_color(theme: &cosmic::Theme) -> Color {
+    if theme.cosmic().is_dark { Color::from_rgb8(0xb3, 0x9d, 0xf5) } else { Color::from_rgb8(0x63, 0x48, 0xb8) }
+}
+
+/// Between a cell and what is attached under it (its errors, its notes, its goal under it)
+const ATTACHED: f32 = 6.0;
+
+/// An agent's note on the text: who, what, the replies so far, and a reply or Resolve. Attached
+/// under its cell: as wide as the cell (`width`; else the text column), its bar where the cell's
+/// status strip is and its text where the code is, a little below the cell
+fn note_card<'a>(ws: &'a Workspace, n: &Value, width: Option<f32>) -> Element<'a, Message> {
     let sp = spacing();
     let id = n["id"].as_str().unwrap_or("").to_string();
-    let mut col = widget::column::with_capacity(6).spacing(4);
-    col = col.push(widget::text::caption(format!("{} · note on line {}", n["label"].as_str().unwrap_or("Agent"), n["line"])));
+    let mut col = widget::column::with_capacity(6).spacing(sp.space_xxxs);
+    // (Resolve, which closes the note, in its heading: the reply row keeps the room for typing)
+    col = col.push(
+        widget::row::with_capacity(2)
+            .align_y(Alignment::Center)
+            .push(widget::text::caption_heading(format!("{} · note on line {}", n["label"].as_str().unwrap_or("Agent"), n["line"])).width(Length::Fill))
+            .push(
+                widget::button::text("Resolve")
+                    .leading_icon(widget::icon::from_name("object-select-symbolic").size(16))
+                    .font_size(z(12.0) as u16)
+                    .padding([0, 6])
+                    .on_press(Message::NoteReply(id.clone(), true)),
+            ),
+    );
     col = col.push(widget::text::body(n["text"].as_str().unwrap_or("").to_string()));
     for r in n["replies"].as_array().into_iter().flatten() {
         col = col.push(widget::text::caption(format!("{}: {}", r["by"].as_str().unwrap_or(""), r["text"].as_str().unwrap_or(""))));
     }
     let reply = ws.note_reply.get(&id).cloned().unwrap_or_default();
     let reply_id = id.clone();
+    // (Reply sends what is typed, so only with something typed)
+    let can_reply = !reply.trim().is_empty();
     col = col.push(
-        widget::row::with_capacity(3)
-            .spacing(sp.space_xs)
-            .align_y(Alignment::Center)
-            .push(
-                widget::text_input("Reply", reply)
-                    .on_input(move |t| Message::NoteReplyInput(reply_id.clone(), t))
-                    .on_submit({
-                        let id = id.clone();
-                        move |_| Message::NoteReply(id.clone(), false)
-                    })
-                    .width(Length::Fill),
-            )
-            .push(widget::button::text("Reply").on_press(Message::NoteReply(id.clone(), false)))
-            .push(widget::button::text("Resolve").on_press(Message::NoteReply(id, true))),
+        widget::container(
+            widget::row::with_capacity(3)
+                .spacing(sp.space_xxs)
+                .align_y(Alignment::Center)
+                .push(
+                    widget::text_input("Reply to the agent", reply)
+                        .on_input(move |t| Message::NoteReplyInput(reply_id.clone(), t))
+                        .on_submit({
+                            let id = id.clone();
+                            move |_| Message::NoteReply(id.clone(), false)
+                        })
+                        .width(Length::Fill),
+                )
+                .push(widget::button::standard("Reply").on_press_maybe(can_reply.then(|| Message::NoteReply(id.clone(), false)))),
+        )
+        .padding(Padding { top: sp.space_xxxs as f32, ..Padding::ZERO }),
     );
-    widget::container(col)
-        .padding([sp.space_xxs, sp.space_s])
-        .width(Length::Fill)
-        .max_width(code_width(60) + 8.0)
-        .class(theme::Container::custom(|theme| {
-            let c = theme.cosmic();
-            iced::widget::container::Style {
-                background: Some(blend(Color::from(c.bg_component_color()), Color::from(c.warning_color()), 0.10).into()),
-                border: Border { radius: 6.0.into(), width: 0.0, color: Color::TRANSPARENT },
-                ..Default::default()
-            }
-        }))
+    let body = widget::container(col).padding([sp.space_xxs, CODE_PADDING.left as u16]).width(Length::Fill).class(theme::Container::custom(|theme| iced::widget::container::Style {
+        background: Some(blend(cell_color(theme), note_color(theme), 0.08).into()),
+        border: Border { radius: 4.0.into(), ..Default::default() },
+        ..Default::default()
+    }));
+    let bar = widget::container(widget::Space::new()).width(Length::Fixed(4.0)).height(Length::Fill).class(theme::Container::custom(|theme| iced::widget::container::Style {
+        background: Some(note_color(theme).into()),
+        border: Border { radius: 2.0.into(), ..Default::default() },
+        ..Default::default()
+    }));
+    let card = widget::row::with_capacity(2).spacing(4).push(bar).push(body).height(Length::Shrink);
+    widget::container(card)
+        .padding(Padding { top: ATTACHED, ..Padding::ZERO })
+        .width(width.map_or(Length::Fill, Length::Fixed))
         .into()
 }
 
@@ -1053,7 +1124,7 @@ fn activity_panel(ws: &Workspace) -> Element<'_, Message> {
     }
     col = col.push(widget::text::caption_heading("Log"));
     col = col.push(widget::text(ws.log.iter().rev().take(80).rev().cloned().collect::<Vec<_>>().join("\n")).font(cosmic::font::mono()).size(z(12.0)));
-    widget::scrollable(col).height(Length::Fill).into()
+    thin(col).height(Length::Fill).into()
 }
 
 /// The session's counterexample finders and quick proofs at the caret, without editing the
@@ -1101,7 +1172,7 @@ fn counterexamples_panel<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbol
             );
         }
     }
-    widget::scrollable(col).height(Length::Fill).into()
+    thin(col).height(Length::Fill).into()
 }
 
 fn theory_status(t: &Theory) -> Element<'_, Message> {
@@ -1135,7 +1206,7 @@ fn mono_block<'a>(text: String, status: Status) -> Element<'a, Message> {
         .padding(Padding { left: 8.0, right: 6.0, top: 4.0, bottom: 4.0 })
         .width(Length::Fill)
         .class(theme::Container::custom(move |theme| iced::widget::container::Style {
-            background: Some(Color::from(theme.cosmic().bg_component_color()).into()),
+            background: Some(cell_color(theme).into()),
             border: Border { radius: 4.0.into(), ..Default::default() },
             ..Default::default()
         }));
@@ -1143,15 +1214,21 @@ fn mono_block<'a>(text: String, status: Status) -> Element<'a, Message> {
 }
 
 /// Add a block after a block (or at the end) from the profile's templates (a text, section or
-/// lemma), and delete the block
+/// lemma), and delete the block: small filled buttons, short enough for the gap between blocks
+/// that offers them on hover, Delete in the destructive style and set apart
 fn block_actions<'a>(t: &Theory, after: Option<usize>, delete: bool) -> Element<'a, Message> {
-    let small = |label: &'static str, msg: Message| widget::button::text(label).font_size(z(12.0) as u16).padding([0, 6]).on_press(msg);
-    let mut row = widget::row::with_capacity(5).spacing(2).align_y(Alignment::Center);
+    let small = |label: &'static str, class: theme::Button, msg: Message| {
+        widget::button::custom(widget::text(label).size(z(12.0)).line_height(iced::widget::text::LineHeight::Relative(1.2)))
+            .padding([z(2.0) as u16, z(10.0) as u16])
+            .class(class)
+            .on_press(msg)
+    };
+    let mut row = widget::row::with_capacity(5).spacing(z(6.0)).align_y(Alignment::Center);
     for template in t.profile.block_templates() {
-        row = row.push(small(template.label, Message::InsertBlock(after, template.kind)));
+        row = row.push(small(template.label, theme::Button::Standard, Message::InsertBlock(after, template.kind)));
     }
     if let Some(i) = after.filter(|_| delete) {
-        row = row.push(widget::Space::new().width(Length::Fixed(12.0))).push(small("Delete", Message::DeleteBlock(i)));
+        row = row.push(widget::Space::new().width(Length::Fixed(z(16.0)))).push(small("Delete", theme::Button::Destructive, Message::DeleteBlock(i)));
     }
     row.into()
 }
@@ -1187,6 +1264,11 @@ pub fn block_code_width(columns: usize) -> f32 {
 /// The text column's width as the layout last chose it (blocks are never wider)
 static COLUMN_CAP: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 
+/// The text column's width in the last layout
+pub fn last_column() -> f32 {
+    f32::from_bits(COLUMN_CAP.load(std::sync::atomic::Ordering::Relaxed))
+}
+
 /// How a block of code looks, shown or being edited: the current one outlined in the accent
 fn code_style(marked: bool) -> impl Fn(&cosmic::Theme, iced::widget::text_editor::Status) -> iced::widget::text_editor::Style {
     move |theme: &cosmic::Theme, _status| {
@@ -1197,12 +1279,12 @@ fn code_style(marked: bool) -> impl Fn(&cosmic::Theme, iced::widget::text_editor
             // darker grey reads as dull there, not as current); its strip takes the accent
             background: if marked {
                 if c.is_dark {
-                    blend(Color::from(c.bg_component_color()), Color::BLACK, 0.32).into()
+                    blend(cell_color(theme), Color::BLACK, 0.32).into()
                 } else {
-                    blend(Color::from(c.bg_component_color()), accent, 0.07).into()
+                    blend(cell_color(theme), accent, 0.10).into()
                 }
             } else {
-                Color::from(c.bg_component_color()).into()
+                cell_color(theme).into()
             },
             border: Border { radius: 4.0.into(), width: 0.0, color: Color::TRANSPARENT },
             placeholder: Color { a: 0.5, ..Color::from(c.on_bg_color()) },
@@ -1355,7 +1437,7 @@ fn hover_card<'a>(ws: &'a Workspace, h: &super::Hover) -> Option<Element<'a, Mes
             .class(theme::Container::custom(|theme| {
                 let c = theme.cosmic();
                 iced::widget::container::Style {
-                    background: Some(Color::from(c.bg_component_color()).into()),
+                    background: Some(cell_color(theme).into()),
                     border: Border { radius: 6.0.into(), width: 1.0, color: Color { a: 0.2, ..Color::from(c.on_bg_color()) } },
                     shadow: iced::Shadow { color: Color { a: 0.35, ..Color::BLACK }, offset: iced::Vector::new(0.0, 2.0), blur_radius: 8.0 },
                     ..Default::default()
@@ -1418,7 +1500,7 @@ fn highlighted_block<'a>(t: &Theory, block: &Block) -> Element<'a, Message> {
         .padding(Padding { left: 8.0, right: 6.0, top: 4.0, bottom: 4.0 })
         .width(Length::Fill)
         .class(theme::Container::custom(move |theme| iced::widget::container::Style {
-            background: Some(Color::from(theme.cosmic().bg_component_color()).into()),
+            background: Some(cell_color(theme).into()),
             border: Border { radius: 4.0.into(), ..Default::default() },
             ..Default::default()
         }));
@@ -1465,6 +1547,39 @@ pub fn z(px: f32) -> f32 {
     (px * zoom()).round()
 }
 
+/// One message under a cell (an error, a warning): its icon, what went wrong in the code font
+/// (the goal it lists is the one the goal view shows), and its line, on a tinted container
+/// whose bar is where the cell's status strip is
+fn message_strip<'a>(t: &Theory, kind: &str, start: usize, text: &str, table: &dyn super::codec::Symbols) -> Element<'a, Message> {
+    let error = kind == "error";
+    let line = super::ot::line_col(&t.local, start).0;
+    let tone = move |theme: &cosmic::Theme| if error { error_color(theme) } else { sorry_color(theme) };
+    let icon = widget::icon::from_name(if error { "dialog-error-symbolic" } else { "dialog-warning-symbolic" })
+        .size(14)
+        .icon()
+        .class(theme::Svg::custom(move |theme| iced::widget::svg::Style { color: Some(tone(theme)) }));
+    let body = widget::row::with_capacity(3)
+        .spacing(z(8.0))
+        .push(widget::container(icon).padding(Padding { top: z(1.0), ..Padding::ZERO }))
+        .push(widget::container(symbol_text(&t.profile.message_summary(text), table, z(12.0))).width(Length::Fill))
+        .push(widget::text::caption(format!("line {line}")).class(theme::Text::Color(muted_text())));
+    let body = widget::container(body).padding([z(4.0), CODE_PADDING.left]).width(Length::Fill).class(theme::Container::custom(move |theme| {
+        let c = theme.cosmic();
+        iced::widget::container::Style {
+            background: Some(blend(cell_color(theme), tone(theme), if c.is_dark { 0.14 } else { 0.10 }).into()),
+            text_color: Some(c.on_bg_color().into()),
+            border: Border { radius: 4.0.into(), ..Default::default() },
+            ..Default::default()
+        }
+    }));
+    let bar = widget::container(widget::Space::new()).width(Length::Fixed(4.0)).height(Length::Fill).class(theme::Container::custom(move |theme| iced::widget::container::Style {
+        background: Some(tone(theme).into()),
+        border: Border { radius: 2.0.into(), ..Default::default() },
+        ..Default::default()
+    }));
+    widget::row::with_capacity(2).spacing(4).push(bar).push(body).height(Length::Shrink).into()
+}
+
 /// Messages under a block: all for the proof at the caret, errors for failing ones
 fn messages_view<'a>(t: &Theory, block: &Block, table: &dyn super::codec::Symbols, current: bool) -> Option<Element<'a, Message>> {
     let all = t.messages_in(block.start, block.end);
@@ -1479,22 +1594,10 @@ fn messages_view<'a>(t: &Theory, block: &Block, table: &dyn super::codec::Symbol
     }
     let mut col = widget::column::with_capacity(msgs.len()).spacing(2);
     for m in msgs.into_iter().take(6) {
-        let kind = m.kind.clone();
-        let line = super::ot::line_col(&t.local, m.start).0;
-        // (what went wrong: the goal it lists is the one the goal view shows)
-        col = col.push(
-            widget::container(symbol_text(&format!("{kind} (line {line}): {}", t.profile.message_summary(&m.text)), table, z(12.0)))
-                .padding([2, 8])
-                .width(Length::Fill)
-                .class(theme::Container::custom(move |theme| {
-                    let c = theme.cosmic();
-                    let color: Color = if kind == "error" { c.destructive_color().into() } else { c.warning_color().into() };
-                    iced::widget::container::Style { background: Some(Color { a: 0.15, ..color }.into()), text_color: Some(c.on_bg_color().into()), ..Default::default() }
-                })),
-        );
+        col = col.push(message_strip(t, &m.kind, m.start, &m.text, table));
     }
-    // As wide as the block it is about
-    Some(col.width(Length::Fixed(block_code_width(t.code_columns) + 8.0)).into())
+    // As wide as the block it is about, a little below it
+    Some(widget::container(col).padding(Padding { top: ATTACHED - 4.0, ..Padding::ZERO }).width(Length::Fixed(block_code_width(t.code_columns) + 8.0)).into())
 }
 
 /// The goal at the caret, under the proof being edited, when the right sidebar is hidden
@@ -1503,6 +1606,19 @@ pub fn fill_here(ws: &Workspace) -> bool {
     let (Some(_), Some((start, _)), Some(t)) = (&ws.fill.job, ws.fill.replace, &ws.theory) else { return false };
     let at = super::App::local_offset_pub(t, start);
     t.blocks.iter().find(|b| b.start <= t.cursor && t.cursor <= b.end).is_none_or(|b| b.start <= at && at <= b.end)
+}
+
+/// The goal under its cell (no room beside it): attached a little below, as wide as the cell,
+/// an accent bar where the cell's status strip is
+fn goal_under<'a>(goal: Element<'a, Message>) -> Element<'a, Message> {
+    let bar = widget::container(widget::Space::new()).width(Length::Fixed(4.0)).height(Length::Fill).class(theme::Container::custom(|theme| iced::widget::container::Style {
+        background: Some(Color { a: 0.6, ..Color::from(theme.cosmic().accent_color()) }.into()),
+        border: Border { radius: 2.0.into(), ..Default::default() },
+        ..Default::default()
+    }));
+    widget::container(widget::row::with_capacity(2).spacing(4).push(bar).push(goal).height(Length::Shrink))
+        .padding(Padding { top: ATTACHED - 4.0, ..Padding::ZERO })
+        .into()
 }
 
 fn inline_goal<'a>(ws: Option<&'a Workspace>, table: &dyn super::codec::Symbols) -> Option<Element<'a, Message>> {
@@ -1593,7 +1709,7 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
     let gutter = if beside.is_some() {
         f32::from_bits(PAGE_GUTTER.load(std::sync::atomic::Ordering::Relaxed)) as u16
     } else if view_width() > 0.0 && view_width() < z(900.0) {
-        sp.space_s
+        z(PAGE_MARGIN) as u16
     } else {
         sp.space_l
     };
@@ -1619,7 +1735,12 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
                             .block_editor
                             .as_ref()
                             .zip(t.block_editor.as_ref().and_then(|be| t.construct_at(be.start, be.end)))
-                            .map_or(0.0, |(be, (cs, _))| CODE_PADDING.top + block_line(be, cs) as f32 * code_line_height()),
+                            // (a construct from the block's first line: level with the cell's
+                            // top, not with the text inside its padding)
+                            .map_or(0.0, |(be, (cs, _))| match block_line(be, cs) {
+                                0 => 0.0,
+                                line => CODE_PADDING.top + line as f32 * code_line_height(),
+                            }),
                         _ => 0.0,
                     };
                     if formal && beside.is_some() {
@@ -1637,8 +1758,16 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
                         block.start <= s && s < block.end.max(block.start + 1)
                     })
                 }) {
-                    item = item.push(side(note_card(ws, n), false));
+                    let width = t.block_editor.as_ref().filter(|be| be.kind == Kind::Formal).map(|be| {
+                        let columns = be.content.text().lines().map(|l| l.chars().count()).max().unwrap_or(0);
+                        block_code_width(t.code_columns.max(columns)) + 8.0
+                    });
+                    item = item.push(side(note_card(ws, n, width), false));
                 }
+            }
+            // (and the space after it that a shown block has: what follows stays where it was)
+            if opens_here {
+                item = item.push(side(widget::Space::new().height(Length::Fixed(z(BLOCK_GAP))).into(), false));
             }
             col = col.push(item);
             continue;
@@ -1663,12 +1792,14 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
                 None => mono_block(table.decode(&t.source_text(block.start, block.end)).text, block.status),
             },
             Kind::Formal => {
-                let mut c = widget::column::with_capacity(3).spacing(4).push(block_code(app.workspace.as_ref(), t, i, block, marked));
+                // (as wide as the cell: what is attached under it is too)
+                let columns = t.block_views.get(i).and_then(Option::as_ref).map_or(0, |v| v.columns);
+                let mut c = widget::column::with_capacity(3).spacing(4).width(Length::Fixed(block_code_width(t.code_columns.max(columns)) + 8.0)).push(block_code(app.workspace.as_ref(), t, i, block, marked));
                 if let Some(m) = messages_view(t, block, &*table, current) {
                     c = c.push(m);
                 }
                 if current && let Some(g) = inline_goal(inline, &*table) {
-                    c = c.push(g);
+                    c = c.push(goal_under(g));
                 }
                 c.into()
             }
@@ -1678,16 +1809,17 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
         };
         // The block j and k selected, found by its id to centre it; a prose block shows it with a bar
         let content: Element<'a, Message> = if t.selected == Some(i) && t.block_editor.is_none() {
-            let bar = block.kind != Kind::Formal;
-            widget::container(content)
-                .id(selected_block_id())
-                .padding(Padding { left: if bar { 8.0 } else { 0.0 }, ..Padding::ZERO })
-                .class(theme::Container::custom(move |theme| iced::widget::container::Style {
-                    background: bar.then(|| Color { a: 0.07, ..Color::from(theme.cosmic().accent_color()) }.into()),
-                    border: Border { radius: 4.0.into(), ..Default::default() },
-                    ..Default::default()
-                }))
-                .into()
+            // (prose marked as the paragraph being edited is, on a region reaching past it that
+            // takes no room, so that selecting it moves nothing; a formal block is marked by
+            // its own background and strip)
+            let marked: Element<'a, Message> = if block.kind != Kind::Formal {
+                let theme = theme::active();
+                let accent = Color::from(theme.cosmic().accent_color());
+                super::gap::Halo::new(content, (z(10.0), z(4.0), z(4.0)), Color { a: if theme.cosmic().is_dark { 0.07 } else { 0.09 }, ..accent }).bar(accent).into()
+            } else {
+                content
+            };
+            widget::container(marked).id(selected_block_id()).into()
         } else {
             content
         };
@@ -1703,11 +1835,7 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
             let area = if matches!(block.kind, Kind::Heading(_) | Kind::Text) { area.on_move(move |p| Message::ProsePointer(i, p)) } else { area };
             item = item.push(side(area.into(), marked && editing.is_none() && block.kind == Kind::Formal));
         }
-        // The selected block: what can be added after it, and Delete
         let selected_here = t.selected == Some(i) && editing.is_none() && block.kind != Kind::Header;
-        if selected_here {
-            item = item.push(side(block_actions(t, Some(i), true), false));
-        }
         // Agents' notes on this block, under it
         if let Some(ws) = app.workspace.as_ref() {
             for n in ws.notes.iter().filter(|n| {
@@ -1716,19 +1844,29 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
                     block.start <= s && s < block.end.max(block.start + 1)
                 })
             }) {
-                item = item.push(side(note_card(ws, n), false));
+                let width = (block.kind == Kind::Formal).then(|| {
+                    let columns = t.block_views.get(i).and_then(Option::as_ref).map_or(0, |v| v.columns);
+                    block_code_width(t.code_columns.max(columns)) + 8.0
+                });
+                item = item.push(side(note_card(ws, n, width), false));
             }
+        }
+        // The selected block: what can be added after it, and Delete, set a little below it
+        if selected_here {
+            item = item.push(side(widget::container(block_actions(t, Some(i), true)).padding(Padding { top: z(8.0), ..Padding::ZERO }).into(), false));
         }
         // The gap after it: hovered, it offers what can be added there
         if !selected_here && block.kind != Kind::End {
             let hovered = app.workspace.as_ref().is_some_and(|w| w.gap_hover == Some(i));
             let inner: Element<'a, Message> = if hovered { block_actions(t, Some(i), false) } else { widget::Space::new().into() };
-            let gap = widget::mouse_area(widget::container(inner).height(Length::Fixed(z(20.0))).width(Length::Fill).center_y(Length::Fixed(z(20.0))))
+            let gap = widget::mouse_area(widget::container(inner).height(Length::Fixed(z(BLOCK_GAP))).width(Length::Fill).center_y(Length::Fixed(z(BLOCK_GAP))))
                 .on_enter(Message::GapHover(Some(i)))
-                .on_exit(Message::GapLeave(i));
+                .on_exit(Message::GapLeave(i))
+                // (it holds the pointer, so the page's own click-outside never sees a click here)
+                .on_press(Message::CloseBlock);
             item = item.push(side(gap.into(), false));
         } else {
-            item = item.push(widget::Space::new().height(Length::Fixed(sp.space_xs as f32)));
+            item = item.push(widget::Space::new().height(Length::Fixed(z(BLOCK_GAP) - z(8.0))));
         }
         col = col.push(item);
     }
@@ -1758,7 +1896,7 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
             Some(g) => widget::container(g)
                 .width(Length::Fixed(width))
                 .class(theme::Container::custom(|theme| iced::widget::container::Style {
-                    background: Some(Color::from(theme.cosmic().bg_color()).into()),
+                    background: Some(page_color(theme).into()),
                     border: Border { radius: 6.0.into(), ..Default::default() },
                     ..Default::default()
                 }))
@@ -1769,7 +1907,7 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
     };
     let laid = super::gap::GoalLayer::new(col, goal, anchor, GOAL_GAP);
     let page = widget::container(widget::container(laid).max_width(page_width).width(Length::Fill)).center_x(Length::Fill);
-    widget::mouse_area(widget::scrollable(page).id(literate_scroll_id()).height(Length::Fill)).on_press(Message::CloseBlock).into()
+    widget::mouse_area(thin(page).id(literate_scroll_id()).height(Length::Fill)).on_press(Message::CloseBlock).into()
 }
 
 /// Where a scroll view is (the source view's, the proof window's), to keep the caret in sight there
@@ -1964,7 +2102,7 @@ fn block_editor_in<'a>(ws: Option<&'a Workspace>, t: &'a Theory, window: bool, i
         // At its full height in a scroll view that keeps the caret in sight, so that where its
         // lines are drawn is known for the tint
         let code = banded(super::gap::Gap::new(editor.height(Length::Shrink), widget::Space::new().height(Length::Fixed(0.0)), 0.0));
-        widget::scrollable(code).id(popout_scroll_id()).height(Length::Fill).into()
+        thin(code).id(popout_scroll_id()).height(Length::Fill).into()
     } else {
         let width = block_code_width(t.code_columns.max(columns));
         let code = hoverable(ws, super::HoverTarget::Block, CODE_PADDING, editor.width(width).into());
@@ -1982,7 +2120,7 @@ fn block_editor_in<'a>(ws: Option<&'a Workspace>, t: &'a Theory, window: bool, i
                         ..Default::default()
                     }));
                 let card = widget::container(goal).width(Length::Fill).class(theme::Container::custom(|theme| iced::widget::container::Style {
-                    background: Some(Color::from(theme.cosmic().bg_color()).into()),
+                    background: Some(page_color(theme).into()),
                     border: Border { radius: 6.0.into(), ..Default::default() },
                     ..Default::default()
                 }));
@@ -2021,24 +2159,18 @@ fn block_editor_in<'a>(ws: Option<&'a Workspace>, t: &'a Theory, window: bool, i
         col = col.push(widget::text::caption("Unfinished while the tool runs: pick a proof it finds"));
     }
     let msgs: Vec<_> = all.into_iter().filter(|m| (m.kind == "error" || m.kind == "warning") && !t.expected_error(m)).collect();
-    for m in msgs.into_iter().take(6) {
-        let kind = m.kind.clone();
-        let line = super::ot::line_col(&t.local, m.start).0;
-        col = col.push(
-            widget::container(symbol_text(&format!("{kind} (line {line}): {}", t.profile.message_summary(&m.text)), table, z(12.0)))
-                .padding([2, 8])
-                .width(Length::Fill)
-                .class(theme::Container::custom(move |theme| {
-                    let c = theme.cosmic();
-                    let color: Color = if kind == "error" { c.destructive_color().into() } else { c.warning_color().into() };
-                    iced::widget::container::Style { background: Some(Color { a: 0.15, ..color }.into()), ..Default::default() }
-                })),
-        );
+    if !msgs.is_empty() {
+        let mut strips = widget::column::with_capacity(msgs.len()).spacing(2);
+        for m in msgs.into_iter().take(6) {
+            strips = strips.push(message_strip(t, &m.kind, m.start, &m.text, table));
+        }
+        // (as under a shown block: opening it moves nothing)
+        col = col.push(widget::container(strips).padding(Padding { top: ATTACHED - 4.0, ..Padding::ZERO }));
     }
     // Prose has no proof state
     if !window && !floated && be.kind == Kind::Formal && let Some(g) = inline_goal(inline, table) {
         // (part of the cell: the space below it is the space between cells)
-        col = col.push(widget::container(g).padding(Padding { bottom: spacing().space_s as f32, ..Padding::ZERO }));
+        col = col.push(widget::container(goal_under(g)).padding(Padding { bottom: spacing().space_s as f32, ..Padding::ZERO }));
     }
     if let Some(doc) = &be.preview {
         let mut typo = typography(&theme::active());
@@ -2063,8 +2195,12 @@ fn block_editor_in<'a>(ws: Option<&'a Workspace>, t: &'a Theory, window: bool, i
 /// A heading or text being edited: its text alone, set in the font, size and width it reads in,
 /// on the page rather than in a box; code inside it (antiquotations) keeps code colours, and
 /// what only renders (maths, antiquotations) shows rendered underneath
+///
+/// It is set exactly where the rendered paragraph was (no padding, the rendered paragraphs
+/// around it the renderer's own paragraph spacing away), so that opening and closing it moves
+/// nothing on the page; a faint region behind it, reaching past the text without taking room,
+/// says that it is being edited
 fn prose_editor<'a>(t: &'a Theory, be: &'a super::editor::BlockEditor, vim_mode: Option<super::vim::Mode>) -> Element<'a, Message> {
-    let sp = spacing();
     let (scale, bold) = match be.kind {
         Kind::Heading(level) => (match level { 1 => 1.55, 2 => 1.32, 3 => 1.16, 4 => 1.05, _ => 1.0 }, true),
         _ => (1.0, false),
@@ -2073,13 +2209,14 @@ fn prose_editor<'a>(t: &'a Theory, be: &'a super::editor::BlockEditor, vim_mode:
         weight: if bold { cosmic::iced::font::Weight::Bold } else { cosmic::iced::font::Weight::Normal },
         ..cosmic::iced::Font::with_name("NewComputerModern")
     };
+    let size = z(17.0);
     let editor = iced::widget::text_editor(&be.content)
         .id(block_editor_id())
         .placeholder(if bold { "Section title" } else { "Text" })
         .font(serif)
-        .size(z(17.0) * scale)
+        .size(size * scale)
         .line_height(iced::widget::text::LineHeight::Relative(if bold { 1.25 } else { 1.5 }))
-        .padding(Padding { left: 0.0, right: 0.0, top: 2.0, bottom: 2.0 })
+        .padding(Padding::ZERO)
         .on_action(Message::BlockAction)
         .key_binding(key_bindings(!t.completions.is_empty(), vim_mode))
         .style(|theme: &cosmic::Theme, _status| {
@@ -2093,49 +2230,63 @@ fn prose_editor<'a>(t: &'a Theory, be: &'a super::editor::BlockEditor, vim_mode:
             }
         })
         .highlight_with::<super::editor::Highlighter>(t.block_highlight.themed(), prose_format);
-    // Exactly where the text was, on the page; only the caret says it is being edited. The block's
-    // other paragraphs stay as they read, above and below the one being edited
+    let theme = theme::active();
+    let region = Color { a: if theme.cosmic().is_dark { 0.07 } else { 0.09 }, ..Color::from(theme.cosmic().accent_color()) };
+    let editor: Element<'a, Message> = super::gap::Halo::new(editor, (z(10.0), z(4.0), z(4.0)), region).bar(theme.cosmic().accent_color().into()).into();
+    // The block's other paragraphs stay as they read, above and below the one being edited
     let (before, after) = t
         .blocks
         .iter()
         .find(|b| b.start <= be.start && be.start <= b.end)
         .and_then(|b| b.body)
         .map_or((String::new(), String::new()), |(bs, bend)| (t.source_text(bs, be.start), t.source_text(be.end, bend)));
+    let typo = || {
+        let mut typo = typography(&theme::active());
+        typo.size = size;
+        Arc::new(typo)
+    };
+    // (the renderer's space between paragraphs, which it leaves between the rendered ones)
+    let paragraph_gap = || widget::Space::new().height(Length::Fixed(size * 0.7));
     let rendered = |src: &str| -> Option<Element<'a, Message>> {
         (!src.trim().is_empty()).then(|| {
-            let mut typo = typography(&theme::active());
-            typo.size = z(17.0);
             let md = t.profile.prose(src.trim(), &*t.profile.symbols(None));
-            rich_text(Arc::new(prose_render::markdown::parse(&md)), Arc::new(typo)).into()
+            rich_text(Arc::new(prose_render::markdown::parse(&md)), typo()).into()
         })
     };
-    // (both places always there, empty or not: the editor keeps its place, and so its focus)
-    let mut col = widget::column::with_capacity(5).spacing(4);
-    col = col.push(rendered(&before).unwrap_or_else(|| widget::Space::new().height(Length::Fixed(0.0)).into()));
+    // (all three places always there, empty or not: the editor keeps its place, and so its focus)
+    let mut col = widget::column::with_capacity(5).width(Length::Fill);
+    col = col.push(match rendered(&before) {
+        Some(r) => widget::column::with_capacity(2).push(r).push(paragraph_gap()).into(),
+        None => Element::from(widget::Space::new().height(Length::Fixed(0.0))),
+    });
     col = col.push(editor);
-    col = col.push(rendered(&after).unwrap_or_else(|| widget::Space::new().height(Length::Fixed(0.0)).into()));
+    col = col.push(match rendered(&after) {
+        Some(r) => widget::column::with_capacity(2).push(paragraph_gap()).push(r).into(),
+        None => Element::from(widget::Space::new().height(Length::Fixed(0.0))),
+    });
     if let Some(bar) = completion_bar(t) {
-        col = col.push(bar);
+        col = col.push(widget::container(bar).padding(Padding { top: z(8.0), ..Padding::ZERO }));
     }
-    // The maths or antiquotation the caret is in, set as it will read
+    // The maths or antiquotation the caret is in, set as it will read, at the column's width
     if let Some(snippet) = t.profile.snippet_at(&be.shown(), {
         let shown = be.shown();
         super::editor::LineIndex::new(&shown).offset(&shown, be.content.cursor().position)
     }) {
         let md = t.profile.prose(&snippet, &*t.profile.symbols(None));
-        let mut typo = typography(&theme::active());
-        typo.size = z(17.0);
         col = col.push(
-            widget::container(rich_text(Arc::new(prose_render::markdown::parse(&md)), Arc::new(typo)))
-                .padding([2, 8])
-                .class(theme::Container::custom(|theme| iced::widget::container::Style {
-                    background: Some(Color { a: 0.05, ..Color::from(theme.cosmic().accent_color()) }.into()),
-                    border: Border { radius: 4.0.into(), ..Default::default() },
-                    ..Default::default()
-                })),
+            widget::container(
+                widget::container(rich_text(Arc::new(prose_render::markdown::parse(&md)), typo()))
+                    .padding([z(4.0), z(10.0)])
+                    .width(Length::Fill)
+                    .class(theme::Container::custom(|theme| iced::widget::container::Style {
+                        background: Some(blend(page_color(theme), cell_color(theme), 0.7).into()),
+                        border: Border { radius: 6.0.into(), width: 1.0, color: Color { a: 0.18, ..Color::from(theme.cosmic().accent_color()) } },
+                        ..Default::default()
+                    })),
+            )
+            .padding(Padding { top: z(8.0), ..Padding::ZERO }),
         );
     }
-    let _ = (sp, vim_mode);
     col.into()
 }
 
@@ -2150,9 +2301,11 @@ pub fn prose_format(hl: &super::editor::Hl, theme: &cosmic::Theme) -> iced::adva
         Hl::Sem(super::editor::Sem::Comment | super::editor::Sem::Raw | super::editor::Sem::Inner) => {
             iced::advanced::text::highlighter::Format { color: None, font: None }
         }
+        // (in one regular weight: bold keywords in a line of serif text read as shouting, and
+        // the code's colours already set it apart)
         Hl::Sem(_) | Hl::Keyword => {
             let mut f = highlight_format(hl, theme);
-            f.font = f.font.or(Some(cosmic::font::mono()));
+            f.font = Some(cosmic::font::mono());
             f
         }
         // Rendered markup: bold and emphasis in the prose's own font
@@ -2212,14 +2365,14 @@ pub fn reference_window(app: &App, id: iced::window::Id) -> Element<'_, Message>
         let band = construct_tint();
         let gap = super::gap::Gap::new(code, widget::Space::new().height(Length::Fixed(0.0)), 0.0).band(pad.top + row_top(l0), pad.top + row_top(l1 + 1), band);
         let el: Element<'_, Message> =
-            widget::scrollable(hoverable(app.workspace.as_ref(), super::HoverTarget::Ref(id), pad, gap.into())).id(reference_scroll_id(id)).height(Length::Fill).into();
+            thin(hoverable(app.workspace.as_ref(), super::HoverTarget::Ref(id), pad, gap.into())).id(reference_scroll_id(id)).height(Length::Fill).into();
         el
     });
     widget::container(widget::column::with_capacity(2).push(header).push(content))
         .width(Length::Fill)
         .height(Length::Fill)
         .class(theme::Container::custom(|theme| iced::widget::container::Style {
-            background: Some(Color { a: 1.0, ..Color::from(theme.cosmic().bg_color()) }.into()),
+            background: Some(page_color(theme).into()),
             text_color: Some(theme.cosmic().on_bg_color().into()),
             ..Default::default()
         }))
@@ -2264,7 +2417,7 @@ pub fn proof_window(app: &App) -> Element<'_, Message> {
         return widget::container(widget::text::body("The proof was closed in the main window."))
             .center(Length::Fill)
             .class(theme::Container::custom(|theme| iced::widget::container::Style {
-                background: Some(Color::from(theme.cosmic().bg_color()).into()),
+                background: Some(page_color(theme).into()),
                 ..Default::default()
             }))
             .into();
@@ -2272,7 +2425,7 @@ pub fn proof_window(app: &App) -> Element<'_, Message> {
     // As the main window: the state beside the proof when there is room, else under it
     let content = widget::responsive(move |size| {
         let table = app.table(&ws.machine);
-        let state = widget::container(widget::scrollable(state_view(ws, &*table))).padding(sp.space_s).class(theme::Container::Card);
+        let state = widget::container(thin(state_view(ws, &*table))).padding(sp.space_s).class(theme::Container::Card);
         let editor = widget::container(block_editor_in(Some(ws), t, true, None, &*table));
         let wide = size.width >= z(900.0);
         let el: Element<'_, Message> = if wide {
@@ -2305,7 +2458,7 @@ pub fn proof_window(app: &App) -> Element<'_, Message> {
             let cosmic = theme.cosmic();
             let on: Color = cosmic.on_bg_color().into();
             iced::widget::container::Style {
-                background: Some(Color { a: 1.0, ..Color::from(cosmic.bg_color()) }.into()),
+                background: Some(page_color(theme).into()),
                 text_color: Some(Color { a: 1.0, ..on }),
                 icon_color: Some(Color { a: 1.0, ..on }),
                 ..Default::default()
@@ -2555,6 +2708,12 @@ fn insert_palette<'a>(ws: &'a Workspace, t: &'a Theory, table: &dyn super::codec
 /// Between a block and the goal beside it
 const GOAL_GAP: f32 = 10.0;
 
+/// Between one block and the next (a hover area that offers what can be added there)
+const BLOCK_GAP: f32 = 20.0;
+
+/// The page's side margins, at least, while the goal beside it can keep them
+const PAGE_MARGIN: f32 = 24.0;
+
 /// Room kept for the page's scroll bar
 const SCROLLBAR_ROOM: f32 = 16.0;
 
@@ -2621,7 +2780,7 @@ fn source<'a>(ws: &'a Workspace, t: &'a Theory, inline: Option<&'a Workspace>, t
     // must to stay in sight)
     let (goal_width, goal): (f32, Element<'a, Message>) = match beside.and_then(|(w, _)| Some((w, inline_goal(Some(ws), table)?))) {
         Some((w, g)) => (w, widget::container(g).width(Length::Fixed(w)).class(theme::Container::custom(|theme| iced::widget::container::Style {
-            background: Some(Color::from(theme.cosmic().bg_color()).into()),
+            background: Some(page_color(theme).into()),
             border: Border { radius: 6.0.into(), ..Default::default() },
             ..Default::default()
         })).into()),
@@ -2642,7 +2801,7 @@ fn source<'a>(ws: &'a Workspace, t: &'a Theory, inline: Option<&'a Workspace>, t
         None => (widget::Space::new().width(Length::Fixed(0.0)).height(Length::Fixed(0.0)).into(), iced::Vector::ZERO),
     };
     let page = widget::container(super::gap::Beside::new(super::gap::Beside::new(row, goal, at), pop, pop_at).fixed()).center_x(Length::Fill);
-    col = col.push(widget::scrollable(page).id(source_scroll_id()).height(Length::Fill));
+    col = col.push(thin(page).id(source_scroll_id()).height(Length::Fill));
     if let Some(m) = vim_mode_now() {
         col = col.push(widget::text::caption(format!("-- {} --", m.label())));
     }
@@ -2651,7 +2810,7 @@ fn source<'a>(ws: &'a Workspace, t: &'a Theory, inline: Option<&'a Workspace>, t
     }
     // With no room beside it, the goal at the caret shows under the editor
     if let Some(g) = inline_goal(inline, table) {
-        col = col.push(widget::container(widget::scrollable(g)).max_height(z(220.0)));
+        col = col.push(widget::container(thin(g)).max_height(z(220.0)));
     }
     col.into()
 }
@@ -2785,7 +2944,7 @@ fn message_view<'a>(ws: &'a Workspace, m: &Value, table: &dyn super::codec::Symb
 }
 
 fn output_panel<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Element<'a, Message> {
-    widget::scrollable(state_view(ws, table)).height(Length::Fill).into()
+    thin(state_view(ws, table)).height(Length::Fill).into()
 }
 
 /// The proof state: as parts (the chained facts, then each subgoal as fix, assume and show,
@@ -3133,7 +3292,7 @@ fn subgoal_card<'a>(ws: &'a Workspace, sg: &super::goals::Subgoal, first: bool, 
         .width(Length::Fill)
         .class(theme::Container::custom(move |theme| {
             let c = theme.cosmic();
-            let base = Color::from(c.bg_component_color());
+            let base = cell_color(theme);
             iced::widget::container::Style {
                 background: Some(if first { blend(base, Color::from(c.accent_color()), 0.08) } else { base }.into()),
                 border: Border { radius: 6.0.into(), ..Default::default() },
@@ -3297,7 +3456,7 @@ fn tool_panel<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Eleme
     )));
     col = col.push(widget::text::caption("Type claude or codex (with a hint after it, if you like) on a line of its own in a proof and press Enter."));
     col = col.push(fill_results(ws, table));
-    widget::scrollable(col).height(Length::Fill).into()
+    thin(col).height(Length::Fill).into()
 }
 
 /// An LLM fill's progress and its proofs, each with an Insert button
@@ -3381,7 +3540,7 @@ fn find_panel<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Eleme
     for m in &q.messages {
         col = col.push(message_text(m, table));
     }
-    widget::scrollable(col).height(Length::Fill).into()
+    thin(col).height(Length::Fill).into()
 }
 
 /// Isabelle symbols to insert, by group or by search (name, LaTeX name or abbreviation)
@@ -3426,7 +3585,7 @@ fn symbols_panel<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> El
             col = col.push(wrap(syms.into_iter().map(|(c, sym)| button(c, sym, String::new())).collect()));
         }
     }
-    widget::scrollable(col).height(Length::Fill).into()
+    thin(col).height(Length::Fill).into()
 }
 
 fn agents_panel<'a>(app: &'a App, ws: &'a Workspace) -> Element<'a, Message> {
@@ -3481,7 +3640,7 @@ fn agents_panel<'a>(app: &'a App, ws: &'a Workspace) -> Element<'a, Message> {
         );
         col = col.push(widget::container(card).padding(sp.space_xs).class(theme::Container::Card).width(Length::Fill));
     }
-    widget::scrollable(col).height(Length::Fill).into()
+    thin(col).height(Length::Fill).into()
 }
 
 fn history_panel(ws: &Workspace) -> Element<'_, Message> {
@@ -3505,5 +3664,5 @@ fn history_panel(ws: &Workspace) -> Element<'_, Message> {
         }
         col = col.push(row);
     }
-    widget::scrollable(col).height(Length::Fill).into()
+    thin(col).height(Length::Fill).into()
 }
