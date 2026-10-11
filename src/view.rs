@@ -144,11 +144,23 @@ pub use super::shell::{header_center, header_start};
 /// Whether the goal goes beside the text when there is room (a toolbar toggle)
 static GOAL_BESIDE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
 
+// Under tests, each test thread has a switch of its own: tests that turn the goal beside off for
+// a frame (and on again) run side by side, and must not change another test's layout
+#[cfg(test)]
+thread_local! {
+    static GOAL_BESIDE_HERE: std::cell::Cell<bool> = const { std::cell::Cell::new(true) };
+}
+
 pub fn goal_beside_on() -> bool {
+    #[cfg(test)]
+    return GOAL_BESIDE_HERE.with(|g| g.get());
+    #[cfg(not(test))]
     GOAL_BESIDE.load(std::sync::atomic::Ordering::Relaxed)
 }
 
 pub fn set_goal_beside(on: bool) {
+    #[cfg(test)]
+    GOAL_BESIDE_HERE.with(|g| g.set(on));
     GOAL_BESIDE.store(on, std::sync::atomic::Ordering::Relaxed);
 }
 
