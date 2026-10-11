@@ -303,8 +303,30 @@ pub fn insert_bar_id() -> widget::Id {
 /// (the goals move down only then). None where nothing can be inserted
 pub fn insert_bar<'a>(ws: &'a Workspace, table: &dyn Symbols) -> Option<Element<'a, Message>> {
     let t = ws.theory.as_ref()?;
-    let context = insert_context(t)?;
     let sp = spacing();
+    let context = match insert_context(t) {
+        Some(context) => context,
+        // A block selected but not open: the bar stands where it will be, saying how to use it,
+        // so that opening the block does not move the goals down by its row
+        None if t.mode == Mode::Literate && t.selected.is_some() && t.block_editor.is_none() => {
+            let search = widget::container(widget::search_input("Symbol", "")).width(Length::Fixed(z(110.0)));
+            let more = widget::button::icon(widget::icon::from_name("pan-down-symbolic"));
+            let row = widget::row::with_capacity(3)
+                .spacing(sp.space_xs)
+                .align_y(Alignment::Center)
+                .push(search)
+                .push(
+                    widget::text::caption("Click into the block to insert here")
+                        .class(muted())
+                        .width(Length::Fill)
+                        .wrapping(iced::widget::text::Wrapping::None)
+                        .ellipsize(iced::core::text::Ellipsize::End(iced::core::text::EllipsizeHeightLimit::Lines(1))),
+                )
+                .push(more);
+            return Some(bar_band(row.into()));
+        }
+        None => return None,
+    };
     // (what the row offers, said by its search field while it is empty)
     let placeholder = match context {
         InsertContext::Symbols => "Symbol",
@@ -337,9 +359,13 @@ pub fn insert_bar<'a>(ws: &'a Workspace, table: &dyn Symbols) -> Option<Element<
             col = col.push(grouped(groups));
         }
     }
-    // (a band of its own above the state, faintly set off from it)
-    Some(
-        widget::container(col)
+    Some(bar_band(col.into()))
+}
+
+/// The bar's band: of its own above the state, faintly set off from it
+fn bar_band<'a>(content: Element<'a, Message>) -> Element<'a, Message> {
+    {
+        widget::container(content)
             .id(insert_bar_id())
             .padding([z(4.0), z(6.0)])
             .width(Length::Fill)
@@ -348,6 +374,6 @@ pub fn insert_bar<'a>(ws: &'a Workspace, table: &dyn Symbols) -> Option<Element<
                 border: Border { radius: 8.0.into(), ..Default::default() },
                 ..Default::default()
             }))
-            .into(),
-    )
+            .into()
+    }
 }
