@@ -24,6 +24,36 @@ use crate::theory::{Block, Command};
 
 pub struct Isabelle;
 
+/// Isabelle code coloured by prose-render (for ```isabelle in prose): commands, comments, quoted
+/// text and cartouches, found lexically, as byte ranges
+pub fn highlight(code: &str) -> Vec<(std::ops::Range<usize>, prose_render::highlight::Class)> {
+    use prose_render::highlight::Class;
+    let byte_of: Vec<usize> = code.char_indices().map(|(b, _)| b).chain(std::iter::once(code.len())).collect();
+    let chars: Vec<char> = code.chars().collect();
+    let mut out: Vec<(usize, usize, Class)> = isar::comments(code).into_iter().map(|(s, e)| (s, e, Class::Comment)).collect();
+    for c in blocks::lexical_commands(code, &HashMap::new()) {
+        let end = c.start + c.name.chars().count();
+        if !out.iter().any(|(s, e, _)| *s <= c.start && c.start < *e) {
+            out.push((c.start, end, Class::Keyword));
+        }
+    }
+    // (quoted text outside comments)
+    let mut i = 0;
+    while i < chars.len() {
+        if out.iter().any(|(s, e, c)| *c == Class::Comment && *s <= i && i < *e) {
+            i += 1;
+        } else if chars[i] == '"' {
+            let end = (i + 1..chars.len()).find(|&k| chars[k] == '"').map_or(chars.len(), |k| k + 1);
+            out.push((i, end, Class::String));
+            i = end;
+        } else {
+            i += 1;
+        }
+    }
+    out.sort_by_key(|(s, _, _)| *s);
+    out.into_iter().map(|(s, e, c)| (byte_of[s.min(chars.len())]..byte_of[e.min(chars.len())], c)).collect()
+}
+
 const BLOCK_TEMPLATES: &[BlockTemplate] = &[
     BlockTemplate { kind: "text", label: "+ Text", body: "text \\<open>\\<close>", caret: None },
     BlockTemplate { kind: "section", label: "+ Section", body: "section \\<open>\\<close>", caret: None },
@@ -243,6 +273,7 @@ impl Profile for Isabelle {
                 note: s("Theorems in the context at the caret."),
                 operation: s("find_theorems"),
                 args: vec![s("40"), s("false")],
+                ..Default::default()
             }),
             command: ["value", "term", "thm", "typ", "find_consts"].map(s).to_vec(),
             check_candidates: s("query"),

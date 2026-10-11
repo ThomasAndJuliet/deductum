@@ -34,7 +34,11 @@ mod snapshot;
 #[cfg(test)]
 mod snapshot_shell;
 #[cfg(test)]
+mod snapshot_lean;
+#[cfg(test)]
 mod live;
+#[cfg(test)]
+mod live_lean;
 
 /// LaTeX's fonts, New Computer Modern, for the literate view's prose; see `res/fonts/README`
 pub const FONTS: [&[u8]; 5] = [
@@ -75,6 +79,7 @@ pub const APP_ID: &str = "dev.twright.Deductum";
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger_init();
+    prover::register_highlighters();
     let request = cli::parse(std::env::args().skip(1).collect());
     if let Some(request) = &request
         && cli::forward(request)
@@ -1757,6 +1762,11 @@ pub fn message_key(m: &Value) -> u64 {
 }
 
 impl Workspace {
+    /// Where Lean's Search asks Loogle: `public`, `local` or `off`, as the settings say (C17e)
+    pub fn loogle_source(&self) -> String {
+        crate::settings::loogle().as_str().to_string()
+    }
+
     /// Code views for the messages on show: the proof state and the queries' output
     pub fn rebuild_views(&mut self, table: &dyn Symbols) {
         let mut wanted: Vec<&Value> = Vec::new();
@@ -2374,7 +2384,12 @@ impl cosmic::Application for App {
                 let Some(search) = ws.caps.search.clone() else { return Task::none() };
                 let (machine, sid, path, rev, query) = (ws.machine.clone(), ws.sid.clone(), t.path.clone(), t.confirmed_rev, ws.find_input.clone());
                 ws.find = QueryState { operation: "find_theorems", status: "starting".into(), ..Default::default() };
-                let args: Vec<String> = search.args.iter().cloned().chain([query]).collect();
+                // (Loogle takes its source after the query: the setting's, public until the settings page has one)
+                let args: Vec<String> = if search.operation == "loogle" {
+                    vec![query, ws.loogle_source()]
+                } else {
+                    search.args.iter().cloned().chain([query]).collect()
+                };
                 self.send(
                     &machine,
                     "query",

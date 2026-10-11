@@ -19,6 +19,7 @@
 
 pub mod capabilities;
 pub mod isabelle;
+pub mod lean;
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -33,18 +34,30 @@ use crate::theory::{Block, Command};
 /// The Isabelle profile
 pub static ISABELLE: isabelle::Isabelle = isabelle::Isabelle;
 
+/// The Lean 4 profile
+pub static LEAN: lean::Lean = lean::Lean;
+
 /// The profile for a session's `backend`. A session summary without one comes from a host
 /// older than backends, which ran Isabelle only
 pub fn profile(backend: Option<&str>) -> &'static dyn Profile {
     match backend.unwrap_or("isabelle") {
-        // "lean" => &LEAN,   (registered here once the Lean profile exists)
+        "lean" => &LEAN,
         _ => &ISABELLE,
     }
 }
 
 /// Every profile, for what is decided before a session is known (a path on the command line)
-pub fn profiles() -> [&'static dyn Profile; 1] {
-    [&ISABELLE]
+pub fn profiles() -> [&'static dyn Profile; 2] {
+    [&ISABELLE, &LEAN]
+}
+
+/// Colour ```lean and ```isabelle code in prose with the profiles' lexers (once, at startup)
+pub fn register_highlighters() {
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| {
+        prose_render::highlight::register("lean", &["lean4"], lean::highlight);
+        prose_render::highlight::register("isabelle", &["isar", "thy"], isabelle::highlight);
+    });
 }
 
 /// The symbol table a host sent (`symbol_table`), kept per machine. Only Isabelle's driver has
@@ -195,6 +208,13 @@ pub trait Profile: Send + Sync {
     /// Comments, found lexically: coloured whatever the prover says
     fn comments(&self, text: &str) -> Vec<(usize, usize)>;
 
+    /// Colours found from the characters alone, painted under the prover's: what a document
+    /// looks like before the prover has answered (Lean's lexer; Isabelle needs none)
+    fn lexical_colours(&self, text: &str) -> Vec<(usize, usize, Hl)> {
+        let _ = text;
+        Vec::new()
+    }
+
     /// Colours the profile adds to the prover's (Isabelle: the other half of a coloured bracket)
     fn derived_colours(&self, text: &str, colours: &[(usize, usize, Sem)]) -> Vec<(usize, usize, Sem)> {
         let _ = (text, colours);
@@ -265,6 +285,34 @@ pub trait Profile: Send + Sync {
 
     /// How a subgoal reads: labels and layout
     fn present_goal<'a>(&self, subgoal: &'a Subgoal) -> GoalPresentation<'a>;
+
+    /// What a goal of the state is called in its panel (`subgoal`; Lean says `goal`)
+    fn goal_noun(&self) -> &'static str {
+        "subgoal"
+    }
+
+    /// Whether `c` can be typed after the `\` of a symbol being completed (Isabelle's names are
+    /// letters, digits and `^`; Lean's abbreviations also use punctuation: `\<`, `\.`, `\->`)
+    fn symbol_query_char(&self, c: char) -> bool {
+        c.is_ascii_alphanumeric() || c == '^'
+    }
+
+    /// Whether `\<name>` is the form of a symbol (Isabelle's), so that `\<` begins a name rather
+    /// than being a symbol of its own (Lean's `⟨`)
+    fn angle_escapes(&self) -> bool {
+        true
+    }
+
+    /// Whether the first word of each command is a keyword to colour (Isabelle). Lean's commands
+    /// include every tactic, whose words are coloured by the lexer where they are keywords
+    fn commands_are_keywords(&self) -> bool {
+        true
+    }
+
+    /// Whether the goal panel offers the prover's `show types` option (Isabelle's)
+    fn goal_types_option(&self) -> bool {
+        true
+    }
 
     /// The label of the chained facts above the subgoals
     fn facts_label(&self) -> &'static str;
