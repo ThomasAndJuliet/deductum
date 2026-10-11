@@ -420,14 +420,41 @@ fn outline<'a>(app: &'a App, t: &'a Theory) -> Element<'a, Message> {
     col.into()
 }
 
+/// The theory's statements, one line each: a status mark, the name, and the statement after it
+/// cut short with an ellipsis (the whole line in a tooltip), so that a long statement never
+/// wraps and leaves a stray fragment on a line of its own
 fn theorems<'a>(app: &'a App, t: &'a Theory) -> Element<'a, Message> {
     let table = app.table(&app.workspace.as_ref().map(|w| w.machine.clone()).unwrap_or_default());
     let mut col = widget::column::with_capacity(t.blocks.len()).spacing(1);
     for block in t.blocks.iter().filter(|b| b.kind == Kind::Formal && t.profile.is_statement(b, &t.kinds)) {
-        let title = block_title(t, &*table, block, 48);
+        let first = block_title(t, &*table, block, 200);
+        let name = statement_name(&first);
+        let rest = first.split_once(&name).map_or(String::new(), |(_, r)| r.trim_start_matches(':').trim().to_string());
         let sorry = block.commands.iter().any(|c| t.profile.unfinished().contains(&c.name.as_str()));
         let status = if sorry && block.status == Status::Finished { Status::Warned } else { block.status };
-        col = col.push(nav_item(title, sorry.then(|| "unfinished".to_string()), 0.0, Some(status), Message::Goto(block.start)));
+        let dot = widget::container(widget::Space::new()).width(Length::Fixed(8.0)).height(Length::Fixed(8.0)).class(theme::Container::custom(move |theme| iced::widget::container::Style {
+            background: Some(status_color(status, theme).into()),
+            border: Border { radius: 4.0.into(), ..Default::default() },
+            ..Default::default()
+        }));
+        let one_line = |text: String, mono: bool| {
+            let w = widget::text(text).size(z(13.0)).wrapping(iced::widget::text::Wrapping::None).ellipsize(iced::core::text::Ellipsize::End(iced::core::text::EllipsizeHeightLimit::Lines(1)));
+            if mono { w.font(cosmic::font::mono()) } else { w }
+        };
+        let mut row = widget::row::with_capacity(3)
+            .spacing(z(8.0))
+            .align_y(Alignment::Center)
+            .push(dot)
+            .push(one_line(name, false).font(cosmic::iced::Font { weight: cosmic::iced::font::Weight::Semibold, ..cosmic::font::default() }));
+        if !rest.is_empty() {
+            row = row.push(one_line(rest, true).class(theme::Text::Color(muted_text())).width(Length::Fill));
+        }
+        let tip = if sorry { format!("{first}  (unfinished)") } else { first };
+        col = col.push(widget::tooltip(
+            widget::button::custom(row).width(Length::Fill).padding([z(4.0), z(8.0)]).class(theme::Button::MenuItem).on_press(Message::Goto(block.start)),
+            widget::text(tip).font(cosmic::font::mono()).size(z(12.0)),
+            widget::tooltip::Position::Right,
+        ));
     }
     col.into()
 }
@@ -1334,8 +1361,15 @@ fn hoverable_press<'a>(ws: Option<&'a Workspace>, target: super::HoverTarget, pa
     let Some(ws) = ws else { return pop.into() };
     let Some(h) = ws.hover.as_ref().filter(|h| h.target == target) else { return pop.into() };
     let Some(card) = hover_card(ws, h) else { return pop.into() };
+    // (just below the line under the pointer, so that it never covers that line, and a little
+    // left of the pointer, under the word)
+    let lh = match target {
+        super::HoverTarget::Source => source_line_height(),
+        _ => code_line_height(),
+    };
+    let below = ((h.point.y.max(0.0) / lh).floor() + 1.0) * lh + z(4.0);
     pop.popup(card)
-        .position(widget::popover::Position::Point(iced::Point::new(h.point.x + pad.left + 8.0, h.point.y + pad.top + z(20.0))))
+        .position(widget::popover::Position::Point(iced::Point::new((h.point.x + pad.left - z(8.0)).max(0.0), below + pad.top)))
         .into()
 }
 
@@ -1433,7 +1467,7 @@ fn hover_card<'a>(ws: &'a Workspace, h: &super::Hover) -> Option<Element<'a, Mes
     Some(
         widget::container(col)
             .max_width(z(520.0))
-            .padding([sp.space_xxs, sp.space_xs])
+            .padding([sp.space_xxs as f32 + 2.0, sp.space_xs as f32])
             .class(theme::Container::custom(|theme| {
                 let c = theme.cosmic();
                 iced::widget::container::Style {
@@ -2169,26 +2203,21 @@ fn block_editor_in<'a>(ws: Option<&'a Workspace>, t: &'a Theory, window: bool, i
     }
     // Prose has no proof state
     if !window && !floated && be.kind == Kind::Formal && let Some(g) = inline_goal(inline, table) {
-        // (part of the cell: the space below it is the space between cells)
-        col = col.push(widget::container(goal_under(g)).padding(Padding { bottom: spacing().space_s as f32, ..Padding::ZERO }));
+        // (part of the cell: the space below it is the space between cells, the open block's gap)
+        col = col.push(goal_under(g));
     }
     if let Some(doc) = &be.preview {
         let mut typo = typography(&theme::active());
         typo.size = z(17.0);
         col = col.push(rich_text(doc.clone(), Arc::new(typo)));
     }
-    let controls = widget::row::with_capacity(4)
-        .spacing(sp.space_s)
-        .align_y(Alignment::Center)
-        .push(widget::text::caption(vim_mode.map(|m| format!("-- {} --", m.label())).unwrap_or_default()))
-        .push(widget::text::caption(status_caption(status)))
-        .push(widget::text::caption(if be.preview.is_some() { "· preview follows · Esc or click outside to finish" } else { "· Esc or click outside to finish" }).width(Length::Fill));
-    // (on the page, what the controls say is in the status bar at the window's foot: a row
-    // under the open block would move everything after it as the open block changes)
+    // (what editing means, vim's mode and the block's checking, is in the status bar at the
+    // window's foot, here and in the proof window: a row under the open block would move
+    // everything after it as the open block changes)
+    let _ = (status, vim_mode, sp);
     if window {
-        return col.push(controls).into();
+        return col.into();
     }
-    let _ = controls;
     col.width(Length::Fixed(block_code_width(t.code_columns.max(columns)) + 8.0)).into()
 }
 
@@ -2232,7 +2261,7 @@ fn prose_editor<'a>(t: &'a Theory, be: &'a super::editor::BlockEditor, vim_mode:
         .highlight_with::<super::editor::Highlighter>(t.block_highlight.themed(), prose_format);
     let theme = theme::active();
     let region = Color { a: if theme.cosmic().is_dark { 0.07 } else { 0.09 }, ..Color::from(theme.cosmic().accent_color()) };
-    let editor: Element<'a, Message> = super::gap::Halo::new(editor, (z(10.0), z(4.0), z(4.0)), region).bar(theme.cosmic().accent_color().into()).into();
+    let editor: Element<'a, Message> = super::gap::Halo::new(editor, (z(10.0), z(2.0), z(4.0)), region).bar(theme.cosmic().accent_color().into()).into();
     // The block's other paragraphs stay as they read, above and below the one being edited
     let (before, after) = t
         .blocks
@@ -2325,14 +2354,20 @@ pub fn prose_format(hl: &super::editor::Hl, theme: &cosmic::Theme) -> iced::adva
 pub fn reference_window(app: &App, id: iced::window::Id) -> Element<'_, Message> {
     let sp = spacing();
     let Some((_, r)) = app.references.iter().find(|(w, _)| *w == id) else { return widget::text("").into() };
-    let mut header = widget::row::with_capacity(4).padding([sp.space_xxs, sp.space_s]).spacing(sp.space_xxs).align_y(Alignment::Center);
+    let mut actions: Vec<Element<'_, Message>> = Vec::new();
     if !r.back.is_empty() {
-        header = header.push(widget::button::icon(widget::icon::from_name("go-previous-symbolic")).tooltip("Back").on_press(Message::RefBack(id)));
+        actions.push(widget::button::icon(widget::icon::from_name("go-previous-symbolic")).tooltip("Back to the definition before").on_press(Message::RefBack(id)).into());
     }
-    header = header
-        .push(widget::text::heading(r.title.clone()).width(Length::Fill))
-        .push(widget::text::caption("Ctrl+click: go there · Alt+click: new window"))
-        .push(widget::button::text("Open here").on_press(Message::RefOpenHere(id)));
+    actions.push(
+        widget::tooltip(
+            widget::button::standard("Open in the main window").on_press(Message::RefOpenHere(id)),
+            widget::text("Open this theory in the main window, at the definition"),
+            widget::tooltip::Position::Bottom,
+        )
+        .into(),
+    );
+    let header = window_header(r.title.clone(), actions);
+    let footer = window_footer(vec!["Read-only".into(), "Ctrl+click: go to a definition here".into(), "Alt+click: in a new window".into()]);
     // The whole theory, read-only, as the source view draws it: the definition tinted, tooltips
     // under the pointer
     let content = widget::responsive(move |size| {
@@ -2368,7 +2403,7 @@ pub fn reference_window(app: &App, id: iced::window::Id) -> Element<'_, Message>
             thin(hoverable(app.workspace.as_ref(), super::HoverTarget::Ref(id), pad, gap.into())).id(reference_scroll_id(id)).height(Length::Fill).into();
         el
     });
-    widget::container(widget::column::with_capacity(2).push(header).push(content))
+    widget::container(widget::column::with_capacity(3).push(header).push(content).push(footer))
         .width(Length::Fill)
         .height(Length::Fill)
         .class(theme::Container::custom(|theme| iced::widget::container::Style {
@@ -2407,13 +2442,67 @@ pub fn scroll_reference(id: iced::window::Id, r: &super::Reference) -> cosmic::a
     iced::widget::scrollable::scroll_to(reference_scroll_id(id), iced::widget::scrollable::AbsoluteOffset { x: None, y: Some(y.max(0.0)) })
 }
 
+/// A window's own header bar (the proof and reference windows have no header of the app's): its
+/// title, then its actions, on COSMIC's header background with a rule under it
+fn window_header<'a>(title: String, actions: Vec<Element<'a, Message>>) -> Element<'a, Message> {
+    let sp = spacing();
+    let mut row = widget::row::with_capacity(actions.len() + 1).spacing(sp.space_xxs).align_y(Alignment::Center).push(widget::text::heading(title).width(Length::Fill));
+    for a in actions {
+        row = row.push(a);
+    }
+    widget::container(row)
+        .padding([0, sp.space_s])
+        .height(Length::Fixed(z(48.0)))
+        .center_y(Length::Fixed(z(48.0)))
+        .width(Length::Fill)
+        .class(theme::Container::custom(|theme| {
+            let c = theme.cosmic();
+            iced::widget::container::Style {
+                background: Some(Color::from(c.bg_color()).into()),
+                border: Border { width: 0.0, ..Default::default() },
+                shadow: iced::Shadow { color: Color { a: 0.18, ..Color::BLACK }, offset: iced::Vector::new(0.0, 1.0), blur_radius: 0.0 },
+                ..Default::default()
+            }
+        }))
+        .into()
+}
+
+/// A window's status bar: captions at its foot, apart from the content by a rule
+fn window_footer<'a>(parts: Vec<String>) -> Element<'a, Message> {
+    let sp = spacing();
+    let text = parts.into_iter().filter(|p| !p.is_empty()).collect::<Vec<_>>().join("  ·  ");
+    widget::column::with_capacity(2)
+        .push(widget::divider::horizontal::light())
+        .push(widget::container(widget::text::caption(text).class(theme::Text::Color(muted_text()))).padding([sp.space_xxs, sp.space_s]).width(Length::Fill))
+        .into()
+}
+
+/// A statement's name, from its first line ("lemma add_zero: …" is add_zero), else the line
+fn statement_name(first: &str) -> String {
+    let mut words = first.split_whitespace();
+    let _keyword = words.next();
+    match words.next().map(|w| w.trim_end_matches(':')) {
+        Some(name) if !name.is_empty() && !name.starts_with('"') && !name.starts_with('‹') => name.to_string(),
+        _ => first.to_string(),
+    }
+}
+
+/// A panel of a window, its corners rounded (the editor inside draws the cell's colour)
+fn window_card<'a>(content: Element<'a, Message>) -> widget::Container<'a, Message, cosmic::Theme> {
+    widget::container(content).class(theme::Container::custom(|theme| iced::widget::container::Style {
+        background: Some(blend(cell_color(theme), Color::BLACK, if theme.cosmic().is_dark { 0.32 } else { 0.0 }).into()),
+        border: Border { radius: 8.0.into(), ..Default::default() },
+        ..Default::default()
+    }))
+}
+
 /// The proof workspace in its own window (design C4): the block's source, the
 /// goal at its caret and Sledgehammer, on the same buffer as the main window
 pub fn proof_window(app: &App) -> Element<'_, Message> {
     let sp = spacing();
     let Some(ws) = &app.workspace else { return widget::text("No session").into() };
     let Some(t) = &ws.theory else { return widget::text("No theory").into() };
-    if t.block_editor.is_none() {
+    let Some(be) = &t.block_editor else {
         return widget::container(widget::text::body("The proof was closed in the main window."))
             .center(Length::Fill)
             .class(theme::Container::custom(|theme| iced::widget::container::Style {
@@ -2421,12 +2510,17 @@ pub fn proof_window(app: &App) -> Element<'_, Message> {
                 ..Default::default()
             }))
             .into();
-    }
+    };
     // As the main window: the state beside the proof when there is room, else under it
     let content = widget::responsive(move |size| {
         let table = app.table(&ws.machine);
-        let state = widget::container(thin(state_view(ws, &*table))).padding(sp.space_s).class(theme::Container::Card);
-        let editor = widget::container(block_editor_in(Some(ws), t, true, None, &*table));
+        // (the state on the page, so that its subgoal cards stand out from it as they do there)
+        let state = widget::container(thin(widget::container(state_view(ws, &*table)).padding(Padding { right: z(10.0), ..Padding::ZERO }))).padding([sp.space_xs, sp.space_xs]).class(theme::Container::custom(|theme| iced::widget::container::Style {
+            background: Some(page_color(theme).into()),
+            border: Border { radius: 8.0.into(), width: 1.0, color: Color { a: 0.12, ..Color::from(theme.cosmic().on_bg_color()) } },
+            ..Default::default()
+        }));
+        let editor = window_card(block_editor_in(Some(ws), t, true, None, &*table));
         let wide = size.width >= z(900.0);
         let el: Element<'_, Message> = if wide {
             widget::row::with_capacity(2)
@@ -2445,13 +2539,27 @@ pub fn proof_window(app: &App) -> Element<'_, Message> {
         };
         el
     });
-    // An opaque window: its own header and background, whatever the theme's transparency
-    let header = widget::row::with_capacity(3)
-        .padding([sp.space_xxs, sp.space_s])
-        .align_y(Alignment::Center)
-        .push(widget::text::heading(format!("Proof — {}", file_name(&t.path))).width(Length::Fill))
-        .push(widget::button::text("Bring back").on_press(Message::PopIn));
-    widget::container(widget::column::with_capacity(2).push(header).push(content))
+    // An opaque window: its own header, background and status bar, whatever the theme's transparency
+    let table = app.table(&ws.machine);
+    let block = t.blocks.iter().find(|b| b.start <= be.start && be.start <= b.end);
+    let title = block.map_or_else(|| "Proof".to_string(), |b| format!("Proof of {}", statement_name(&block_title(t, &*table, b, 80))));
+    let header = window_header(
+        format!("{title} — {}", file_name(&t.path)),
+        vec![
+            widget::tooltip(
+                widget::button::standard("Bring back").on_press(Message::PopIn),
+                widget::text("Edit the proof in the main window again"),
+                widget::tooltip::Position::Bottom,
+            )
+            .into(),
+        ],
+    );
+    let footer = window_footer(vec![
+        vim_mode_now().map(|m| format!("-- {} --", m.label())).unwrap_or_default(),
+        status_caption(t.status_in(be.start, be.end)).to_string(),
+        "Esc or Bring back to finish".to_string(),
+    ]);
+    widget::container(widget::column::with_capacity(3).push(header).push(content).push(footer))
         .width(Length::Fill)
         .height(Length::Fill)
         .class(theme::Container::custom(|theme| {
@@ -2647,59 +2755,65 @@ pub fn list_entries(t: &Theory, table: &dyn super::codec::Symbols) -> Vec<Palett
 }
 
 /// Beside the block being edited, when there is no goal: what can be inserted at the caret, by
-/// context (symbols in maths or a term, templates in prose, Isar in a proof), searchable
+/// context (symbols in maths or a term, templates in prose, Isar in a proof), searchable. The
+/// entries are grouped by where they come from (lists, the context's own entries, symbols
+/// matching the search), each group under a heading; a search with no match says so
 fn insert_palette<'a>(ws: &'a Workspace, t: &'a Theory, table: &dyn super::codec::Symbols, width: f32) -> Element<'a, Message> {
     let sp = spacing();
     let context = insert_context(t).unwrap_or(InsertContext::Prose);
     let query = ws.palette_query.trim().to_lowercase();
-    let mut col = widget::column::with_capacity(4).spacing(sp.space_xs);
-    col = col.push(widget::text::caption(match context {
-        InsertContext::Symbols => "Insert a symbol",
-        InsertContext::Prose => "Insert in the text",
-        InsertContext::Proof => "Insert in the proof",
-    }));
-    col = col.push(widget::text_input("Search", &ws.palette_query).on_input(Message::PaletteQuery));
-    // (each: its label, and what it puts before and after the selection or the caret)
-    let mut items: Vec<(String, String, String)> = Vec::new();
+    let selected = t.block_editor.as_ref().and_then(|be| be.content.selection()).is_some_and(|s| !s.trim().is_empty());
+    let mut col = widget::column::with_capacity(8).spacing(sp.space_xxs);
+    let (title, hint) = match context {
+        InsertContext::Symbols => ("Insert a symbol", "Or type \\ and its name, then Tab"),
+        InsertContext::Prose if selected => ("Insert in the text", "Wraps the selection"),
+        InsertContext::Prose => ("Insert in the text", "At the caret, ready to type into"),
+        InsertContext::Proof if selected => ("Insert in the proof", "Wraps the selection"),
+        InsertContext::Proof => ("Insert in the proof", "At the caret"),
+    };
+    col = col.push(widget::row::with_capacity(2).align_y(Alignment::Center).push(widget::text::heading(title).width(Length::Fill)).push(widget::text::caption(hint).class(theme::Text::Color(muted_text()))));
+    col = col.push(widget::container(widget::search_input("Search", &ws.palette_query).on_input(Message::PaletteQuery).on_clear(Message::PaletteQuery(String::new()))).padding([sp.space_xxxs, 0]));
+    // (each group: its heading, and its entries: a label, and what goes before and after the
+    // selection or the caret)
+    let mut groups: Vec<(&'static str, Vec<(String, String, String)>)> = Vec::new();
     let symbol = |c: char, label: String| (label, c.to_string(), String::new());
     let entry = |e: PaletteEntry| (e.label, e.before, e.after);
     let matches = |e: &PaletteEntry| query.is_empty() || e.label.contains(&query);
     match context {
         InsertContext::Symbols if !query.is_empty() => {
-            for (c, sym, how) in table.search(&query, 40) {
-                items.push(symbol(c, format!("{c}  {}", if how.is_empty() { sym.clone() } else { format!("{sym} {how}") })));
-            }
+            groups.push(("Symbols", table.search(&query, 40).into_iter().map(|(c, sym, how)| symbol(c, format!("{c}  {}", if how.is_empty() { sym.clone() } else { format!("{sym} {how}") }))).collect()));
         }
-        InsertContext::Symbols => items.extend(t.profile.palette(context, &ws.caps).into_iter().map(entry)),
+        InsertContext::Symbols => groups.push(("Common symbols", t.profile.palette(context, &ws.caps).into_iter().map(entry).collect())),
         InsertContext::Prose | InsertContext::Proof => {
             // Lists: in one, its next item (and a nested one); elsewhere, a list to begin
             if context == InsertContext::Prose {
-                items.extend(list_entries(t, table).into_iter().filter(matches).map(entry));
+                groups.push(("Lists", list_entries(t, table).into_iter().filter(matches).map(entry).collect()));
             }
-            items.extend(t.profile.palette(context, &ws.caps).into_iter().filter(matches).map(entry));
-            // (and symbols matching the search)
+            groups.push((if context == InsertContext::Prose { "Markup and antiquotations" } else { "Steps and tools" }, t.profile.palette(context, &ws.caps).into_iter().filter(matches).map(entry).collect()));
             if !query.is_empty() {
-                for (c, sym, _) in table.search(&query, 12) {
-                    items.push(symbol(c, format!("{c}  {sym}")));
-                }
+                groups.push(("Symbols", table.search(&query, 12).into_iter().map(|(c, sym, _)| symbol(c, format!("{c}  {sym}"))).collect()));
             }
         }
     }
-    let selected = t.block_editor.as_ref().and_then(|be| be.content.selection()).is_some_and(|s| !s.trim().is_empty());
-    if selected && context != InsertContext::Symbols {
-        col = col.push(widget::text::caption("Wraps the selection"));
+    groups.retain(|(_, items)| !items.is_empty());
+    if groups.is_empty() {
+        col = col.push(widget::container(widget::text::body(format!("Nothing matches “{}”.", ws.palette_query.trim()))).padding([sp.space_xxs, 0]));
     }
-    let buttons: Vec<Element<'a, Message>> = items
-        .into_iter()
-        .map(|(label, before, after)| widget::button::text(label).class(theme::Button::Standard).on_press(Message::Wrap(before, after)).into())
-        .collect();
-    col = col.push(widget::flex_row(buttons).row_spacing(sp.space_xxs).column_spacing(sp.space_xxs));
+    for (heading, items) in groups {
+        col = col.push(widget::container(widget::text::caption_heading(heading).class(theme::Text::Color(muted_text()))).padding(Padding { top: sp.space_xxs as f32, ..Padding::ZERO }));
+        let buttons: Vec<Element<'a, Message>> = items
+            .into_iter()
+            .map(|(label, before, after)| widget::button::text(label).class(theme::Button::Standard).on_press(Message::Wrap(before, after)).into())
+            .collect();
+        col = col.push(widget::flex_row(buttons).row_spacing(sp.space_xxs).column_spacing(sp.space_xxs));
+    }
+    // (on the page, outlined: a panel of its own beside the text, not a part of it)
     widget::container(col)
         .padding(sp.space_s)
         .width(Length::Fixed(width))
         .class(theme::Container::custom(|theme| iced::widget::container::Style {
-            background: Some(Color { a: 0.05, ..Color::from(theme.cosmic().accent_color()) }.into()),
-            border: Border { radius: 6.0.into(), ..Default::default() },
+            background: Some(page_color(theme).into()),
+            border: Border { radius: 8.0.into(), width: 1.0, color: Color { a: 0.14, ..Color::from(theme.cosmic().on_bg_color()) } },
             ..Default::default()
         }))
         .into()
@@ -2857,17 +2971,7 @@ fn side_panel<'a>(app: &'a App, ws: &'a Workspace) -> Element<'a, Message> {
         tabs.push((Panel::Symbols, "Symbols".into()));
     }
     tabs.extend([(Panel::Agents, "Agents".into()), (Panel::History, "History".into()), (Panel::Log, "Activity".into())]);
-    let mut rows = [widget::row::with_capacity(4).spacing(2), widget::row::with_capacity(4).spacing(2)];
-    for (i, (panel, label)) in tabs.into_iter().enumerate() {
-        let r = std::mem::replace(&mut rows[i / 4], widget::row::with_capacity(0));
-        rows[i / 4] = r.push(
-            widget::button::text(label)
-                .class(if ws.panel == panel { theme::Button::Suggested } else { theme::Button::Text })
-                .on_press(Message::Panel(panel)),
-        );
-    }
-    let [r0, r1] = rows;
-    let bar = widget::column::with_capacity(2).push(r0).push(r1);
+    let bar = panel_tabs(ws.panel, tabs, app.right_width - 2.0 * sp.space_s as f32);
     let table = app.table(&ws.machine);
     let content: Element<'a, Message> = match ws.panel {
         Panel::Output => output_panel(ws, &*table),
@@ -2884,6 +2988,75 @@ fn side_panel<'a>(app: &'a App, ws: &'a Workspace) -> Element<'a, Message> {
         .width(Length::Fixed(app.right_width))
         .height(Length::Fill)
         .class(theme::Container::Card)
+        .into()
+}
+
+/// The side panel's tabs: one row of equal segments in a fixed-height bar, never wrapping. When
+/// the panel is too narrow for all of them, the last segment is a "More" button that steps
+/// through the ones left out (named in its tooltip), and the open panel always has a segment
+fn panel_tabs<'a>(open: Panel, tabs: Vec<(Panel, String)>, width: f32) -> Element<'a, Message> {
+    let size = z(12.5);
+    // (a segment's width for its label: the label as set, and room either side)
+    let wanted = |label: &str| label.chars().count() as f32 * size * 0.56 + z(18.0);
+    let fits = |tabs: &[(Panel, String)], more: bool| tabs.iter().map(|(_, l)| wanted(l) + 2.0).sum::<f32>() + if more { wanted("More") } else { 0.0 } <= width - 4.0;
+    let (shown, hidden): (Vec<(Panel, String)>, Vec<(Panel, String)>) = if fits(&tabs, false) {
+        (tabs, Vec::new())
+    } else {
+        let mut shown = tabs.clone();
+        let mut hidden = Vec::new();
+        while shown.len() > 1 && !fits(&shown, true) {
+            hidden.insert(0, shown.pop().expect("a segment"));
+        }
+        // (the open panel always has a segment: it takes the last one's place)
+        if let Some(k) = hidden.iter().position(|(p, _)| *p == open) {
+            let open_tab = hidden.remove(k);
+            if let Some(last) = shown.pop() {
+                hidden.insert(0, last);
+            }
+            shown.push(open_tab);
+        }
+        (shown, hidden)
+    };
+    let segment = |label: String, active: bool, msg: Message| -> Element<'a, Message> {
+        let portion = label.chars().count() as u16 + 3;
+        widget::button::custom(
+            widget::text(label)
+                .size(size)
+                .wrapping(iced::widget::text::Wrapping::None)
+                .ellipsize(iced::core::text::Ellipsize::End(iced::core::text::EllipsizeHeightLimit::Lines(1)))
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .align_x(Alignment::Center)
+                .align_y(Alignment::Center),
+        )
+        .width(Length::FillPortion(portion))
+        .height(Length::Fill)
+        .padding([0, 4])
+        .class(if active { theme::Button::Suggested } else { theme::Button::Icon })
+        .on_press(msg)
+        .into()
+    };
+    let mut row = widget::row::with_capacity(shown.len() + 1).spacing(2).height(Length::Fill).align_y(Alignment::Center);
+    for (panel, label) in shown {
+        row = row.push(segment(label, panel == open, Message::Panel(panel)));
+    }
+    if let Some((first, _)) = hidden.first() {
+        let names: Vec<&str> = hidden.iter().map(|(_, l)| l.as_str()).collect();
+        row = row.push(widget::tooltip(
+            segment("More".into(), false, Message::Panel(*first)),
+            widget::text(format!("Also: {}", names.join(", "))),
+            widget::tooltip::Position::Bottom,
+        ));
+    }
+    widget::container(row)
+        .height(Length::Fixed(z(34.0)))
+        .padding(2)
+        .width(Length::Fill)
+        .class(theme::Container::custom(|theme| iced::widget::container::Style {
+            background: Some(Color { a: if theme.cosmic().is_dark { 0.05 } else { 0.06 }, ..Color::from(theme.cosmic().on_bg_color()) }.into()),
+            border: Border { radius: 17.0.into(), ..Default::default() },
+            ..Default::default()
+        }))
         .into()
 }
 
@@ -2965,14 +3138,27 @@ fn state_view<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Eleme
     }
     let g = super::goals::Goals::parse(&ws.goals.messages);
     let have_parts = g.count.is_some() || g.nogoal || !g.facts.is_empty();
+    // Goals or Text: two even segments of one small control, as the side panel's tabs are
     let toggle = |label: &'static str, on: bool, msg: Message| {
-        widget::button::text(label).class(if on { theme::Button::Suggested } else { theme::Button::Text }).on_press(msg)
+        widget::button::custom(widget::text(label).size(z(13.0)).width(Length::Fill).height(Length::Fill).align_x(Alignment::Center).align_y(Alignment::Center))
+            .width(Length::Fixed(z(64.0)))
+            .height(Length::Fill)
+            .padding(0)
+            .class(if on { theme::Button::Suggested } else { theme::Button::Icon })
+            .on_press(msg)
     };
+    let switch = widget::container(widget::row::with_capacity(2).spacing(2).height(Length::Fill).push(toggle("Goals", !ws.state_text, Message::StateText(false))).push(toggle("Text", ws.state_text, Message::StateText(true))))
+        .height(Length::Fixed(z(30.0)))
+        .padding(2)
+        .class(theme::Container::custom(|theme| iced::widget::container::Style {
+            background: Some(Color { a: if theme.cosmic().is_dark { 0.06 } else { 0.07 }, ..Color::from(theme.cosmic().on_bg_color()) }.into()),
+            border: Border { radius: 15.0.into(), ..Default::default() },
+            ..Default::default()
+        }));
     let controls = widget::row::with_capacity(4)
         .spacing(sp.space_xxs)
         .align_y(Alignment::Center)
-        .push(toggle("Goals", !ws.state_text, Message::StateText(false)))
-        .push(toggle("Text", ws.state_text, Message::StateText(true)))
+        .push(switch)
         .push(widget::Space::new().width(Length::Fill))
         .push(widget::checkbox(ws.show_types).label("Types").on_toggle(Message::ShowTypes));
     // On a proof tool typed in the text (sledgehammer, nitpick, …): its findings, as they come,
@@ -3090,7 +3276,8 @@ fn state_view<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Eleme
         for f in &g.facts {
             facts = facts.push(message_view(ws, f, table));
         }
-        col = col.push(labelled(ws.profile.facts_label(), facts.into()));
+        // (inset as the subgoal cards' contents are, so that all the labels are in one column)
+        col = col.push(widget::container(labelled(ws.profile.facts_label(), facts.into())).padding(Padding { left: sp.space_xs as f32, right: sp.space_xs as f32, ..Padding::ZERO }));
     }
     let shown = if ws.all_goals { g.subgoals.len() } else { g.subgoals.len().min(4) };
     for (i, sg) in g.subgoals.iter().take(shown).enumerate() {
@@ -3262,6 +3449,10 @@ fn labelled<'a>(label: &'static str, body: Element<'a, Message>) -> Element<'a, 
 fn subgoal_card<'a>(ws: &'a Workspace, sg: &super::goals::Subgoal, first: bool, new: bool, table: &dyn super::codec::Symbols) -> Element<'a, Message> {
     let sp = spacing();
     let mut head = widget::row::with_capacity(2).spacing(sp.space_xs).push(widget::text::caption(format!("Subgoal {}", sg.n)));
+    // (the first is tinted: it is the one the next step works on, which says so)
+    if first {
+        head = head.push(widget::text::caption("· next").class(theme::Text::Color(muted_text())));
+    }
     if new {
         head = head.push(widget::text::caption("· new").class(theme::Text::Accent));
     }
@@ -3338,28 +3529,50 @@ fn state_text<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Eleme
     col.into()
 }
 
-fn proofs(q: &super::QueryState) -> Vec<String> {
-    let mut out: Vec<String> = Vec::new();
+/// The proofs a tool found, each with who found it and how fast ("e, 6 ms"), from the lines that
+/// offer them ("e: Try this: by simp (6 ms)")
+fn proofs(q: &super::QueryState) -> Vec<(String, Vec<String>)> {
+    let mut out: Vec<(String, Vec<String>)> = Vec::new();
     for m in &q.messages {
+        let text = m["text"].as_str().unwrap_or("");
+        let prover = text.split_once(": ").map(|(p, _)| p).filter(|p| !p.contains(' ') && !p.is_empty());
+        let time = text.rsplit_once('(').and_then(|(_, t)| t.strip_suffix(')')).filter(|t| t.ends_with('s'));
+        let by = match (prover, time) {
+            (Some(p), Some(t)) => Some(format!("{p}, {t}")),
+            (Some(p), None) => Some(p.to_string()),
+            _ => None,
+        };
         for sb in m["sendbacks"].as_array().into_iter().flatten() {
-            if let Some(s) = sb.as_str()
-                && !out.iter().any(|p| p == s)
-            {
-                out.push(s.to_string());
+            let Some(s) = sb.as_str() else { continue };
+            match out.iter_mut().find(|(p, _)| p == s) {
+                Some((_, who)) => who.extend(by.clone()),
+                None => out.push((s.to_string(), by.clone().into_iter().collect())),
             }
         }
     }
     out
 }
 
+/// A ✓ or ✗ (or … while not known), coloured
+fn verdict<'a>(ok: Option<bool>) -> Element<'a, Message> {
+    let (name, tone): (&'static str, fn(&cosmic::Theme) -> Color) = match ok {
+        Some(true) => ("object-select-symbolic", |t| t.cosmic().success_color().into()),
+        Some(false) => ("window-close-symbolic", error_color),
+        None => ("content-loading-symbolic", |t| Color { a: 0.6, ..Color::from(t.cosmic().on_bg_color()) }),
+    };
+    widget::icon::from_name(name).size(16).icon().class(theme::Svg::custom(move |theme| iced::widget::svg::Style { color: Some(tone(theme)) })).into()
+}
+
 /// The proof tool that runs from a panel (Isabelle's Sledgehammer), built from its settings: the
-/// first one without a label beside Run and Cancel, the labelled ones in rows, the switches in a
-/// row of their own; then its findings with Insert. Under it, LLM help for the hole
+/// unlabelled ones each a line of their own, the labelled ones in rows with their labels in a
+/// column, the switches in a row, then Cancel and Run; then its findings, each proof with the
+/// provers that found it and Insert. Under it, LLM help for the hole
 fn tool_panel<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Element<'a, Message> {
     let sp = spacing();
     let q = &ws.tool_query;
     let mut col = widget::column::with_capacity(12).spacing(sp.space_xs);
     if let Some(tool) = ws.caps.panel_tool() {
+        col = col.push(widget::text::heading(tool.label.as_str()));
         if !tool.panel_note.is_empty() {
             col = col.push(widget::text::caption(tool.panel_note.as_str()));
         }
@@ -3367,30 +3580,19 @@ fn tool_panel<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Eleme
             let (name, key) = (tool.name.clone(), s.key.clone());
             widget::text_input(s.placeholder.as_str(), tool.value(&ws.tool_settings, &s.key)).on_input(move |v| Message::ToolSetting(name.clone(), key.clone(), v))
         };
-        let first = tool.settings.iter().position(|s| s.label.is_empty() && s.kind != "bool");
-        let mut run = widget::row::with_capacity(3).spacing(sp.space_xs).align_y(Alignment::Center);
-        if let Some(i) = first {
-            run = run.push(setting(&tool.settings[i]).width(Length::Fill));
-        }
-        col = col.push(
-            run.push(widget::button::suggested("Run").on_press(Message::RunTool(tool.name.clone())))
-                .push(widget::button::standard("Cancel").on_press_maybe((q.status == "running" || q.status == "waiting").then_some(Message::CancelQuery))),
-        );
-        for (i, s) in tool.settings.iter().enumerate() {
-            if Some(i) == first || s.kind == "bool" {
-                continue;
-            }
+        let label_width = Length::Fixed(z(72.0));
+        for s in tool.settings.iter().filter(|s| s.kind != "bool") {
             let input = setting(s);
             if s.label.is_empty() {
-                col = col.push(input);
+                col = col.push(input.width(Length::Fill));
                 continue;
             }
             col = col.push(
                 widget::row::with_capacity(3)
                     .spacing(sp.space_xs)
                     .align_y(Alignment::Center)
-                    .push(widget::text::body(s.label.as_str()))
-                    .push(if s.kind == "number" { input.width(Length::Fixed(64.0)) } else { input.width(Length::Fill) })
+                    .push(widget::text::body(s.label.as_str()).width(label_width))
+                    .push(if s.kind == "number" { input.width(Length::Fixed(z(72.0))) } else { input.width(Length::Fill) })
                     .push(widget::text::body(s.unit.as_str())),
             );
         }
@@ -3403,8 +3605,17 @@ fn tool_panel<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Eleme
             }
             col = col.push(row);
         }
+        let busy = q.status == "running" || q.status == "waiting" || q.status == "starting";
+        col = col.push(
+            widget::row::with_capacity(3)
+                .spacing(sp.space_xs)
+                .align_y(Alignment::Center)
+                .push(widget::Space::new().width(Length::Fill))
+                .push(widget::button::standard("Cancel").on_press_maybe(busy.then_some(Message::CancelQuery)))
+                .push(widget::button::suggested("Run").on_press(Message::RunTool(tool.name.clone()))),
+        );
         if !tool.typed_note.is_empty() {
-            col = col.push(widget::text::caption(tool.typed_note.as_str()));
+            col = col.push(widget::text::caption(tool.typed_note.as_str()).class(theme::Text::Color(muted_text())));
         }
         if !q.status.is_empty() {
             let status = match q.status.as_str() {
@@ -3416,7 +3627,12 @@ fn tool_panel<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Eleme
                 "failed" => "Failed",
                 other => other,
             };
-            col = col.push(widget::text::heading(status.to_string()));
+            col = col.push(widget::divider::horizontal::light());
+            let mut head = widget::row::with_capacity(2).spacing(sp.space_xs).align_y(Alignment::Center);
+            if busy {
+                head = head.push(widget::progress_bar::circular::Circular::new().size(16.0));
+            }
+            col = col.push(head.push(widget::text::heading(status.to_string())));
         }
         if let Some(err) = &q.error {
             col = col.push(widget::text::body(err.clone()));
@@ -3424,17 +3640,24 @@ fn tool_panel<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Eleme
         let found = proofs(q);
         if !found.is_empty() {
             col = col.push(widget::text::caption(if q.replace.is_some() {
-                format!("Found proofs — Insert replaces the {}:", ws.profile.placeholder())
+                format!("Insert replaces the {}:", ws.profile.placeholder())
             } else {
-                "Found proofs — Insert adds the proof after the command:".to_string()
+                "Insert adds the proof after the command:".to_string()
             }));
-            for p in found {
+            for (n, (p, by)) in found.into_iter().enumerate() {
+                let mut text = widget::column::with_capacity(2).push(widget::text(table.decode(&p).text).font(cosmic::font::mono()).size(z(13.0)));
+                if !by.is_empty() {
+                    text = text.push(widget::text::caption(format!("found by {}", by.join("; "))).class(theme::Text::Color(muted_text())));
+                }
+                // (the first, the fastest found, is the one to take)
+                let insert = if n == 0 { widget::button::suggested("Insert") } else { widget::button::standard("Insert") };
                 col = col.push(
-                    widget::row::with_capacity(2)
+                    widget::row::with_capacity(3)
                         .spacing(sp.space_xs)
                         .align_y(Alignment::Center)
-                        .push(widget::text(table.decode(&p).text).font(cosmic::font::mono()).size(13).width(Length::Fill))
-                        .push(widget::button::suggested("Insert").on_press(Message::InsertProof(p.clone()))),
+                        .push(verdict(Some(true)))
+                        .push(text.width(Length::Fill))
+                        .push(insert.on_press(Message::InsertProof(p.clone()))),
                 );
             }
         }
@@ -3446,15 +3669,14 @@ fn tool_panel<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Eleme
             }
             col = col.push(message_view(ws, m, table));
         }
-        col = col.push(widget::divider::horizontal::default());
+        col = col.push(widget::container(widget::divider::horizontal::default()).padding([sp.space_xxs, 0]));
     }
     // An LLM's proofs for the hole, each checked by the prover before it is offered
     let placeholder = ws.profile.placeholder();
     col = col.push(widget::text::heading("Fill the hole with an LLM"));
     col = col.push(widget::text::caption(format!(
-        "Claude or Codex on the session's machine proposes proofs for the {placeholder} at or after the caret; each is checked by the prover first."
+        "Claude or Codex on the session's machine proposes proofs for the {placeholder} at or after the caret; each is checked by the prover first. Type claude or codex (with a hint after it, if you like) on a line of its own in a proof and press Enter."
     )));
-    col = col.push(widget::text::caption("Type claude or codex (with a hint after it, if you like) on a line of its own in a proof and press Enter."));
     col = col.push(fill_results(ws, table));
     thin(col).height(Length::Fill).into()
 }
@@ -3472,7 +3694,7 @@ fn fill_results<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Ele
             "failed" => "Failed",
             other => other,
         };
-        col = col.push(widget::text::body(status.to_string()));
+        col = col.push(widget::text::heading(status.to_string()));
     }
     if let Some(err) = &f.error {
         col = col.push(widget::text::body(err.clone()));
@@ -3498,22 +3720,21 @@ fn fill_results<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Ele
     }
     for c in &f.candidates {
         let text = c["text"].as_str().unwrap_or("").to_string();
-        let mark = match c["ok"].as_bool() {
-            Some(true) => "✓ ",
-            Some(false) => "✗ ",
-            None => "… ",
-        };
-        let mut row = widget::row::with_capacity(2).spacing(sp.space_xs).align_y(Alignment::Center).push(
-            widget::column::with_capacity(2)
-                .push(widget::text(format!("{mark}{}", table.decode(&text).text)).font(cosmic::font::mono()).size(z(13.0)))
-                .push(widget::text::caption(c["message"].as_str().unwrap_or("").to_string()))
-                .width(Length::Fill),
-        );
-        row = row.push(if c["ok"].as_bool() == Some(true) {
-            widget::button::suggested("Insert").on_press(Message::InsertFill(text))
-        } else {
-            widget::button::standard("Insert anyway").on_press(Message::InsertFill(text))
-        });
+        let ok = c["ok"].as_bool();
+        let mut what = widget::column::with_capacity(2).push(widget::text(table.decode(&text).text).font(cosmic::font::mono()).size(z(13.0)));
+        if let Some(m) = c["message"].as_str().filter(|m| !m.is_empty()) {
+            what = what.push(widget::text::caption(m.to_string()).class(theme::Text::Color(muted_text())));
+        }
+        let row = widget::row::with_capacity(3)
+            .spacing(sp.space_xs)
+            .align_y(Alignment::Center)
+            .push(verdict(ok))
+            .push(what.width(Length::Fill))
+            .push(if ok == Some(true) {
+                widget::button::suggested("Insert").on_press(Message::InsertFill(text))
+            } else {
+                widget::button::standard("Insert anyway").on_press(Message::InsertFill(text))
+            });
         col = col.push(row);
     }
     col.into()
@@ -3543,51 +3764,60 @@ fn find_panel<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Eleme
     thin(col).height(Length::Fill).into()
 }
 
-/// Isabelle symbols to insert, by group or by search (name, LaTeX name or abbreviation)
+/// Isabelle symbols to insert, by group or by search (name, LaTeX name or abbreviation): glyphs
+/// large enough to tell apart, in square cells that light up under the pointer, each with a
+/// tooltip giving its name and how to type it
 fn symbols_panel<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Element<'a, Message> {
     let sp = spacing();
-    let mut col = widget::column::with_capacity(24).spacing(sp.space_xs);
-    col = col.push(widget::text_input("search: forall, leq, -->, sub…", &ws.symbol_search).on_input(Message::SymbolSearch));
+    let mut col = widget::column::with_capacity(24).spacing(sp.space_xxs);
+    col = col.push(widget::search_input("forall, leq, -->, sub…", &ws.symbol_search).on_input(Message::SymbolSearch).on_clear(Message::SymbolSearch(String::new())));
     col = col.push(widget::text::caption("In the text, type \\ and a name (or a LaTeX name) and press Tab."));
-    let button = |c: char, sym: String, how: String| -> Element<'a, Message> {
-        let tip = if how.is_empty() { sym.clone() } else { format!("{sym}   {how}") };
+    let mut typed: std::collections::HashMap<char, Vec<String>> = std::collections::HashMap::new();
+    for (c, abbrev) in table.abbreviations() {
+        typed.entry(c).or_default().push(abbrev.to_string());
+    }
+    let cell = |c: char, sym: String, how: String| -> Element<'a, Message> {
+        let mut ways: Vec<String> = typed.get(&c).cloned().unwrap_or_default();
+        if !how.is_empty() && !ways.contains(&how) {
+            ways.insert(0, how);
+        }
+        let tip = if ways.is_empty() { sym } else { format!("{sym}   type {}", ways.join(" or ")) };
         widget::tooltip(
-            widget::button::text(c.to_string()).padding([2, 6]).on_press(Message::InsertSymbol(c.to_string())),
-            widget::text(tip),
+            widget::button::custom(widget::text(c.to_string()).size(z(19.0)).font(cosmic::font::mono()).width(Length::Fill).height(Length::Fill).align_x(Alignment::Center).align_y(Alignment::Center))
+                .width(Length::Fixed(z(36.0)))
+                .height(Length::Fixed(z(36.0)))
+                .padding(0)
+                .class(theme::Button::Icon)
+                .on_press(Message::InsertSymbol(c.to_string())),
+            widget::text(tip).font(cosmic::font::mono()).size(z(13.0)),
             widget::tooltip::Position::Bottom,
         )
         .into()
     };
-    let wrap = |items: Vec<Element<'a, Message>>| -> Element<'a, Message> {
-        let mut rows = widget::column::with_capacity(items.len() / 10 + 1).spacing(2);
-        let mut row = widget::row::with_capacity(10).spacing(2);
-        let mut n = 0;
-        for item in items {
-            row = row.push(item);
-            n += 1;
-            if n == 10 {
-                rows = rows.push(std::mem::replace(&mut row, widget::row::with_capacity(10).spacing(2)));
-                n = 0;
-            }
-        }
-        if n > 0 {
-            rows = rows.push(row);
-        }
-        rows.into()
-    };
+    let grid = |items: Vec<Element<'a, Message>>| -> Element<'a, Message> { widget::flex_row(items).row_spacing(2).column_spacing(2).into() };
     let q = ws.symbol_search.trim().trim_start_matches('\\');
     if !q.is_empty() {
         let found = table.search(q, 40);
-        col = col.push(wrap(found.into_iter().map(|(c, sym, how)| button(c, sym, how)).collect()));
+        if found.is_empty() {
+            col = col.push(widget::text::body(format!("No symbol matches “{q}”.")));
+        }
+        col = col.push(grid(found.into_iter().map(|(c, sym, how)| cell(c, sym, how)).collect()));
     } else {
         for (group, syms) in table.groups() {
-            col = col.push(widget::text::caption_heading(group));
-            col = col.push(wrap(syms.into_iter().map(|(c, sym)| button(c, sym, String::new())).collect()));
+            // (group names as the table has them, lower case: a heading starts with a capital)
+            let mut heading = group.clone();
+            if let Some(first) = heading.get(..1) {
+                heading = first.to_uppercase() + &heading[1..];
+            }
+            col = col.push(widget::container(widget::text::heading(heading)).padding(Padding { top: sp.space_xxs as f32, ..Padding::ZERO }));
+            col = col.push(grid(syms.into_iter().map(|(c, sym)| cell(c, sym, String::new())).collect()));
         }
     }
     thin(col).height(Length::Fill).into()
 }
 
+/// The agents that have used the session: each a card with who and where it is, its editing
+/// rights (each revocable), the rights it can be given, and following it
 fn agents_panel<'a>(app: &'a App, ws: &'a Workspace) -> Element<'a, Message> {
     let sp = spacing();
     let mut col = widget::column::with_capacity(24).spacing(sp.space_xs);
@@ -3604,16 +3834,26 @@ fn agents_panel<'a>(app: &'a App, ws: &'a Workspace) -> Element<'a, Message> {
         let live = clients.iter().any(|c| c["key"].as_str() == Some(key.as_str()));
         let pos = info["position"].clone();
         let where_ = pos["path"].as_str().map(|p| format!("{} line {}", file_name(p), pos["line"])).unwrap_or_default();
-        let mut card = widget::column::with_capacity(6).spacing(4);
-        card = card.push(widget::text::heading(format!("{label}{}", if live { " · attached" } else { "" })));
-        card = card.push(widget::text::caption(format!("{key}{}", if where_.is_empty() { String::new() } else { format!(" · at {where_}") })));
+        let mut card = widget::column::with_capacity(8).spacing(sp.space_xxs);
+        // Who, whether attached now, and where it last was
+        let mut head = widget::row::with_capacity(2).spacing(sp.space_xxs).align_y(Alignment::Center).push(widget::text::heading(label.clone()).width(Length::Fill));
+        if live {
+            head = head.push(widget::text::caption("attached").class(theme::Text::Accent));
+        }
+        card = card.push(head);
+        card = card.push(widget::text::caption(format!("{key}{}", if where_.is_empty() { String::new() } else { format!(" · at {where_}") })).class(theme::Text::Color(muted_text())));
+        // Its rights, each with Revoke
         let mine: Vec<&Value> = grants.iter().filter(|g| g["agent"].as_str() == Some(key.as_str())).collect();
+        card = card.push(widget::container(widget::text::caption_heading("Editing rights")).padding(Padding { top: sp.space_xxs as f32, ..Padding::ZERO }));
+        if mine.is_empty() {
+            card = card.push(widget::text::body("None: it can read and query, not edit."));
+        }
         for g in &mine {
             let scope = match g["scope"].as_str() {
-                Some("folder") => "May edit the whole folder".to_string(),
-                Some("theory") => format!("May edit {}", file_name(g["path"].as_str().unwrap_or(""))),
-                Some("proof") => format!("May edit the proof at line {} of {}", g["line"], file_name(g["path"].as_str().unwrap_or(""))),
-                _ => "May edit".into(),
+                Some("folder") => "The whole folder".to_string(),
+                Some("theory") => file_name(g["path"].as_str().unwrap_or("")).to_string(),
+                Some("proof") => format!("The proof at line {} of {}", g["line"], file_name(g["path"].as_str().unwrap_or(""))),
+                _ => "Some of the session".into(),
             };
             card = card.push(
                 widget::row::with_capacity(2)
@@ -3623,46 +3863,87 @@ fn agents_panel<'a>(app: &'a App, ws: &'a Workspace) -> Element<'a, Message> {
                     .push(widget::button::destructive("Revoke").on_press(Message::Revoke(g["id"].as_str().unwrap_or("").to_string()))),
             );
         }
+        // The rights it can be given, labelled, as one group
+        card = card.push(widget::text::caption("Allow it to edit:"));
         card = card.push(
             widget::row::with_capacity(3)
-                .spacing(4)
-                .push(widget::button::standard("Grant folder").on_press(Message::Grant(key.clone(), label.clone(), "folder")))
+                .spacing(sp.space_xxs)
+                .push(widget::button::standard("Folder").on_press(Message::Grant(key.clone(), label.clone(), "folder")))
                 .push(widget::button::standard("This theory").on_press_maybe(ws.theory.as_ref().map(|_| Message::Grant(key.clone(), label.clone(), "theory"))))
                 .push(widget::button::standard("Proof at caret").on_press_maybe(ws.theory.as_ref().map(|_| Message::Grant(key.clone(), label.clone(), "proof")))),
         );
         let following = ws.follow.as_deref() == Some(key.as_str());
+        card = card.push(widget::divider::horizontal::light());
         card = card.push(
             widget::row::with_capacity(2)
                 .spacing(sp.space_xs)
                 .align_y(Alignment::Center)
-                .push(widget::toggler(following).on_toggle(move |on| Message::Follow(on.then(|| key.clone()))))
-                .push(widget::text::body("Follow this agent")),
+                .push(
+                    widget::column::with_capacity(2)
+                        .push(widget::text::body("Follow this agent"))
+                        .push(widget::text::caption("Go where it shows you, as it does").class(theme::Text::Color(muted_text())))
+                        .width(Length::Fill),
+                )
+                .push(widget::toggler(following).on_toggle(move |on| Message::Follow(on.then(|| key.clone())))),
         );
         col = col.push(widget::container(card).padding(sp.space_xs).class(theme::Container::Card).width(Length::Fill));
     }
     thin(col).height(Length::Fill).into()
 }
 
+/// How long ago a Unix time was, in words
+fn ago(time: f64) -> String {
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0.0, |d| d.as_secs_f64());
+    let s = (now - time).max(0.0) as u64;
+    match s {
+        0..60 => "just now".into(),
+        60..3600 => format!("{} min ago", s / 60),
+        3600..86400 => format!("{} h ago", s / 3600),
+        _ => format!("{} days ago", s / 86400),
+    }
+}
+
+/// The theory's edits, newest first: who, what and where, when; an agent's edit can be reverted
+/// on its own (your own are undone with Ctrl+Z)
 fn history_panel(ws: &Workspace) -> Element<'_, Message> {
     let sp = spacing();
-    let mut col = widget::column::with_capacity(ws.history.len() + 1).spacing(4);
-    col = col.push(widget::text::caption("Ctrl+Z undoes your own edits. Agents' changes are reverted one by one; later edits are kept."));
-    for h in &ws.history {
+    let mut col = widget::column::with_capacity(ws.history.len() * 2 + 1).spacing(0);
+    col = col.push(widget::container(widget::text::caption("Ctrl+Z undoes your own edits. An agent's change is reverted on its own; later edits are kept.")).padding(Padding { bottom: sp.space_xs as f32, ..Padding::ZERO }));
+    if ws.history.is_empty() {
+        col = col.push(widget::text::body("No edits yet."));
+    }
+    for (n, h) in ws.history.iter().enumerate() {
         let author = h["author"]["label"].as_str().unwrap_or("?").to_string();
+        let agent = h["author"]["kind"] == "agent";
         let kind = h["kind"].as_str().unwrap_or("").to_string();
         let reverted = h["reverted_by"].is_number();
-        let mut row = widget::row::with_capacity(2).spacing(sp.space_xs).align_y(Alignment::Center).push(
-            widget::column::with_capacity(2)
-                .push(widget::text::body(format!("{author} — {kind} at line {}{}", h["line"], if reverted { " (reverted)" } else { "" })))
-                .push(widget::text::caption(h["summary"].as_str().unwrap_or("").to_string()))
-                .width(Length::Fill),
-        );
-        if h["author"]["kind"] == "agent" && !reverted
+        if n > 0 {
+            col = col.push(widget::divider::horizontal::light());
+        }
+        let mut what = format!("{kind} at line {}", h["line"]);
+        if let Some(t) = h["time"].as_f64() {
+            what.push_str(&format!(" · {}", ago(t)));
+        }
+        let mut text = widget::column::with_capacity(3)
+            .spacing(2)
+            .push(
+                widget::row::with_capacity(2)
+                    .spacing(sp.space_xxs)
+                    .push(widget::text::body(author).font(cosmic::iced::Font { weight: cosmic::iced::font::Weight::Semibold, ..cosmic::font::default() }))
+                    .push(widget::text::body(what).class(theme::Text::Color(muted_text()))),
+            )
+            .push(widget::text(h["summary"].as_str().unwrap_or("").to_string()).font(cosmic::font::mono()).size(z(12.0)))
+            .width(Length::Fill);
+        if reverted {
+            text = text.push(widget::text::caption("reverted").class(theme::Text::Color(muted_text())));
+        }
+        let mut row = widget::row::with_capacity(2).spacing(sp.space_xs).align_y(Alignment::Center).push(text);
+        if agent && !reverted
             && let Some(id) = h["id"].as_u64()
         {
             row = row.push(widget::button::standard("Revert").on_press(Message::Revert(id)));
         }
-        col = col.push(row);
+        col = col.push(widget::container(row).padding([sp.space_xxs, 0]));
     }
     thin(col).height(Length::Fill).into()
 }
