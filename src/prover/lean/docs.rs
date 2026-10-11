@@ -214,6 +214,49 @@ impl Docs {
     }
 }
 
+/// The Markdown with each soft line break (a single newline inside a paragraph) a space, as
+/// Markdown reads it and as docstrings are written (wrapped at 80 columns). Hard breaks (two spaces
+/// or a backslash before the newline), code fences, display maths, headings, list items, quotes
+/// and tables keep their line breaks. Each newline becomes one space, so every offset is the same
+pub fn reflow(markdown: &str) -> String {
+    let lines: Vec<&str> = markdown.split('\n').collect();
+    let block_start = |l: &str| {
+        let t = l.trim_start();
+        t.starts_with(['#', '>', '|', '-', '*', '+'])
+            || t.starts_with("```")
+            || t.starts_with("~~~")
+            || t.starts_with("$$")
+            || t.split_once(['.', ')']).is_some_and(|(n, rest)| !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()) && rest.starts_with(' '))
+    };
+    let mut out = String::with_capacity(markdown.len());
+    let (mut fence, mut display) = (false, false);
+    for (i, line) in lines.iter().enumerate() {
+        out.push_str(line);
+        let Some(next) = lines.get(i + 1) else { break };
+        let t = line.trim_start();
+        if t.starts_with("```") || t.starts_with("~~~") {
+            fence = !fence;
+        }
+        if !fence && t.matches("$$").count() % 2 == 1 {
+            display = !display;
+        }
+        let soft = !fence
+            && !display
+            && !line.trim().is_empty()
+            && !next.trim().is_empty()
+            && !line.ends_with("  ")
+            && !line.ends_with('\\')
+            && !t.starts_with(['#', '|'])
+            && !t.starts_with("$$")
+            && !t.trim_end().ends_with("$$")
+            && !block_start(next)
+            && !t.starts_with("```")
+            && !next.starts_with("    ");
+        out.push(if soft { ' ' } else { '\n' });
+    }
+    out
+}
+
 /// What a snippet is
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Kind {
@@ -519,6 +562,18 @@ mod tests {
             }
         }
         assert!(seen > 10, "{seen}");
+    }
+
+    #[test]
+    fn soft_breaks_become_spaces_and_nothing_else_moves() {
+        let md = "A wrapped\nparagraph with `code`\nover three lines.\n\n- item one\n  goes on\n- item two\n\n```lean\ndef a := 1\ndef b := 2\n```\n\n$$\nx = y\n$$\n\n$$a = b$$\nright after\n\nhard  \nbreak\n# Title\nafter";
+        let r = reflow(md);
+        assert_eq!(r.len(), md.len());
+        assert!(r.starts_with("A wrapped paragraph with `code` over three lines.\n\n- item one   goes on\n- item two"), "{r:?}");
+        assert!(r.contains("```lean\ndef a := 1\ndef b := 2\n```"));
+        assert!(r.contains("$$\nx = y\n$$"));
+        assert!(r.contains("$$a = b$$\nright after"), "{r:?}");
+        assert!(r.contains("hard  \nbreak\n# Title\nafter"), "{r:?}");
     }
 
     #[test]

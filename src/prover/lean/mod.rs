@@ -364,13 +364,13 @@ impl Profile for Lean {
 
     fn prose(&self, body: &str, _codec: &dyn Codec) -> String {
         // (the Markdown as written, without the common indentation)
-        docs::to_markdown(body).markdown
+        docs::reflow(&docs::to_markdown(body).markdown)
     }
 
     fn prose_map(&self, body: &str) -> Option<super::ProseMap> {
         let d = docs::to_markdown(body);
         let runs = d.segments();
-        Some(super::ProseMap { markdown: d.markdown, runs })
+        Some(super::ProseMap { markdown: docs::reflow(&d.markdown), runs })
     }
 
     fn snippet_at(&self, text: &str, at: usize) -> Option<String> {
@@ -731,6 +731,7 @@ mod tests {
     fn prose_is_markdown_without_the_indent() {
         let md = Lean.prose("\n  # Title\n\n  Some `code` and $x^2$.\n", &Plain);
         assert_eq!(md, "# Title\n\nSome `code` and $x^2$.");
+        assert_eq!(Lean.prose("\n  one wrapped\n  paragraph\n", &Plain), "one wrapped paragraph");
         assert_eq!(Lean.snippet_at("so $x + 0 = x$ here", 5).as_deref(), Some("$x + 0 = x$"));
         let c = Lean.prose_code_classes("a `b` and $c$");
         assert_eq!(c[3], Some(Hl::Sem(Sem::Free)));

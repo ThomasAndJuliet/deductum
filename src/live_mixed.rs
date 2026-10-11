@@ -126,6 +126,7 @@ fn live_mixed() {
         println!("isabelle session {isa_sid} checked");
 
         // The Lean session, through the new-session page
+        app.status = None; // (an older daemon on the other machine does not know `client_settings`)
         let _ = app.update(Message::NewSession(true));
         let _ = app.update(Message::NewMachine(1));
         assert!(pump(&mut app, &mut stream, 60, |a| a.new_session.as_ref().is_some_and(|ns| ns.listing.is_some())).await, "the host lists its folder");
@@ -163,6 +164,7 @@ fn live_mixed() {
         assert_eq!(lean_shown.sections.last().and_then(|s| s.label), Some("⊢"));
         assert!(lean_shown.sections.iter().any(|s| s.label.is_none()), "unlabelled hypotheses");
         println!("lean goal labels: {:?}", lean_shown.sections.iter().map(|s| s.label).collect::<Vec<_>>());
+        let _ = app.update(Message::Panel(super::Panel::Output));
         frames(&mut h, &app, "lean-document");
 
         // The Project tab and its build action
