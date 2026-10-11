@@ -18,14 +18,21 @@ mod gap;
 mod goals;
 mod input;
 mod link;
+mod new_session;
 mod ot;
 mod prover;
+mod settings;
+mod settings_page;
+mod shell;
+mod sidebar;
 mod theory;
 mod view;
 mod vim;
 
 #[cfg(test)]
 mod snapshot;
+#[cfg(test)]
+mod snapshot_shell;
 #[cfg(test)]
 mod live;
 
@@ -62,6 +69,7 @@ use tokio::sync::mpsc;
 use codec::Symbols;
 use editor::{Mode, Theory};
 use prover::{Capabilities, Profile, Tool};
+pub use new_session::NewSession;
 
 pub const APP_ID: &str = "dev.twright.Deductum";
 
@@ -105,6 +113,8 @@ pub enum Panel {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum LeftMode {
     Sessions,
+    /// The open session's project and its actions (when its capabilities offer some)
+    Project,
     Outline,
     Theorems,
     Problems,
@@ -158,7 +168,7 @@ pub enum Message {
     Complete(usize),
     /// Enter: a new line indented for the proof structure
     Newline,
-    /// Shift+Tab: remove up to two spaces of indentation from the current line
+    /// Shift+Tab: remove up to an indent (a setting) of spaces from the current line
     Unindent,
     /// A key for the vim machine (key, with Ctrl)
     Vim(String, bool),
@@ -257,6 +267,8 @@ pub enum Message {
     InsertOutput(String),
     PopOutClosed(cosmic::iced::window::Id),
     ToggleSidebar,
+    /// The shell: settings, the header and status bar, project actions, the new-session flow
+    Shell(shell::Msg),
     Noop,
 }
 
@@ -290,6 +302,8 @@ enum Pending {
     RefInfo(cosmic::iced::window::Id, RefUse),
     /// A name in a reference window's library theory, looked up in the main theory's context
     Entity(cosmic::iced::window::Id, RefUse),
+    /// A project action of this session, by name
+    ProjectAction(String, String),
 }
 
 /// What a look-up in a reference window is for: a tooltip (this generation of the pointer's
@@ -443,16 +457,6 @@ pub struct Workspace {
     pub merge: Option<Vec<Value>>,
 }
 
-#[derive(Default)]
-pub struct NewSession {
-    pub machine: usize,
-    pub folder: String,
-    pub listing: Option<Value>,
-    pub logic: String,
-    pub suggestion: Option<Value>,
-    pub error: Option<String>,
-}
-
 pub struct App {
     core: Core,
     pub links: Vec<Link>,
@@ -501,58 +505,11 @@ pub struct App {
     pub vim_enabled: bool,
     pub mode_model: widget::segmented_button::SingleSelectModel,
     mode_entities: [widget::segmented_button::Entity; 2],
-}
-
-/// Settings kept between runs
-#[derive(Default, serde::Serialize, serde::Deserialize)]
-struct UiSettings {
-    #[serde(default)]
-    vim: bool,
-    #[serde(default)]
-    zoom: Option<f32>,
-    #[serde(default)]
-    left_width: Option<f32>,
-    #[serde(default)]
-    right_width: Option<f32>,
-    /// Whether the sidebars were open (both start closed)
-    #[serde(default)]
-    show_left: Option<bool>,
-    #[serde(default)]
-    show_right: Option<bool>,
-    /// Whether the goal goes beside the text when there is room
-    #[serde(default)]
-    goal_beside: Option<bool>,
-}
-
-fn settings_path() -> std::path::PathBuf {
-    let base = std::env::var_os("HOME").map(std::path::PathBuf::from).unwrap_or_default().join(".config/deductum");
-    base.join("settings.json")
-}
-
-fn load_settings() -> UiSettings {
-    std::fs::read_to_string(settings_path()).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default()
+    /// The header, status bar, settings and project actions (see `shell`)
+    pub shell: shell::Shell,
 }
 
 impl App {
-    fn save_settings(&self) {
-        let settings = UiSettings {
-            vim: self.vim_enabled,
-            zoom: Some(view::zoom()),
-            left_width: Some(self.left_width),
-            right_width: Some(self.right_width),
-            show_left: Some(self.show_sidebar),
-            show_right: Some(self.show_right),
-            goal_beside: Some(view::goal_beside_on()),
-        };
-        let path = settings_path();
-        if let Some(dir) = path.parent() {
-            let _ = std::fs::create_dir_all(dir);
-        }
-        if let Ok(text) = serde_json::to_string_pretty(&settings) {
-            let _ = std::fs::write(path, text);
-        }
-    }
-
     /// Apply the vim machine's ops to the editor in use
     fn vim_ops(&mut self, ops: Vec<vim::Op>) -> Task<Message> {
         use cosmic::widget::text_editor::{Action as A, Edit as E, Motion as M};
@@ -773,6 +730,8 @@ impl App {
                     l.status = "connected".into();
                 }
                 self.send(&key, "hello", json!({"client": "app", "label": "Deductum"}), Pending::Hello);
+                // (what this app wants of keyword lines and searches: its settings)
+                self.tell_host(&key);
                 self.send(&key, "sessions", json!({}), Pending::Sessions);
                 self.send(&key, "symbol_table", json!({}), Pending::Symbols);
                 // Reattach after a reconnect
@@ -850,8 +809,13 @@ impl App {
                 Pending::Create | Pending::Suggest | Pending::ListDir => {
                     if let Some(ns) = &mut self.new_session {
                         ns.error = Some(error);
+                        // (no detections will come: the cards offer every backend)
+                        if ns.detections.is_none() {
+                            ns.detections = Some(Vec::new());
+                        }
                     }
                 }
+                Pending::ProjectAction(sid, name) => self.project_action_done(sid, name, &v),
                 _ => self.status = Some(error),
             }
             return Task::none();
@@ -907,9 +871,18 @@ impl App {
             Pending::Read(sid, path) => {
                 let table = self.table(&machine);
                 let kinds = self.kinds.clone();
+                // A project file (a ROOT, a lakefile) is not a literate document: the source view
+                let project_file = |app: &Self, p: &str| app.workspace.as_ref().is_some_and(|w| sidebar::is_project_file(app, w, p));
+                let this_project = project_file(self, &path);
+                let last_project = self.workspace.as_ref().and_then(|w| w.theory.as_ref()).is_some_and(|t| project_file(self, &t.path));
                 if let Some(ws) = self.workspace.as_mut().filter(|w| w.sid == sid) {
                     let ws_profile = ws.profile;
-                    let mode = ws.theory.as_ref().map_or(Mode::Literate, |t| t.mode);
+                    let mode = match ws.theory.as_ref().map(|t| t.mode) {
+                        _ if this_project => Mode::Source,
+                        Some(_) if last_project => Mode::Literate,
+                        Some(m) => m,
+                        None => Mode::Literate,
+                    };
                     let doc = &v["doc"];
                     let real = doc["path"].as_str().unwrap_or(&path).to_string();
                     // Typing the host hasn't confirmed (a reconnect, a resync) is kept,
@@ -994,15 +967,21 @@ impl App {
                 if let Some(ns) = &mut self.new_session {
                     ns.folder = v["path"].as_str().unwrap_or("").to_string();
                     ns.listing = Some(v);
+                    ns.detections = None;
+                    ns.error = None;
                     let folder = ns.folder.clone();
                     let machine = self.links.get(ns.machine).map(|l| l.target.key.clone()).unwrap_or_default();
                     self.send(&machine, "suggest", json!({"folder": folder}), Pending::Suggest);
                 }
             }
             Pending::Suggest => {
+                // (nothing detected and one backend on the machine, as with an older host: it)
+                let only = self.new_session.as_ref().map(|ns| self.backends(ns.machine)).filter(|b| b.len() == 1).and_then(|b| b[0]["backend"].as_str().map(str::to_string));
                 if let Some(ns) = &mut self.new_session {
-                    ns.logic = v["suggestion"]["logic"].as_str().unwrap_or("HOL").to_string();
-                    ns.suggestion = Some(v["suggestion"].clone());
+                    ns.suggested(&v);
+                    if ns.backend.is_none() && ns.detections.as_ref().is_some_and(Vec::is_empty) {
+                        ns.backend = only;
+                    }
                 }
             }
             Pending::Create => {
@@ -1104,6 +1083,7 @@ impl App {
                 }
                 return Task::batch([task, self.flush_edits()]);
             }
+            Pending::ProjectAction(sid, name) => self.project_action_done(sid, name, &v),
             Pending::Plain => {
                 if let Some(files) = v.get("files")
                     && let Some(ws) = &mut self.workspace
@@ -1741,14 +1721,27 @@ impl App {
             return self.update(Message::OpenSession(machine, sid.clone()));
         }
         if let Some(path) = &request.path {
-            // (a document of some backend: its folder's session, opened at it)
-            let (folder, theory) = if prover::profiles().iter().any(|p| p.is_document(path)) {
+            // A document of some backend (by the extensions its host lists): the session of that
+            // backend holding it, else its folder's session of that backend, started if need be
+            let index = self.links.iter().position(|l| l.target.key == machine).unwrap_or(0);
+            let backend = self.backend_of(index, path);
+            let (folder, theory) = if backend.is_some() || prover::profiles().iter().any(|p| p.is_document(path)) {
                 (std::path::Path::new(path).parent().map(|p| p.display().to_string()).unwrap_or_default(), Some(path.clone()))
             } else {
                 (path.clone(), None)
             };
+            if let (Some(b), Some(doc)) = (&backend, &theory)
+                && let Some(sid) = self.session_for(&machine, b, doc)
+            {
+                self.want_theory = theory;
+                return self.update(Message::OpenSession(machine, sid));
+            }
+            let mut params = json!({"folder": folder, "start": true, "resume": true});
+            if let (Some(b), Some(_)) = (&backend, &theory) {
+                params["backend"] = json!(b);
+            }
             self.want_theory = theory;
-            self.send(&machine, "session_create", json!({"folder": folder, "start": true, "resume": true}), Pending::Create);
+            self.send(&machine, "session_create", params, Pending::Create);
         }
         Task::none()
     }
@@ -1786,11 +1779,9 @@ impl Workspace {
     }
 }
 
-/// The caret's line, if it reads `claude` or `codex` (and a hint): an LLM asked for a proof
-/// How long typing must pause on a `claude` or `codex` line before it asks: long enough to finish
-/// `claude[opus]` and a hint after a hesitation (Enter asks at once)
-const KEYWORD_PAUSE: Duration = Duration::from_millis(2500);
-
+/// The caret's line, if it reads `claude` or `codex` (and a hint): an LLM asked for a proof. How
+/// long typing must pause on such a line before it asks is a setting (2.5 s at first: long enough
+/// to finish `claude[opus]` and a hint after a hesitation; Enter asks at once)
 pub fn keyword_line(t: &Theory) -> Option<String> {
     let chars: Vec<char> = t.local.chars().collect();
     let at = t.cursor.min(chars.len());
@@ -1874,32 +1865,24 @@ impl cosmic::Application for App {
             vim_enabled: false,
             mode_model,
             mode_entities,
+            shell: shell::Shell::default(),
         };
-        let settings = load_settings();
-        app.vim_enabled = settings.vim;
-        if let Some(z) = settings.zoom {
-            view::set_zoom(z);
-        }
-        app.left_width = settings.left_width.unwrap_or(app.left_width);
-        app.right_width = settings.right_width.unwrap_or(app.right_width);
-        app.show_sidebar = settings.show_left.unwrap_or(false);
-        app.show_right = settings.show_right.unwrap_or(false);
-        view::set_goal_beside(settings.goal_beside.unwrap_or(true));
+        let theme = app.apply_loaded_settings(settings::Settings::load());
         load_fonts();
         let title = app.retitle();
-        (app, Task::batch([title, cli::listen()]))
+        (app, Task::batch([title, theme, cli::listen()]))
     }
 
     fn header_start(&self) -> Vec<Element<'_, Self::Message>> {
-        view::header_start(self)
+        shell::header_start(self)
     }
 
     fn header_center(&self) -> Vec<Element<'_, Self::Message>> {
-        view::header_center(self)
+        shell::header_center(self)
     }
 
     fn header_end(&self) -> Vec<Element<'_, Self::Message>> {
-        view::header_end(self)
+        shell::header_end(self)
     }
 
     fn view(&self) -> Element<'_, Self::Message> {
@@ -1946,6 +1929,7 @@ impl cosmic::Application for App {
                 K::Character("=" | "+") if modifiers.command() => Some(Message::Zoom(1)),
                 K::Character("-") if modifiers.command() => Some(Message::Zoom(-1)),
                 K::Character("0") if modifiers.command() => Some(Message::Zoom(0)),
+                K::Character(",") if modifiers.command() => Some(Message::Shell(shell::Msg::ToggleSettings)),
                 K::Named(cosmic::iced::keyboard::key::Named::ArrowLeft) if modifiers.alt() => Some(Message::Back),
                 K::Character(c) if !modifiers.alt() && !modifiers.logo() => Some(Message::WindowKey(c.to_string(), modifiers.control())),
                 K::Named(cosmic::iced::keyboard::key::Named::Enter) => Some(Message::WindowKey("Enter".into(), false)),
@@ -1970,6 +1954,7 @@ impl cosmic::Application for App {
     fn update(&mut self, message: Self::Message) -> Task<Self::Message> {
         match message {
             Message::Noop => {}
+            Message::Shell(m) => return self.shell_update(m),
             Message::Link(key, event) => return self.on_link(key, event),
             Message::Open(request) => {
                 self.request = Some(request);
@@ -1980,6 +1965,8 @@ impl cosmic::Application for App {
                 self.save_settings();
             }
             Message::OpenSession(machine, sid) => {
+                // (a session picked while the settings show: the document again)
+                self.shell.settings_open = false;
                 if self.workspace.as_ref().is_some_and(|w| w.machine == machine && w.sid == sid) {
                     return Task::none();
                 }
@@ -2003,7 +1990,7 @@ impl cosmic::Application for App {
                     goals: QueryState { operation: "deductum_goals", ..Default::default() },
                     goals_prev: QueryState { operation: "deductum_goals", ..Default::default() },
                     state_text: false,
-                    show_types: false,
+                    show_types: self.shell.settings.proof_state.show_types,
                     all_goals: false,
                     theory_filter: String::new(),
                     notes: Vec::new(),
@@ -2095,9 +2082,10 @@ impl cosmic::Application for App {
                         // A line reading `claude …` or `codex …`: asked when the typing pauses
                         self.keyword_gen += 1;
                         let generation = self.keyword_gen;
+                        let wait = self.shell.settings.keyword_pause();
                         let pause = Task::perform(
                             async move {
-                                tokio::time::sleep(KEYWORD_PAUSE).await;
+                                tokio::time::sleep(wait).await;
                                 generation
                             },
                             |g| cosmic::Action::App(Message::KeywordTick(g)),
@@ -2133,9 +2121,10 @@ impl cosmic::Application for App {
                         // A line reading `claude …` or `codex …`: asked when the typing pauses
                         self.keyword_gen += 1;
                         let generation = self.keyword_gen;
+                        let wait = self.shell.settings.keyword_pause();
                         let pause = Task::perform(
                             async move {
-                                tokio::time::sleep(KEYWORD_PAUSE).await;
+                                tokio::time::sleep(wait).await;
                                 generation
                             },
                             |g| cosmic::Action::App(Message::KeywordTick(g)),
@@ -2271,7 +2260,8 @@ impl cosmic::Application for App {
                 // caret's command, to say what the command changed
                 let margin = ((self.right_width - 120.0) / (view::z(13.0) * 0.6)).clamp(40.0, 160.0) as usize;
                 let types = if ws.show_types { "true" } else { "false" };
-                let prev = t.prover.commands.iter().position(|c| c.start <= offset && offset < c.end).and_then(|i| i.checked_sub(1)).map(|i| t.prover.commands[i].end.saturating_sub(1));
+                // (the state before only to say what the step changed, when that is shown)
+                let prev = t.prover.commands.iter().position(|c| c.start <= offset && offset < c.end).and_then(|i| i.checked_sub(1)).map(|i| t.prover.commands[i].end.saturating_sub(1)).filter(|_| self.shell.settings.proof_state.show_changes);
                 let running: Vec<(String, &'static str)> = [(&ws.goals, "deductum_goals"), (&ws.goals_prev, "goals_prev")]
                     .into_iter()
                     .filter(|(q, _)| matches!(q.status.as_str(), "waiting" | "running"))
@@ -2461,6 +2451,7 @@ impl cosmic::Application for App {
                 }
             }
             Message::NewSession(open) => {
+                self.shell.settings_open = false;
                 if open {
                     let machine = self.workspace.as_ref().and_then(|w| self.links.iter().position(|l| l.target.key == w.machine)).unwrap_or(0);
                     self.new_session = Some(NewSession { machine, ..Default::default() });
@@ -2474,6 +2465,9 @@ impl cosmic::Application for App {
                 if let Some(ns) = &mut self.new_session {
                     ns.machine = i;
                     ns.listing = None;
+                    ns.detections = None;
+                    ns.backend = None;
+                    ns.toolchain = None;
                     let key = self.links.get(i).map(|l| l.target.key.clone()).unwrap_or_default();
                     self.send(&key, "list_dir", json!({}), Pending::ListDir);
                 }
@@ -2495,18 +2489,10 @@ impl cosmic::Application for App {
                 }
             }
             Message::NewCreate => {
-                if let Some(ns) = &self.new_session {
+                if let Some(ns) = &mut self.new_session {
+                    ns.error = None;
+                    let params = ns.create_params();
                     let key = self.links.get(ns.machine).map(|l| l.target.key.clone()).unwrap_or_default();
-                    let mut params = json!({"folder": ns.folder, "start": true, "resume": true});
-                    if !ns.logic.trim().is_empty() {
-                        params["logic"] = json!(ns.logic.trim());
-                        if let Some(s) = &ns.suggestion
-                            && s["logic"].as_str() == Some(ns.logic.trim())
-                        {
-                            params["dirs"] = s["dirs"].clone();
-                            params["include_sessions"] = s["include_sessions"].clone();
-                        }
-                    }
                     self.send(&key, "session_create", params, Pending::Create);
                 }
             }
@@ -2791,7 +2777,7 @@ impl cosmic::Application for App {
                 }
                 let Some(ws) = &self.workspace else { return Task::none() };
                 let Some(t) = &ws.theory else { return Task::none() };
-                if !t.settled() || keyword_line(t).is_none() {
+                if !t.settled() || keyword_line(t).is_none() || !self.shell.settings.editing.keywords {
                     return Task::none();
                 }
                 let at = Self::host_offset(t, t.cursor);
@@ -3269,7 +3255,7 @@ impl cosmic::Application for App {
                     };
                     text.split('\n').nth(pos.line).unwrap_or("").to_string()
                 };
-                let n = line.chars().take_while(|c| *c == ' ').count().min(2);
+                let n = line.chars().take_while(|c| *c == ' ').count().min(settings::indent_width());
                 if n == 0 {
                     return Task::none();
                 }
