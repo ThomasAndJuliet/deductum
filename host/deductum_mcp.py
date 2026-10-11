@@ -1,12 +1,16 @@
-"""MCP adapter: agents' access to Deductum's shared Isabelle sessions.
+"""MCP adapter: agents' access to Deductum's shared proof sessions (Isabelle, Lean).
 
 ``deductum_host.py mcp [--ssh DESTINATION]`` speaks MCP (JSON-RPC over stdio) to the
 agent and the host protocol to the session host, locally or on another machine over
 ssh. The agent works in the same live session as the human (design C2): it reads the
 unsaved buffers, edits with revision checks (C7), sees proof states at its own
-positions without moving anyone's caret, and runs Sledgehammer. It is identified by
-its conversation id (C9); notices about conflicting changes, grants and disk
-conflicts are appended to every tool result.
+positions without moving anyone's caret, and runs the backend's proof tools. It is
+identified by its conversation id (C9); notices about conflicting changes, grants and
+disk conflicts are appended to every tool result.
+
+Tools are prover-neutral (``proof_*``); the old ``isabelle_*`` names are aliases that
+always work and are listed only with DEDUCTUM_MCP_ALIASES=1. Calls are checked against
+the session's capabilities (docs/deductum-provers.md section 5).
 """
 
 from __future__ import annotations
@@ -26,23 +30,28 @@ import deductum_ot as ot
 SERVER_INFO = {"name": "deductum", "version": H.VERSION}
 
 INSTRUCTIONS = """\
-Deductum gives you the human's live Isabelle sessions: the same unsaved theory text
-the human sees, checked continuously by one shared prover.
+Deductum gives you the human's live proof sessions (Isabelle or Lean): the same unsaved
+document text the human sees, checked continuously by one shared prover.
 
-- Start with isabelle_sessions, or isabelle_open_session for a folder.
-- isabelle_read_theory returns numbered lines and a revision. Pass that revision to
-  isabelle_edit_theory; edits made against an older revision are rebased if the text
-  you targeted is unchanged, and refused with the current text if it changed.
-- Editing the human's theories needs editing rights the human grants in Deductum.
-  Ask with isabelle_request_access, saying why. Meanwhile, or instead, work in your own copy: isabelle_start_independent (the human reviews
-  and merges it).
-- isabelle_proof_state shows the goal after the command at a line; isabelle_check
-  waits for checking and lists errors; isabelle_sledgehammer finds proofs.
-- Notices at the end of results tell you when someone changed or reverted your edits,
-  when your rights changed, or when a theory changed on disk. Re-read before retrying.
+- Start with proof_sessions, or proof_open_session for a folder. Each session has a backend
+  and capabilities; proof_capabilities lists what it offers.
+- proof_read returns numbered lines and a revision. Pass that revision to proof_edit; edits
+  made against an older revision are rebased if the text you targeted is unchanged, and
+  refused with the current text if it changed.
+- Editing the human's documents needs editing rights the human grants in Deductum.
+  Ask with proof_request_access, saying why. Meanwhile, or instead, work in your own copy:
+  proof_start_independent (the human reviews and merges it).
+- proof_state shows the goal after the command at a position (offset, or line and column);
+  proof_check waits for checking and lists errors. proof_run_tool runs a proof tool
+  (Isabelle: sledgehammer, ...; Lean: exact?, ...), proof_search looks up lemmas,
+  proof_command runs a command without editing. Tools the session does not offer are
+  refused with a list of those it does.
+- Notices at the end of every result tell you when someone changed or reverted your edits,
+  when your rights changed, or when a document changed on disk. Re-read before retrying.
+  proof_notices shows them on their own.
 - Never restart or resume a session the human stopped or paused; tell the human.
-- Working with the human: isabelle_human_view says where they are and what they selected
-  ("this lemma"); isabelle_show points them at lines; isabelle_add_note leaves a note on lines
+- Working with the human: proof_human_view says where they are and what they selected
+  ("this lemma"); proof_show points them at lines; proof_add_note leaves a note on lines
   for them to answer (replies come as notices).
 """
 
@@ -109,39 +118,80 @@ def S(type_: str, desc: str, **extra: Any) -> Dict[str, Any]:
     return dict({"type": type_, "description": desc}, **extra)
 
 
-SESSION = S("string", "Session id from isabelle_sessions")
-PATH = S("string", "Theory file path (absolute, or relative to the session folder)")
+SESSION = S("string", "Session id from proof_sessions")
+PATH = S("string", "Document path (absolute, or relative to the session folder)")
 LINE = S("integer", "1-based line number")
+OFFSET = S("integer", "0-based character offset in the document (alternative to line)")
+COLUMN = S("integer", "0-based column on the line (default: end of the line's last command)")
+POS = {"offset": OFFSET, "line": LINE, "column": COLUMN}
+TIMEOUT = S("number", "Seconds to wait (default 120)")
+
+# Old tool names, still accepted (and listed when DEDUCTUM_MCP_ALIASES=1)
+ALIASES: Dict[str, str] = {
+    "isabelle_sessions": "proof_sessions", "isabelle_open_session": "proof_open_session",
+    "isabelle_start_independent": "proof_start_independent", "isabelle_session_info": "proof_session_info",
+    "isabelle_read_theory": "proof_read", "isabelle_edit_theory": "proof_edit", "isabelle_check": "proof_check",
+    "isabelle_proof_state": "proof_state", "isabelle_sledgehammer": "proof_run_tool",
+    "isabelle_find_theorems": "proof_search", "isabelle_run_diagnostic": "proof_command",
+    "isabelle_cancel": "proof_cancel", "isabelle_save": "proof_save", "isabelle_history": "proof_history",
+    "isabelle_revert": "proof_revert", "isabelle_conflict": "proof_conflict",
+    "isabelle_resolve_conflict": "proof_resolve_conflict", "isabelle_listen": "proof_listen",
+    "isabelle_propose": "proof_propose", "isabelle_human_view": "proof_human_view", "isabelle_show": "proof_show",
+    "isabelle_add_note": "proof_add_note", "isabelle_notes": "proof_notes",
+    "isabelle_resolve_note": "proof_resolve_note", "isabelle_request_access": "proof_request_access",
+    "isabelle_notices": "proof_notices", "isabelle_session_control": "proof_session_control",
+    "isabelle_merge_preview": "proof_merge_preview",
+}
+
+# What a session offers when the host reports no capabilities: Isabelle with its full tool set
+ISABELLE_CAPS: Dict[str, Any] = {
+    "tools": [{"name": n} for n in ("sledgehammer", "try0", "try", "solve_direct", "nitpick", "quickcheck",
+                                    "nunchaku")],
+    "search": {"label": "Find theorems", "operation": "find_theorems"},
+    "command": ["quickcheck", "nitpick", "try0", "solve_direct", "try", "value", "term", "thm", "typ",
+                "print_cases", "print_facts", "find_consts", "find_theorems", "print_context", "print_state"],
+}
 
 TOOLS: List[Dict[str, Any]] = [
-    {"name": "isabelle_sessions", "description": "List Deductum sessions on the host: folder, base logic, "
-     "prover state (Running, Paused, Stopped...), who is attached, your editing rights.",
+    {"name": "proof_sessions", "description": "List Deductum sessions on the host: folder, backend (isabelle or "
+     "lean), toolchain, prover state (Running, Paused, Stopped...), who is attached, your editing rights.",
      "inputSchema": {"type": "object", "properties": {}}},
-    {"name": "isabelle_open_session", "description": "Attach to the shared session for a theory folder, "
-     "creating it (and starting its prover) if there is none. Set independent=true for your own copy of "
-     "the folder in a git worktree, with its own prover, that the human later reviews and merges.",
+    {"name": "proof_open_session", "description": "Attach to the shared session for a project folder, "
+     "creating it (and starting its prover) if there is none. backend is isabelle or lean; omit it and the host "
+     "detects it from the folder (ROOT for Isabelle, lakefile/lean-toolchain for Lean). Set independent=true for "
+     "your own copy of the folder in a git worktree, with its own prover, that the human later reviews and merges. "
+     "Returns the backend and what the session offers (see proof_capabilities).",
      "inputSchema": {"type": "object", "properties": {
-         "folder": S("string", "Folder of theories"),
-         "logic": S("string", "Base logic session (default: the parent of the folder's ROOT session)"),
+         "folder": S("string", "Project folder"),
+         "backend": S("string", "isabelle or lean (default: detected)", enum=["isabelle", "lean"]),
+         "toolchain": S("string", "Toolchain to use, e.g. an Isabelle runtime path or a Lean toolchain name "
+                                  "(default: the host's choice)"),
+         "project": {"type": "object", "description": "Backend-specific project settings (e.g. Lean: "
+                     "{\"lakefile\": ..., \"package\": ...})"},
+         "logic": S("string", "Isabelle only: base logic session (default: the parent of the folder's ROOT session)"),
          "independent": S("boolean", "Your own copy instead of the shared session"),
      }, "required": ["folder"]}},
-    {"name": "isabelle_start_independent", "description": "Fork your own independent session from a "
+    {"name": "proof_start_independent", "description": "Fork your own independent session from a "
      "shared one, starting from the human's current unsaved text, in a git worktree on a new branch.",
      "inputSchema": {"type": "object", "properties": {"session": SESSION}, "required": ["session"]}},
-    {"name": "isabelle_session_info", "description": "A session's theories with checking status, dirty "
+    {"name": "proof_session_info", "description": "A session's documents with checking status, dirty "
      "buffers, conflicts, grants and attached clients.",
      "inputSchema": {"type": "object", "properties": {"session": SESSION}, "required": ["session"]}},
-    {"name": "isabelle_read_theory", "description": "Read a theory's live text (unsaved edits included) "
-     "with line numbers and the revision to pass to isabelle_edit_theory, plus current errors.",
+    {"name": "proof_capabilities", "description": "The backend (isabelle or lean), toolchain and capabilities of a "
+     "session: which proof tools proof_run_tool accepts, whether proof_search is available and what commands "
+     "proof_command accepts. Tools the session does not offer are refused.",
+     "inputSchema": {"type": "object", "properties": {"session": SESSION}, "required": ["session"]}},
+    {"name": "proof_read", "description": "Read a document's live text (unsaved edits included) "
+     "with line numbers and the revision to pass to proof_edit, plus current errors.",
      "inputSchema": {"type": "object", "properties": {
          "session": SESSION, "path": PATH, "start_line": LINE, "end_line": LINE}, "required": ["session", "path"]}},
-    {"name": "isabelle_edit_theory", "description": "Edit a theory. Each edit replaces old_text (which "
+    {"name": "proof_edit", "description": "Edit a document. Each edit replaces old_text (which "
      "must occur exactly once, or give occurrence) with new_text, in the text of the given revision. "
      "Edits against an older revision are rebased when their text is unchanged since; otherwise the "
-     "edit is refused with the current text.",
+     "edit is refused with the current text. Needs editing rights in shared sessions.",
      "inputSchema": {"type": "object", "properties": {
          "session": SESSION, "path": PATH,
-         "revision": S("integer", "Revision the edits refer to, from isabelle_read_theory"),
+         "revision": S("integer", "Revision the edits refer to, from proof_read"),
          "edits": {"type": "array", "items": {"type": "object", "properties": {
              "old_text": S("string", "Exact text to replace (empty to insert at line)"),
              "new_text": S("string", "Replacement"),
@@ -149,90 +199,103 @@ TOOLS: List[Dict[str, Any]] = [
              "line": S("integer", "With empty old_text: insert at the start of this line")},
              "required": ["new_text"]}}},
          "required": ["session", "path", "revision", "edits"]}},
-    {"name": "isabelle_check", "description": "Wait until the prover has checked a theory (or the timeout) "
-     "and list its errors and warnings with line numbers.",
+    {"name": "proof_check", "description": "Wait until the prover has checked a document (or the timeout) "
+     "and list its errors and warnings with line numbers. Isabelle and Lean.",
      "inputSchema": {"type": "object", "properties": {
          "session": SESSION, "path": PATH, "timeout": S("number", "Seconds to wait (default 60)")},
          "required": ["session", "path"]}},
-    {"name": "isabelle_proof_state", "description": "The proof state and messages after the command at a "
-     "line (or after the first occurrence of a text), at your own position: nobody's caret moves.",
-     "inputSchema": {"type": "object", "properties": {
-         "session": SESSION, "path": PATH, "line": LINE,
-         "column": S("integer", "0-based column (default: end of line)"),
-         "after_text": S("string", "Instead of line: the end of the first occurrence of this text")},
+    {"name": "proof_state", "description": "The goals and messages after the command at a position, at your own "
+     "position: nobody's caret moves. Give offset, or line (with optional column), or after_text (the end of the "
+     "first occurrence of a text). Isabelle and Lean.",
+     "inputSchema": {"type": "object", "properties": dict(
+         POS, session=SESSION, path=PATH,
+         after_text=S("string", "Instead of a position: the end of the first occurrence of this text")),
          "required": ["session", "path"]}},
-    {"name": "isabelle_sledgehammer", "description": "Run Sledgehammer on the goal at a line (on a sorry or "
-     "oops line, the goal before it) and wait for the result. Returns the proofs found and the line "
-     "range they would replace. apply=true inserts the first proof found (needs editing rights).",
-     "inputSchema": {"type": "object", "properties": {
-         "session": SESSION, "path": PATH, "line": LINE,
-         "provers": S("string", "Space-separated provers (default: Isabelle's sledgehammer_provers)"),
-         "isar_proofs": S("boolean", "Ask for Isar proofs"), "try0": S("boolean", "Try simple methods first (default true)"),
-         "timeout": S("number", "Seconds to wait (default 120)"),
-         "apply": S("boolean", "Insert the first proof found")}, "required": ["session", "path", "line"]}},
-    {"name": "isabelle_find_theorems", "description": "Find theorems in the context at a line, e.g. "
-     "query '\"_ + _ = _ + _\" name: comm'.",
-     "inputSchema": {"type": "object", "properties": {
-         "session": SESSION, "path": PATH, "line": LINE, "query": S("string", "find_theorems criteria"),
-         "limit": S("integer", "Maximum results (default 40)")}, "required": ["session", "path", "line", "query"]}},
-    {"name": "isabelle_run_diagnostic", "description": "Run a diagnostic command on the goal at a line without "
-     "editing the theory: quickcheck, nitpick, try0, solve_direct, try, value, term, thm, typ, print_cases, "
-     "print_facts, find_consts. Options in brackets work, e.g. 'nitpick [timeout = 60, card = 1-8]'. Returns the "
-     "command's output (counterexamples, found proofs).",
-     "inputSchema": {"type": "object", "properties": {
-         "session": SESSION, "path": PATH, "line": LINE,
-         "command": S("string", "The diagnostic command, e.g. 'quickcheck' or 'value \"rev [1,2,3::nat]\"'"),
-         "timeout": S("number", "Seconds to wait (default 120)")}, "required": ["session", "path", "line", "command"]}},
-    {"name": "isabelle_cancel", "description": "Interrupt running proofs in a session (e.g. a looping "
+    {"name": "proof_run_tool", "description": "Run a typed proof tool on the goal at a position and wait for the "
+     "result. Which tools exist depends on the session's backend (see proof_capabilities): Isabelle offers "
+     "sledgehammer, try0, try, solve_direct, nitpick, quickcheck; Lean offers tools such as exact?, apply?, rw?, "
+     "simp?, aesop?, grind, and hammer where the project has it. A tool the session does not offer is refused "
+     "with the list of those it does. Position: offset, or line (+column); on a sorry or oops line, the goal "
+     "before it. Returns the output and any proofs found with the range they would replace; apply=true inserts "
+     "the first proof found (needs editing rights). args: for sledgehammer an object {provers, isar_proofs, "
+     "try0}; for other tools extra arguments as a list of strings.",
+     "inputSchema": {"type": "object", "properties": dict(
+         POS, session=SESSION, path=PATH,
+         tool=S("string", "Tool name from proof_capabilities, e.g. sledgehammer or exact?"),
+         args={"description": "Tool arguments: object for sledgehammer {provers, isar_proofs, try0}, else a list "
+                              "of strings"},
+         timeout=TIMEOUT, apply=S("boolean", "Insert the first proof found")),
+         "required": ["session", "path", "tool"]}},
+    {"name": "proof_search", "description": "Search for lemmas or theorems usable at a position. Isabelle: "
+     "find_theorems criteria, e.g. '\"_ + _ = _ + _\" name: comm'. Lean: the search the session reports in its "
+     "capabilities (e.g. exact?/apply? at the position). Refused when the session offers no search. Position: "
+     "offset, or line (+column).",
+     "inputSchema": {"type": "object", "properties": dict(
+         POS, session=SESSION, path=PATH, query=S("string", "Search criteria in the backend's syntax"),
+         limit=S("integer", "Maximum results (Isabelle; default 40)")),
+         "required": ["session", "path", "query"]}},
+    {"name": "proof_command", "description": "Run a command at a position without editing the document, and "
+     "return its output (messages, errors). Isabelle: diagnostics such as quickcheck, nitpick, try0, "
+     "solve_direct, try, value, term, thm, typ, print_cases, print_facts, find_consts; options in brackets work, "
+     "e.g. 'nitpick [timeout = 60, card = 1-8]'. Lean: #check, #eval, #print, #reduce and the like. The "
+     "accepted commands are the session's capabilities command list; others are refused. Position: offset, or "
+     "line (+column).",
+     "inputSchema": {"type": "object", "properties": dict(
+         POS, session=SESSION, path=PATH,
+         text=S("string", "The command, e.g. 'quickcheck', 'value \"rev [1,2,3::nat]\"' or '#check Nat.add_comm'"),
+         timeout=TIMEOUT),
+         "required": ["session", "path", "text"]}},
+    {"name": "proof_cancel", "description": "Interrupt running proofs in a session (e.g. a looping "
      "tactic).", "inputSchema": {"type": "object", "properties": {"session": SESSION}, "required": ["session"]}},
-    {"name": "isabelle_save", "description": "Save a theory now (theories are also autosaved).",
+    {"name": "proof_save", "description": "Save a document now (documents are also autosaved).",
      "inputSchema": {"type": "object", "properties": {"session": SESSION, "path": PATH}, "required": ["session"]}},
-    {"name": "isabelle_history", "description": "Recent changes to a theory: who changed what, which were "
-     "reverted. Use with isabelle_revert.",
+    {"name": "proof_history", "description": "Recent changes to a document: who changed what, which were "
+     "reverted. Use with proof_revert.",
      "inputSchema": {"type": "object", "properties": {"session": SESSION, "path": PATH,
                                                       "mine": S("boolean", "Only your changes")},
                      "required": ["session", "path"]}},
-    {"name": "isabelle_revert", "description": "Revert one of your own changes by its id from "
-     "isabelle_history; later edits by others are kept.",
+    {"name": "proof_revert", "description": "Revert one of your own changes by its id from "
+     "proof_history; later edits by others are kept.",
      "inputSchema": {"type": "object", "properties": {"session": SESSION, "path": PATH,
                                                       "change": S("integer", "Change id")},
                      "required": ["session", "path", "change"]}},
-    {"name": "isabelle_conflict", "description": "For a theory that changed on disk while it had unsaved "
+    {"name": "proof_conflict", "description": "For a document that changed on disk while it had unsaved "
      "edits: the last saved text, the disk text and the buffer text.",
      "inputSchema": {"type": "object", "properties": {"session": SESSION, "path": PATH}, "required": ["session", "path"]}},
-    {"name": "isabelle_resolve_conflict", "description": "Resolve a disk conflict: take the disk version, "
+    {"name": "proof_resolve_conflict", "description": "Resolve a disk conflict: take the disk version, "
      "keep the buffer (overwriting disk), or give merged text. Needs editing rights; the human can revert it.",
      "inputSchema": {"type": "object", "properties": {
          "session": SESSION, "path": PATH, "choice": S("string", "disk, buffer or merge",
                                                        enum=["disk", "buffer", "merge"]),
-         "text": S("string", "The merged theory text, for choice=merge")},
+         "text": S("string", "The merged document text, for choice=merge")},
          "required": ["session", "path", "choice"]}},
-    {"name": "isabelle_listen", "description": "Listen for the human's queries in Deductum: waits up to "
-     "50 seconds for the next one for you and returns it (the theory, line, lemma, goal and what they asked), "
+    {"name": "proof_listen", "description": "Listen for the human's queries in Deductum: waits up to "
+     "50 seconds for the next one for you and returns it (the document, line, lemma, goal and what they asked), "
      "or says there is none yet; call it again to keep listening. The human asks you by typing `@name …` on a "
      "proof line (name: the one you give here), or by choosing you for their claude/codex queries. Answer each "
-     "query with isabelle_propose; the human inserts a proof from Deductum, or tells you which one in your "
+     "query with proof_propose; the human inserts a proof from Deductum, or tells you which one in your "
      "conversation.",
      "inputSchema": {"type": "object", "properties": {
          "session": SESSION,
          "name": S("string", "What the human calls you, as in @name (short, e.g. 'tock' or 'helper')")},
          "required": ["session"]}},
-    {"name": "isabelle_propose", "description": "Answer a query from isabelle_listen: proofs for the gap "
-     "(each complete proof text for that line, e.g. 'by (simp add: foo_def)' or an Isar block), and facts to "
-     "guide Sledgehammer. Deductum checks each proof with the prover and shows them to the human with "
-     "Insert buttons. Check proofs first where you can (isabelle_check in your own copy).",
+    {"name": "proof_propose", "description": "Answer a query from proof_listen: proofs for the gap "
+     "(each complete proof text for that line, e.g. 'by (simp add: foo_def)' or an Isar block; in Lean a tactic "
+     "block), and facts to guide the backend's automation (Isabelle: a `using` line in front of Sledgehammer). "
+     "Deductum checks each proof with the prover and shows them to the human with Insert buttons. Check proofs "
+     "first where you can (proof_check in your own copy).",
      "inputSchema": {"type": "object", "properties": {
-         "session": SESSION, "query": S("string", "The query's id, from isabelle_listen"),
+         "session": SESSION, "query": S("string", "The query's id, from proof_listen"),
          "proofs": {"type": "array", "items": {"type": "string"}, "description": "Proofs, best first"},
-         "using": {"type": "array", "items": {"type": "string"}, "description": "Facts for a `using` line in front of Sledgehammer"},
+         "using": {"type": "array", "items": {"type": "string"}, "description": "Facts to guide automation"},
          "message": S("string", "A sentence for the human, shown with the proofs")},
          "required": ["session", "query"]}},
-    {"name": "isabelle_human_view", "description": "What the human is looking at in Deductum: the theory, "
-     "the caret's line, any selected text, the lemma (name and statement), the step the caret is in (the Isar "
+    {"name": "proof_human_view", "description": "What the human is looking at in Deductum: the document, "
+     "the caret's line, any selected text, the lemma (name and statement), the step the caret is in (the "
      "statement the goal they see is for) and the proof around the caret. Use it when the human says "
-     "'this lemma', 'this step', 'here' or 'the selected part'; then isabelle_proof_state at that line.",
+     "'this lemma', 'this step', 'here' or 'the selected part'; then proof_state at that line.",
      "inputSchema": {"type": "object", "properties": {"session": SESSION}, "required": ["session"]}},
-    {"name": "isabelle_show", "description": "Show the human a place in a theory: Deductum offers to go there "
+    {"name": "proof_show", "description": "Show the human a place in a document: Deductum offers to go there "
      "(or goes, if the human follows you), highlighting the lines, with your message. Use it to point at "
      "what you are talking about rather than quoting it.",
      "inputSchema": {"type": "object", "properties": {
@@ -240,41 +303,73 @@ TOOLS: List[Dict[str, Any]] = [
          "end_line": S("integer", "Last line to highlight (default: line)"),
          "message": S("string", "What to look at there, in a sentence")},
          "required": ["session", "path", "line"]}},
-    {"name": "isabelle_add_note", "description": "Leave a note on lines of a theory, shown beside them in "
+    {"name": "proof_add_note", "description": "Leave a note on lines of a document, shown beside them in "
      "Deductum until the human resolves it (it moves with edits). For questions, explanations and "
      "suggestions that belong to a place; the human's replies come as notices.",
      "inputSchema": {"type": "object", "properties": {
          "session": SESSION, "path": PATH, "line": LINE,
          "end_line": S("integer", "Last line the note is about (default: line)"),
          "text": S("string", "The note")}, "required": ["session", "path", "line", "text"]}},
-    {"name": "isabelle_notes", "description": "The open notes on a session's theories, with replies.",
+    {"name": "proof_notes", "description": "The open notes on a session's documents, with replies.",
      "inputSchema": {"type": "object", "properties": {"session": SESSION, "path": PATH}, "required": ["session"]}},
-    {"name": "isabelle_resolve_note", "description": "Reply to a note, or resolve (remove) one of yours.",
+    {"name": "proof_resolve_note", "description": "Reply to a note, or resolve (remove) one of yours.",
      "inputSchema": {"type": "object", "properties": {
          "session": SESSION, "note": S("string", "The note's id"), "text": S("string", "A reply (optional)"),
          "resolve": S("boolean", "Remove the note")}, "required": ["session", "note"]}},
-    {"name": "isabelle_request_access", "description": "Ask the human for editing rights in a shared session: "
-     "the whole folder, one theory, or the proof at a line. Deductum shows the request with your reason; "
-     "the answer comes as a notice (granted or denied). Until then, read and query freely, or work in an "
-     "independent session.",
+    {"name": "proof_request_access", "description": "Ask the human for editing rights in a shared session: "
+     "the whole folder, one document, or the proof at a line (or offset). Deductum shows the request with your "
+     "reason; the answer comes as a notice (granted or denied). Until then, read and query freely, or work in "
+     "an independent session.",
      "inputSchema": {"type": "object", "properties": {
-         "session": SESSION, "scope": S("string", "folder, theory or proof", enum=["folder", "theory", "proof"]),
-         "path": S("string", "The theory, for scope theory or proof"),
+         "session": SESSION, "scope": S("string", "folder, theory (one document) or proof", enum=["folder", "theory", "proof"]),
+         "path": S("string", "The document, for scope theory or proof"),
          "line": S("integer", "A line inside the proof, for scope proof"),
+         "offset": OFFSET,
          "reason": S("string", "What you want to change and why, in a sentence or two")},
          "required": ["session", "scope", "reason"]}},
-    {"name": "isabelle_notices", "description": "Notices for you: conflicting or reverted changes, grants, "
-     "disk conflicts, failed saves.", "inputSchema": {"type": "object", "properties": {}}},
-    {"name": "isabelle_session_control", "description": "Stop, pause or resume the prover of YOUR OWN "
+    {"name": "proof_notices", "description": "Notices for you: conflicting or reverted changes, grants, "
+     "disk conflicts, failed saves. They are also appended to the end of every tool result.",
+     "inputSchema": {"type": "object", "properties": {}}},
+    {"name": "proof_session_control", "description": "Stop, pause or resume the prover of YOUR OWN "
      "independent session, or discard it. The human controls shared sessions.",
      "inputSchema": {"type": "object", "properties": {
          "session": SESSION, "action": S("string", "stop, pause, resume or discard",
                                          enum=["stop", "pause", "resume", "discard"])},
          "required": ["session", "action"]}},
-    {"name": "isabelle_merge_preview", "description": "The diff of your independent session against what it "
+    {"name": "proof_merge_preview", "description": "The diff of your independent session against what it "
      "started from, as the human will see it when merging.",
      "inputSchema": {"type": "object", "properties": {"session": SESSION}, "required": ["session"]}},
 ]
+
+
+def alias_tools() -> List[Dict[str, Any]]:
+    by_name = {t["name"]: t for t in TOOLS}
+    return [dict(by_name[new], name=old, description=f"Alias of {new}. " + by_name[new]["description"])
+            for old, new in ALIASES.items()]
+
+
+def listed_tools() -> List[Dict[str, Any]]:
+    """The tools in tools/list: the proof_* names; the old names too when DEDUCTUM_MCP_ALIASES=1"""
+    return TOOLS + (alias_tools() if os.environ.get("DEDUCTUM_MCP_ALIASES") == "1" else [])
+
+
+def truthy(v: Any) -> bool:
+    return str(v).lower() in ("true", "1", "yes") if not isinstance(v, bool) else v
+
+
+def translate_alias(name: str, args: Dict[str, Any]) -> tuple:
+    """Old tool name and arguments to the proof_* tool and its arguments"""
+    new = ALIASES.get(name)
+    if new is None:
+        return name, args
+    args = dict(args)
+    if name == "isabelle_sledgehammer":
+        args["tool"] = "sledgehammer"
+        args["args"] = {"provers": args.pop("provers", None), "isar_proofs": args.pop("isar_proofs", None),
+                        "try0": args.pop("try0", None)}
+    elif name == "isabelle_run_diagnostic" and "command" in args:
+        args["text"] = args.pop("command")
+    return new, args
 
 
 class Adapter:
@@ -285,6 +380,7 @@ class Adapter:
                                     location=location_from_env())
         self.texts: Dict[tuple, Dict[int, str]] = {}
         self.folders: Dict[str, str] = {}
+        self.poll = 0.7  # seconds between polls of a running query
 
     # ----- helpers
 
@@ -333,7 +429,42 @@ class Adapter:
                 + (", fully checked" if status.get("consolidated") else "")) if status else "status: not checked yet"
         return head + ("\n" + "\n".join(out) if out else "\nno errors or warnings")
 
-    def offset_for(self, text: str, args: Dict[str, Any]) -> int:
+    @staticmethod
+    def describe(s: Dict[str, Any]) -> str:
+        """backend, toolchain and logic of a session summary, in a phrase"""
+        tc = s.get("toolchain")
+        tc = tc.get("name") or tc.get("version") or tc.get("path") if isinstance(tc, dict) else tc
+        return ", ".join([f"backend {s.get('backend') or 'isabelle'}"] + ([f"toolchain {tc}"] if tc else [])
+                         + ([f"logic {s['logic']}"] if s.get("logic") else []))
+
+    def summary(self, session: str) -> Dict[str, Any]:
+        return self.req("session_info", session=session)["session"]
+
+    @staticmethod
+    def backend_caps(summary: Dict[str, Any]) -> tuple:
+        """(backend, capabilities); Isabelle's full tool set when the host reports none"""
+        backend = summary.get("backend") or "isabelle"
+        caps = summary.get("capabilities")
+        if caps is None:
+            caps = ISABELLE_CAPS if backend == "isabelle" else {}
+        return backend, caps
+
+    @staticmethod
+    def tool_names(caps: Dict[str, Any]) -> List[str]:
+        return [t["name"] for t in caps.get("tools") or []]
+
+    def refusal(self, backend: str, caps: Dict[str, Any], what: str) -> str:
+        search = caps.get("search")
+        return (f"This {backend} session does not offer {what}. It offers: tools: "
+                f"{', '.join(self.tool_names(caps)) or 'none'}; search: "
+                f"{(search.get('label') or search.get('operation') or 'yes') if isinstance(search, dict) else 'no'}; "
+                f"commands: {', '.join(caps.get('command') or []) or 'none'}. See proof_capabilities.")
+
+    def offset_for(self, text: str, args: Dict[str, Any], required: bool = False) -> int:
+        if args.get("offset") is not None:
+            return max(0, min(int(args["offset"]), len(text)))
+        if required and args.get("line") is None and not args.get("after_text"):
+            raise H.HostError("Give a position: offset, or line (and optionally column)")
         if args.get("after_text"):
             i = text.find(args["after_text"])
             if i < 0:
@@ -353,19 +484,20 @@ class Adapter:
     # ----- tools
 
     def call(self, name: str, args: Dict[str, Any]) -> str:
+        name, args = translate_alias(name, args)
         session = args.get("session")
         path = self.resolve_path(session, args["path"]) if args.get("path") and session else args.get("path")
-        if name == "isabelle_sessions":
+        if name == "proof_sessions":
             sessions = self.req("sessions")["sessions"]
             if not sessions:
-                return "No sessions. Use isabelle_open_session with a theory folder."
+                return "No sessions. Use proof_open_session with a project folder."
             key = self.hello.get("key")
             lines = []
             for s in sessions:
                 rights = [g for g in s["grants"] if g["agent"] == key]
                 own = s.get("owner") and s["owner"].get("key") == key
                 lines.append(
-                    f"- {s['id']}: {s['name']} [{s['lifecycle']}] {s['folder']} (logic {s['logic']})"
+                    f"- {s['id']}: {s['name']} [{s['lifecycle']}] {s['folder']} ({self.describe(s)})"
                     + (f" — {s['message']}" if s.get("message") else "")
                     + ("; YOUR independent session" if own else "")
                     + ("; you may edit: " + ", ".join(g["scope"] + (" " + os.path.basename(g["path"]) if g.get("path") else "")
@@ -373,23 +505,24 @@ class Adapter:
                        ("" if own else "; read-only for you"))
                     + (f"; clients: {', '.join(c['label'] for c in s['clients'])}" if s["clients"] else ""))
             return "\n".join(lines)
-        if name == "isabelle_open_session":
+        if name == "proof_open_session":
+            extra = {k: args[k] for k in ("backend", "toolchain", "project") if args.get(k) is not None}
             r = self.req("session_create", folder=args["folder"], logic=args.get("logic"),
-                         independent=bool(args.get("independent")), start=True, resume=False)
+                         independent=bool(args.get("independent")), start=True, resume=False, **extra)
             s = r["session"]
             self.folders[s["id"]] = s["folder"]
-            return (f"Session {s['id']} ({s['name']}) on {s['folder']}, logic {s['logic']}: {s['lifecycle']}"
+            return (f"Session {s['id']} ({s['name']}) on {s['folder']}, {self.describe(s)}: {s['lifecycle']}"
                     + (f" — {s['message']}" if s.get("message") else "")
                     + ("\nThis is your independent copy; the human reviews and merges it." if s.get("owner") else ""))
-        if name == "isabelle_start_independent":
+        if name == "proof_start_independent":
             s = self.req("session_fork", session=session)["session"]
             self.folders[s["id"]] = s["folder"]
             return (f"Independent session {s['id']} in {s['folder']} (branch {s['parent']['branch']}): "
                     f"{s['lifecycle']}. Edit freely there; the human reviews and merges your work.")
-        if name == "isabelle_session_info":
+        if name == "proof_session_info":
             s = self.req("session_info", session=session)["session"]
             self.folders[session] = s["folder"]
-            out = [f"{s['name']} [{s['lifecycle']}] {s['folder']} logic {s['logic']} epoch {s['epoch']}"]
+            out = [f"{s['name']} [{s['lifecycle']}] {s['folder']} {self.describe(s)} epoch {s['epoch']}"]
             if s.get("message"):
                 out.append(s["message"])
             for t in s["theories"][:200]:
@@ -402,15 +535,15 @@ class Adapter:
             if s["grants"]:
                 out.append("grants: " + "; ".join(f"{g['label']}: {g['scope']}" for g in s["grants"]))
             return "\n".join(out)
-        if name == "isabelle_read_theory":
+        if name == "proof_read":
             doc = self.read(session, path)
             start = int(args.get("start_line") or 1)
             end = args.get("end_line")
             head = (f"{doc['path']} revision {doc['revision']}" + (" (unsaved edits)" if doc["dirty"] else "")
-                    + (" — CHANGED ON DISK, see isabelle_conflict" if doc["conflict"] else ""))
+                    + (" — CHANGED ON DISK, see proof_conflict" if doc["conflict"] else ""))
             return head + "\n" + self.numbered(doc["text"], start, int(end) if end else None) + "\n\n" + \
                 self.diagnostics(doc["text"], doc["prover"])
-        if name == "isabelle_edit_theory":
+        if name == "proof_edit":
             # (one edit given directly, or no revision: the current text, read now)
             if "edits" not in args and ("old_text" in args or "new_text" in args):
                 args["edits"] = [{k: args[k] for k in ("old_text", "new_text", "line", "occurrence") if k in args}]
@@ -449,8 +582,8 @@ class Adapter:
             line = ot.lines_cols(doc["text"], min(first, len(doc["text"])))[0]
             return (f"Edited: now revision {doc['revision']} (change {r.get('entry')}). Around line {line}:\n"
                     + self.numbered(doc["text"], max(1, line - 3), line + 8)
-                    + "\nThe prover rechecks continuously; use isabelle_check for errors.")
-        if name == "isabelle_check":
+                    + "\nThe prover rechecks continuously; use proof_check for errors.")
+        if name == "proof_check":
             timeout = float(args.get("timeout") or 60)
             t0 = time.time()
             doc = self.read(session, path)
@@ -466,7 +599,7 @@ class Adapter:
                 return f"The session is {info['lifecycle']}" + (f": {info['message']}" if info.get("message") else "") + \
                     "\n" + self.diagnostics(doc["text"], doc["prover"])
             return f"{doc['path']} revision {doc['revision']}\n" + self.diagnostics(doc["text"], doc["prover"])
-        if name == "isabelle_proof_state":
+        if name == "proof_state":
             doc = self.read(session, path)
             offset = self.offset_for(doc["text"], args)
             r = self.req("state", session=session, path=path, offset=offset, revision=doc["revision"], margin=100)
@@ -483,38 +616,92 @@ class Adapter:
             for m in r["messages"]:
                 out.append(("" if m["kind"] == "state" else m["kind"] + ": ") + m["text"])
             return "\n".join(out) if r["messages"] else out[0] + "\n(no output)"
-        if name in ("isabelle_sledgehammer", "isabelle_find_theorems"):
-            doc = self.read(session, path)
-            offset = self.offset_for(doc["text"], args)
-            if name == "isabelle_sledgehammer":
-                op, qargs = "sledgehammer", [args.get("provers") or "", "true" if args.get("isar_proofs") else "false",
-                                             "false" if args.get("try0") is False else "true"]
-                timeout = float(args.get("timeout") or 120)
+        if name == "proof_capabilities":
+            s = self.summary(session)
+            backend, caps = self.backend_caps(s)
+            out = [f"backend: {backend}", f"toolchain: {json.dumps(s.get('toolchain'), ensure_ascii=False)}"
+                   if s.get("toolchain") else "toolchain: (not reported)"]
+            if s.get("capabilities") is None:
+                out.append("capabilities: not reported by the host; assuming Isabelle's full tool set")
+            out.append("tools: " + (", ".join(self.tool_names(caps)) or "none"))
+            out.append("search: " + (json.dumps(caps["search"], ensure_ascii=False) if caps.get("search") else "none"))
+            out.append("command: " + (", ".join(caps.get("command") or []) or "none"))
+            out.append("capabilities (full):\n" + json.dumps(caps, indent=2, ensure_ascii=False))
+            return "\n".join(out)
+        if name in ("proof_run_tool", "proof_search", "proof_command"):
+            s = self.summary(session)
+            backend, caps = self.backend_caps(s)
+            qargs: List[str]
+            timeout = float(args.get("timeout") or 120)
+            label = op = ""
+            if name == "proof_run_tool":
+                tool = str(args.get("tool") or "")
+                entry = next((t for t in caps.get("tools") or [] if t.get("name") == tool), None)
+                if entry is None:
+                    raise H.HostError(self.refusal(backend, caps, f"tool {tool!r}"), "unsupported")
+                targs = args.get("args") or {}
+                if tool == "sledgehammer":
+                    if isinstance(targs, list):
+                        targs = dict(zip(("provers", "isar_proofs", "try0"), targs))
+                    op, qargs = "sledgehammer", [str(targs.get("provers") or ""),
+                                                 "true" if truthy(targs.get("isar_proofs", targs.get("isar"))) else "false",
+                                                 "false" if str(targs.get("try0")).lower() in ("false", "0") else "true"]
+                elif backend == "isabelle" and not entry.get("operation"):
+                    # Isabelle's other typed tools are diagnostic commands
+                    extra = " ".join(str(a) for a in targs) if isinstance(targs, list) else str(targs or "")
+                    op, qargs = "deductum_command", [(tool + " " + extra).strip()]
+                else:
+                    op = entry.get("operation") or tool
+                    qargs = [str(a) for a in targs] if isinstance(targs, list) else \
+                        ([json.dumps(targs)] if isinstance(targs, dict) and targs else [str(targs)] if targs else [])
+                label = tool
+            elif name == "proof_search":
+                search = caps.get("search")
+                op = (search.get("operation") if isinstance(search, dict) else None) or \
+                    ("find_theorems" if backend == "isabelle" else "")
+                if not op:
+                    raise H.HostError(self.refusal(backend, caps, "search"), "unsupported")
+                qargs = [str(args.get("limit") or 40), "false", args["query"]] if op == "find_theorems" else [args["query"]]
+                label, timeout = "search", float(args.get("timeout") or 60)
             else:
-                op, qargs = "find_theorems", [str(args.get("limit") or 40), "false", args["query"]]
-                timeout = 60.0
+                cmd = (args.get("text") or "").strip()
+                if not cmd:
+                    raise H.HostError("Give the command text")
+                allowed = caps.get("command") or []
+                if not allowed:
+                    raise H.HostError(self.refusal(backend, caps, "commands"), "unsupported")
+                if cmd.split()[0].split("[")[0] not in allowed:
+                    raise H.HostError(self.refusal(backend, caps, f"command {cmd.split()[0]!r}"), "unsupported")
+                op, qargs, label = "deductum_command", [cmd], cmd
+            doc = self.read(session, path)
+            offset = self.offset_for(doc["text"], args, required=True)
             qid = self.req("query", session=session, path=path, offset=offset, revision=doc["revision"],
                            operation=op, args=qargs)["query"]
             t0 = time.time()
-            q = {}
+            q: Dict[str, Any] = {}
             while time.time() - t0 < timeout:
                 q = self.req("query_status", session=session, query=qid)["query"]
                 if q["status"] in ("finished", "failed", "canceled"):
                     break
-                time.sleep(0.7)
+                time.sleep(self.poll)
             else:
                 self.req("cancel_query", session=session, query=qid)
                 q["status"] = "timed out"
             texts = [m["text"] for m in q.get("messages", [])]
-            if op == "find_theorems":
+            if name == "proof_search":
                 return "\n".join(texts) or f"No result ({q['status']})."
+            if name == "proof_command":
+                out = [f"{label}: {q.get('status')}" + (f" ({q['error']})" if q.get("error") else "")]
+                for m in q.get("messages", []):
+                    out.append(("" if m["kind"] in ("writeln", "info") else m["kind"] + ": ") + m["text"])
+                return "\n".join(out)
             proofs = []
             for m in q.get("messages", []):
                 for sb in m.get("sendbacks", []):
                     if sb not in proofs:
                         proofs.append(sb)
             doc = self.read(session, path)
-            out = [f"Sledgehammer {q['status']}" + (f": {q['error']}" if q.get("error") else "")]
+            out = [f"{label} {q['status']}" + (f": {q['error']}" if q.get("error") else "")]
             out += ["  " + t for t in texts if "found a proof" not in t]
             if proofs:
                 rep = q.get("replace")
@@ -537,78 +724,54 @@ class Adapter:
                     except H.HostError as exn:
                         out.append(f"Not inserted ({exn.code}): {exn}")
             return "\n".join(out)
-        if name == "isabelle_run_diagnostic":
-            cmd = args["command"].strip()
-            allowed = ("quickcheck", "nitpick", "try0", "solve_direct", "try", "value", "term", "thm", "typ",
-                       "print_cases", "print_facts", "find_consts", "find_theorems", "print_context", "print_state")
-            if cmd.split()[0].split("[")[0] not in allowed:
-                raise H.HostError("Only diagnostic commands can run this way: " + ", ".join(allowed))
-            doc = self.read(session, path)
-            offset = self.offset_for(doc["text"], args)
-            qid = self.req("query", session=session, path=path, offset=offset, revision=doc["revision"],
-                           operation="deductum_command", args=[cmd])["query"]
-            t0 = time.time()
-            q: Dict[str, Any] = {}
-            while time.time() - t0 < float(args.get("timeout") or 120):
-                q = self.req("query_status", session=session, query=qid)["query"]
-                if q["status"] in ("finished", "failed", "canceled"):
-                    break
-                time.sleep(0.7)
-            else:
-                self.req("cancel_query", session=session, query=qid)
-                q["status"] = "timed out"
-            out = [f"{cmd}: {q.get('status')}" + (f" ({q['error']})" if q.get("error") else "")]
-            for m in q.get("messages", []):
-                out.append(("" if m["kind"] == "writeln" else m["kind"] + ": ") + m["text"])
-            return "\n".join(out)
-        if name == "isabelle_cancel":
+        if name == "proof_cancel":
             n = self.req("cancel", session=session)["canceled"]
             return f"Interrupted {n} running execution(s)."
-        if name == "isabelle_save":
+        if name == "proof_save":
             r = self.req("save", session=session, path=path) if path else self.req("save", session=session)
             return "Saved." if not r["failed"] else "Not saved: " + "; ".join(f"{f['path']}: {f['error']}" for f in r["failed"])
-        if name == "isabelle_history":
+        if name == "proof_history":
             hist = self.req("history", session=session, path=path, limit=40,
                             author=self.hello.get("key") if args.get("mine") else None)["history"]
             return "\n".join(
                 f"change {h['id']} (rev {h['rev']}) {h['kind']} by {h['author'].get('label')} at line {h['line']}: "
                 f"{h['summary']}" + (f" [reverted by {h['reverted_by']}]" if h.get("reverted_by") else "")
                 for h in hist) or "No changes yet."
-        if name == "isabelle_revert":
+        if name == "proof_revert":
             r = self.req("revert", session=session, path=path, entry=int(args["change"]))
             return f"Reverted change(s) {r['reverted']}; now revision {r['revision']}."
-        if name == "isabelle_conflict":
+        if name == "proof_conflict":
             doc = self.req("read", session=session, path=path, subscribe=False, conflict_texts=True)["doc"]
             if not doc.get("conflict"):
                 return "No disk conflict for this theory."
             t = doc["conflict_texts"]
             return ("=== last saved (base) ===\n" + (t["base"] or "") + "\n=== disk ===\n" +
                     (t["disk"] if t["disk"] is not None else "(deleted)") + "\n=== buffer (unsaved) ===\n" + t["buffer"])
-        if name == "isabelle_resolve_conflict":
+        if name == "proof_resolve_conflict":
             r = self.req("resolve", session=session, path=path, choice=args["choice"], text=args.get("text"))
             return f"Resolved; revision {r['revision']}. It will be saved shortly."
-        if name == "isabelle_listen":
+        if name == "proof_listen":
             r = self.req("listen", session=session, name=args.get("name", ""), timeout=50)
             out = []
             for job in r.get("withdrawn") or []:
                 out.append(f"Query {job} was withdrawn by the human (its line was changed or deleted).")
             q = r.get("query")
             if not q:
-                out.append("No query yet. Call isabelle_listen again to keep listening.")
+                out.append("No query yet. Call proof_listen again to keep listening.")
                 return "\n".join(out)
             out.append(f"Query {q['job']} from the human, at line {q['line']} of {q['path']}:")
             out.append(f"They typed: {q['asked'].strip()}" + (f"\nTheir hint: {q['hint']}" if q.get("hint") else ""))
             out.append(f"The lemma up to that line:\n{q['lemma']}")
             if q.get("goal"):
                 out.append(f"The goal there:\n{q['goal']}")
-            out.append("Answer with isabelle_propose (query " + q["job"] + "), then listen again.")
+            out.append("Answer with proof_propose (query " + q["job"] + "), then listen again.")
             return "\n\n".join(out)
-        if name == "isabelle_propose":
+        if name == "proof_propose":
             self.req("propose", session=session, query=args["query"], proofs=args.get("proofs") or [],
                      using=args.get("using") or [], message=args.get("message", ""))
             return ("Sent. Deductum checks the proofs and shows them to the human, who inserts one (or tells you "
                     "which). Listen again for the next query.")
-        if name == "isabelle_human_view":
+        if name == "proof_human_view":
             v = self.req("human_view", session=session)["view"]
             if not v.get("open"):
                 return "The human has no theory of this session open in Deductum."
@@ -625,7 +788,7 @@ class Adapter:
             if v.get("proof"):
                 out.append(f"The proof around the caret (from line {v['proof']['line']}):\n{v['proof']['text']}")
             return "\n\n".join(out)
-        if name in ("isabelle_show", "isabelle_add_note"):
+        if name in ("proof_show", "proof_add_note"):
             doc = self.read(session, path)
             text = doc["text"]
             line = int(args["line"])
@@ -633,7 +796,7 @@ class Adapter:
             start = ot.offset_of(text, line, 0)
             nxt = ot.offset_of(text, end_line + 1, 0) if end_line < text.count("\n") + 1 else len(text)
             end = max(start, nxt - 1)
-            if name == "isabelle_show":
+            if name == "proof_show":
                 r = self.req("show", session=session, path=path, start=start, end=end,
                              revision=doc["revision"], message=args.get("message", ""))
                 return (f"Offered the human line {r['line']}." if r.get("shown")
@@ -641,7 +804,7 @@ class Adapter:
             r = self.req("add_note", session=session, path=path, start=start, end=end,
                          revision=doc["revision"], text=args["text"])["note"]
             return f"Note {r['id']} added at line {r['line']}. Replies come as notices."
-        if name == "isabelle_notes":
+        if name == "proof_notes":
             notes = self.req("notes", session=session, path=path)["notes"]
             if not notes:
                 return "No open notes."
@@ -650,11 +813,11 @@ class Adapter:
                 out.append(f"[{n['id']}] {Path(n['path']).name} line {n['line']} ({n['label']}): {n['text']}")
                 out.extend(f"    {r['by']}: {r['text']}" for r in n["replies"])
             return "\n".join(out)
-        if name == "isabelle_resolve_note":
+        if name == "proof_resolve_note":
             self.req("reply_note", session=session, note=args["note"], text=args.get("text", ""),
                      resolve=bool(args.get("resolve")))
             return "Done."
-        if name == "isabelle_request_access":
+        if name == "proof_request_access":
             params: Dict[str, Any] = {"session": session, "scope": args["scope"], "reason": args.get("reason", "")}
             if path:
                 params["path"] = path
@@ -664,17 +827,17 @@ class Adapter:
             r = self.req("request_access", **params)["request"]
             what = {"folder": "the folder", "theory": "the theory"}.get(r["scope"], f"the proof at line {r.get('line')}")
             return (f"Asked the human for editing rights to {what}. The answer comes as a notice "
-                    "(isabelle_notices, or at the end of later results).")
-        if name == "isabelle_notices":
+                    "(proof_notices, or at the end of later results).")
+        if name == "proof_notices":
             return ""  # appended below
-        if name == "isabelle_session_control":
+        if name == "proof_session_control":
             action = args["action"]
             if action == "discard":
                 self.req("discard", session=session)
                 return "Discarded."
             s = self.req(action, session=session)["session"]
             return f"{s['name']}: {s['lifecycle']}"
-        if name == "isabelle_merge_preview":
+        if name == "proof_merge_preview":
             files = self.req("merge_preview", session=session)["files"]
             return "\n".join(f["diff"] for f in files) or "No changes against the starting point."
         raise H.HostError(f"Unknown tool {name}")
@@ -746,7 +909,7 @@ def main(argv: List[str]) -> int:
         elif method == "ping":
             respond(rid, {})
         elif method == "tools/list":
-            respond(rid, {"tools": TOOLS})
+            respond(rid, {"tools": listed_tools()})
         elif method == "tools/call":
             params = msg.get("params") or {}
             name = params.get("name", "")
