@@ -460,6 +460,17 @@ fn shell_frame_matrix() {
         let i = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.name == "theorem").unwrap();
         let _ = cosmic::Application::update(&mut app, Message::EditBlock(i));
         draw_in(light, || window(&app), &format!("matrix-shell-{theme}-1100-lean-sidebars"), Size::new(1100.0, 860.0));
+        // a document with the sidebars at narrow widths: the left one at 800 px, both at 1000 px
+        for (width, right) in [(800.0, false), (1000.0, true)] {
+            let mut app = mixed_app();
+            app.window_width = width;
+            app.left_width = 240.0;
+            app.right_width = 300.0;
+            app.show_right = right;
+            let i = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.name == "lemma").unwrap();
+            let _ = cosmic::Application::update(&mut app, Message::EditBlock(i));
+            draw_in(light, || window(&app), &format!("matrix-shell-{theme}-{}-sidebars", width as u32), Size::new(width, 760.0));
+        }
         // the header with a running tool at 1000 px
         let mut app = mixed_app();
         app.window_width = 1000.0;
