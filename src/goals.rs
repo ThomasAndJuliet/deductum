@@ -1,15 +1,19 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! The proof state in parts, from the prelude's `deductum_goals` query: the chained facts and,
-//! for each subgoal, its fixed variables, assumptions and conclusion. Each part arrives as one
-//! message headed `#deductum:KIND N`; the head is cut off here (with the message's colour
-//! spans moved to match), so that each part shows as code of its own.
+//! The proof state in parts, from the `deductum_goals` query (the host's "Goal parts"): the
+//! chained facts and, for each subgoal, its case tag (Lean), its fixed variables or hypotheses,
+//! assumptions and conclusion. Each part arrives as one message headed `#deductum:KIND N`; the
+//! head is cut off here (with the message's colour spans moved to match), so that each part
+//! shows as code of its own. How a subgoal reads is the profile's (`Profile::present_goal`).
 
 use serde_json::{Value, json};
 
 #[derive(Clone, Debug, Default)]
 pub struct Subgoal {
     pub n: usize,
+    /// The goal's case tag (Lean's `succ`), which Isabelle does not send
+    pub case: Option<Value>,
+    /// Fixed variables (Isabelle), or every hypothesis (Lean's `h : P n`)
     pub params: Vec<Value>,
     pub prems: Vec<Value>,
     pub concl: Option<Value>,
@@ -19,7 +23,8 @@ impl Subgoal {
     /// What the subgoal says, to tell the same subgoal in another state
     pub fn key(&self) -> String {
         let text = |m: &Value| m["raw"].as_str().unwrap_or("").split_whitespace().collect::<Vec<_>>().join(" ");
-        let mut out: Vec<String> = self.params.iter().map(text).collect();
+        let mut out: Vec<String> = self.case.iter().map(|c| format!("case {}", text(c))).collect();
+        out.extend(self.params.iter().map(text));
         out.push("|".into());
         out.extend(self.prems.iter().map(text));
         out.push("|".into());
@@ -64,6 +69,10 @@ impl Goals {
                 "fact" => g.facts.push(part),
                 "count" => g.count = Some(n),
                 "nogoal" => g.nogoal = true,
+                "case" => {
+                    let i = sub(&mut g);
+                    g.subgoals[i].case = Some(part);
+                }
                 "param" => {
                     let i = sub(&mut g);
                     g.subgoals[i].params.push(part);
@@ -87,6 +96,7 @@ impl Goals {
     pub fn parts(&self) -> Vec<&Value> {
         let mut out: Vec<&Value> = self.text.iter().chain(self.facts.iter()).collect();
         for s in &self.subgoals {
+            out.extend(s.case.iter());
             out.extend(s.params.iter());
             out.extend(s.prems.iter());
             out.extend(s.concl.iter());
@@ -146,5 +156,27 @@ mod tests {
         assert_eq!(g.subgoals[0].concl.as_ref().unwrap()["text"], "xs ≠ []");
         assert_eq!(g.parts().len(), 4);
         assert_ne!(g.subgoals[0].key(), g.subgoals[1].key());
+        assert!(g.subgoals.iter().all(|s| s.case.is_none()));
+    }
+
+    #[test]
+    fn a_case_tag_belongs_to_its_subgoal() {
+        let part = |r: &str| json!({"kind": "writeln", "raw": r, "text": r, "spans": []});
+        let g = Goals::parse(&[
+            part("#deductum:count 2"),
+            part("#deductum:case 1\nzero"),
+            part("#deductum:concl 1\nP 0"),
+            part("#deductum:case 2\nsucc"),
+            part("#deductum:param 2\nn : ℕ"),
+            part("#deductum:param 2\nih : P n"),
+            part("#deductum:concl 2\nP (n + 1)"),
+        ]);
+        assert_eq!(g.subgoals.len(), 2);
+        assert_eq!(g.subgoals[0].case.as_ref().unwrap()["text"], "zero");
+        assert_eq!(g.subgoals[1].case.as_ref().unwrap()["text"], "succ");
+        assert_eq!(g.subgoals[1].params.len(), 2);
+        assert_eq!(g.parts().len(), 6);
+        // (the same goal under another case is another goal)
+        assert_ne!(g.subgoals[0].key(), Goals::parse(&[part("#deductum:concl 1\nP 0")]).subgoals[0].key());
     }
 }
