@@ -153,7 +153,7 @@ fn sessions(app: &App) -> Element<'_, Message> {
         let key = link.target.key.as_str();
         let on_machine: Vec<(&String, &Value)> = app.sessions.iter().filter(|((m, _), _)| m == key).map(|((_, id), v)| (id, v)).collect();
         // The machine: its name, whether it is connected, and its provers' memory against its budget
-        let connected = link.sender.is_some();
+        let connected = shell::connection(link) == shell::Conn::Connected;
         let total: u64 = on_machine.iter().filter_map(|(id, v)| memory_mb(app, key, id, v)).sum();
         let budget = link.hello.as_ref().and_then(|h| h["memory_budget_gb"].as_f64());
         // (its name, and under it whether it is connected and what its provers use: a line that
@@ -220,30 +220,17 @@ fn sessions(app: &App) -> Element<'_, Message> {
     col.into()
 }
 
-/// A machine's connection: a dot and a word, then what its provers use
+/// A machine's connection: a dot and a word (as the status bar and the settings say it), then
+/// what its provers use
 fn connection<'a>(link: &super::Link, memory: Option<String>) -> Element<'a, Message> {
-    let (word, tint): (String, fn(&cosmic::Theme) -> Color) = if link.sender.is_some() {
-        ("connected".into(), success)
-    } else if link.status.starts_with("disconnected") {
-        ("offline".into(), destructive)
-    } else {
-        ("connecting…".into(), warning)
-    };
-    let tip = if link.status.is_empty() { word.clone() } else { link.status.clone() };
+    let conn = shell::connection(link);
+    let word = conn.word().to_string();
+    let tip = conn.detail().map_or_else(|| word.clone(), |d| format!("{word}: {d}"));
     widget::tooltip(
         widget::row::with_capacity(2)
             .spacing(4)
             .align_y(Alignment::Center)
-            .push(
-                widget::container(widget::Space::new())
-                    .width(Length::Fixed(7.0))
-                    .height(Length::Fixed(7.0))
-                    .class(theme::Container::custom(move |theme| iced::widget::container::Style {
-                        background: Some(tint(theme).into()),
-                        border: Border { radius: 4.0.into(), ..Default::default() },
-                        ..Default::default()
-                    })),
-            )
+            .push(conn.dot(7.0))
             .push(widget::text::caption(match memory {
                 Some(m) => format!("{word}  ·  {m}"),
                 None => word,
