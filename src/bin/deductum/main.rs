@@ -1770,7 +1770,9 @@ pub fn message_key(m: &Value) -> u64 {
 
 impl Workspace {
     /// Where Lean's search looks: `public` (loogle.lean-lang.org), `local` (a loogle program) or
-    /// `off`. The settings page sets it (key `loogle.source`); until it does, public (C17e)
+    /// `off`. The settings page sets it (key `loogle.source`); until it does, public (C17e).
+    /// When `crate::settings::loogle()` (Off/Local/Public) is merged, this is its body: map the
+    /// three to "off", "local", "public"; this is the only place that reads the source
     pub fn loogle_source(&self) -> String {
         self.tool_settings.get("loogle.source").filter(|s| matches!(s.as_str(), "public" | "local" | "off")).cloned().unwrap_or_else(|| "public".into())
     }
