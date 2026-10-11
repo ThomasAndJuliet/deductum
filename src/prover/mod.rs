@@ -285,8 +285,22 @@ pub trait Profile: Send + Sync {
     /// Whether the caret, after `before` in a formal block, is inside a term (symbols then)
     fn in_term(&self, before: &str) -> bool;
 
+    /// What the caret, after `before` (the decoded text of a formal block up to it), is in, for
+    /// the insert palette and the insert bar above the goal: a term (symbols), a place for a
+    /// proof step, or a comment that is prose. By default a term where [`Self::in_term`] says so,
+    /// a proof step elsewhere (Isabelle, where everything outside quotes and cartouches is Isar)
+    fn formal_context(&self, before: &str) -> InsertContext {
+        if self.in_term(before) { InsertContext::Symbols } else { InsertContext::Proof }
+    }
+
     /// The insert palette's entries for a context, as the session's capabilities allow
     fn palette(&self, context: InsertContext, caps: &Capabilities) -> Vec<PaletteEntry>;
+
+    /// The entries the insert bar above the goal shows before anything is searched for, most
+    /// wanted first (the bar shows as many as fit on its one row). By default the palette's own
+    fn quick_entries(&self, context: InsertContext, caps: &Capabilities) -> Vec<PaletteEntry> {
+        self.palette(context, caps)
+    }
 
     /// The palette's list entries for prose whose caret line is `line`: in a list its next
     /// item, elsewhere a list to begin
