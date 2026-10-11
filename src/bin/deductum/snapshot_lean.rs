@@ -513,3 +513,159 @@ fn the_layout_does_not_change_as_clicks_move_the_caret() {
         }
     }
 }
+
+/// Where the pop-out button and the editor it floats over are laid out, and how far the page is
+/// scrolled (what is drawn is that much higher)
+struct PopOutPlace {
+    editor: cosmic::widget::Id,
+    scroll: cosmic::widget::Id,
+    pop: Option<cosmic::iced::Rectangle>,
+    cell: Option<cosmic::iced::Rectangle>,
+    scrolled: cosmic::iced::Vector,
+}
+
+impl cosmic::iced::advanced::widget::Operation<()> for PopOutPlace {
+    fn traverse(&mut self, operate: &mut dyn FnMut(&mut dyn cosmic::iced::advanced::widget::Operation<()>)) {
+        operate(self);
+    }
+
+    fn container(&mut self, id: Option<&cosmic::widget::Id>, bounds: cosmic::iced::Rectangle) {
+        if id == Some(&super::view::pop_out_button_id()) {
+            self.pop = Some(bounds);
+        }
+    }
+
+    fn focusable(&mut self, id: Option<&cosmic::widget::Id>, bounds: cosmic::iced::Rectangle, _state: &mut dyn cosmic::iced::advanced::widget::operation::Focusable) {
+        if id == Some(&self.editor) {
+            self.cell = Some(bounds);
+        }
+    }
+
+    fn scrollable(
+        &mut self,
+        id: Option<&cosmic::widget::Id>,
+        _bounds: cosmic::iced::Rectangle,
+        _content: cosmic::iced::Rectangle,
+        translation: cosmic::iced::Vector,
+        _state: &mut dyn cosmic::iced::advanced::widget::operation::Scrollable,
+    ) {
+        if id == Some(&self.scroll) {
+            self.scrolled = translation;
+        }
+    }
+}
+
+/// "The pop-out button is in slightly the wrong position in both source view and literate view":
+/// it must sit inside the top right corner of the code it belongs to (the open block's cell, or
+/// the proof's first line in the source view), as far from the right edge as from the top,
+/// centred on the first line, whatever the prover, theme, width and scrolling. Measured from the
+/// layout, and checked against the frame: the icon is drawn inside the button's place
+#[test]
+fn the_pop_out_button_sits_in_the_corner_of_its_proof() {
+    let fillers: String = (0..30).map(|i| format!("lemma filler{i}: \"True\"\n  by simp\n\n")).collect();
+    let long_isabelle = super::snapshot::DEMO.replace("lemma broken", &format!("{fillers}lemma broken"));
+    let mut report = Vec::new();
+    for lean in [true, false] {
+        for mode in [Mode::Literate, Mode::Source] {
+            for dark in [true, false] {
+                for (w, h) in [(800u32, 760u32), (1400, 900)] {
+                    for scrolled in [false, true] {
+                        let mut harness = Harness::new(Size::new(w as f32, h as f32));
+                        light(!dark);
+                        super::view::set_goal_beside(true);
+                        // (near the top, or far down the document and scrolled to)
+                        let (mut app, target) = match (lean, scrolled) {
+                            (true, false) => (lean_app_with(mode, &proofs_only()), "theorem append_nil_right"),
+                            (true, true) => (lean_app(mode), "theorem and_swap'"),
+                            (false, false) => (demo_app(mode), "lemma add_zero"),
+                            (false, true) => {
+                                let mut app = demo_app(mode);
+                                let doc = json!({"text": long_isabelle, "revision": 1, "prover": {}});
+                                app.workspace.as_mut().unwrap().theory = Some(Theory::new("/tmp/Long.thy".into(), &doc, &super::prover::isabelle::symbols::Table::fallback(), Arc::new(HashMap::new()), mode, super::prover::profile(None)));
+                                (app, "lemma broken")
+                            }
+                        };
+                        app.show_sidebar = false;
+                        app.show_right = false;
+                        app.window_width = w as f32;
+                        let t = theory(&app);
+                        let at = t.local.find(target).map(|b| t.local[..b].chars().count()).unwrap();
+                        let i = t.blocks.iter().position(|b| b.start <= at && at <= b.end).unwrap();
+                        if mode == Mode::Literate {
+                            update(&mut app, super::Message::EditBlock(i));
+                        } else {
+                            let t = app.workspace.as_mut().unwrap().theory.as_mut().unwrap();
+                            t.cursor = at + 3;
+                            let pos = t.lines.position(&t.decoded.text, t.decoded.to_decoded(at + 3));
+                            super::editor::place(&mut t.source, pos);
+                        }
+                        let (editor, scroll) = if mode == Mode::Literate { (super::view::block_editor_id(), super::view::literate_scroll_id()) } else { (super::view::source_editor_id(), super::view::source_scroll_id()) };
+                        let mut place = PopOutPlace { editor: editor.clone(), scroll: scroll.clone(), pop: None, cell: None, scrolled: cosmic::iced::Vector::ZERO };
+                        let name = format!("popout-{}-{}-{}-{w}{}", if lean { "lean" } else { "isabelle" }, if mode == Mode::Source { "source" } else { "literate" }, if dark { "dark" } else { "light" }, if scrolled { "-scrolled" } else { "" });
+                        harness.draw(&app, &name);
+                        harness.operate(&app, &mut place);
+                        if scrolled {
+                            // the page scrolled so that the proof is in the middle of the view
+                            let pop = place.pop.expect("a pop-out button");
+                            harness.move_to(&app, cosmic::iced::Point::new(w as f32 / 3.0, h as f32 / 2.0));
+                            let by = pop.y - h as f32 / 2.0;
+                            harness.events(&app, &[cosmic::iced::Event::Mouse(cosmic::iced::mouse::Event::WheelScrolled { delta: cosmic::iced::mouse::ScrollDelta::Pixels { x: 0.0, y: -by } })]);
+                            harness.draw(&app, &name);
+                            harness.operate(&app, &mut place);
+                        }
+                        let png = harness.draw(&app, &name);
+                        let (pop, cell) = (place.pop.expect("a pop-out button"), place.cell.expect("the editor"));
+                        let drawn = cosmic::iced::Rectangle { y: pop.y - place.scrolled.y, x: pop.x - place.scrolled.x, ..pop };
+                        // Where the proof's first line is: the cell's first line, or the source
+                        // view's line of the proof's start
+                        let lh = if mode == Mode::Literate { super::view::z(13.0) * 1.4 } else { super::view::source_line_height() };
+                        let img = image::RgbaImage::from_raw(w, h, png.clone()).unwrap();
+                        let (first_top, right) = if mode == Mode::Literate {
+                            (cell.y + 5.0, cell.x + cell.width)
+                        } else {
+                            // (the source view's lines wrap: the proof's first row is where the
+                            // construct's tint begins, the caret being on it, at the editor's left)
+                            let x = (cell.x + 3.0) as u32;
+                            let above = *img.get_pixel(x, (drawn.y - 25.0).max(0.0) as u32);
+                            let tint = ((drawn.y - 15.0).max(0.0) as u32..(drawn.y + 15.0) as u32).find(|&y| img.get_pixel(x, y) != &above);
+                            // (with no construct known, the line's place, no line above it wrapping)
+                            let t = theory(&app);
+                            let line = t.lines.position(&t.decoded.text, t.decoded.to_decoded(t.blocks[i].start)).line;
+                            let top = tint.map_or(cell.y + cosmic::theme::active().cosmic().spacing.space_s as f32 + line as f32 * lh - place.scrolled.y, |y| y as f32);
+                            (top + place.scrolled.y, cell.x + cell.width)
+                        };
+                        let (right_inset, centre_off) = (right - (pop.x + pop.width), (pop.y + pop.height / 2.0) - (first_top + lh / 2.0));
+                        let top_inset = pop.y - if mode == Mode::Literate { cell.y } else { first_top };
+                        // The icon drawn inside the button's place: ink there, centred
+                        let bg = *img.get_pixel(drawn.x as u32 - 2, (drawn.y + drawn.height / 2.0) as u32);
+                        let far = |p: &image::Rgba<u8>| (0..3).map(|k| (p[k] as i32 - bg[k] as i32).abs()).sum::<i32>() > 120;
+                        let (mut xs, mut ys) = (Vec::new(), Vec::new());
+                        for y in (drawn.y as i32 - 6).max(0)..((drawn.y + drawn.height) as i32 + 6).min(h as i32) {
+                            for x in (drawn.x as i32 - 6)..((drawn.x + drawn.width) as i32 + 6).min(w as i32) {
+                                if far(img.get_pixel(x as u32, y as u32)) {
+                                    xs.push(x as f32);
+                                    ys.push(y as f32);
+                                }
+                            }
+                        }
+                        assert!(xs.len() > 10, "{name}: the icon is drawn where the button is ({drawn:?})");
+                        let ink = ((xs.iter().cloned().fold(f32::MAX, f32::min) + xs.iter().cloned().fold(0.0, f32::max)) / 2.0, (ys.iter().cloned().fold(f32::MAX, f32::min) + ys.iter().cloned().fold(0.0, f32::max)) / 2.0);
+                        let off = (ink.0 - (drawn.x + drawn.width / 2.0), ink.1 - (drawn.y + drawn.height / 2.0));
+                        report.push(format!("{name}: pop {pop:?} cell {cell:?} right inset {right_inset:.1} top inset {top_inset:.1} off the first line's centre {centre_off:.1} icon off its place {off:?}"));
+                        assert!(off.0.abs() <= 2.5 && off.1.abs() <= 2.5, "{name}: the icon is drawn {off:?} from the button's place");
+                        assert!(centre_off.abs() <= 1.0, "{name}: centred on the first line ({centre_off:.1} off)");
+                        assert!((2.0..=8.0).contains(&right_inset), "{name}: inside the right edge ({right_inset:.1})");
+                        if mode == Mode::Literate {
+                            assert!(top_inset >= 1.0, "{name}: inside the cell's top ({top_inset:.1})");
+                            assert!((right_inset - top_inset).abs() <= 1.0, "{name}: as far from the right as from the top ({right_inset:.1}, {top_inset:.1})");
+                        } else {
+                            assert!(top_inset >= -1.0, "{name}: within the first line's band ({top_inset:.1})");
+                        }
+                        light(false);
+                    }
+                }
+            }
+        }
+    }
+    eprintln!("{}", report.join("\n"));
+}
