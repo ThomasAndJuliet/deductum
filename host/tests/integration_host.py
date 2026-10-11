@@ -303,7 +303,8 @@ def main():
                 txn="kw")
     ev = wait_for(app, lambda e: e.get("event") == "fill" and e.get("replace"), timeout=30, what="keyword fill")
     text = app.request("read", session=sid, path=str(thy))["doc"]["text"]
-    check("claude try simp" not in text and text[ev["replace"]["start"]:ev["replace"]["end"]] == "sorry",
+    # (the keyword stays as typed: the prover sees a `sorry` of the same length there)
+    check(text[ev["replace"]["start"]:ev["replace"]["end"]].startswith("claude try simp"),
           "a typed claude line becomes the hole it fills")
     check(ev["agent"] == "claude" and ev["hint"] == "try simp", "the keyword's agent and hint are used")
     ev = wait_for(app, lambda e: e.get("event") == "fill" and e.get("status") in ("done", "failed"), timeout=240,
