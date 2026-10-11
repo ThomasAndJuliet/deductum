@@ -195,6 +195,7 @@ pub fn demo_app(mode: Mode) -> App {
         vim_enabled: false,
         mode_model: cosmic::widget::segmented_button::SingleSelectModel::default(),
         mode_entities: [cosmic::widget::segmented_button::Entity::default(); 2],
+        shell: Default::default(),
     }
 }
 
@@ -206,12 +207,17 @@ pub fn draw(app: &App, name: &str, size: Size) -> Vec<u8> {
 /// drive the widgets take turns, so that one test's view does not change another's keys
 static UI: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
-fn ui_turn() -> std::sync::MutexGuard<'static, ()> {
+pub fn ui_turn() -> std::sync::MutexGuard<'static, ()> {
     UI.lock().unwrap_or_else(|e| e.into_inner())
 }
 
 pub fn draw_element(element: cosmic::Element<'_, super::Message>, name: &str, size: Size) -> Vec<u8> {
     let _turn = ui_turn();
+    render(element, name, size)
+}
+
+/// A frame, drawn by a caller that already has its turn (to set the theme for it, say)
+pub fn render(element: cosmic::Element<'_, super::Message>, name: &str, size: Size) -> Vec<u8> {
     super::load_fonts();
     let mut renderer = cosmic::iced::futures::executor::block_on(<cosmic::Renderer as Headless>::new(Font::default(), Pixels(14.0), Some("tiny-skia"))).expect("a headless renderer");
     let theme = cosmic::theme::active();

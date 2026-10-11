@@ -10,7 +10,7 @@ use std::sync::{Arc, LazyLock};
 
 use cosmic::iced::{Alignment, Border, Color, Length, Padding};
 use cosmic::prelude::*;
-use cosmic::widget::{self, button, text_editor};
+use cosmic::widget::{self, text_editor};
 use cosmic::{iced, theme};
 use serde_json::Value;
 
@@ -18,7 +18,7 @@ use super::editor::{Mode, Theory, highlight_format};
 use super::prover::{GoalBody, InsertContext, PaletteEntry, Setting, Tool};
 use super::theory::{Block, Kind, Status};
 use prose_render::rich::{Typography, rich_text};
-use super::{App, LeftMode, Message, Panel, Workspace, file_name, link};
+use super::{App, LeftMode, Message, Panel, Workspace, file_name};
 
 static BLOCK_EDITOR: LazyLock<widget::Id> = LazyLock::new(widget::Id::unique);
 static SOURCE_EDITOR: LazyLock<widget::Id> = LazyLock::new(widget::Id::unique);
@@ -40,16 +40,11 @@ fn icon(name: &'static str) -> widget::icon::Icon {
     widget::icon::from_name(name).size(16).icon()
 }
 
-fn icon_button(name: &'static str, tip: &'static str, message: Option<Message>) -> Element<'static, Message> {
-    let b = button::icon(widget::icon::from_name(name)).on_press_maybe(message);
-    widget::tooltip(b, widget::text(tip), widget::tooltip::Position::Bottom).into()
-}
-
 fn spacing() -> cosmic::cosmic_theme::Spacing {
     theme::active().cosmic().spacing
 }
 
-fn status_color(status: Status, theme: &cosmic::Theme) -> Color {
+pub fn status_color(status: Status, theme: &cosmic::Theme) -> Color {
     let c = theme.cosmic();
     match status {
         Status::Finished => Color { a: 0.35, ..Color::from(c.success_color()) },
@@ -87,83 +82,11 @@ pub fn typography(theme: &cosmic::Theme) -> Typography {
     }
 }
 
-// ----- header
-
-pub fn header_start(app: &App) -> Vec<Element<'_, Message>> {
-    let mut items: Vec<Element<'_, Message>> =
-        vec![icon_button("sidebar-show-symbolic", "Show or hide the navigation", Some(Message::ToggleSidebar))];
-    if let Some(t) = app.workspace.as_ref().and_then(|w| w.theory.as_ref()) {
-        // A fixed width: the control would otherwise take the header's whole free width
-        items.push(
-            widget::container(widget::segmented_control::horizontal(&app.mode_model).on_activate(Message::SetModeEntity))
-                .width(Length::Fixed(230.0))
-                .into(),
-        );
-        items.push(icon_button("edit-undo-symbolic", "Undo your last edit (Ctrl+Z)", t.can_undo.then_some(Message::Undo)));
-        items.push(icon_button("edit-redo-symbolic", "Redo (Ctrl+Shift+Z)", t.can_redo.then_some(Message::Redo)));
-        if !app.back.is_empty() {
-            items.push(icon_button("go-previous-symbolic", "Back to where Ctrl+click came from (Alt+Left)", Some(Message::Back)));
-        }
-    }
-    items
-}
-
-pub fn header_end(app: &App) -> Vec<Element<'_, Message>> {
-    let mut items: Vec<Element<'_, Message>> = Vec::new();
-    let Some(ws) = &app.workspace else {
-        items.push(widget::button::suggested("New session").on_press(Message::NewSession(true)).into());
-        return items;
-    };
-    let summary = app.sessions.get(&(ws.machine.clone(), ws.sid.clone()));
-    let lifecycle = summary.and_then(|s| s["lifecycle"].as_str()).unwrap_or("?").to_string();
-    match lifecycle.as_str() {
-        "Running" => {
-            items.push(icon_button("media-playback-pause-symbolic", "Pause: keep the prover loaded, stop checking", Some(Message::Lifecycle("pause"))));
-            items.push(icon_button("system-shutdown-symbolic", "Stop the prover (buffers are kept)", Some(Message::Lifecycle("stop"))));
-        }
-        "Paused" => {
-            items.push(icon_button("media-playback-start-symbolic", "Resume checking", Some(Message::Lifecycle("resume"))));
-            items.push(icon_button("system-shutdown-symbolic", "Stop the prover (buffers are kept)", Some(Message::Lifecycle("stop"))));
-        }
-        "Stopped" | "Failed" => {
-            items.push(widget::button::suggested("Resume").on_press(Message::Lifecycle("resume")).into());
-            items.push(icon_button("user-trash-symbolic", "Forget this session (theories are saved; an agent's unmerged work is refused)", Some(Message::Lifecycle("discard"))));
-        }
-        _ => {}
-    }
-    if ws.info.is_some() {
-        items.push(icon_button("folder-open-symbolic", "Open the session's folder in Files", Some(Message::OpenFolder(link::Opener::Files))));
-        items.push(icon_button("text-editor-symbolic", "Open the session's folder in Zed", Some(Message::OpenFolder(link::Opener::Zed))));
-        items.push(icon_button("utilities-terminal-symbolic", "Open a terminal in the session's folder", Some(Message::OpenFolder(link::Opener::Terminal))));
-    }
-    items.push(
-        widget::tooltip(
-            widget::button::text("Vim")
-                .class(if app.vim_enabled { theme::Button::Suggested } else { theme::Button::Text })
-                .on_press(Message::ToggleVim),
-            widget::text("Vim keys in the editors"),
-            widget::tooltip::Position::Bottom,
-        )
-        .into(),
-    );
-    // The goal beside the text when there is room (off: under the construct, the page centred)
-    items.push(
-        widget::tooltip(
-            widget::button::icon(widget::icon::from_name(if goal_beside_on() { "view-dual-symbolic" } else { "view-paged-symbolic" }))
-                .class(if goal_beside_on() { theme::Button::Suggested } else { theme::Button::Icon })
-                .on_press(Message::ToggleGoalBeside),
-            widget::text(if goal_beside_on() {
-                "The goal beside the text when there is room: click to keep it under the proof, the page centred"
-            } else {
-                "The goal under the proof, the page centred: click to put it beside the text when there is room"
-            }),
-            widget::tooltip::Position::Bottom,
-        )
-        .into(),
-    );
-    items.push(icon_button("sidebar-show-right-symbolic", "Show or hide proof output and tools", Some(Message::ToggleRight)));
-    items
-}
+// The header bar and the status bar are the shell's (`shell.rs`); the left sidebar is
+// `sidebar.rs`'s, the new-session flow `new_session.rs`'s and the settings `settings_page.rs`'s.
+/// (for the pictures of the header drawn on their own)
+#[cfg(test)]
+pub use super::shell::{header_center, header_start};
 
 /// Whether the goal goes beside the text when there is room (a toolbar toggle)
 static GOAL_BESIDE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
@@ -191,20 +114,21 @@ pub fn view(app: &App) -> Element<'_, Message> {
 
 /// Whether the right sidebar shows at this window width
 pub fn right_shown(app: &App, width: f32) -> bool {
-    app.show_right && app.workspace.is_some() && app.new_session.is_none() && width >= 960.0
+    app.show_right && app.workspace.is_some() && app.new_session.is_none() && !app.shell.settings_open && width >= 960.0
 }
 
 fn layout(app: &App, width: f32) -> Element<'_, Message> {
-    let sp = spacing();
     // Narrow windows give the theory the room: the sidebars fold away
     let left = app.show_sidebar && width >= 640.0;
     let right = right_shown(app, width);
     let mut row = widget::row::with_capacity(5).spacing(0).height(Length::Fill);
     if left {
-        row = row.push(sidebar(app)).push(splitter(true));
+        row = row.push(super::sidebar::sidebar(app)).push(splitter(true));
     }
-    let main: Element<'_, Message> = if let Some(ns) = &app.new_session {
-        new_session(app, ns)
+    let main: Element<'_, Message> = if app.shell.settings_open {
+        super::settings_page::page(app)
+    } else if let Some(ns) = &app.new_session {
+        super::new_session::page(app, ns)
     } else if let Some(ws) = &app.workspace {
         let main_width = width - if left { app.left_width + 6.0 } else { 0.0 } - if right { app.right_width + 6.0 } else { 0.0 };
         workspace(app, ws, right, main_width)
@@ -223,15 +147,10 @@ fn layout(app: &App, width: f32) -> Element<'_, Message> {
         row.into()
     };
     let mut col = widget::column::with_capacity(2).push(row);
-    // The status bar, always there with a theory open (so the page's height never changes for
+    // The status bar, always there with a document open (so the page's height never changes for
     // it): what editing the open block means, and the app's last word
-    let editing = editing_status(app);
-    if editing.is_some() || app.status.is_some() || app.workspace.as_ref().is_some_and(|w| w.theory.is_some()) {
-        let bar = widget::row::with_capacity(2)
-            .spacing(sp.space_m)
-            .push(widget::text::caption(editing.unwrap_or_default()).width(Length::Fill))
-            .push(widget::text::caption(app.status.clone().unwrap_or_default()));
-        col = col.push(widget::container(bar).padding([sp.space_xxs, sp.space_s]).width(Length::Fill));
+    if let Some(bar) = super::shell::status_bar(app) {
+        col = col.push(bar);
     }
     // An opaque background of the theme's colour (with no inset content card, the window itself
     // would show through to the desktop)
@@ -267,66 +186,13 @@ fn welcome(app: &App) -> Element<'_, Message> {
     let mut col = widget::column::with_capacity(6)
         .spacing(sp.space_s)
         .push(widget::text::title1("Deductum"))
-        .push(widget::text::body("Isabelle theories as literate documents, worked on together with agents in one live session."))
-        .push(widget::button::suggested("Open a theory folder…").on_press(Message::NewSession(true)));
+        .push(widget::text::body("Isabelle theories and Lean files as literate documents, worked on together with agents in one live session."))
+        .push(widget::button::suggested("Open a folder…").on_press(Message::NewSession(true)));
     let any = !app.sessions.is_empty();
     if any {
         col = col.push(widget::text::body("Or pick a session on the left."));
     }
     widget::container(col.max_width(640)).center(Length::Fill).into()
-}
-
-fn lifecycle_badge(s: &Value) -> String {
-    let lc = s["lifecycle"].as_str().unwrap_or("?");
-    let act = &s["activity"];
-    let running = act["running"].as_u64().unwrap_or(0);
-    let failed = act["failed"].as_u64().unwrap_or(0);
-    let mut out = lc.to_string();
-    if lc == "Running" && running > 0 {
-        out.push_str(" · checking");
-    }
-    if failed > 0 {
-        out.push_str(&format!(" · {failed} failing"));
-    }
-    out
-}
-
-fn sidebar(app: &App) -> Element<'_, Message> {
-    let sp = spacing();
-    let theory = app.workspace.as_ref().and_then(|w| w.theory.as_ref());
-    let tabs = [
-        (LeftMode::Sessions, "network-server-symbolic", "Sessions"),
-        (LeftMode::Outline, "view-list-bullet-symbolic", "Outline"),
-        (LeftMode::Theorems, "emblem-ok-symbolic", "Theorems"),
-        (LeftMode::Problems, "dialog-warning-symbolic", "Problems"),
-    ];
-    let mut bar = widget::row::with_capacity(tabs.len() + 1).spacing(2).align_y(Alignment::Center);
-    for (mode, icon_name, label) in tabs {
-        let enabled = mode == LeftMode::Sessions || theory.is_some();
-        let b = widget::button::icon(widget::icon::from_name(icon_name))
-            .class(if app.left == mode { theme::Button::Suggested } else { theme::Button::Icon })
-            .on_press_maybe(enabled.then_some(Message::LeftMode(mode)));
-        bar = bar.push(widget::tooltip(b, widget::text(label), widget::tooltip::Position::Bottom));
-    }
-    let title = tabs.iter().find(|t| t.0 == app.left).map_or("", |t| t.2);
-    bar = bar.push(widget::text::heading(title).width(Length::Fill)).push(widget::Space::new().width(Length::Fixed(4.0)));
-    let content: Element<'_, Message> = match (app.left, theory) {
-        (LeftMode::Outline, Some(t)) => outline(app, t),
-        (LeftMode::Theorems, Some(t)) => theorems(app, t),
-        (LeftMode::Problems, Some(t)) => problems(app, t),
-        _ => sessions_list(app),
-    };
-    widget::container(
-        widget::column::with_capacity(2)
-            .spacing(sp.space_xs)
-            .padding([sp.space_xs, sp.space_xs])
-            .push(bar)
-            .push(widget::scrollable(content).height(Length::Fill)),
-    )
-    .width(Length::Fixed(app.left_width))
-    .height(Length::Fill)
-    .class(theme::Container::Card)
-    .into()
 }
 
 fn nav_item<'a>(label: String, detail: Option<String>, indent: f32, color: Option<Status>, message: Message) -> Element<'a, Message> {
@@ -365,7 +231,7 @@ fn block_title(t: &Theory, table: &dyn super::codec::Symbols, block: &Block, max
     if first.chars().count() > max { format!("{}…", first.chars().take(max).collect::<String>()) } else { first }
 }
 
-fn outline<'a>(app: &'a App, t: &'a Theory) -> Element<'a, Message> {
+pub fn outline<'a>(app: &'a App, t: &'a Theory) -> Element<'a, Message> {
     let table = app.table(&app.workspace.as_ref().map(|w| w.machine.clone()).unwrap_or_default());
     let mut col = widget::column::with_capacity(t.blocks.len()).spacing(1);
     for block in &t.blocks {
@@ -377,7 +243,7 @@ fn outline<'a>(app: &'a App, t: &'a Theory) -> Element<'a, Message> {
     col.into()
 }
 
-fn theorems<'a>(app: &'a App, t: &'a Theory) -> Element<'a, Message> {
+pub fn theorems<'a>(app: &'a App, t: &'a Theory) -> Element<'a, Message> {
     let table = app.table(&app.workspace.as_ref().map(|w| w.machine.clone()).unwrap_or_default());
     let mut col = widget::column::with_capacity(t.blocks.len()).spacing(1);
     for block in t.blocks.iter().filter(|b| b.kind == Kind::Formal && t.profile.is_statement(b, &t.kinds)) {
@@ -389,7 +255,7 @@ fn theorems<'a>(app: &'a App, t: &'a Theory) -> Element<'a, Message> {
     col.into()
 }
 
-fn problems<'a>(app: &'a App, t: &'a Theory) -> Element<'a, Message> {
+pub fn problems<'a>(app: &'a App, t: &'a Theory) -> Element<'a, Message> {
     let table = app.table(&app.workspace.as_ref().map(|w| w.machine.clone()).unwrap_or_default());
     let mut col = widget::column::with_capacity(32).spacing(1);
     // Imported theories that cannot load hold this one up
@@ -418,185 +284,6 @@ fn problems<'a>(app: &'a App, t: &'a Theory) -> Element<'a, Message> {
         }
     }
     col.into()
-}
-
-fn sessions_list(app: &App) -> Element<'_, Message> {
-    let sp = spacing();
-    let mut col = widget::column::with_capacity(32).spacing(sp.space_xxs);
-    col = col.push(
-        widget::row::with_capacity(2)
-            .align_y(Alignment::Center)
-            .push(widget::Space::new().width(Length::Fill))
-            .push(widget::button::text("New session").on_press(Message::NewSession(true))),
-    );
-    for link in &app.links {
-        let connected = link.sender.is_some();
-        col = col.push(
-            widget::text::caption_heading(format!("{}{}", link.name, if connected { String::new() } else { format!(" — {}", link.status) })),
-        );
-        for ((machine, sid), s) in app.sessions.iter().filter(|((m, _), _)| *m == link.target.key) {
-            let current = app.workspace.as_ref().is_some_and(|w| w.machine == *machine && w.sid == *sid);
-            let name = s["name"].as_str().unwrap_or(sid).to_string();
-            let owner = s["owner"]["label"].as_str().map(|l| format!(" ({l})")).unwrap_or_default();
-            let clients = s["clients"].as_array().map_or(0, |c| c.iter().filter(|c| c["kind"] == "agent").count());
-            // A session: its name, and a line on its prover and agents; the open one marked by
-            // weight and a quiet background, not a filled button
-            let label = widget::column::with_capacity(2)
-                .push(
-                    widget::text(format!("{name}{owner}"))
-                        .size(z(14.0))
-                        .font(cosmic::iced::Font { weight: if current { cosmic::iced::font::Weight::Bold } else { cosmic::iced::font::Weight::Normal }, ..cosmic::font::default() })
-                        .wrapping(iced::widget::text::Wrapping::None),
-                )
-                .push(widget::text::caption(format!(
-                    "{}{}",
-                    lifecycle_badge(s),
-                    if clients > 0 { format!(" · {clients} agent{}", if clients == 1 { "" } else { "s" }) } else { String::new() }
-                )));
-            col = col.push(
-                widget::button::custom(label)
-                    .width(Length::Fill)
-                    .padding([4, 8])
-                    .class(if current { theme::Button::Standard } else { theme::Button::MenuItem })
-                    .on_press(Message::OpenSession(machine.clone(), sid.clone())),
-            );
-            if current && let Some(ws) = &app.workspace {
-                col = col.push(theories(app, ws));
-            }
-        }
-    }
-    col.into()
-}
-
-fn theories<'a>(app: &'a App, ws: &'a Workspace) -> Element<'a, Message> {
-    let sp = spacing();
-    let mut col = widget::column::with_capacity(64).spacing(1).padding(Padding { left: sp.space_xs as f32, ..Padding::ZERO });
-    let Some(info) = &ws.info else { return widget::text::caption("Loading…").into() };
-    let folder = info["folder"].as_str().unwrap_or("");
-    let all: Vec<&Value> = info["theories"].as_array().into_iter().flatten().filter(|t| t["path"].as_str().is_some_and(|p| ws.profile.is_document(p))).collect();
-    // A big folder gets a filter
-    if all.len() > 10 {
-        col = col.push(
-            widget::container(widget::text_input(format!("Filter {} theories", all.len()), &ws.theory_filter).on_input(Message::TheoryFilter))
-                .padding(Padding { bottom: 4.0, right: 4.0, ..Padding::ZERO }),
-        );
-    }
-    let filter = ws.theory_filter.to_lowercase();
-    // By folder, then the name less what all names in the folder start with
-    let mut groups: std::collections::BTreeMap<String, Vec<(String, &Value)>> = std::collections::BTreeMap::new();
-    for t in &all {
-        let path = t["path"].as_str().unwrap_or("");
-        let rel = path.strip_prefix(folder).unwrap_or(path).trim_start_matches('/');
-        if !filter.is_empty() && super::input::fuzzy(&filter, &rel.to_lowercase()).is_none() {
-            continue;
-        }
-        let (dir, name) = rel.rsplit_once('/').unwrap_or(("", rel));
-        groups.entry(dir.to_string()).or_default().push((ws.profile.document_name(name).to_string(), *t));
-    }
-    if groups.is_empty() {
-        col = col.push(widget::text::caption("No theory matches"));
-    }
-    for (dir, items) in groups {
-        let head = dir.clone();
-        let indent = if head.is_empty() { 0.0 } else { 10.0 };
-        if !head.is_empty() {
-            col = col.push(widget::container(widget::text::caption(head)).padding(Padding { top: 4.0, left: 6.0, ..Padding::ZERO }));
-        }
-        for (name, t) in items {
-            let path = t["path"].as_str().unwrap_or("").to_string();
-            let st = &t["status"];
-            let status = if t["conflict"].as_bool() == Some(true) || st["failed"].as_u64().unwrap_or(0) > 0 {
-                Some(Status::Failed)
-            } else if st["consolidated"].as_bool() == Some(true) {
-                Some(Status::Finished)
-            } else if st["running"].as_u64().unwrap_or(0) > 0 {
-                Some(Status::Running)
-            } else if st.is_object() {
-                Some(Status::Unprocessed)
-            } else {
-                None
-            };
-            let current = ws.theory.as_ref().is_some_and(|th| th.path == path);
-            let dirty = if t["dirty"].as_bool() == Some(true) { " •" } else { "" };
-            let mut row = widget::row::with_capacity(2).spacing(6).align_y(Alignment::Center);
-            row = row.push(
-                widget::container(widget::Space::new())
-                    .width(Length::Fixed(7.0))
-                    .height(Length::Fixed(7.0))
-                    .class(theme::Container::custom(move |theme| iced::widget::container::Style {
-                        background: status.map(|s| status_color(s, theme).into()),
-                        border: Border { radius: 4.0.into(), ..Default::default() },
-                        ..Default::default()
-                    })),
-            );
-            row = row.push(widget::text(format!("{name}{dirty}")).size(z(13.0)).wrapping(iced::widget::text::Wrapping::None));
-            col = col.push(
-                widget::tooltip(
-                    widget::button::custom(row)
-                        .width(Length::Fill)
-                        .padding(Padding { left: 6.0 + indent, right: 6.0, top: 2.0, bottom: 2.0 })
-                        .class(if current { theme::Button::Standard } else { theme::Button::MenuItem })
-                        .on_press(Message::OpenTheory(path.clone())),
-                    widget::text::caption(file_name(&path).to_string()),
-                    widget::tooltip::Position::Right,
-                ),
-            );
-        }
-    }
-    let _ = app;
-    col.into()
-}
-
-
-fn new_session<'a>(app: &'a App, ns: &'a super::NewSession) -> Element<'a, Message> {
-    let sp = spacing();
-    let names: Vec<String> = app.links.iter().map(|l| l.name.clone()).collect();
-    let mut col = widget::column::with_capacity(12)
-        .spacing(sp.space_s)
-        .padding(sp.space_l)
-        .push(widget::text::title3("New session"))
-        .push(widget::text::body("A session is one shared Isabelle prover for a folder of theories. It keeps running when you close the window; agents can attach to it."))
-        .push(widget::settings::item("Machine", widget::dropdown(names, Some(ns.machine), Message::NewMachine)))
-        .push(widget::settings::item(
-            "Folder",
-            widget::text_input("/path/to/theories", &ns.folder).on_input(Message::NewFolder).on_submit(|f| Message::NewBrowse(f)).width(Length::Fixed(480.0)),
-        ));
-    if let Some(listing) = &ns.listing {
-        let mut list = widget::column::with_capacity(40).spacing(1);
-        if let Some(parent) = listing["parent"].as_str() {
-            list = list.push(widget::button::custom(widget::text::body("..")).class(theme::Button::MenuItem).width(Length::Fill).on_press(Message::NewBrowse(parent.to_string())));
-        }
-        let base = listing["path"].as_str().unwrap_or("");
-        for e in listing["entries"].as_array().into_iter().flatten() {
-            let name = e["name"].as_str().unwrap_or("");
-            let dir = e["dir"].as_bool() == Some(true);
-            let full = format!("{}/{}", base.trim_end_matches('/'), name);
-            let label = if dir { format!("{name}/") } else { name.to_string() };
-            let b = widget::button::custom(widget::text::body(label)).class(theme::Button::MenuItem).width(Length::Fill);
-            list = list.push(if dir { b.on_press(Message::NewBrowse(full)) } else { b });
-        }
-        col = col.push(widget::container(widget::scrollable(list)).height(Length::Fixed(260.0)).class(theme::Container::Card));
-    }
-    let detail = ns.suggestion.as_ref().map(|s| {
-        if let Some(note) = s["note"].as_str() {
-            return note.to_string();
-        }
-        s["session"].as_str().map(|n| format!("The folder belongs to session {n}; its parent is the suggested base logic.")).unwrap_or_else(|| "No ROOT found; HOL is suggested.".into())
-    });
-    col = col.push(widget::settings::item("Base logic", widget::text_input("HOL", &ns.logic).on_input(Message::NewLogic).width(Length::Fixed(240.0))));
-    if let Some(d) = detail {
-        col = col.push(widget::text::caption(d));
-    }
-    if let Some(err) = &ns.error {
-        col = col.push(widget::text::body(err.clone()).class(theme::Text::Accent));
-    }
-    col = col.push(
-        widget::row::with_capacity(2)
-            .spacing(sp.space_s)
-            .push(widget::button::standard("Cancel").on_press(Message::NewSession(false)))
-            .push(widget::button::suggested("Start session").on_press_maybe((!ns.folder.is_empty()).then_some(Message::NewCreate))),
-    );
-    widget::scrollable(col.max_width(820)).into()
 }
 
 // ----- the workspace
@@ -874,131 +561,6 @@ fn alternative_banner<'a>(alt: &'a Value) -> Element<'a, Message> {
     }
     row = row.push(widget::button::text("Dismiss").on_press(Message::DismissAlternative(id)));
     widget::container(row).padding(sp.space_xs).class(theme::Container::Card).width(Length::Fill).into()
-}
-
-/// The prover's state in the header bar, as COSMIC apps show work in progress: never an
-/// idle-looking editor while the prover is busy. Clicking it opens the details
-pub fn header_center(app: &App) -> Vec<Element<'_, Message>> {
-    let Some(ws) = &app.workspace else { return Vec::new() };
-    let lifecycle = app
-        .sessions
-        .get(&(ws.machine.clone(), ws.sid.clone()))
-        .and_then(|s| s["lifecycle"].as_str())
-        .unwrap_or("")
-        .to_string();
-    match (&ws.theory, lifecycle.as_str()) {
-        (Some(t), "Running") => prover_status(ws, t).into_iter().collect(),
-        (_, "") => Vec::new(),
-        (_, lc) => vec![
-            widget::button::custom(widget::text::body(format!("Prover {}", lc.to_lowercase())))
-                .class(theme::Button::Text)
-                .on_press(Message::Panel(Panel::Log))
-                .into(),
-        ],
-    }
-}
-
-fn prover_status<'a>(ws: &'a Workspace, t: &'a Theory) -> Option<Element<'a, Message>> {
-    let act = ws.activity.as_ref()?;
-    let theories = act["theories"].as_array()?;
-    let find = |path: &str| theories.iter().find(|th| th["path"].as_str() == Some(path));
-    // The current theory's imports, transitively, that are not checked yet
-    let mut waiting: Vec<(String, u64, bool)> = Vec::new();
-    let mut seen = std::collections::HashSet::new();
-    let mut stack: Vec<String> = find(&t.path)
-        .and_then(|th| th["imports"].as_array())
-        .map(|i| i.iter().filter_map(|p| p.as_str().map(str::to_string)).collect())
-        .unwrap_or_default();
-    while let Some(p) = stack.pop() {
-        if !seen.insert(p.clone()) {
-            continue;
-        }
-        if let Some(th) = find(&p) {
-            if th["consolidated"].as_bool() != Some(true) {
-                let failed = th["failed"].as_u64().unwrap_or(0) > 0 || th["header_errors"].as_array().is_some_and(|e| !e.is_empty());
-                waiting.push((file_name(&p).to_string(), th["percentage"].as_u64().unwrap_or(0), failed));
-            }
-            for i in th["imports"].as_array().into_iter().flatten().filter_map(|x| x.as_str()) {
-                stack.push(i.to_string());
-            }
-        }
-    }
-    let running = act["running"].as_array().cloned().unwrap_or_default();
-    let busy_theories = theories.iter().filter(|th| th["running"].as_u64().unwrap_or(0) > 0).count();
-    let (finished, unprocessed, run_here, failed, consolidated) = t.status();
-    let total = (finished + unprocessed + run_here + failed).max(1);
-    let prover = &act["prover"];
-    let busy = !running.is_empty() || busy_theories > 0;
-    let mut parts: Vec<String> = Vec::new();
-    if !waiting.is_empty() {
-        let blocked = waiting.iter().filter(|w| w.2).count();
-        parts.push(if blocked > 0 {
-            format!("{blocked} import{} cannot load", if blocked == 1 { "" } else { "s" })
-        } else {
-            format!("waiting for {} import{}", waiting.len(), if waiting.len() == 1 { "" } else { "s" })
-        });
-    } else if busy || (!consolidated && !t.prover.status.is_null()) {
-        parts.push(format!("checking {}%", (finished + failed) * 100 / total));
-    } else if !t.prover.status.is_null() {
-        parts.push("checked".into());
-    }
-    if failed > 0 {
-        parts.push(format!("{failed} failing"));
-    }
-    let is_tool = |r: &Value| r["name"].as_str().is_some_and(|n| ws.caps.typed_tool(n).is_some());
-    if let Some(longest) = running.iter().find(|r| !is_tool(r))
-        && longest["seconds"].as_u64().unwrap_or(0) >= 5
-    {
-        parts.push(format!("{} {} s", longest["name"].as_str().unwrap_or(""), longest["seconds"]));
-    }
-    if let Some(cpu) = prover["cpu"].as_u64().filter(|c| *c >= 5) {
-        parts.push(format!("CPU {cpu}%"));
-    }
-    if let Some(mb) = prover["rss_mb"].as_u64() {
-        parts.push(format!("{:.1} GB", mb as f64 / 1000.0));
-    }
-    let mut row = widget::row::with_capacity(4).spacing(6).align_y(Alignment::Center);
-    if busy {
-        row = row.push(widget::progress_bar::circular::Circular::new().size(14.0));
-    }
-    row = row.push(widget::text::body(parts.join(" · ")));
-    let tip = if waiting.is_empty() {
-        "Prover activity: click for details".to_string()
-    } else {
-        let mut w = waiting.clone();
-        w.sort_by_key(|w| (!w.2, w.1));
-        format!(
-            "Waiting for: {}",
-            w.iter().take(8).map(|(n, p, f)| if *f { format!("{n} (cannot load)") } else { format!("{n} {p}%") }).collect::<Vec<_>>().join(", ")
-        )
-    };
-    let status = widget::tooltip(
-        widget::button::custom(row).class(theme::Button::Text).on_press(Message::Panel(Panel::Log)),
-        widget::text(tip),
-        widget::tooltip::Position::Bottom,
-    );
-    let mut out = widget::row::with_capacity(3).spacing(2).align_y(Alignment::Center).push(status);
-    // A proof tool typed in the text, running: stoppable on its own
-    // A proof tool typed in the text: its own entry, with its own Stop
-    if let Some(tool) = running.iter().find(|r| is_tool(r)) {
-        let name = tool["name"].as_str().unwrap_or("");
-        let label = format!("{name} {} s", tool["seconds"].as_u64().unwrap_or(0));
-        if ws.tools_stopping {
-            out = out.push(widget::text::body(format!("· {label} · stopping…")));
-        } else if ws.caps.typed_tool(name).is_some_and(|t| t.stop) {
-            out = out
-                .push(widget::text::body(format!("· {label}")))
-                .push(icon_button("process-stop-symbolic", "Stop it (as if its time ran out)", Some(Message::StopTools)));
-        } else {
-            out = out.push(widget::text::body(format!("· {label}")));
-        }
-    }
-    // Interrupt: for proofs other than the tools, where the prover can
-    let others = running.iter().any(|r| !is_tool(r));
-    if busy && others && ws.caps.interrupt {
-        out = out.push(icon_button("process-stop-symbolic", "Interrupt running proofs", Some(Message::Lifecycle("cancel"))));
-    }
-    Some(out.into())
 }
 
 fn activity_panel(ws: &Workspace) -> Element<'_, Message> {
@@ -1885,25 +1447,6 @@ pub fn centre_selected() -> cosmic::app::Task<Message> {
     })
 }
 
-/// What editing the open block means, for the status bar: vim's mode, the block's checking, how
-/// to finish
-fn editing_status(app: &App) -> Option<String> {
-    let t = app.workspace.as_ref()?.theory.as_ref()?;
-    let be = t.block_editor.as_ref().filter(|_| t.mode == Mode::Literate)?;
-    let mut parts = Vec::new();
-    if let Some(m) = vim_mode_now() {
-        parts.push(format!("-- {} --", m.label()));
-    }
-    if be.wrap.is_none() {
-        parts.push(status_caption(t.status_in(be.start, be.end)).to_string());
-    }
-    if be.preview.is_some() {
-        parts.push("preview follows".to_string());
-    }
-    parts.push("Esc or click outside to finish".to_string());
-    Some(parts.join(" · "))
-}
-
 fn status_caption(status: Option<Status>) -> &'static str {
     match status {
         Some(Status::Failed) => "✗ failing",
@@ -2323,6 +1866,10 @@ fn key_binding(press: text_editor::KeyPress, completing: bool, vim: Option<super
     if m.command() && matches!(press.key.as_ref(), Key::Character("=" | "+" | "-" | "0")) {
         return None;
     }
+    // The settings, from any editor and in any vim mode
+    if m.command() && matches!(press.key.as_ref(), Key::Character(",")) {
+        return Some(text_editor::Binding::Custom(Message::Shell(super::shell::Msg::ToggleSettings)));
+    }
     // Vim: outside insert mode every key goes to the vim machine
     if let Some(mode) = vim {
         let custom = |k: &str, ctrl: bool| Some(text_editor::Binding::Custom(Message::Vim(k.to_string(), ctrl)));
@@ -2361,7 +1908,7 @@ fn key_binding(press: text_editor::KeyPress, completing: bool, vim: Option<super
         Key::Named(Named::Tab) if completing && !m.shift() => Some(text_editor::Binding::Custom(Message::Complete(0))),
         // Tab indents, as in any code editor, instead of moving the focus
         Key::Named(Named::Tab) if m.shift() => Some(text_editor::Binding::Custom(Message::Unindent)),
-        Key::Named(Named::Tab) => Some(text_editor::Binding::Custom(Message::InsertSymbol("  ".into()))),
+        Key::Named(Named::Tab) => Some(text_editor::Binding::Custom(Message::InsertSymbol(" ".repeat(super::settings::indent_width())))),
         Key::Character("z") if m.command() && m.shift() => Some(text_editor::Binding::Custom(Message::Redo)),
         Key::Character("z") if m.command() => Some(text_editor::Binding::Custom(Message::Undo)),
         Key::Character("y") if m.command() => Some(text_editor::Binding::Custom(Message::Redo)),
@@ -2893,7 +2440,8 @@ fn state_view<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Eleme
     let prev = super::goals::Goals::parse(&ws.goals_prev.messages);
     let before: Vec<String> = prev.subgoals.iter().map(|s| s.key()).collect();
     let now: Vec<String> = g.subgoals.iter().map(|s| s.key()).collect();
-    let compared = prev.count.is_some();
+    // (what the step changed only when the settings ask for it)
+    let compared = prev.count.is_some() && super::settings::show_changes();
     let solved = before.iter().filter(|k| !now.contains(k)).count();
     let added = now.iter().filter(|k| !before.contains(k)).count();
     let n = g.count.unwrap_or(0);

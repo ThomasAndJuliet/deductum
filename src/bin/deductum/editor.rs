@@ -958,6 +958,16 @@ impl Theory {
         let before: String = text.chars().take(caret).collect();
         let words = self.words();
         self.completions = complete(self.profile, &before, table, &self.kinds, &words, self.goal.as_ref());
+        // Without completion while typing (a setting), only what is typed to be completed: `\`
+        // symbols and `@names`, which have no other way in
+        if !crate::settings::complete_while_typing() {
+            let chars: Vec<char> = before.chars().collect();
+            // (a symbol's replacement starts at its `\`, a name's just after its `@`)
+            self.completions.retain(|c| {
+                let Some(i) = chars.len().checked_sub(c.replace) else { return false };
+                chars.get(i) == Some(&'\\') || (i > 0 && chars[i - 1] == '@')
+            });
+        }
     }
 
     /// Accept completion `i` in the editor in use
