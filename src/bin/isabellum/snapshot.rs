@@ -1683,18 +1683,132 @@ fn opening_the_next_block_does_not_move_it() {
     let ti = blocks.iter().position(|b| b.kind == super::theory::Kind::Text).unwrap();
     let li = blocks.iter().position(|b| b.name == "lemma").unwrap();
     let mut h = Harness::new(Size::new(1320.0, 900.0));
-    // the lemma's strip: the first row, at the strip's x, that is the strip's colour, below the text
-    let strip_top = |png: Vec<u8>| -> Option<u32> {
-        let img = image::RgbaImage::from_raw(1320, 900, png).unwrap();
-        let bg = *img.get_pixel(12, 400);
-        // the strips are at the column's left edge: find it on the lemma's row
-        (200..880).find(|&y| (100..700).any(|x| { let p = img.get_pixel(x, y); p != &bg && p[1] > 90 && p[0] < 90 && p[2] < 110 }))
+    // the lemma's top: the first height, down its left, where the pointer is over it (its shown
+    // view, or its open editor)
+    let top = |h: &mut Harness, app: &App, open: bool| -> Option<u32> {
+        h.draw(app, if open { "jump-lemma-open" } else { "jump-text-open" });
+        (150..800).step_by(2).find(|&y| {
+            (150..700).step_by(30).any(|x| {
+                h.move_to(app, cosmic::iced::Point::new(x as f32, y as f32)).iter().any(|m| match m {
+                    super::Message::HoverMove(super::HoverTarget::View(i), _) => !open && *i == li,
+                    super::Message::HoverMove(super::HoverTarget::Block, _) => open,
+                    _ => false,
+                })
+            })
+        })
     };
     let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(ti));
-    let with_text = strip_top(h.draw(&app, "jump-text-open"));
+    let with_text = top(&mut h, &app, false);
     let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(li));
-    let with_lemma = strip_top(h.draw(&app, "jump-lemma-open"));
-    eprintln!("lemma strip top: text open {with_text:?}, lemma open {with_lemma:?}");
+    let with_lemma = top(&mut h, &app, true);
+    eprintln!("lemma top: text open {with_text:?}, lemma open {with_lemma:?}");
     let (a, b) = (with_text.expect("the lemma drawn"), with_lemma.expect("the lemma drawn"));
-    assert!(a.abs_diff(b) <= 3, "the lemma stays where it was as it opens ({a} then {b})");
+    // (within a little: the paragraph being edited shows its antiquotations as source, so it can
+    // be a line longer than rendered; the row of editing hints under the open block, which moved
+    // it 23 px, is gone)
+    assert!(a.abs_diff(b) <= 12, "the lemma stays where it was as it opens ({a} then {b})");
+}
+
+/// Up from a block whose first line wraps: one press per row, then out to the block above (the
+/// editor's remembered column must not cost an extra press on the top row); down likewise
+#[test]
+fn up_and_down_leave_a_block_from_its_edge_rows() {
+    use cosmic::iced::keyboard::{Key, key::Named};
+    let long = "lemma wrapped: \"timed_contract_wf true\\<^sub>r skip_unstable (timed_assign_final f) \\<and> timed_reactive P \\<and> timed_reactive Q \\<and> timed_reactive R\"";
+    let text = format!("theory U imports Main begin\n\nlemma above: \"True\"\n  by simp\n\n{long}\n  by simp\n\nlemma below: \"True\"\n  by simp\n\nend\n");
+    for up in [true, false] {
+        let mut app = demo_app(Mode::Literate);
+        let doc = json!({"text": text, "revision": 1, "prover": prover_json(&text)});
+        app.workspace.as_mut().unwrap().theory = Some(Theory::new("/tmp/U.thy".into(), &doc, &Arc::new(Table::fallback()), Arc::new(HashMap::new()), Mode::Literate));
+        app.show_right = false;
+        app.show_sidebar = false;
+        let wi = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.name == "lemma" && b.start > text.find("lemma wrapped").unwrap().saturating_sub(1)).unwrap();
+        let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(wi));
+        let mut h = Harness::new(Size::new(900.0, 800.0));
+        h.focus(&app, super::view::block_editor_id());
+        h.draw(&app, "edge-rows");
+        // the caret: on "by simp" (going up), or at the start of the wrapped first line (going down)
+        {
+            let be = app.workspace.as_mut().unwrap().theory.as_mut().unwrap().block_editor.as_mut().unwrap();
+            let pos = if up { cosmic::widget::text_editor::Position { line: 1, column: 6 } } else { cosmic::widget::text_editor::Position { line: 0, column: 3 } };
+            super::editor::place(&mut be.content, pos);
+        }
+        let open = |app: &App| {
+            let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+            t.block_editor.as_ref().and_then(|be| t.blocks.iter().position(|b| b.start <= be.start && be.start <= b.end))
+        };
+        let mut presses = 0;
+        for _ in 0..8 {
+            presses += 1;
+            let msgs = h.key(&app, Key::Named(if up { Named::ArrowUp } else { Named::ArrowDown }), None);
+            for m in msgs {
+                let _ = cosmic::Application::update(&mut app, m);
+            }
+            h.draw(&app, "edge-rows");
+            if open(&app) != Some(wi) {
+                break;
+            }
+        }
+        eprintln!("up {up}: left the block after {presses} presses");
+        // up: by simp -> row 2 -> row 1 -> out; down: row 1 -> row 2 -> by simp -> out
+        assert!(presses <= 3 + usize::from(!up), "up {up}: out of the block within a press per row ({presses} presses)");
+        assert!(open(&app) != Some(wi), "up {up}: left the block");
+    }
+}
+
+/// The palette wraps the selection (emphasis around a selected word), or inserts at the caret
+/// with the caret between (a term to type)
+#[test]
+fn the_palette_wraps_the_selection() {
+    use cosmic::widget::text_editor::{Action as A, Cursor, Position};
+    let para = "We prove that addition with zero is the identity\n  for every natural number.";
+    let text = format!("theory W imports Main begin\n\ntext \\<open>{para}\\<close>\n\nend\n");
+    let fresh = || {
+        let mut app = demo_app(Mode::Literate);
+        let doc = json!({"text": text, "revision": 1, "prover": {}});
+        app.workspace.as_mut().unwrap().theory = Some(Theory::new("/tmp/W.thy".into(), &doc, &Arc::new(Table::fallback()), Arc::new(HashMap::new()), Mode::Literate));
+        let ti = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.kind == super::theory::Kind::Text).unwrap();
+        let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(ti));
+        app
+    };
+    let local = |app: &App| app.workspace.as_ref().unwrap().theory.as_ref().unwrap().local.clone();
+    let shown = |app: &App| app.workspace.as_ref().unwrap().theory.as_ref().unwrap().block_editor.as_ref().unwrap().content.text();
+    // 1. a selected word, emphasised
+    let mut app = fresh();
+    {
+        let be = app.workspace.as_mut().unwrap().theory.as_mut().unwrap().block_editor.as_mut().unwrap();
+        let t = be.content.text();
+        let s = t.find("addition").unwrap();
+        let li = super::editor::LineIndex::new(&t);
+        let (a, b) = (li.position(&t, t[..s].chars().count()), li.position(&t, t[..s].chars().count() + 8));
+        be.content.move_to(Cursor { position: b, selection: Some(a) });
+    }
+    let _ = cosmic::Application::update(&mut app, super::Message::Wrap("\\<^emph>‹".into(), "›".into()));
+    assert!(local(&app).contains("\\<^emph>\\<open>addition\\<close> with zero"), "{:?}", local(&app));
+    assert!(local(&app).contains("identity\n  for every"), "the rest of the paragraph as it was: {:?}", local(&app));
+    // 2. at the caret: both, the caret between
+    let mut app = fresh();
+    {
+        let be = app.workspace.as_mut().unwrap().theory.as_mut().unwrap().block_editor.as_mut().unwrap();
+        super::editor::place(&mut be.content, Position { line: 0, column: 3 });
+    }
+    let _ = cosmic::Application::update(&mut app, super::Message::Wrap("@{term \"".into(), "\"}".into()));
+    assert!(local(&app).contains("We @{term \"\"}prove"), "{:?}", local(&app));
+    let be = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().block_editor.as_ref().unwrap();
+    let t = shown(&app);
+    let at = super::editor::LineIndex::new(&t).offset(&t, be.content.cursor().position);
+    assert_eq!(t.chars().skip(at).take(2).collect::<String>(), "\"}", "the caret between the quotes");
+    // 3. a word selected as a double click selects it (the cursor cannot say where it is)
+    let mut app = fresh();
+    {
+        let be = app.workspace.as_mut().unwrap().theory.as_mut().unwrap().block_editor.as_mut().unwrap();
+        super::editor::place(&mut be.content, Position { line: 0, column: 16 });
+        be.content.perform(A::SelectWord);
+    }
+    let sel = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().block_editor.as_ref().unwrap().content.selection();
+    eprintln!("word selection: {sel:?}");
+    if sel.as_deref().is_some_and(|s| !s.trim().is_empty()) {
+        let _ = cosmic::Application::update(&mut app, super::Message::Wrap("\\<^bold>‹".into(), "›".into()));
+        assert!(local(&app).contains(&format!("\\<^bold>\\<open>{}\\<close>", sel.unwrap().trim())), "{:?}", local(&app));
+    }
 }

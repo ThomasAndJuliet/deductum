@@ -241,6 +241,8 @@ pub enum Message {
     ToggleGoalBeside,
     /// The insert palette's search
     PaletteQuery(String),
+    /// Put this before and this after the selection, or at the caret with the caret between
+    Wrap(String, String),
     /// Where `claude` and `codex` queries go: helper, fresh, or agent:KEY
     QueryRoute(String),
     /// Start the helper conversation again
@@ -591,11 +593,22 @@ impl App {
                     tasks.push(self.update(act(A::Move(m))));
                     continue;
                 }
-                tasks.push(self.update(Message::BlockAction(A::Move(m))));
-                let Some(t) = self.workspace.as_ref().and_then(|w| w.theory.as_ref()) else { break };
-                let Some(be) = &t.block_editor else { continue };
-                if be.content.cursor().position != before {
-                    continue;
+                // On the first (last) row as laid out, the block is left at once: the editor's
+                // remembered column would otherwise move the caret sideways there first, which
+                // looks like no edge and takes another press
+                let on_edge_row = self
+                    .workspace
+                    .as_mut()
+                    .and_then(|w| w.theory.as_mut())
+                    .and_then(|t| t.block_editor.as_mut())
+                    .is_some_and(|be| editor::on_edge_row(&mut be.content, m == M::Down));
+                if !on_edge_row {
+                    tasks.push(self.update(Message::BlockAction(A::Move(m))));
+                    let Some(t) = self.workspace.as_ref().and_then(|w| w.theory.as_ref()) else { break };
+                    let Some(be) = &t.block_editor else { continue };
+                    if be.content.cursor().position != before {
+                        continue;
+                    }
                 }
                 let m = &m;
                 // (within a text block, the next paragraph before the next block)
@@ -2569,6 +2582,58 @@ impl cosmic::Application for App {
                 };
                 view::set_zoom(z);
                 self.save_settings();
+            }
+            Message::Wrap(before, after) => {
+                use cosmic::widget::text_editor::{Action as A, Edit as E, Motion as M};
+                let Some(t) = self.workspace.as_ref().and_then(|w| w.theory.as_ref()) else { return Task::none() };
+                let in_block = t.block_editor.is_some() && t.mode == Mode::Literate;
+                let (content, focus) = match &t.block_editor {
+                    Some(be) if in_block => (&be.content, view::block_editor_id()),
+                    _ => (&t.source, view::source_editor_id()),
+                };
+                let act = |a: A| if in_block { Message::BlockAction(a) } else { Message::SourceAction(a) };
+                let paste = |s: &str| A::Edit(E::Paste(Arc::new(s.to_string())));
+                let text = content.text();
+                let li = editor::LineIndex::new(&text);
+                let range = editor::selection_range(content);
+                let mut tasks = Vec::new();
+                match range {
+                    // Around the selection: what goes after first, then what goes before, each
+                    // an insertion of its own (the selected text is left as it is)
+                    Some((s, e)) => {
+                        let place = |app: &mut Self, at: usize| {
+                            if let Some(t) = app.workspace.as_mut().and_then(|w| w.theory.as_mut()) {
+                                let content = match &mut t.block_editor {
+                                    Some(be) if in_block => &mut be.content,
+                                    _ => &mut t.source,
+                                };
+                                let text = content.text();
+                                let li = editor::LineIndex::new(&text);
+                                editor::place(content, li.position(&text, at));
+                            }
+                        };
+                        place(self, e);
+                        if !after.is_empty() {
+                            tasks.push(self.update(act(paste(&after))));
+                        }
+                        place(self, s);
+                        if !before.is_empty() {
+                            tasks.push(self.update(act(paste(&before))));
+                        }
+                        let end = e + before.chars().count() + after.chars().count();
+                        place(self, end);
+                    }
+                    // At the caret: both, the caret between them
+                    None => {
+                        let _ = li;
+                        tasks.push(self.update(act(paste(&format!("{before}{after}")))));
+                        for _ in 0..after.chars().count() {
+                            tasks.push(self.update(act(A::Move(M::Left))));
+                        }
+                    }
+                }
+                tasks.push(widget::text_input::focus(focus));
+                return Task::batch(tasks);
             }
             Message::PaletteQuery(q) => {
                 if let Some(ws) = &mut self.workspace {

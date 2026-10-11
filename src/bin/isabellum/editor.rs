@@ -1032,6 +1032,146 @@ enum EditKind {
 
 /// Put an editor's caret at a position, with nothing selected (`move_to` alone leaves an empty
 /// selection there, which the next motion would only clear)
+/// Whether the caret is on the editor's first row as laid out (`last`: its last row): what a
+/// click at that row's far end (start) lands on says where the row ends (starts). False when
+/// the editor has not been laid out
+pub fn on_edge_row(content: &mut text_editor::Content, last: bool) -> bool {
+    let saved = content.cursor();
+    let pos = saved.position;
+    let lines = content.line_count();
+    let probe = if last { cosmic::iced::Point::new(0.0, 1.0e7) } else { cosmic::iced::Point::new(1.0e7, 2.0) };
+    content.perform(Action::Click(probe));
+    let edge = content.cursor().position;
+    content.move_to(saved);
+    if saved.selection.is_none() {
+        content.perform(Action::ClearSelection);
+    }
+    // (not laid out: every click lands at the start)
+    if edge.line == 0 && edge.column == 0 && !(lines == 1 && pos.column == 0) {
+        return false;
+    }
+    if last { pos.line == edge.line && pos.column >= edge.column } else { pos.line == 0 && edge.line == 0 && pos.column <= edge.column }
+}
+
+/// The code in a paragraph of prose, as it reads lexically: antiquotations (`@{name` and its
+/// closing brace as keywords, quoted or cartouche arguments as terms, other arguments as names),
+/// maths source (`$` and LaTeX commands, its braces and scripts) and raw LaTeX commands
+pub fn prose_code_classes(text: &str) -> Vec<Option<Hl>> {
+    let cs: Vec<char> = text.chars().collect();
+    let n = cs.len();
+    let mut out: Vec<Option<Hl>> = vec![None; n];
+    let term = Some(Hl::Sem(Sem::Free));
+    let name = Some(Hl::Sem(Sem::TFree));
+    let punct = Some(Hl::Sem(Sem::Skolem));
+    let mut i = 0;
+    while i < n {
+        if cs[i] == '@' && cs.get(i + 1) == Some(&'{') {
+            let mut j = i + 2;
+            while j < n && (cs[j].is_alphanumeric() || cs[j] == '_') {
+                j += 1;
+            }
+            for c in out.iter_mut().take(j).skip(i) {
+                *c = Some(Hl::Keyword);
+            }
+            // its arguments, to the closing brace (quotes and cartouches nest)
+            let (mut depth, mut quoted, mut k) = (0usize, false, j);
+            while k < n {
+                let c = cs[k];
+                if quoted {
+                    out[k] = term;
+                    quoted = c != '"';
+                } else if c == '"' {
+                    out[k] = term;
+                    quoted = true;
+                } else if c == '‹' {
+                    depth += 1;
+                    out[k] = term;
+                } else if c == '›' {
+                    depth = depth.saturating_sub(1);
+                    out[k] = term;
+                } else if depth > 0 {
+                    out[k] = term;
+                } else if c == '}' {
+                    out[k] = Some(Hl::Keyword);
+                    k += 1;
+                    break;
+                } else if !c.is_whitespace() {
+                    out[k] = name;
+                }
+                k += 1;
+            }
+            i = k;
+            continue;
+        }
+        if cs[i] == '$' {
+            out[i] = Some(Hl::Keyword);
+            let mut k = i + 1;
+            while k < n && cs[k] != '$' {
+                if cs[k] == '\\' {
+                    let mut j = k + 1;
+                    while j < n && cs[j].is_ascii_alphabetic() {
+                        j += 1;
+                    }
+                    let j = j.max(k + 2).min(n);
+                    for c in out.iter_mut().take(j).skip(k) {
+                        *c = Some(Hl::Keyword);
+                    }
+                    k = j;
+                    continue;
+                }
+                if matches!(cs[k], '{' | '}' | '^' | '_') {
+                    out[k] = punct;
+                }
+                k += 1;
+            }
+            if k < n {
+                out[k] = Some(Hl::Keyword);
+            }
+            i = k + 1;
+            continue;
+        }
+        if cs[i] == '\\' && cs.get(i + 1).is_some_and(|c| c.is_ascii_alphabetic()) {
+            let mut j = i + 1;
+            while j < n && cs[j].is_ascii_alphabetic() {
+                j += 1;
+            }
+            for c in out.iter_mut().take(j).skip(i) {
+                *c = Some(Hl::Keyword);
+            }
+            i = j;
+            continue;
+        }
+        i += 1;
+    }
+    out
+}
+
+/// Where the selection is (code point offsets in the editor's text, start before end): from the
+/// cursor and its anchor, or, for a selection the cursor cannot say (a double or triple click
+/// selects the word or line around a point), the selected text found around the caret
+pub fn selection_range(content: &text_editor::Content) -> Option<(usize, usize)> {
+    let selected = content.selection().filter(|s| !s.is_empty())?;
+    let text = content.text();
+    let li = LineIndex::new(&text);
+    let cursor = content.cursor();
+    let at = li.offset(&text, cursor.position);
+    let n = selected.chars().count();
+    if let Some(anchor) = cursor.selection.filter(|a| *a != cursor.position) {
+        let a = li.offset(&text, anchor);
+        let (s, e) = (a.min(at), a.max(at));
+        if e - s == n {
+            return Some((s, e));
+        }
+    }
+    // (the occurrence of the selected text nearest the caret)
+    let chars: Vec<char> = text.chars().collect();
+    let want: Vec<char> = selected.chars().collect();
+    (0..=chars.len().saturating_sub(n))
+        .filter(|&i| chars[i..i + n] == want[..])
+        .min_by_key(|&i| if i <= at && at <= i + n { 0 } else { i.abs_diff(at).min((i + n).abs_diff(at)) + 1 })
+        .map(|i| (i, i + n))
+}
+
 pub fn place(content: &mut text_editor::Content, position: text_editor::Position) {
     content.move_to(Cursor { position, selection: None });
     content.perform(Action::ClearSelection);
@@ -1203,8 +1343,18 @@ impl Theory {
         let mut lines: Vec<Vec<(Range<usize>, Hl)>> = vec![Vec::new()];
         let mut byte = 0;
         let mut current: Option<(usize, Hl)> = None;
-        for (k, c) in be.shown().chars().enumerate() {
-            let hl = self.classes.get(ds + k).copied().flatten();
+        // Prose being edited: the code in it coloured as code at once (antiquotations, maths
+        // source, LaTeX commands), where the prover has not coloured it (yet)
+        let shown = be.shown();
+        let prose = be.wrap.as_ref().map(|_| prose_code_classes(&shown));
+        let prose_class = |h: Option<Hl>| matches!(h, None | Some(Hl::Comment | Hl::Unprocessed | Hl::Running | Hl::Sem(Sem::Comment | Sem::Raw | Sem::Inner)));
+        for (k, c) in shown.chars().enumerate() {
+            let mut hl = self.classes.get(ds + k).copied().flatten();
+            if let Some(code) = prose.as_ref().and_then(|p| p.get(k).copied().flatten())
+                && prose_class(hl)
+            {
+                hl = Some(code);
+            }
             if c == '\n' {
                 if let Some((s, h)) = current.take() {
                     lines.last_mut().unwrap().push((s..byte, h));
@@ -2357,6 +2507,26 @@ mod prose_completion_tests {
         t.accept_completion(0, &table);
         assert!(!t.local.contains('\u{200B}'), "no zero-width spaces in the source: {:?}", t.local);
         assert!(t.local.contains("the unstable\n  observation. Its final commitment applies a\n  total substitution, assignment"), "{:?}", t.local);
+    }
+}
+
+#[cfg(test)]
+mod prose_code_tests {
+    use super::*;
+
+    #[test]
+    fn code_in_prose_reads_as_code() {
+        let text = "so @{term \"x + y\"} by @{thm foo_def}, see \\cite{Nipkow} and $x \\le y^2$ here";
+        let c = prose_code_classes(text);
+        let at = |s: &str| text[..text.find(s).unwrap()].chars().count();
+        assert_eq!(c[at("@{term")], Some(Hl::Keyword));
+        assert_eq!(c[at("x + y")], Some(Hl::Sem(Sem::Free)), "the term");
+        assert_eq!(c[at("foo_def")], Some(Hl::Sem(Sem::TFree)), "the theorem's name");
+        assert_eq!(c[at("\\cite")], Some(Hl::Keyword));
+        assert_eq!(c[at("\\le")], Some(Hl::Keyword), "a LaTeX command in maths");
+        assert_eq!(c[at("^2")], Some(Hl::Sem(Sem::Skolem)), "a superscript in maths");
+        assert_eq!(c[at("so")], None, "prose stays prose");
+        assert_eq!(c[at("here")], None);
     }
 }
 
