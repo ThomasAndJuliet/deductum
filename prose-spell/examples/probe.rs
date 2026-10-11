@@ -1,5 +1,5 @@
 use harper_core::linting::{LintGroup, Linter};
-use harper_core::prose_spell::FstDictionary;
+use harper_core::spell::FstDictionary;
 use harper_core::{Dialect, Document};
 fn main() {
     let dict = FstDictionary::curated();
