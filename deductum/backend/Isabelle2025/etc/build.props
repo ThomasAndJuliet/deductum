@@ -1,0 +1,8 @@
+title = Deductum prover backend
+module = lib/deductum_backend.jar
+requirements = \
+  env:ISABELLE_SCALA_JAR
+sources = \
+  src/backend.scala
+services = \
+  deductum.Tools

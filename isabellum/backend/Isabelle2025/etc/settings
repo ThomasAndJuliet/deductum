@@ -1,3 +1,0 @@
-# -*- shell-script -*- :mode=shellscript:
-
-ISABELLUM_BACKEND_HOME="$COMPONENT"

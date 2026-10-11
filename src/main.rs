@@ -535,7 +535,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         env::set_var("TERM", "xterm-256color");
     }
 
-    menu::check_isabellum();
+    menu::check_deductum();
 
     // Set settings
     let mut settings = Settings::default();
@@ -663,8 +663,8 @@ pub enum Action {
     TabForkTo(ProfileId),
     OpenLocallyByMenu,
     OpenInZed,
-    /// The Isabelle session the tab's agent works in, in Isabellum
-    OpenInIsabellum,
+    /// The Isabelle session the tab's agent works in, in Deductum
+    OpenInDeductum,
     OpenInFiles,
     /// Rename the conversation of the tab in front
     SessionRename,
@@ -739,7 +739,7 @@ impl Action {
             Self::RemoteEnd => Message::RemoteEnd(entity_opt),
             Self::TabPopOut => Message::TabPopOut(entity_opt),
             Self::OpenInZed => Message::OpenInZed,
-            Self::OpenInIsabellum => Message::OpenInIsabellum(entity_opt),
+            Self::OpenInDeductum => Message::OpenInDeductum(entity_opt),
             Self::OpenInFiles => Message::OpenInFiles,
             Self::SessionRename => Message::SessionRename(entity_opt),
             Self::SidebarToggle => Message::SidebarToggle,
@@ -1016,8 +1016,8 @@ pub enum Message {
     OpenLocallyByMenu,
     OpenLocallyResult(Result<(), String>),
     OpenInZedResult(Result<(), String>),
-    OpenInIsabellum(Option<segmented_button::Entity>),
-    OpenInIsabellumResult(Result<(), String>),
+    OpenInDeductum(Option<segmented_button::Entity>),
+    OpenInDeductumResult(Result<(), String>),
     NewTabMenuClose,
     NewTabMenuToggle,
     Opacity(u8),
@@ -7517,8 +7517,8 @@ impl Application for App {
                     return self.file_open_error(fl!("open-in-zed-failed", error = err.as_str()), err);
                 }
             }
-            Message::OpenInIsabellum(entity_opt) => {
-                if self.pending_commands.contains_key("open-isabellum") {
+            Message::OpenInDeductum(entity_opt) => {
+                if self.pending_commands.contains_key("open-deductum") {
                     return Task::none();
                 }
                 let process = match entity_opt {
@@ -7539,24 +7539,24 @@ impl Application for App {
                         agent::TabProcess::Dir { host, .. } => host.clone(),
                         agent::TabProcess::Local(_) => String::new(),
                     };
-                    // Isabellum knows the computer by the name it has here
+                    // Deductum knows the computer by the name it has here
                     let machine = self
                         .config
                         .machines
                         .values()
                         .find(|m| !host.is_empty() && (m.destination() == host || m.host == host))
                         .map(|m| m.name.clone());
-                    self.start_progress("open-isabellum", fl!("opening-isabellum"));
+                    self.start_progress("open-deductum", fl!("opening-deductum"));
                     return cosmic::task::future(async move {
-                        Message::OpenInIsabellumResult(agent::open_in_isabellum(process, machine).await)
+                        Message::OpenInDeductumResult(agent::open_in_deductum(process, machine).await)
                     });
                 }
             }
-            Message::OpenInIsabellumResult(result) => {
-                self.finish_progress("open-isabellum");
+            Message::OpenInDeductumResult(result) => {
+                self.finish_progress("open-deductum");
                 if let Err(err) = result {
-                    log::warn!("failed to open in Isabellum: {}", err);
-                    return self.file_open_error(fl!("open-in-isabellum-failed", error = err.as_str()), err);
+                    log::warn!("failed to open in Deductum: {}", err);
+                    return self.file_open_error(fl!("open-in-deductum-failed", error = err.as_str()), err);
                 }
             }
             Message::RemoteEnded(entity, result) => {

@@ -1,0 +1,3 @@
+# -*- shell-script -*- :mode=shellscript:
+
+DEDUCTUM_BACKEND_HOME="$COMPONENT"

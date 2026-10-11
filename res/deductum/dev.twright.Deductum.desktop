@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=Deductum
+Comment=Isabelle theories as literate documents, worked on with agents in one live session
+Exec=deductum %F
+Icon=dev.twright.Deductum
+Terminal=false
+Type=Application
+Categories=Development;Science;Math;
+Keywords=Isabelle;theorem;prover;proof;literate;
+StartupWMClass=dev.twright.Deductum

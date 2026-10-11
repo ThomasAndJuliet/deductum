@@ -18,26 +18,26 @@ use std::{collections::HashMap, sync::LazyLock};
 
 use crate::{Action, ColorSchemeId, ColorSchemeKind, Config, Message, fl};
 
-/// Whether Isabellum is installed, so its action is offered (its design C10).
-/// Set once at startup by [`check_isabellum`]
-pub static ISABELLUM_INSTALLED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+/// Whether Deductum is installed, so its action is offered (its design C10).
+/// Set once at startup by [`check_deductum`]
+pub static DEDUCTUM_INSTALLED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
-/// Look for Isabellum on the host, in the background
-pub fn check_isabellum() {
+/// Look for Deductum on the host, in the background
+pub fn check_deductum() {
     std::thread::spawn(|| {
-        let script = "PATH=\"$PATH:$HOME/.local/bin\"; command -v isabellum >/dev/null 2>&1 || flatpak info dev.twright.Isabellum >/dev/null 2>&1";
+        let script = "PATH=\"$PATH:$HOME/.local/bin\"; command -v deductum >/dev/null 2>&1 || flatpak info dev.twright.Deductum >/dev/null 2>&1 || command -v isabellum >/dev/null 2>&1 || flatpak info dev.twright.Isabellum >/dev/null 2>&1";
         let status = if std::path::Path::new("/.flatpak-info").exists() {
             std::process::Command::new("flatpak-spawn").args(["--host", "sh", "-c", script]).status()
         } else {
             std::process::Command::new("sh").args(["-c", script]).status()
         };
         let found = status.is_ok_and(|s| s.success());
-        ISABELLUM_INSTALLED.store(found, std::sync::atomic::Ordering::Relaxed);
+        DEDUCTUM_INSTALLED.store(found, std::sync::atomic::Ordering::Relaxed);
     });
 }
 
-fn isabellum_installed() -> bool {
-    ISABELLUM_INSTALLED.load(std::sync::atomic::Ordering::Relaxed)
+fn deductum_installed() -> bool {
+    DEDUCTUM_INSTALLED.load(std::sync::atomic::Ordering::Relaxed)
 }
 
 static MENU_ID: LazyLock<cosmic::widget::Id> =
@@ -187,8 +187,8 @@ pub fn tab_menu(
                 items.push(item(fl!("detach-session"), Action::TabClose));
                 items.push(item(fl!("move-to-new-window"), Action::TabPopOut));
                 items.push(item(fl!("end-remote-session"), Action::RemoteEnd));
-                if isabellum_installed() {
-                    items.push(item(fl!("open-in-isabellum"), Action::OpenInIsabellum));
+                if deductum_installed() {
+                    items.push(item(fl!("open-in-deductum"), Action::OpenInDeductum));
                 }
                 // An agent's conversation, and its worktree, to another computer
                 let targets = destinations.get(&entity).map(Vec::as_slice).unwrap_or_default();
@@ -207,8 +207,8 @@ pub fn tab_menu(
                 items.push(item(fl!("move-to-new-window"), Action::TabPopOut));
                 items.push(item(fl!("end-remote-session"), Action::RemoteEnd));
                 items.push(item(fl!("rename-menu"), Action::SessionRename));
-                if isabellum_installed() {
-                    items.push(item(fl!("open-in-isabellum"), Action::OpenInIsabellum));
+                if deductum_installed() {
+                    items.push(item(fl!("open-in-deductum"), Action::OpenInDeductum));
                 }
                 let targets = destinations.get(&entity).map(Vec::as_slice).unwrap_or_default();
                 if !targets.is_empty() {
@@ -341,8 +341,8 @@ pub fn menu_bar<'a>(
         MenuItem::Button(fl!("open-in-zed"), None, Action::OpenInZed),
         MenuItem::Button(fl!("open-in-files"), None, Action::OpenInFiles),
     ]);
-    if isabellum_installed() {
-        session_items.push(MenuItem::Button(fl!("open-in-isabellum"), None, Action::OpenInIsabellum));
+    if deductum_installed() {
+        session_items.push(MenuItem::Button(fl!("open-in-deductum"), None, Action::OpenInDeductum));
     }
 
     responsive_menu_bar()

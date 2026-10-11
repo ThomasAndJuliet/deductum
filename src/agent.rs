@@ -921,18 +921,19 @@ pub async fn open_in_zed(process: TabProcess) -> Result<(), String> {
     run(command).await.map(|_| ())
 }
 
-/// Open, in Isabellum on this computer, the Isabelle session the agent in a
-/// tab is working in, or else its project. Isabellum's session host on the
+/// Open, in Deductum on this computer, the Isabelle session the agent in a
+/// tab is working in, or else its project. Deductum's session host on the
 /// agent's computer says which session the agent used, by its Zellij session
-/// or its folder. `machine` is the computer's name, which Isabellum shares
-/// (Isabellum's design C10, `docs/isabellum-decisions.md`)
-pub async fn open_in_isabellum(process: TabProcess, machine: Option<String>) -> Result<(), String> {
+/// or its folder. `machine` is the computer's name, which Deductum shares
+/// (Deductum's design C10, `docs/deductum-decisions.md`)
+pub async fn open_in_deductum(process: TabProcess, machine: Option<String>) -> Result<(), String> {
     let (host, dirs) = project_dirs(&process).await?;
     let host_name = host.clone().unwrap_or_default();
     let find = |arg: &str, value: &str| {
         format!(
-            "python3 ~/.local/share/isabellum/host/isabellum_host.py find --{arg} {} 2>/dev/null\n",
-            sh_quote(value)
+            "for h in ~/.local/share/deductum/host/deductum_host.py ~/.local/share/isabellum/host/isabellum_host.py; do \
+             [ -f \"$h\" ] && python3 \"$h\" find --{arg} {v} 2>/dev/null | grep -q '\\[{{' && {{ python3 \"$h\" find --{arg} {v} 2>/dev/null; break; }}; done\n",
+            v = sh_quote(value)
         )
     };
     let first_session = |output: String| {
@@ -960,13 +961,15 @@ pub async fn open_in_isabellum(process: TabProcess, machine: Option<String>) -> 
     command.args([
         "-c",
         "PATH=\"$PATH:$HOME/.local/bin\"\n\
+         command -v deductum >/dev/null 2>&1 && exec setsid -f deductum \"$@\"\n\
+         flatpak info dev.twright.Deductum >/dev/null 2>&1 && exec setsid -f flatpak run dev.twright.Deductum \"$@\"\n\
          command -v isabellum >/dev/null 2>&1 && exec setsid -f isabellum \"$@\"\n\
          flatpak info dev.twright.Isabellum >/dev/null 2>&1 && exec setsid -f flatpak run dev.twright.Isabellum \"$@\"\n\
-         echo 'Isabellum is not installed' >&2; exit 127\n",
-        "isabellum",
+         echo 'Deductum is not installed' >&2; exit 127\n",
+        "deductum",
     ]);
     command.args(&args);
-    log::info!("opening in Isabellum: {:?}", command.as_std());
+    log::info!("opening in Deductum: {:?}", command.as_std());
     run(command).await.map(|_| ())
 }
 

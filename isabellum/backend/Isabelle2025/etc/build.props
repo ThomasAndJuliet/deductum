@@ -1,8 +1,0 @@
-title = Isabellum prover backend
-module = lib/isabellum_backend.jar
-requirements = \
-  env:ISABELLE_SCALA_JAR
-sources = \
-  src/backend.scala
-services = \
-  isabellum.Tools
