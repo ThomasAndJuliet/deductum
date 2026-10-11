@@ -25,19 +25,22 @@ fn doc_json(text: &str) -> serde_json::Value {
     let chars: Vec<char> = text.chars().collect();
     let cmds = super::prover::LEAN.lexical_commands(text, &HashMap::new());
     let commands: Vec<serde_json::Value> = cmds.iter().map(|c| json!([c.start, c.end, c.name, status(text, c.start, &c.name)])).collect();
-    let at = |needle: &str| text[..text.rfind(needle).unwrap()].chars().count();
-    let (sorry, omega) = (at("sorry"), at("omega"));
+    let at = |needle: &str| text.rfind(needle).map(|b| text[..b].chars().count());
     let _ = &chars;
+    let mut messages = Vec::new();
+    if let Some(sorry) = at("sorry") {
+        messages.push(json!({"start": sorry, "end": sorry + 5, "kind": "warning", "text": "declaration uses 'sorry'"}));
+    }
+    if let Some(omega) = at("omega") {
+        messages.push(json!({"start": omega, "end": omega + 5, "kind": "error", "text": "omega could not prove the goal:\nNo usable constraints found. You may need to unfold definitions so `omega` can see linear arithmetic facts about `Nat` and `Int`, which may also involve multiplication, division, and modular remainder by constants."}));
+    }
     json!({
         "text": text, "revision": 1, "dirty": false, "can_undo": true,
         "prover": {
             "revision": 1,
             "status": {"finished": 20, "unprocessed": 0, "running": 0, "failed": 1, "consolidated": true},
             "commands": commands,
-            "messages": [
-                {"start": sorry, "end": sorry + 5, "kind": "warning", "text": "declaration uses 'sorry'"},
-                {"start": omega, "end": omega + 5, "kind": "error", "text": "omega could not prove the goal:\nNo usable constraints found. You may need to unfold definitions so `omega` can see linear arithmetic facts about `Nat` and `Int`, which may also involve multiplication, division, and modular remainder by constants."},
-            ],
+            "messages": messages,
         },
     })
 }
@@ -420,4 +423,98 @@ fn long_hypotheses_wrap_inside_the_goal_card() {
     }
     let mut h = Harness::new(Size::new(1400.0, 900.0));
     h.draw(&app, "lean-goal-long-lines");
+}
+
+/// Prose as Lean files lay it out, each in a file of its own (so that it is at the top of the page):
+/// a module doc with a heading, a list and a code fence; a module doc of plain paragraphs indented
+/// by two; docstrings whose lines the file indents by 4 and by 2, the last with a list and a fence
+const PROSE_CASES: &[(&str, &str, &str)] = &[
+    ("module-doc-heading", "# The section", "/-!\n# The section\n\nThe first paragraph of the module doc, wrapped over\nseveral lines of source so that the editor must wrap\nthe text as the page does, with `code` and $x^2$ in it.\n\n- a list item that\n  goes on\n- another item\n\n```lean\ndef a := 1\n  def b := 2\n```\n-/\n"),
+    ("module-doc-plain", "Plain paragraphs", "/-!\n  Plain paragraphs, indented by two in the file,\n  that run over\n  three lines of source.\n\n  A second paragraph.\n-/\n"),
+    ("docstring-indented", "A docstring of a declaration", "namespace Foo\n\n/-- A docstring of a declaration in a namespace, indented\n    in the file by four spaces, wrapped over\n    three lines of source. -/\ndef f := 1\n\nend Foo\n"),
+    ("docstring-list-fence", "A docstring with a list", "/-- A docstring with a list:\n  - first item,\n    which wraps,\n  - second item,\n\n  and a fence:\n\n  ```lean\n  def g := 2\n    def h := 3\n  ```\n-/\ndef g := 2\n"),
+];
+
+/// The left edge of the ink in a row band, and the top of the ink around it (pixels), in the page
+/// column
+fn ink_edges(png: &[u8], w: u32, h: u32, y: u32, from: u32) -> Option<(u32, u32)> {
+    let img = image::RgbaImage::from_raw(w, h, png.to_vec()).unwrap();
+    let bg = *img.get_pixel(w - 3, h - 3);
+    let ink = |x: u32, y: u32| {
+        let p = img.get_pixel(x, y);
+        let d = |i: usize| (p[i] as i32 - bg[i] as i32).abs();
+        d(0) + d(1) + d(2) > 90
+    };
+    let cols = from..w - 60;
+    let top = (y.saturating_sub(10)..y + 40).find(|&yy| cols.clone().any(|x| ink(x, yy)))?;
+    let left = cols.clone().find(|&x| (top..top + 14).any(|yy| ink(x, yy)))?;
+    Some((left, top))
+}
+
+/// Where a prose block's text starts before and after it is opened by a click on its first line:
+/// the left edge and the top of its first line must not move
+fn prose_edges(doc: &str, text_of_block: &str, w: f32, dark: bool, tag: &str) -> ((u32, u32), (u32, u32)) {
+    let size = Size::new(w, 900.0);
+    let mut app = lean_app_with(Mode::Literate, &format!("import DSRV.Semantics\n\n{doc}"));
+    app.show_sidebar = false;
+    app.show_right = false;
+    // (no goal under the first block: nothing to push the prose down)
+    app.workspace.as_mut().unwrap().goals = QueryState { operation: "deductum_goals", ..Default::default() };
+    app.workspace.as_mut().unwrap().output = None;
+    let mut h = Harness::new(size);
+    light(!dark);
+    super::view::set_goal_beside(false);
+    let i = theory(&app)
+        .blocks
+        .iter()
+        .enumerate()
+        .filter(|(_, b)| b.kind != super::theory::Kind::Formal && theory(&app).local.chars().skip(b.start).take(b.end - b.start).collect::<String>().contains(text_of_block))
+        .map(|(i, _)| i)
+        .next()
+        .unwrap_or_else(|| panic!("a prose block with {text_of_block:?}"));
+    let name = |s: &str| format!("lean-open-{tag}-{}-{}-{s}", w as u32, if dark { "dark" } else { "light" });
+    let png = h.draw(&app, &name("closed"));
+    // the block's top: where the pointer first is over it
+    let mut top = None;
+    'scan: for y in (30..880).step_by(2) {
+        for x in [140.0f32, 220.0, 300.0, 400.0, 500.0] {
+            if h.move_to(&app, cosmic::iced::Point::new(x, y as f32)).iter().any(|m| matches!(m, super::Message::ProseHover(b, _) if *b == i)) {
+                top = Some((x, y as f32));
+                break 'scan;
+            }
+        }
+    }
+    let (x, y) = top.expect("the block under the pointer");
+    let closed = ink_edges(&png, size.width as u32, 900, y as u32, 60).unwrap_or((0, 0));
+    // a click on its first line (a little in from the left)
+    let msgs = h.click(&app, cosmic::iced::Point::new(x + 60.0, y + 6.0));
+    assert!(msgs.iter().any(|m| matches!(m, super::Message::EditBlock(_))), "a click opens the block");
+    for m in msgs {
+        let _ = cosmic::Application::update(&mut app, m);
+    }
+    let png = h.draw(&app, &name("open"));
+    // (the accent bar that marks the open block is left of the text; the faint region behind it is not ink)
+    let open = ink_edges(&png, size.width as u32, 900, y as u32, closed.0.saturating_sub(5)).unwrap_or((0, 0));
+    light(false);
+    super::view::set_goal_beside(true);
+    (closed, open)
+}
+
+#[test]
+fn opening_lean_prose_does_not_move_its_text() {
+    let mut report = Vec::new();
+    for (tag, needle, doc) in PROSE_CASES {
+        for w in [800.0f32, 1400.0] {
+            for dark in [true, false] {
+                let (closed, open) = prose_edges(doc, needle, w, dark, tag);
+                report.push(format!("{tag} {w} {}: closed {closed:?} open {open:?}", if dark { "dark" } else { "light" }));
+                if std::env::var_os("LEAN_MEASURE_ONLY").is_some() {
+                    continue;
+                }
+                assert!(closed.0.abs_diff(open.0) <= 1, "{tag} at {w}: the left edge moves ({closed:?} then {open:?})");
+                assert!(closed.1.abs_diff(open.1) <= 2, "{tag} at {w}: the first line moves vertically ({closed:?} then {open:?})");
+            }
+        }
+    }
+    println!("{}", report.join("\n"));
 }

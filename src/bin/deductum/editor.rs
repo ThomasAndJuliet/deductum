@@ -1174,8 +1174,7 @@ impl Theory {
             }
         };
         let word = |s: &str| -> Option<String> {
-            let w: String = s.chars().skip_while(|c| !c.is_alphanumeric()).take_while(|c| c.is_alphanumeric()).collect();
-            (w.chars().count() >= 3).then_some(w)
+            s.split(|c: char| !c.is_alphanumeric()).find(|w| w.chars().count() >= 3).map(str::to_string)
         };
         // Where each block's text starts in the Markdown: its first word, after the last block's
         let md = &map.markdown;
