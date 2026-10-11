@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! The app against a real session host: `ISABELLUM_LIVE=d59500 cargo test
-//! --bin isabellum live -- --ignored --nocapture` drives the window's state
+//! The app against a real session host: `DEDUCTUM_LIVE=d59500 cargo test
+//! --bin deductum live -- --ignored --nocapture` drives the window's state
 //! machine with the messages a real host over ssh sends, typing as the human
 //! while an agent edits the same theory.
 
@@ -61,15 +61,15 @@ fn app(target: link::Target) -> App {
 
 /// The test sessions off the host again (stopped, then discarded once stopped), and their folders
 fn cleanup(dest: &str) {
-    ssh(dest, r#"cd ~/.local/share/isabellum/host && python3 - <<'PY'
-import time, isabellum_host as H
+    ssh(dest, r#"cd ~/.local/share/deductum/host && python3 - <<'PY'
+import time, deductum_host as H
 c = H.SyncClient.local(); c.request("hello", client="cli")
-mine = [s for s in c.request("sessions")["sessions"] if s["folder"].startswith("/tmp/isabellum-live")]
+mine = [s for s in c.request("sessions")["sessions"] if s["folder"].startswith("/tmp/deductum-live")]
 for s in mine:
     if s["lifecycle"] not in ("Stopped", "Failed"):
         c.request("stop", session=s["id"])
 for _ in range(60):
-    if all(x["lifecycle"] in ("Stopped", "Failed") for x in c.request("sessions")["sessions"] if x["folder"].startswith("/tmp/isabellum-live")):
+    if all(x["lifecycle"] in ("Stopped", "Failed") for x in c.request("sessions")["sessions"] if x["folder"].startswith("/tmp/deductum-live")):
         break
     time.sleep(0.5)
 for s in mine:
@@ -78,7 +78,7 @@ for s in mine:
     except H.HostError:
         pass
 PY
-rm -rf /tmp/isabellum-live-*
+rm -rf /tmp/deductum-live-*
 "#);
 }
 
@@ -94,8 +94,8 @@ fn ssh(dest: &str, script: &str) -> String {
 #[test]
 #[ignore]
 fn live_session() {
-    let Ok(dest) = std::env::var("ISABELLUM_LIVE") else { return };
-    let folder = format!("/tmp/isabellum-live-{}", std::process::id());
+    let Ok(dest) = std::env::var("DEDUCTUM_LIVE") else { return };
+    let folder = format!("/tmp/deductum-live-{}", std::process::id());
     ssh(&dest, &format!("mkdir -p {folder} && cat > {folder}/Live.thy <<'THY'\n{THY}THY\n"));
     let rt = tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap();
     rt.block_on(async {
@@ -140,8 +140,8 @@ fn live_session() {
                     typed = true;
                     // Meanwhile an agent with rights replaces the sorry
                     let sid = app.workspace.as_ref().unwrap().sid.clone();
-                    let out = ssh(&dest, &format!(r#"cd ~/.local/share/isabellum/host && python3 - <<'PY'
-import isabellum_host as H
+                    let out = ssh(&dest, &format!(r#"cd ~/.local/share/deductum/host && python3 - <<'PY'
+import deductum_host as H
 app = H.SyncClient.local(); app.request("hello", client="app")
 app.request("grant", session="{sid}", agent="claude:live", label="Claude (live)", scope="folder")
 a = H.SyncClient.local(); a.request("hello", client="agent", label="Claude (live)", identity={{"provider":"claude","conversation":"live"}})
@@ -200,8 +200,8 @@ PY"#));
 #[test]
 #[ignore]
 fn live_types() {
-    let Ok(dest) = std::env::var("ISABELLUM_LIVE") else { return };
-    let folder = format!("/tmp/isabellum-live-types-{}", std::process::id());
+    let Ok(dest) = std::env::var("DEDUCTUM_LIVE") else { return };
+    let folder = format!("/tmp/deductum-live-types-{}", std::process::id());
     ssh(&dest, &format!("mkdir -p {folder} && cat > {folder}/Live.thy <<'THY'\n{THY}THY\n"));
     let rt = tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap();
     rt.block_on(async {
@@ -283,8 +283,8 @@ fn settled(app: &App) -> bool {
 #[test]
 #[ignore]
 fn live_literate() {
-    let Ok(dest) = std::env::var("ISABELLUM_LIVE") else { return };
-    let folder = format!("/tmp/isabellum-live-lit-{}", std::process::id());
+    let Ok(dest) = std::env::var("DEDUCTUM_LIVE") else { return };
+    let folder = format!("/tmp/deductum-live-lit-{}", std::process::id());
     ssh(&dest, &format!("mkdir -p {folder} && cat > {folder}/Live.thy <<'THY'\n{THY}THY\n"));
     let rt = tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap();
     rt.block_on(async {
@@ -369,8 +369,8 @@ fn live_literate() {
 fn live_ui() {
     use super::snapshot::Harness;
     use cosmic::iced::keyboard::{Key, key::Named};
-    let Ok(dest) = std::env::var("ISABELLUM_LIVE") else { return };
-    let folder = format!("/tmp/isabellum-live-ui-{}", std::process::id());
+    let Ok(dest) = std::env::var("DEDUCTUM_LIVE") else { return };
+    let folder = format!("/tmp/deductum-live-ui-{}", std::process::id());
     ssh(&dest, &format!("mkdir -p {folder} && cat > {folder}/Live.thy <<'THY'\n{THY}THY\n"));
     let rt = tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap();
     rt.block_on(async {
@@ -489,13 +489,13 @@ fn live_ui() {
 fn live_tock() {
     use super::snapshot::Harness;
     use cosmic::iced::keyboard::{Key, key::Named};
-    let Ok(dest) = std::env::var("ISABELLUM_LIVE") else { return };
+    let Ok(dest) = std::env::var("DEDUCTUM_LIVE") else { return };
     let home = std::env::var("HOME").unwrap();
-    let folder = format!("/home/au759518/.cache/cosmic-term/mounts/neo{home}/tmp-isabellum-tock");
+    let folder = format!("/home/au759518/.cache/cosmic-term/mounts/neo{home}/tmp-deductum-tock");
     let thy = format!("{folder}/Timed_Circus_Assignment.thy");
     // A fresh copy of the human's project each run (its theories and ROOT; theirs stay untouched)
     let src = format!("{home}/worktrees/timed-circus-utp2-handover-20261002/project/UTP-Tock-Circus");
-    let copy = format!("{home}/tmp-isabellum-tock");
+    let copy = format!("{home}/tmp-deductum-tock");
     let _ = std::process::Command::new("sh").arg("-c").arg(format!("rm -rf {copy} && mkdir -p {copy} && cp {src}/*.thy {src}/ROOT {copy}/")).status();
     let rt = tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap();
     rt.block_on(async {
@@ -621,14 +621,14 @@ fn live_tock() {
         let b = t.blocks.iter().find(|b| b.commands.iter().any(|c| c.name == "sledgehammer")).unwrap();
         assert_eq!(t.shown_status(b.start, b.end, b.status), super::theory::Status::Warned, "a stopped sledgehammer leaves the proof unfinished, not failed");
         h.draw(&app, "tock-6-stopped");
-        cleanup_folder(&dest, "tmp-isabellum-tock");
+        cleanup_folder(&dest, "tmp-deductum-tock");
     });
 }
 
 /// A test session on a folder named so, off the host
 fn cleanup_folder(dest: &str, needle: &str) {
-    ssh(dest, &format!(r#"cd ~/.local/share/isabellum/host && python3 - <<'PY'
-import time, isabellum_host as H
+    ssh(dest, &format!(r#"cd ~/.local/share/deductum/host && python3 - <<'PY'
+import time, deductum_host as H
 c = H.SyncClient.local(); c.request("hello", client="cli")
 mine = [s for s in c.request("sessions")["sessions"] if "{needle}" in s["folder"]]
 for s in mine:
@@ -667,13 +667,13 @@ fn find_click(h: &mut super::snapshot::Harness, app: &App, want: impl Fn(&Messag
 #[ignore]
 fn live_collaboration() {
     use super::snapshot::Harness;
-    let Ok(dest) = std::env::var("ISABELLUM_LIVE") else { return };
-    let folder = format!("/tmp/isabellum-live-collab-{}", std::process::id());
+    let Ok(dest) = std::env::var("DEDUCTUM_LIVE") else { return };
+    let folder = format!("/tmp/deductum-live-collab-{}", std::process::id());
     let path = format!("{folder}/Live.thy");
     ssh(&dest, &format!("mkdir -p {folder} && cat > {path} <<'THY'\n{THY}THY\n"));
     let agent = |code: &str| {
-        ssh(&dest, &format!(r#"cd ~/.local/share/isabellum/host && python3 - <<'PY'
-import json, isabellum_host as H
+        ssh(&dest, &format!(r#"cd ~/.local/share/deductum/host && python3 - <<'PY'
+import json, deductum_host as H
 a = H.SyncClient.local(); a.request("hello", client="agent", label="Claude (collab test)", identity={{"provider": "claude", "conversation": "collab-test"}})
 {code}
 PY
@@ -727,15 +727,15 @@ print(json.dumps(a.request("add_note", session="{sid}", path="{path}", start=one
     });
 }
 
-/// Reference windows against a real host of their own (`ISABELLUM_REMOTE_ROOT`, so the user's
+/// Reference windows against a real host of their own (`DEDUCTUM_REMOTE_ROOT`, so the user's
 /// host and sessions are not touched): Alt+click `rev` opens HOL's List.thy at its definition,
 /// as a library theory; hovering a name in it shows what it is; Ctrl+click moves the window and
 /// Alt+click opens another
 #[test]
 #[ignore]
 fn live_reference() {
-    let (Ok(dest), Ok(root)) = (std::env::var("ISABELLUM_LIVE"), std::env::var("ISABELLUM_REMOTE_ROOT")) else { return };
-    let folder = format!("/tmp/isabellum-ref-{}", std::process::id());
+    let (Ok(dest), Ok(root)) = (std::env::var("DEDUCTUM_LIVE"), std::env::var("DEDUCTUM_REMOTE_ROOT")) else { return };
+    let folder = format!("/tmp/deductum-ref-{}", std::process::id());
     ssh(&dest, &format!("mkdir -p {folder} && printf 'theory Ref imports Main begin\\n\\nlemma \"rev (rev xs) = xs\"\\n  by simp\\n\\nend\\n' > {folder}/Ref.thy"));
     let rt = tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap();
     rt.block_on(async {
@@ -792,15 +792,15 @@ fn live_reference() {
         pump(&mut app, &mut stream, 5, |_| false).await;
     });
     // (and the backend component that host registered with Isabelle)
-    ssh(&dest, &format!("ISABELLUM_STATE_DIR={root}/state python3 {root}/host/isabellum_host.py stop-host; rm -rf {folder} {root}; sed -i '\\|^{root}/|d' ~/.isabelle/*/etc/components"));
+    ssh(&dest, &format!("DEDUCTUM_STATE_DIR={root}/state python3 {root}/host/deductum_host.py stop-host; rm -rf {folder} {root}; sed -i '\\|^{root}/|d' ~/.isabelle/*/etc/components"));
 }
 
-/// `ISABELLUM_LINK_PROBE=1`: the link to each machine Terminal Agents knows, as the app makes it,
+/// `DEDUCTUM_LINK_PROBE=1`: the link to each machine Terminal Agents knows, as the app makes it,
 /// its events printed for a while (run inside the Flatpak to see what the app sees)
 #[test]
 #[ignore]
 fn live_link_probe() {
-    if std::env::var("ISABELLUM_LINK_PROBE").is_err() {
+    if std::env::var("DEDUCTUM_LINK_PROBE").is_err() {
         return;
     }
     let targets = link::targets();

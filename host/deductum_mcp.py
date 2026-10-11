@@ -1,6 +1,6 @@
-"""MCP adapter: agents' access to Isabellum's shared Isabelle sessions.
+"""MCP adapter: agents' access to Deductum's shared Isabelle sessions.
 
-``isabellum_host.py mcp [--ssh DESTINATION]`` speaks MCP (JSON-RPC over stdio) to the
+``deductum_host.py mcp [--ssh DESTINATION]`` speaks MCP (JSON-RPC over stdio) to the
 agent and the host protocol to the session host, locally or on another machine over
 ssh. The agent works in the same live session as the human (design C2): it reads the
 unsaved buffers, edits with revision checks (C7), sees proof states at its own
@@ -20,20 +20,20 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-import isabellum_host as H
-import isabellum_ot as ot
+import deductum_host as H
+import deductum_ot as ot
 
-SERVER_INFO = {"name": "isabellum", "version": H.VERSION}
+SERVER_INFO = {"name": "deductum", "version": H.VERSION}
 
 INSTRUCTIONS = """\
-Isabellum gives you the human's live Isabelle sessions: the same unsaved theory text
+Deductum gives you the human's live Isabelle sessions: the same unsaved theory text
 the human sees, checked continuously by one shared prover.
 
 - Start with isabelle_sessions, or isabelle_open_session for a folder.
 - isabelle_read_theory returns numbered lines and a revision. Pass that revision to
   isabelle_edit_theory; edits made against an older revision are rebased if the text
   you targeted is unchanged, and refused with the current text if it changed.
-- Editing the human's theories needs editing rights the human grants in Isabellum.
+- Editing the human's theories needs editing rights the human grants in Deductum.
   Ask with isabelle_request_access, saying why. Meanwhile, or instead, work in your own copy: isabelle_start_independent (the human reviews
   and merges it).
 - isabelle_proof_state shows the goal after the command at a line; isabelle_check
@@ -48,8 +48,8 @@ the human sees, checked continuously by one shared prover.
 
 
 def identity_from_env() -> Optional[Dict[str, str]]:
-    if os.environ.get("ISABELLUM_AGENT_ID"):
-        provider, _, conv = os.environ["ISABELLUM_AGENT_ID"].partition(":")
+    if os.environ.get("DEDUCTUM_AGENT_ID"):
+        provider, _, conv = os.environ["DEDUCTUM_AGENT_ID"].partition(":")
         return {"provider": provider or "agent", "conversation": conv or provider}
     if os.environ.get("CLAUDE_CODE_SESSION_ID"):
         return {"provider": "claude", "conversation": os.environ["CLAUDE_CODE_SESSION_ID"]}
@@ -83,8 +83,8 @@ def parent_agent() -> Optional[tuple]:
 
 
 def label_from_env() -> str:
-    if os.environ.get("ISABELLUM_AGENT_LABEL"):
-        return os.environ["ISABELLUM_AGENT_LABEL"]
+    if os.environ.get("DEDUCTUM_AGENT_LABEL"):
+        return os.environ["DEDUCTUM_AGENT_LABEL"]
     if os.environ.get("CLAUDE_CODE_SESSION_ID") or os.environ.get("CLAUDECODE"):
         return "Claude"
     parent = parent_agent()
@@ -114,7 +114,7 @@ PATH = S("string", "Theory file path (absolute, or relative to the session folde
 LINE = S("integer", "1-based line number")
 
 TOOLS: List[Dict[str, Any]] = [
-    {"name": "isabelle_sessions", "description": "List Isabellum sessions on the host: folder, base logic, "
+    {"name": "isabelle_sessions", "description": "List Deductum sessions on the host: folder, base logic, "
      "prover state (Running, Paused, Stopped...), who is attached, your editing rights.",
      "inputSchema": {"type": "object", "properties": {}}},
     {"name": "isabelle_open_session", "description": "Attach to the shared session for a theory folder, "
@@ -207,11 +207,11 @@ TOOLS: List[Dict[str, Any]] = [
                                                        enum=["disk", "buffer", "merge"]),
          "text": S("string", "The merged theory text, for choice=merge")},
          "required": ["session", "path", "choice"]}},
-    {"name": "isabelle_listen", "description": "Listen for the human's queries in Isabellum: waits up to "
+    {"name": "isabelle_listen", "description": "Listen for the human's queries in Deductum: waits up to "
      "50 seconds for the next one for you and returns it (the theory, line, lemma, goal and what they asked), "
      "or says there is none yet; call it again to keep listening. The human asks you by typing `@name …` on a "
      "proof line (name: the one you give here), or by choosing you for their claude/codex queries. Answer each "
-     "query with isabelle_propose; the human inserts a proof from Isabellum, or tells you which one in your "
+     "query with isabelle_propose; the human inserts a proof from Deductum, or tells you which one in your "
      "conversation.",
      "inputSchema": {"type": "object", "properties": {
          "session": SESSION,
@@ -219,7 +219,7 @@ TOOLS: List[Dict[str, Any]] = [
          "required": ["session"]}},
     {"name": "isabelle_propose", "description": "Answer a query from isabelle_listen: proofs for the gap "
      "(each complete proof text for that line, e.g. 'by (simp add: foo_def)' or an Isar block), and facts to "
-     "guide Sledgehammer. Isabellum checks each proof with the prover and shows them to the human with "
+     "guide Sledgehammer. Deductum checks each proof with the prover and shows them to the human with "
      "Insert buttons. Check proofs first where you can (isabelle_check in your own copy).",
      "inputSchema": {"type": "object", "properties": {
          "session": SESSION, "query": S("string", "The query's id, from isabelle_listen"),
@@ -227,12 +227,12 @@ TOOLS: List[Dict[str, Any]] = [
          "using": {"type": "array", "items": {"type": "string"}, "description": "Facts for a `using` line in front of Sledgehammer"},
          "message": S("string", "A sentence for the human, shown with the proofs")},
          "required": ["session", "query"]}},
-    {"name": "isabelle_human_view", "description": "What the human is looking at in Isabellum: the theory, "
+    {"name": "isabelle_human_view", "description": "What the human is looking at in Deductum: the theory, "
      "the caret's line, any selected text, the lemma (name and statement), the step the caret is in (the Isar "
      "statement the goal they see is for) and the proof around the caret. Use it when the human says "
      "'this lemma', 'this step', 'here' or 'the selected part'; then isabelle_proof_state at that line.",
      "inputSchema": {"type": "object", "properties": {"session": SESSION}, "required": ["session"]}},
-    {"name": "isabelle_show", "description": "Show the human a place in a theory: Isabellum offers to go there "
+    {"name": "isabelle_show", "description": "Show the human a place in a theory: Deductum offers to go there "
      "(or goes, if the human follows you), highlighting the lines, with your message. Use it to point at "
      "what you are talking about rather than quoting it.",
      "inputSchema": {"type": "object", "properties": {
@@ -241,7 +241,7 @@ TOOLS: List[Dict[str, Any]] = [
          "message": S("string", "What to look at there, in a sentence")},
          "required": ["session", "path", "line"]}},
     {"name": "isabelle_add_note", "description": "Leave a note on lines of a theory, shown beside them in "
-     "Isabellum until the human resolves it (it moves with edits). For questions, explanations and "
+     "Deductum until the human resolves it (it moves with edits). For questions, explanations and "
      "suggestions that belong to a place; the human's replies come as notices.",
      "inputSchema": {"type": "object", "properties": {
          "session": SESSION, "path": PATH, "line": LINE,
@@ -254,7 +254,7 @@ TOOLS: List[Dict[str, Any]] = [
          "session": SESSION, "note": S("string", "The note's id"), "text": S("string", "A reply (optional)"),
          "resolve": S("boolean", "Remove the note")}, "required": ["session", "note"]}},
     {"name": "isabelle_request_access", "description": "Ask the human for editing rights in a shared session: "
-     "the whole folder, one theory, or the proof at a line. Isabellum shows the request with your reason; "
+     "the whole folder, one theory, or the proof at a line. Deductum shows the request with your reason; "
      "the answer comes as a notice (granted or denied). Until then, read and query freely, or work in an "
      "independent session.",
      "inputSchema": {"type": "object", "properties": {
@@ -546,7 +546,7 @@ class Adapter:
             doc = self.read(session, path)
             offset = self.offset_for(doc["text"], args)
             qid = self.req("query", session=session, path=path, offset=offset, revision=doc["revision"],
-                           operation="isabellum_command", args=[cmd])["query"]
+                           operation="deductum_command", args=[cmd])["query"]
             t0 = time.time()
             q: Dict[str, Any] = {}
             while time.time() - t0 < float(args.get("timeout") or 120):
@@ -606,12 +606,12 @@ class Adapter:
         if name == "isabelle_propose":
             self.req("propose", session=session, query=args["query"], proofs=args.get("proofs") or [],
                      using=args.get("using") or [], message=args.get("message", ""))
-            return ("Sent. Isabellum checks the proofs and shows them to the human, who inserts one (or tells you "
+            return ("Sent. Deductum checks the proofs and shows them to the human, who inserts one (or tells you "
                     "which). Listen again for the next query.")
         if name == "isabelle_human_view":
             v = self.req("human_view", session=session)["view"]
             if not v.get("open"):
-                return "The human has no theory of this session open in Isabellum."
+                return "The human has no theory of this session open in Deductum."
             out = [f"The human is at line {v.get('line')} of {v.get('path')} ({v.get('mode') or 'literate'} view)."]
             if v.get("selection"):
                 out.append("Selected:\n" + v["selection"])
@@ -637,7 +637,7 @@ class Adapter:
                 r = self.req("show", session=session, path=path, start=start, end=end,
                              revision=doc["revision"], message=args.get("message", ""))
                 return (f"Offered the human line {r['line']}." if r.get("shown")
-                        else "Isabellum is not open; nothing was shown.")
+                        else "Deductum is not open; nothing was shown.")
             r = self.req("add_note", session=session, path=path, start=start, end=end,
                          revision=doc["revision"], text=args["text"])["note"]
             return f"Note {r['id']} added at line {r['line']}. Replies come as notices."
@@ -686,7 +686,7 @@ class Adapter:
             return ""
         if not notices:
             return ""
-        lines = ["", "--- Isabellum notices ---"]
+        lines = ["", "--- Deductum notices ---"]
         for n in notices:
             line = f"[{n['kind']}] {n.get('message', '')}"
             if n.get("text") and n["kind"] in ("overlap", "reverted"):
@@ -708,7 +708,7 @@ def main(argv: List[str]) -> int:
             i += 2
         else:
             i += 1
-    ssh = ssh or os.environ.get("ISABELLUM_HOST_SSH")
+    ssh = ssh or os.environ.get("DEDUCTUM_HOST_SSH")
     adapter: Optional[Adapter] = None
 
     def get_adapter() -> Adapter:
@@ -766,7 +766,7 @@ def main(argv: List[str]) -> int:
                               "isError": True})
             except (ConnectionError, OSError) as exn:
                 adapter = None
-                respond(rid, {"content": [{"type": "text", "text": f"Cannot reach the Isabellum host: {exn}"}],
+                respond(rid, {"content": [{"type": "text", "text": f"Cannot reach the Deductum host: {exn}"}],
                               "isError": True})
             except Exception as exn:  # report, keep serving
                 text = f"Missing argument: {exn}" if isinstance(exn, KeyError) else f"Internal error: {type(exn).__name__}: {exn}"

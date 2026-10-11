@@ -2,7 +2,7 @@
 
 //! Links to session hosts (design C2, C11): one per machine, locally or over
 //! ssh to a machine Terminal Agents knows (C1). The host speaks JSON lines;
-//! `isabellum_host.py connect` bridges stdio to its socket and starts it if
+//! `deductum_host.py connect` bridges stdio to its socket and starts it if
 //! need be. Before connecting, the host and backend sources this app carries
 //! are installed on the machine when missing or older.
 
@@ -47,7 +47,7 @@ struct Machine {
 pub fn targets() -> Vec<(String, Target)> {
     let mut out = vec![(local_name(), Target { key: "local".into(), destination: None })];
     // Extra machines, `name=destination,…`, for trying a host without registering it
-    if let Ok(extra) = std::env::var("ISABELLUM_MACHINES") {
+    if let Ok(extra) = std::env::var("DEDUCTUM_MACHINES") {
         for item in extra.split(',').filter(|s| !s.trim().is_empty()) {
             let (name, dest) = item.split_once('=').unwrap_or((item, item));
             out.push((name.trim().to_string(), Target { key: name.trim().to_string(), destination: Some(dest.trim().to_string()) }));
@@ -138,28 +138,28 @@ fn host_command(program: &str, args: &[String]) -> tokio::process::Command {
 /// The host and backend sources this app carries
 pub fn bundle() -> Option<PathBuf> {
     let mut candidates = Vec::new();
-    if let Some(dir) = std::env::var_os("ISABELLUM_BUNDLE") {
+    if let Some(dir) = std::env::var_os("DEDUCTUM_BUNDLE") {
         candidates.push(PathBuf::from(dir));
     }
-    candidates.push(PathBuf::from("/app/share/isabellum"));
+    candidates.push(PathBuf::from("/app/share/deductum"));
     if let Ok(exe) = std::env::current_exe()
         && let Some(dir) = exe.parent()
     {
-        candidates.push(dir.join("../share/isabellum"));
-        candidates.push(dir.join("../../isabellum"));
+        candidates.push(dir.join("../share/deductum"));
+        candidates.push(dir.join("../../deductum"));
     }
-    candidates.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("isabellum"));
-    candidates.into_iter().find(|p| p.join("host/isabellum_host.py").is_file())
+    candidates.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("deductum"));
+    candidates.into_iter().find(|p| p.join("host/deductum_host.py").is_file())
 }
 
 fn bundle_version(bundle: &std::path::Path) -> String {
     let mut hasher = std::hash::DefaultHasher::new();
     for file in [
-        "host/isabellum_host.py",
-        "host/isabellum_ot.py",
-        "host/isabellum_mcp.py",
+        "host/deductum_host.py",
+        "host/deductum_ot.py",
+        "host/deductum_mcp.py",
         "backend/Isabelle2025/src/backend.scala",
-        "backend/Isabelle2025/ML/isabellum_prelude.ML",
+        "backend/Isabelle2025/ML/deductum_prelude.ML",
         "backend/Isabelle2025/etc/build.props",
         "backend/Isabelle2025/etc/settings",
     ] {
@@ -170,12 +170,12 @@ fn bundle_version(bundle: &std::path::Path) -> String {
 }
 
 /// Where the host is installed on the target, and the environment it runs with: normally
-/// `~/.local/share/isabellum` and the user's state; `ISABELLUM_REMOTE_ROOT` (for tests) installs
+/// `~/.local/share/deductum` and the user's state; `DEDUCTUM_REMOTE_ROOT` (for tests) installs
 /// and runs a host of its own there, with its own state, beside the user's
 fn remote_root() -> (String, String) {
-    match std::env::var("ISABELLUM_REMOTE_ROOT") {
-        Ok(root) if !root.is_empty() => (root.clone(), format!("ISABELLUM_STATE_DIR={root}/state ")),
-        _ => ("~/.local/share/isabellum".to_string(), String::new()),
+    match std::env::var("DEDUCTUM_REMOTE_ROOT") {
+        Ok(root) if !root.is_empty() => (root.clone(), format!("DEDUCTUM_STATE_DIR={root}/state ")),
+        _ => ("~/.local/share/deductum".to_string(), String::new()),
     }
 }
 
@@ -183,7 +183,7 @@ fn remote_root() -> (String, String) {
 async fn install(target: &Target) -> Result<(), String> {
     let Some(bundle) = bundle() else { return Ok(()) };
     // Running from the installed copy itself: nothing to install
-    let installed = home().join(".local/share/isabellum");
+    let installed = home().join(".local/share/deductum");
     let (root, _) = remote_root();
     if target.destination.is_none()
         && root.starts_with('~')
@@ -236,7 +236,7 @@ async fn install(target: &Target) -> Result<(), String> {
 
 fn connect_command(target: &Target) -> tokio::process::Command {
     let (root, env) = remote_root();
-    let script = format!("{env}python3 {root}/host/isabellum_host.py connect");
+    let script = format!("{env}python3 {root}/host/deductum_host.py connect");
     let mut cmd = match &target.destination {
         None => host_command("sh", &["-c".into(), script.clone()]),
         Some(dest) => host_command(

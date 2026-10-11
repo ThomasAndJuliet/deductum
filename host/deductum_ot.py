@@ -1,4 +1,4 @@
-"""Text changes for the Isabellum session host: applying, inverting and rebasing.
+"""Text changes for the Deductum session host: applying, inverting and rebasing.
 
 A *change* is a list of replacements ``(start, end, text)`` against one revision of
 a document, sorted by ``start`` and not overlapping. Offsets count code points.

@@ -2465,14 +2465,14 @@ pub fn name_at(text: &str, at: usize) -> Option<String> {
 }
 
 /// A tooltip and a definition, as the host's `info` gives them, from the prelude's
-/// `isabellum_entity` query: parts headed "#isabellum:entity KIND", then the full name, the
+/// `deductum_entity` query: parts headed "#deductum:entity KIND", then the full name, the
 /// defining file and line, and what it is
 pub fn entity_info(messages: &[serde_json::Value]) -> serde_json::Value {
     let mut items = Vec::new();
     let mut definition = serde_json::Value::Null;
     for m in messages {
         let raw = m["raw"].as_str().or_else(|| m["text"].as_str()).unwrap_or("");
-        let Some(rest) = raw.strip_prefix("#isabellum:entity ") else { continue };
+        let Some(rest) = raw.strip_prefix("#deductum:entity ") else { continue };
         let mut parts = rest.splitn(5, '\n');
         let (kind, full, file, line, what) = (
             parts.next().unwrap_or("").trim(),
@@ -2558,8 +2558,8 @@ mod name_tests {
 
     #[test]
     fn entity_results_become_a_tooltip_and_a_definition() {
-        let m = serde_json::json!({"raw": "#isabellum:entity constant\nList.rev\n/isa/src/HOL/List.thy\n420\nrev :: 'a list \\<Rightarrow> 'a list"});
-        let info = entity_info(&[m, serde_json::json!({"raw": "#isabellum:done"})]);
+        let m = serde_json::json!({"raw": "#deductum:entity constant\nList.rev\n/isa/src/HOL/List.thy\n420\nrev :: 'a list \\<Rightarrow> 'a list"});
+        let info = entity_info(&[m, serde_json::json!({"raw": "#deductum:done"})]);
         assert_eq!(info["definition"]["line"], 420);
         assert_eq!(info["definition"]["file"], "/isa/src/HOL/List.thy");
         assert!(info["tooltip"]["items"][0]["raw"].as_str().unwrap().starts_with("constant List.rev\nrev ::"));

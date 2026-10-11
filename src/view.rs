@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Isabellum's window: sessions on the left, the theory in the middle in its
+//! Deductum's window: sessions on the left, the theory in the middle in its
 //! literate or source view (design C14), proof output, Sledgehammer, agents
 //! and history on the right.
 
@@ -263,7 +263,7 @@ fn welcome(app: &App) -> Element<'_, Message> {
     let sp = spacing();
     let mut col = widget::column::with_capacity(6)
         .spacing(sp.space_s)
-        .push(widget::text::title1("Isabellum"))
+        .push(widget::text::title1("Deductum"))
         .push(widget::text::body("Isabelle theories as literate documents, worked on together with agents in one live session."))
         .push(widget::button::suggested("Open a theory folder…").on_press(Message::NewSession(true)));
     let any = !app.sessions.is_empty();
@@ -1836,7 +1836,7 @@ pub fn keep_caret_in(id: widget::Id, line: usize, lh: f32, top: f32) -> cosmic::
 }
 
 pub fn selected_block_id() -> widget::Id {
-    widget::Id::new("isabellum-selected-block")
+    widget::Id::new("deductum-selected-block")
 }
 
 /// Where the selected block and the literate view's viewport are, for centring it
@@ -2248,7 +2248,7 @@ fn reference_rows(r: &super::Reference, width: f32) -> impl Fn(usize) -> f32 {
 }
 
 pub fn reference_scroll_id(id: iced::window::Id) -> widget::Id {
-    widget::Id::new(format!("isabellum-reference-{id:?}"))
+    widget::Id::new(format!("deductum-reference-{id:?}"))
 }
 
 /// Scroll a reference window to its definition, a few lines above it in sight
@@ -2648,7 +2648,7 @@ pub fn source_line_height() -> f32 {
 }
 
 pub fn popout_scroll_id() -> widget::Id {
-    widget::Id::new("isabellum-popout-scroll")
+    widget::Id::new("deductum-popout-scroll")
 }
 
 /// Keep the proof window's caret in sight
@@ -2657,7 +2657,7 @@ pub fn keep_popout_caret(line: usize) -> cosmic::app::Task<Message> {
 }
 
 pub fn source_scroll_id() -> widget::Id {
-    widget::Id::new("isabellum-source-scroll")
+    widget::Id::new("deductum-source-scroll")
 }
 
 fn source<'a>(ws: &'a Workspace, t: &'a Theory, inline: Option<&'a Workspace>, table: &super::symbols::Table, beside: Option<(f32, f32)>, width: f32) -> Element<'a, Message> {
@@ -3435,7 +3435,7 @@ fn agents_panel<'a>(app: &'a App, ws: &'a Workspace) -> Element<'a, Message> {
     let grants: Vec<Value> = summary.and_then(|s| s["grants"].as_array().cloned()).unwrap_or_default();
     let clients: Vec<Value> = summary.and_then(|s| s["clients"].as_array().cloned()).unwrap_or_default();
     let seen = ws.info.as_ref().and_then(|i| i["seen"].as_object().cloned()).unwrap_or_default();
-    col = col.push(widget::text::caption("Agents use this session through Isabellum's MCP tools. They edit only where you grant rights; grants last until you revoke them."));
+    col = col.push(widget::text::caption("Agents use this session through Deductum's MCP tools. They edit only where you grant rights; grants last until you revoke them."));
     if seen.is_empty() {
         col = col.push(widget::text::body("No agent has used this session yet."));
     }

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! The proof state in parts, from the prelude's `isabellum_goals` query: the chained facts and,
+//! The proof state in parts, from the prelude's `deductum_goals` query: the chained facts and,
 //! for each subgoal, its fixed variables, assumptions and conclusion. Each part arrives as one
-//! message headed `#isabellum:KIND N`; the head is cut off here (with the message's colour
+//! message headed `#deductum:KIND N`; the head is cut off here (with the message's colour
 //! spans moved to match), so that each part shows as code of its own.
 
 use serde_json::{Value, json};
@@ -99,9 +99,9 @@ impl Goals {
 fn strip(m: &Value) -> Option<(String, usize, Value)> {
     let raw = m["raw"].as_str().or_else(|| m["text"].as_str())?;
     let (head, body) = raw.split_once('\n').unwrap_or((raw, ""));
-    let head = head.strip_prefix("#isabellum:")?;
+    let head = head.strip_prefix("#deductum:")?;
     let (kind, n) = head.split_once(' ').unwrap_or((head, "0"));
-    let cut = head.chars().count() + "#isabellum:".len() + 1;
+    let cut = head.chars().count() + "#deductum:".len() + 1;
     let text = m["text"].as_str().map(|t| t.split_once('\n').map_or("", |(_, b)| b)).unwrap_or(body);
     let spans: Vec<Value> = m["spans"]
         .as_array()
@@ -132,11 +132,11 @@ mod tests {
     #[test]
     fn parts_become_subgoals() {
         let msgs = vec![
-            json!({"kind": "writeln", "raw": "#isabellum:count 2\n", "text": "#isabellum:count 2\n", "spans": []}),
-            json!({"kind": "writeln", "raw": "#isabellum:param 1\nxs :: 'a list", "text": "#isabellum:param 1\nxs :: 'a list", "spans": [[19, 21, "free"]]}),
-            json!({"kind": "writeln", "raw": "#isabellum:prem 1\n0 < n", "text": "#isabellum:prem 1\n0 < n", "spans": []}),
-            json!({"kind": "writeln", "raw": "#isabellum:concl 1\nxs \\<noteq> []", "text": "#isabellum:concl 1\nxs ≠ []", "spans": []}),
-            json!({"kind": "writeln", "raw": "#isabellum:concl 2\nP n", "text": "#isabellum:concl 2\nP n", "spans": []}),
+            json!({"kind": "writeln", "raw": "#deductum:count 2\n", "text": "#deductum:count 2\n", "spans": []}),
+            json!({"kind": "writeln", "raw": "#deductum:param 1\nxs :: 'a list", "text": "#deductum:param 1\nxs :: 'a list", "spans": [[19, 21, "free"]]}),
+            json!({"kind": "writeln", "raw": "#deductum:prem 1\n0 < n", "text": "#deductum:prem 1\n0 < n", "spans": []}),
+            json!({"kind": "writeln", "raw": "#deductum:concl 1\nxs \\<noteq> []", "text": "#deductum:concl 1\nxs ≠ []", "spans": []}),
+            json!({"kind": "writeln", "raw": "#deductum:concl 2\nP n", "text": "#deductum:concl 2\nP n", "spans": []}),
         ];
         let g = Goals::parse(&msgs);
         assert_eq!(g.count, Some(2));

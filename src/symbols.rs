@@ -74,7 +74,7 @@ const SUP_SHOWN: &[(char, char)] = &[
     ('φ', 'ᵠ'), ('χ', 'ᵡ'), ('\'', '′'), ('⇩', '⇩'), ('∗', '*'), ('⊤', 'ᵀ'), ('†', '†'), ('⊥', 'ᗮ'),
 ];
 
-/// Isabellum Scripts (`res/isabellum/fonts`) has a raised and a lowered small glyph
+/// Isabellum Scripts (`res/deductum/fonts`) has a raised and a lowered small glyph
 /// for each printable ASCII and Greek character, in the private use area
 pub fn script_glyph(superscript: bool, c: char) -> Option<char> {
     let c = c as u32;
@@ -562,11 +562,11 @@ mod tests {
 mod real_table_probe {
     use super::*;
 
-    /// `ISABELLUM_SYMBOLS=/tmp/isa-symbols.json`: how lines of a UTP theory decode with the
+    /// `DEDUCTUM_SYMBOLS=/tmp/isa-symbols.json`: how lines of a UTP theory decode with the
     /// prover's real symbol table
     #[test]
     fn probe_utp_lines() {
-        let Ok(path) = std::env::var("ISABELLUM_SYMBOLS") else { return };
+        let Ok(path) = std::env::var("DEDUCTUM_SYMBOLS") else { return };
         let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
         let entries: Vec<Entry> = serde_json::from_value(v["symbols"].clone()).unwrap();
         let table = Table::new(entries);

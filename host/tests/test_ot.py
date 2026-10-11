@@ -5,7 +5,7 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-import isabellum_ot as ot  # noqa: E402
+import deductum_ot as ot  # noqa: E402
 
 
 def random_change(rng, length, n=3):

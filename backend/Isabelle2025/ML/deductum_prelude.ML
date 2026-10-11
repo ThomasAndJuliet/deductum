@@ -1,4 +1,4 @@
-(*  Title:      isabellum/backend/Isabelle2025/ML/isabellum_prelude.ML
+(*  Title:      deductum/backend/Isabelle2025/ML/deductum_prelude.ML
 
 Loaded into the prover at startup (Isabelle_Process use_prelude). A query
 operation that runs a diagnostic Isar command, such as quickcheck, nitpick,
@@ -8,7 +8,7 @@ is parsed with the keywords of the theory at that position.
 *)
 
 val _ =
-  Query_Operation.register {name = "isabellum_command", pri = 0}
+  Query_Operation.register {name = "deductum_command", pri = 0}
     (fn {state = st, args, writeln_result, ...} =>
       let
         val text = (case args of [t] => t | _ => error "Expected one command");
@@ -28,9 +28,9 @@ val _ =
 (* The proof state at a position, in parts for a structured display: the chained facts, then
    for each subgoal its fixed variables (with types), assumptions and conclusion, each pretty
    printed at the display's width. Every part is one result, headed by a line
-   "#isabellum:KIND N" (KIND text, fact, count, param, prem, concl or nogoal; N the subgoal) *)
+   "#deductum:KIND N" (KIND text, fact, count, param, prem, concl or nogoal; N the subgoal) *)
 val _ =
-  Query_Operation.register {name = "isabellum_goals", pri = 0}
+  Query_Operation.register {name = "deductum_goals", pri = 0}
     (fn {state = st, args, writeln_result, ...} =>
       let
         val (margin, types) =
@@ -38,7 +38,7 @@ val _ =
             [m, t] => (the_default 76 (Int.fromString m), t = "true")
           | _ => (76, false));
         fun out kind n prt =
-          writeln_result ("#isabellum:" ^ kind ^ " " ^ string_of_int n ^ "\n" ^
+          writeln_result ("#deductum:" ^ kind ^ " " ^ string_of_int n ^ "\n" ^
             Pretty.string_of_ops (Pretty.output_ops (SOME margin)) prt);
         val state =
           if Toplevel.is_proof st then Toplevel.proof_of st else error "Not inside a proof";
@@ -75,10 +75,10 @@ val _ =
 
 (* What a name means at a position, for a theory the prover has not checked in this session (a
    library theory shown in a reference window): one result for each kind of thing the name is,
-   headed by a line "#isabellum:entity KIND", then its full name, the file and line defining it
+   headed by a line "#deductum:entity KIND", then its full name, the file and line defining it
    (empty and 0 when unknown) and what it is *)
 val _ =
-  Query_Operation.register {name = "isabellum_entity", pri = 0}
+  Query_Operation.register {name = "deductum_entity", pri = 0}
     (fn {state = st, args, writeln_result, ...} =>
       let
         val name = (case args of [n] => n | _ => error "Expected one name");
@@ -96,7 +96,7 @@ val _ =
                   | NONE => "");
                 val line = the_default 0 (Position.line_of pos);
               in
-                writeln_result ("#isabellum:entity " ^ kind ^ "\n" ^ full ^ "\n" ^ file ^ "\n" ^
+                writeln_result ("#deductum:entity " ^ kind ^ "\n" ^ full ^ "\n" ^ file ^ "\n" ^
                   string_of_int line ^ "\n" ^ text (pretty full))
               end
             else ()
@@ -111,5 +111,5 @@ val _ =
         look "type" (Proof_Context.type_space ctxt) (fn c => Pretty.str ("type " ^ Proof_Context.extern_type ctxt c));
         look "class" (Proof_Context.class_space ctxt) (fn c => Pretty.str ("class " ^ c));
         look "locale" (Locale.locale_space thy) (fn c => Pretty.str ("locale " ^ c));
-        writeln_result "#isabellum:done"
+        writeln_result "#deductum:done"
       end);

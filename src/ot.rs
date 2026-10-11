@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Text changes, as the session host has them (`isabellum/host/isabellum_ot.py`):
+//! Text changes, as the session host has them (`deductum/host/deductum_ot.py`):
 //! replacements `(start, end, text)` against one revision, sorted and not
 //! overlapping, with offsets in code points. The app needs the host's `merge`
 //! rebase to keep the human's typing over edits that arrive meanwhile (design

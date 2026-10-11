@@ -4,7 +4,7 @@ import sys
 import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-import isabellum_host as h  # noqa: E402
+import deductum_host as h  # noqa: E402
 
 
 class ProverText(unittest.TestCase):

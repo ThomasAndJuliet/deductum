@@ -1,6 +1,6 @@
-/*  Title:      isabellum/backend/Isabelle2025/src/backend.scala
+/*  Title:      deductum/backend/Isabelle2025/src/backend.scala
 
-    "isabelle isabellum_backend": one PIDE session for Isabellum's session host,
+    "isabelle deductum_backend": one PIDE session for Deductum's session host,
     driven by JSON lines on stdin and answering with JSON lines on stdout.
 
     The host owns the buffers (design C11); this process holds the prover's copy
@@ -13,7 +13,7 @@
     Query_Operation mechanism; distributed under the Isabelle license (BSD).
 */
 
-package isabellum
+package deductum
 
 
 import isabelle._
@@ -27,7 +27,7 @@ import scala.util.parsing.input.Reader
 
 object Backend {
   val isabelle_tool =
-    Isabelle_Tool("isabellum_backend", "PIDE session for the Isabellum session host",
+    Isabelle_Tool("deductum_backend", "PIDE session for the Deductum session host",
       Scala_Project.here,
       { args =>
         var dirs: List[Path] = Nil
@@ -37,7 +37,7 @@ object Backend {
         var no_build = false
 
         val getopts = Getopts("""
-Usage: isabelle isabellum_backend [OPTIONS]
+Usage: isabelle deductum_backend [OPTIONS]
 
   Options are:
     -d DIR       include session directory
@@ -46,7 +46,7 @@ Usage: isabelle isabellum_backend [OPTIONS]
     -n           no build of session image on startup
     -o OPTION    override Isabelle system OPTION (via NAME=VAL or NAME)
 
-  Run one PIDE session for Isabellum, with JSON lines on stdin/stdout.
+  Run one PIDE session for Deductum, with JSON lines on stdin/stdout.
 """,
           "d:" -> (arg => dirs = dirs ::: List(Path.explode(File.standard_path(arg)))),
           "i:" -> (arg => include_sessions = include_sessions ::: List(arg)),
@@ -760,7 +760,7 @@ class Backend(
           if elem.name == Markup.RUNNING => id
         } getOrElse query.exec_id
       // Results the operation reported, then the plain messages of its execution
-      // (a command run by isabellum_command prints with writeln)
+      // (a command run by deductum_command prints with writeln)
       val output =
         (for {
           case XML.Elem(_, List(XML.Elem(markup, body))) <- results
@@ -968,7 +968,7 @@ class Backend(
       val store = Store(options)
       val session_heaps =
         ML_Process.session_heaps(store, session_background, logic = session_background.session_name)
-      val prelude = Path.explode("$ISABELLUM_BACKEND_HOME/ML/isabellum_prelude.ML")
+      val prelude = Path.explode("$DEDUCTUM_BACKEND_HOME/ML/deductum_prelude.ML")
       val use_prelude = if (prelude.is_file) List(File.platform_path(prelude.expand)) else Nil
       Isabelle_Process.start(options, session, session_background, session_heaps,
         use_prelude = use_prelude).await_startup()

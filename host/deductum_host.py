@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
-"""Isabellum session host.
+"""Deductum session host.
 
-One host per user per machine owns Isabellum's shared Isabelle sessions there
-(design C2/C3/C11 in .local-design/isabelle-app.md, docs/isabellum-decisions.md):
+One host per user per machine owns Deductum's shared Isabelle sessions there
+(design C2/C3/C11 in .local-design/isabelle-app.md, docs/deductum-decisions.md):
 the authoritative unsaved text of each theory, its author-attributed edit log,
 undo and revert (C5/C7), editing grants (C6/C9), conflict notices for agents (C7),
 autosave and external changes (C13), independent agent sessions (C8), and the
-prover process for each session (``isabelle isabellum_backend``, C12).
+prover process for each session (``isabelle deductum_backend``, C12).
 
-Clients (the Isabellum app, agents' MCP adapters, the command line) talk JSON lines
+Clients (the Deductum app, agents' MCP adapters, the command line) talk JSON lines
 over a Unix socket. Remote clients reach it through ``ssh MACHINE python3
-.../isabellum_host.py connect``, which bridges stdio to the socket and starts the
+.../deductum_host.py connect``, which bridges stdio to the socket and starts the
 host if it isn't running. The host outlives its clients: closing the app detaches,
 and only an explicit Stop ends a prover.
 
@@ -40,18 +40,18 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import isabellum_ot as ot  # noqa: E402
+import deductum_ot as ot  # noqa: E402
 
 PROTOCOL = 1
 VERSION = "0.1.0"
 HOME = Path.home()
-STATE_DIR = Path(os.environ.get("ISABELLUM_STATE_DIR")
-                 or Path(os.environ.get("XDG_STATE_HOME") or HOME / ".local/state") / "isabellum")
+STATE_DIR = Path(os.environ.get("DEDUCTUM_STATE_DIR")
+                 or Path(os.environ.get("XDG_STATE_HOME") or HOME / ".local/state") / "deductum")
 SOCKET_PATH = STATE_DIR / "host.sock"
 LOCK_PATH = STATE_DIR / "host.lock"
 LOG_PATH = STATE_DIR / "host.log"
 SHARE_DIR = Path(__file__).resolve().parent.parent
-CONFIG_PATH = Path(os.environ.get("XDG_CONFIG_HOME") or HOME / ".config") / "isabellum" / "host.json"
+CONFIG_PATH = Path(os.environ.get("XDG_CONFIG_HOME") or HOME / ".config") / "deductum" / "host.json"
 
 AUTOSAVE_DELAY = 2.0
 WATCH_INTERVAL = 1.0
@@ -134,7 +134,7 @@ def read_file(path: str) -> Optional[Tuple[str, bool, bool]]:
 def write_file_atomic(path: str, data: bytes) -> None:
     """Write via a temporary file and rename, keeping the file's permissions"""
     target = Path(path)
-    tmp = target.with_name("." + target.name + ".isabellum-tmp")
+    tmp = target.with_name("." + target.name + ".deductum-tmp")
     mode = None
     with contextlib.suppress(OSError):
         mode = os.stat(path).st_mode & 0o7777
@@ -164,8 +164,8 @@ def find_runtimes() -> List[Dict[str, Any]]:
     config = read_json(CONFIG_PATH, {}) or {}
     for p in config.get("runtimes", []):
         candidates.append(Path(os.path.expanduser(p)))
-    if os.environ.get("ISABELLUM_ISABELLE"):
-        candidates.append(Path(os.environ["ISABELLUM_ISABELLE"]))
+    if os.environ.get("DEDUCTUM_ISABELLE"):
+        candidates.append(Path(os.environ["DEDUCTUM_ISABELLE"]))
     for pattern in ("Documents/Software/Isabelle*/bin/isabelle", "Software/Isabelle*/bin/isabelle",
                     "Isabelle*/bin/isabelle", "opt/Isabelle*/bin/isabelle"):
         candidates.extend(sorted(HOME.glob(pattern)))
@@ -345,7 +345,7 @@ def ensure_component(runtime: str, progress) -> None:
     ident = runtime_identifier(Path(runtime))
     comp = SHARE_DIR / "backend" / (ident or "")
     if not ident or not comp.is_dir():
-        raise HostError(f"No Isabellum backend for {ident or runtime}", "unsupported_runtime")
+        raise HostError(f"No Deductum backend for {ident or runtime}", "unsupported_runtime")
     env = dict(os.environ)
     home_user = _component_ready.get(runtime) or subprocess.run(
         [runtime, "getenv", "-b", "ISABELLE_HOME_USER"], capture_output=True, text=True, timeout=120,
@@ -358,19 +358,19 @@ def ensure_component(runtime: str, progress) -> None:
     if _component_ready.get(runtime) and str(comp) in lines:
         return
     # Other copies of the backend (an old install, a test) would provide the same tool
-    for stale in [ln for ln in lines if ln != str(comp) and re.search(r"isabellum[^/]*/backend/[^/]+/?$", ln)]:
-        progress(f"Unregistering a stale Isabellum backend: {stale}")
+    for stale in [ln for ln in lines if ln != str(comp) and re.search(r"deductum[^/]*/backend/[^/]+/?$", ln)]:
+        progress(f"Unregistering a stale Deductum backend: {stale}")
         subprocess.run([runtime, "components", "-x", stale], capture_output=True, text=True, timeout=300, env=env)
     if str(comp) not in lines:
-        progress(f"Registering the Isabellum backend with {ident}")
+        progress(f"Registering the Deductum backend with {ident}")
         r = subprocess.run([runtime, "components", "-u", str(comp)], capture_output=True,
                            text=True, timeout=300, env=env)
         if r.returncode != 0:
             raise HostError("Could not register backend: " + r.stderr.strip())
-    jar = comp / "lib" / "isabellum_backend.jar"
+    jar = comp / "lib" / "deductum_backend.jar"
     sources = list((comp / "src").glob("*.scala")) + [comp / "etc" / "build.props"]
     if not jar.is_file() or any(s.stat().st_mtime > jar.stat().st_mtime for s in sources):
-        progress("Building the Isabellum backend")
+        progress("Building the Deductum backend")
         r = subprocess.run([runtime, "scala_build"], capture_output=True, text=True, timeout=1800,
                            env=env)
         if r.returncode != 0 or not jar.is_file():
@@ -522,7 +522,7 @@ class Backend:
 
     async def start(self) -> None:
         s = self.session
-        cmd = [s.meta["runtime"], "isabellum_backend", "-l", s.meta["logic"]]
+        cmd = [s.meta["runtime"], "deductum_backend", "-l", s.meta["logic"]]
         for d in s.meta.get("dirs", []):
             cmd += ["-d", d]
         for name in s.meta.get("include_sessions", []):
@@ -965,7 +965,7 @@ class Session:
         author = client.author()
         if author["kind"] == "agent" and not self.agent_may_edit(author["key"], doc, rebased):
             raise HostError("You have no editing rights here. Ask for them with isabelle_request_access (the "
-                            "human answers in Isabellum), or work in your own independent session.", "forbidden")
+                            "human answers in Deductum), or work in your own independent session.", "forbidden")
         if author["kind"] == "agent" and doc.conflict:
             raise HostError("This theory changed on disk while it had unsaved edits; resolve that first "
                             "(isabelle_resolve_conflict)", "disk_conflict")
@@ -1287,7 +1287,7 @@ class Session:
 
     def request_access(self, client: "Client", scope: str, path: Optional[str], offset: Optional[int],
                        reason: str) -> Dict[str, Any]:
-        """An agent asks the human for editing rights: Isabellum shows the request with Allow and
+        """An agent asks the human for editing rights: Deductum shows the request with Allow and
         Deny, and the agent gets a notice with the answer"""
         if scope not in ("folder", "theory", "proof"):
             raise HostError("Scope must be folder, theory or proof")
@@ -1334,7 +1334,7 @@ class Session:
     # ----- collaboration: what the human sees, showing them places, notes on the text
 
     def human_view(self) -> Dict[str, Any]:
-        """Where the human is in Isabellum: the theory, the caret, the selection, and the
+        """Where the human is in Deductum: the theory, the caret, the selection, and the
         command and proof around the caret"""
         views = [c.views.get(self.id) for c in self.host.clients if c.kind == "app" and c.views.get(self.id)]
         if not views:
@@ -2170,14 +2170,14 @@ Answer with only a JSON object and nothing else:
         return [], []
 
     async def run_command_at(self, doc: Doc, offset: int, text: str, timeout: float = 60) -> List[str]:
-        """Errors from running a diagnostic command at a position (isabellum_command)"""
+        """Errors from running a diagnostic command at a position (deductum_command)"""
         qid = uuid.uuid4().hex[:10]
-        self.queries[qid] = {"id": qid, "client": None, "path": doc.path, "operation": "isabellum_command",
+        self.queries[qid] = {"id": qid, "client": None, "path": doc.path, "operation": "deductum_command",
                              "args": [text], "revision": doc.revision, "status": "waiting", "messages": [],
                              "started": now()}
         assert self.backend
         self.backend.send({"op": "query", "query": qid, "file": doc.path, "offset": offset,
-                           "operation": "isabellum_command", "args": [text]})
+                           "operation": "deductum_command", "args": [text]})
         q = await self.await_query(qid, timeout)
         errors = [m["text"] for m in q.get("messages", []) if m.get("kind") == "error"]
         if q.get("status") != "finished" and not errors:
@@ -2332,12 +2332,12 @@ Answer with only a JSON object and nothing else:
                 await asyncio.sleep(0.1)
             for res in results:
                 qid = uuid.uuid4().hex[:10]
-                self.queries[qid] = {"id": qid, "client": None, "path": doc.path, "operation": "isabellum_command",
+                self.queries[qid] = {"id": qid, "client": None, "path": doc.path, "operation": "deductum_command",
                                      "args": [res["text"]], "revision": doc.revision, "status": "waiting",
                                      "messages": [], "started": now()}
                 assert self.backend
                 self.backend.send({"op": "query", "query": qid, "file": doc.path, "offset": start,
-                                   "operation": "isabellum_command", "args": [res["text"]]})
+                                   "operation": "deductum_command", "args": [res["text"]]})
                 q = await self.await_query(qid, 120)
                 # (a duplicate fact comes after the proof succeeded: see the prelude)
                 errors = [m["text"] for m in q.get("messages", []) if m.get("kind") == "error"
@@ -2509,7 +2509,7 @@ class Host:
         else:
             supported = [r for r in runtimes if r["supported"]]
             if not supported:
-                raise HostError("No supported Isabelle runtime on this machine; Isabellum needs "
+                raise HostError("No supported Isabelle runtime on this machine; Deductum needs "
                                 "Isabelle2025 (CyPhyAssure). Found: " +
                                 ", ".join(f"{r['identifier']} ({r['path']})" for r in runtimes),
                                 "unsupported_runtime")
@@ -2568,7 +2568,7 @@ class Host:
             raise HostError("Independent sessions need the folder to be in a git repository", "no_git")
         head = git("rev-parse", "HEAD", cwd=top).strip()
         sid = uuid.uuid4().hex[:8]
-        branch = f"isabellum/{sid}"
+        branch = f"deductum/{sid}"
         worktree = STATE_DIR / "worktrees" / f"{Path(top).name}-{sid}"
         worktree.parent.mkdir(parents=True, exist_ok=True)
         git("worktree", "add", "-b", branch, str(worktree), head, cwd=top)
@@ -3111,7 +3111,7 @@ class Host:
         self.server = await asyncio.start_unix_server(self.serve_client, path=str(SOCKET_PATH),
                                                       limit=64 * 1024 * 1024)
         os.chmod(SOCKET_PATH, 0o600)
-        log("isabellum host", VERSION, "listening on", SOCKET_PATH)
+        log("deductum host", VERSION, "listening on", SOCKET_PATH)
         loop = asyncio.get_running_loop()
         for sig in (signal.SIGTERM, signal.SIGINT):
             loop.add_signal_handler(sig, self.stopping.set)
@@ -3151,7 +3151,7 @@ def run_daemon(to_log: bool = False) -> int:
     try:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError:
-        print("isabellum host already running", file=sys.stderr)
+        print("deductum host already running", file=sys.stderr)
         return 0
     asyncio.run(Host().run())
     return 0
@@ -3208,9 +3208,9 @@ def spawn_daemon() -> None:
     script = str(Path(__file__).resolve())
     started = False
     if shutil.which("systemd-run") and os.environ.get("XDG_RUNTIME_DIR"):
-        env_args = [f"--setenv={k}={os.environ[k]}" for k in ("ISABELLUM_STATE_DIR", "USER_HOME", "PATH",
-                                                                "ISABELLUM_ISABELLE") if os.environ.get(k)]
-        for unit in ("isabellum-host", f"isabellum-host-{int(time.time())}"):
+        env_args = [f"--setenv={k}={os.environ[k]}" for k in ("DEDUCTUM_STATE_DIR", "USER_HOME", "PATH",
+                                                                "DEDUCTUM_ISABELLE") if os.environ.get(k)]
+        for unit in ("deductum-host", f"deductum-host-{int(time.time())}"):
             r = subprocess.run(["systemd-run", "--user", "--collect", "--quiet", f"--unit={unit}", *env_args,
                                 sys.executable, script, "daemon", "--log"],
                                capture_output=True, text=True, timeout=30)
@@ -3225,7 +3225,7 @@ def spawn_daemon() -> None:
         if host_running():
             return
         time.sleep(0.1)
-    raise SystemExit("isabellum host did not start; see " + str(LOG_PATH))
+    raise SystemExit("deductum host did not start; see " + str(LOG_PATH))
 
 
 def connect_socket() -> socket.socket:
@@ -3278,7 +3278,7 @@ class SyncClient:
 
     @classmethod
     def over_ssh(cls, destination: str, remote_python: str = "python3",
-                 remote_script: str = "~/.local/share/isabellum/host/isabellum_host.py") -> "SyncClient":
+                 remote_script: str = "~/.local/share/deductum/host/deductum_host.py") -> "SyncClient":
         proc = subprocess.Popen(["ssh", "-o", "BatchMode=yes", "-T", destination,
                                  f"{remote_python} {remote_script} connect"],
                                 stdin=subprocess.PIPE, stdout=subprocess.PIPE)
@@ -3302,7 +3302,7 @@ class SyncClient:
         while b"\n" not in self.buf:
             data = self._recv()
             if not data:
-                raise ConnectionError("isabellum host closed the connection")
+                raise ConnectionError("deductum host closed the connection")
             self.buf += data
         line, self.buf = self.buf.split(b"\n", 1)
         return json.loads(line)
@@ -3329,11 +3329,11 @@ def main(argv: List[str]) -> int:
     if cmd == "connect":
         return run_connect()
     if cmd == "mcp":
-        import isabellum_mcp
-        return isabellum_mcp.main(argv[2:])
+        import deductum_mcp
+        return deductum_mcp.main(argv[2:])
     if cmd in ("status", "sessions"):
         c = SyncClient.local()
-        c.request("hello", client="cli", label="isabellum-host cli")
+        c.request("hello", client="cli", label="deductum-host cli")
         print(json.dumps(c.request("sessions")["sessions"], indent=2))
         return 0
     if cmd == "find":
@@ -3345,7 +3345,7 @@ def main(argv: List[str]) -> int:
             if rest[i].startswith("--"):
                 opts[rest[i][2:]] = rest[i + 1]
         c = SyncClient.local()
-        c.request("hello", client="cli", label="isabellum find")
+        c.request("hello", client="cli", label="deductum find")
         print(json.dumps(c.request("find_sessions", **opts)["sessions"]))
         return 0
     if cmd == "stop-host":
@@ -3357,7 +3357,7 @@ def main(argv: List[str]) -> int:
     if cmd == "runtimes":
         print(json.dumps(find_runtimes(), indent=2))
         return 0
-    print("usage: isabellum_host.py daemon|connect|mcp|status|runtimes|find|stop-host")
+    print("usage: deductum_host.py daemon|connect|mcp|status|runtimes|find|stop-host")
     return 2
 
 

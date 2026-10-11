@@ -1,8 +1,8 @@
 # Unit test of content-based undo without a prover: a host with a doc, vim-like edits
 import asyncio, os, sys, tempfile
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-os.environ["ISABELLUM_STATE_DIR"] = tempfile.mkdtemp()
-import isabellum_host as H
+os.environ["DEDUCTUM_STATE_DIR"] = tempfile.mkdtemp()
+import deductum_host as H
 
 async def main():
     host = H.Host()

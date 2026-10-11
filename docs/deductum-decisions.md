@@ -1,12 +1,12 @@
-# Isabellum: decisions
+# Deductum (formerly Isabellum): decisions
 
-Isabellum opens a folder of Isabelle theories and shows it as a literate
+Deductum opens a folder of Isabelle theories and shows it as a literate
 document. You and any number of agents work in the same live prover session.
 The app is a sibling of COSMIC Terminal Agents and lives in the same repository.
 
-On branch `multi-prover`, Isabellum is being renamed **Deductum** (C17a) and extended to Lean and Rocq (Coq)
+This app was called **Isabellum** until 2026-10-11 (C17a); the record below keeps its history under the new name. On branch `multi-prover` it is being extended to Lean and Rocq (Coq)
 backends alongside Isabelle (C16). That design is in
-[isabellum-provers.md](isabellum-provers.md). The rest of this record still
+[deductum-provers.md](deductum-provers.md). The rest of this record still
 describes the Isabelle-only app as implemented.
 
 This record keeps three things apart:
@@ -30,30 +30,30 @@ The working ledger with the full reasoning is
 ## Components
 
 ```text
-Isabellum app (Rust, libcosmic)  ──┐
+Deductum app (Rust, libcosmic)  ──┐
 agent's MCP adapter (Python)     ──┼── JSON lines ──>  session host (Python, one per user per machine)
-isabellum command, Terminal Agents ┘   socket, or         │ edit log, undo, grants, notices,
+deductum command, Terminal Agents ┘   socket, or         │ edit log, undo, grants, notices,
                                        ssh + `connect`     │ autosave, disk watch, lifecycle
-                                                           └── JSON lines ──> isabelle isabellum_backend
+                                                           └── JSON lines ──> isabelle deductum_backend
                                                                               (Scala, Isabelle2025 PIDE)
 ```
 
 | Component | Path | Role |
 |---|---|---|
-| Backend | `isabellum/backend/Isabelle2025/src/backend.scala` | One PIDE session per prover epoch. Holds the prover's copy of each opened theory and reports command spans and status, messages, proof states at any offset, and query operations (Sledgehammer, Find Theorems). |
-| Session host | `isabellum/host/isabellum_host.py` | Owns sessions, the authoritative buffers, the edit log, undo, grants, notices, autosave and disk watching. Starts and stops backends. Standard library only. |
-| Transforms | `isabellum/host/isabellum_ot.py`, `src/bin/isabellum/ot.rs` | Rebasing a change past later changes under the `strict`, `partial` and `merge` policies. |
-| MCP adapter | `isabellum/host/isabellum_mcp.py` | The agent tools. Run with `isabellum_host.py mcp [--ssh DEST]`. |
-| App | `src/bin/isabellum/` | Sessions sidebar, the literate and source views, panels, the `isabellum` command. |
+| Backend | `deductum/backend/Isabelle2025/src/backend.scala` | One PIDE session per prover epoch. Holds the prover's copy of each opened theory and reports command spans and status, messages, proof states at any offset, and query operations (Sledgehammer, Find Theorems). |
+| Session host | `deductum/host/deductum_host.py` | Owns sessions, the authoritative buffers, the edit log, undo, grants, notices, autosave and disk watching. Starts and stops backends. Standard library only. |
+| Transforms | `deductum/host/deductum_ot.py`, `src/bin/deductum/ot.rs` | Rebasing a change past later changes under the `strict`, `partial` and `merge` policies. |
+| MCP adapter | `deductum/host/deductum_mcp.py` | The agent tools. Run with `deductum_host.py mcp [--ssh DEST]`. |
+| App | `src/bin/deductum/` | Sessions sidebar, the literate and source views, panels, the `deductum` command. |
 | Renderer | `prose/prose-render`, `prose/prose-spell` | Cerea's shared crates, as a git subtree. They replace the `#[path]` borrowing of `src/thread/{markdown,rich,math}.rs` described under "The literate view" (merged from `shared-prose`). |
 
 ## Specified behaviour
 
 | Id | Decision |
 |---|---|
-| C1 | A distinct app named **Isabellum**, with the command-line helper `isabellum`. It opens a theory folder for interactive proof work, using literate programming. It works locally or remotely using Terminal Agents' machine list. |
+| C1 | A distinct app named **Deductum**, with the command-line helper `deductum`. It opens a theory folder for interactive proof work, using literate programming. It works locally or remotely using Terminal Agents' machine list. |
 | C2 | You and multiple agents (over MCP) use the **same live PIDE session**. Each agent has its own query position, and queries never move your caret. Edits are guarded by revision. The session persists after the app closes, with explicit Stop and Resume. |
-| C3 | A Sessions sidebar. **Stop** keeps the buffers and recovery state, and Resume starts a new epoch. A query never resumes a stopped session. `isabellum .`, `--machine`, `--session` work like `zed .`. |
+| C3 | A Sessions sidebar. **Stop** keeps the buffers and recovery state, and Resume starts a new epoch. A query never resumes a stopped session. `deductum .`, `--machine`, `--session` work like `zed .`. |
 | C4 | `.thy` files are authoritative. Prose in `text` blocks is editable. Clicking rendered LaTeX or Isabelle content reveals its own source. Proofs are edited inline, with an expanded proof workspace that can pop out into its own window. Agents may be granted direct editing rights. |
 | C5 | Undo is per author: Ctrl+Z undoes your own edits, and agents' changes have a separate revert action. |
 | C6 | Grant scopes: the whole folder, one theory, or a selected proof. The grant screen defaults to the folder. |
@@ -65,7 +65,7 @@ isabellum command, Terminal Agents ┘   socket, or         │ edit log, undo, 
 | C12 | The main Isabelle version is the one isabelle-utp supports: CyPhyAssure's patched **Isabelle2025**. |
 | C13 | **Autosave**, and agents can save. When a file changes on disk with no unsaved edits, it is reloaded; otherwise a Reload button is shown, or agents can resolve the conflict. |
 | C14 | Two views per theory, **literate** and **source**, with Isabelle symbols rendered in both. **Sledgehammer** integration with a good UI is essential. |
-| C16 | In a new worktree, a large extension with **separate Isabelle, Lean and Coq/Rocq backends**. The UI exposes the features that are relevant to the current backend, and manages projects and sessions across the backends. Builds on Cerea's split rendering engine (`prose/`). Design: [isabellum-provers.md](isabellum-provers.md). |
+| C16 | In a new worktree, a large extension with **separate Isabelle, Lean and Coq/Rocq backends**. The UI exposes the features that are relevant to the current backend, and manages projects and sessions across the backends. Builds on Cerea's split rendering engine (`prose/`). Design: [deductum-provers.md](deductum-provers.md). |
 
 ## Chosen architecture
 
@@ -112,7 +112,7 @@ isabellum command, Terminal Agents ┘   socket, or         │ edit log, undo, 
 - **Autosave.** About 2 s after the last edit, and on Pause, Stop and app
   detach. Files are written to a temporary file and renamed. Line endings and
   BOM are kept.
-- **Independent sessions.** A git worktree on branch `isabellum/<id>`, started
+- **Independent sessions.** A git worktree on branch `deductum/<id>`, started
   from the human's live buffers. The merge is a line-level three-way rebase
   into the shared session. The merged text is attributed to the agent and
   can be reverted.
@@ -129,23 +129,23 @@ isabellum command, Terminal Agents ┘   socket, or         │ edit log, undo, 
 
 | Area | Evidence |
 |---|---|
-| Transforms | `isabellum/host/tests/test_ot.py`: 14 tests, including randomised properties. Strict rebasing equals applying both changes simultaneously; merging never drops inserted text; inverses round-trip. The Rust port has matching tests. |
-| Host against a real prover | `isabellum/host/tests/integration_host.py` passes 28 checks on au-laptop with CyPhyAssure Isabelle2025: proof states, refusing edits without a grant, rebasing stale edits, rejecting conflicting ones, overlap notices, per-author undo and redo, revert with notice, autosave, clean reload as a logged edit, disk conflicts holding autosave, agent resolution, Sledgehammer with the span to replace, Pause refusing queries immediately, Resume rechecking, Stop and Resume with a new epoch, agents unable to resume the human's session, `find_sessions` by Zellij session, and refusal after revoking. |
+| Transforms | `deductum/host/tests/test_ot.py`: 14 tests, including randomised properties. Strict rebasing equals applying both changes simultaneously; merging never drops inserted text; inverses round-trip. The Rust port has matching tests. |
+| Host against a real prover | `deductum/host/tests/integration_host.py` passes 28 checks on au-laptop with CyPhyAssure Isabelle2025: proof states, refusing edits without a grant, rebasing stale edits, rejecting conflicting ones, overlap notices, per-author undo and redo, revert with notice, autosave, clean reload as a logged edit, disk conflicts holding autosave, agent resolution, Sledgehammer with the span to replace, Pause refusing queries immediately, Resume rechecking, Stop and Resume with a new epoch, agents unable to resume the human's session, `find_sessions` by Zellij session, and refusal after revoking. |
 | MCP | A scripted agent session on au-laptop: open, check, read, proof state, Sledgehammer refused without rights and then inserting `by simp` after a grant, history, Find Theorems. |
-| App views | `src/bin/isabellum/snapshot.rs` renders the literate view, the source view, and the Sledgehammer, Agents and History panels headlessly with tiny-skia (`CT_SNAPSHOTS=dir`). |
-| App against a real host | `src/bin/isabellum/live.rs` (`ISABELLUM_LIVE=d59500`, `--ignored`) drives the window's state machine over ssh. You type in the source view while an agent replaces a `sorry` against an older revision; the replica converges on both edits. The goal query, Sledgehammer and autosave are checked too. |
-| Unit tests | 43 Rust tests (`cargo test --bin isabellum`): symbols and offset maps, blocks, the literate conversion, the replica with concurrent edits, typed symbol escapes, the command line. |
+| App views | `src/bin/deductum/snapshot.rs` renders the literate view, the source view, and the Sledgehammer, Agents and History panels headlessly with tiny-skia (`CT_SNAPSHOTS=dir`). |
+| App against a real host | `src/bin/deductum/live.rs` (`DEDUCTUM_LIVE=d59500`, `--ignored`) drives the window's state machine over ssh. You type in the source view while an agent replaces a `sorry` against an older revision; the replica converges on both edits. The goal query, Sledgehammer and autosave are checked too. |
+| Unit tests | 43 Rust tests (`cargo test --bin deductum`): symbols and offset maps, blocks, the literate conversion, the replica with concurrent edits, typed symbol escapes, the command line. |
 
 Building and running:
 
 ```sh
-cargo build --release --bin isabellum                       # inside the Flatpak SDK on neo
-python3 isabellum/host/isabellum_host.py runtimes           # the runtimes the host can use
-claude mcp add isabellum -- python3 ~/.local/share/isabellum/host/isabellum_host.py mcp
+cargo build --release --bin deductum                       # inside the Flatpak SDK on neo
+python3 deductum/host/deductum_host.py runtimes           # the runtimes the host can use
+claude mcp add deductum -- python3 ~/.local/share/deductum/host/deductum_host.py mcp
 ```
 
-The app installs `isabellum/host` and `isabellum/backend` into
-`~/.local/share/isabellum` on each machine it connects to. The host builds
+The app installs `deductum/host` and `deductum/backend` into
+`~/.local/share/deductum` on each machine it connects to. The host builds
 the backend jar with the runtime's `isabelle scala_build`.
 
 ## Also implemented
@@ -156,19 +156,19 @@ the backend jar with the runtime's `isabelle scala_build`.
   window.
 - **Editing prose (C4).** A prose block opens its source, and the block's
   rendered preview follows each keystroke below it.
-- **"Open in Isabellum" in Terminal Agents (C10).** It is in the tab menu of
+- **"Open in Deductum" in Terminal Agents (C10).** It is in the tab menu of
   session and thread tabs, and in the Session menu.
-  - `agent::open_in_isabellum` asks the session host on the agent's computer
-    (`isabellum_host.py find --zellij NAME`, or `--folder DIR`) for the
+  - `agent::open_in_deductum` asks the session host on the agent's computer
+    (`deductum_host.py find --zellij NAME`, or `--folder DIR`) for the
     session the agent used.
-  - It then runs `isabellum --machine NAME --session ID`. Failing that, it
+  - It then runs `deductum --machine NAME --session ID`. Failing that, it
     opens the agent's project folder.
-  - Isabellum adds a link to a machine it is asked about but doesn't yet
+  - Deductum adds a link to a machine it is asked about but doesn't yet
     know.
-  - The action is offered only when Isabellum is installed, either as
-    `isabellum` on PATH or as the Flatpak. Terminal Agents checks once at
+  - The action is offered only when Deductum is installed, either as
+    `deductum` on PATH or as the Flatpak. Terminal Agents checks once at
     startup.
-- **A Flatpak package.** `packaging/flatpak/dev.twright.Isabellum.yml`
+- **A Flatpak package.** `packaging/flatpak/dev.twright.Deductum.yml`
   packages a release binary built in the same SDK, together with the host
   and backend sources. It builds and passes `check-flatpak-catalog`. It has
   not been published to `home-apps`.
@@ -180,11 +180,11 @@ the backend jar with the runtime's `isabelle scala_build`.
 ## Added after trying the preview (C15)
 
 - **Diagnostic commands at any position.** Quickcheck, Nitpick, `try0` and `solve_direct` run without editing the text.
-  - The backend's ML prelude (`backend/Isabelle2025/ML/isabellum_prelude.ML`, loaded with `use_prelude`) registers a query operation, `isabellum_command`. It parses the command with the theory's keywords at the print function's position, so the command's messages carry its execution id. The backend collects them with the query's own results.
+  - The backend's ML prelude (`backend/Isabelle2025/ML/deductum_prelude.ML`, loaded with `use_prelude`) registers a query operation, `deductum_command`. It parses the command with the theory's keywords at the print function's position, so the command's messages carry its execution id. The backend collects them with the query's own results.
   - The **Quickcheck** panel and the `isabelle_run_diagnostic` MCP tool use it.
 - **LLM hole filling** (`fill_hole`).
   - The host asks Claude (`claude -p`) or Codex (`codex exec`) on the session's machine for candidate proofs for a `sorry`. The prompt holds the theory header, the preceding text, the lemma and the proof state.
-  - The host checks each candidate with `isabellum_command` before offering it with Insert.
+  - The host checks each candidate with `deductum_command` before offering it with Insert.
 - **Sledgehammer options.**
   - `sledgehammer_timeout` and `sledgehammer_provers` are set on the running prover (backend `options`, host `prover_options`) and kept with the session.
   - A `sledgehammer` typed in the text offers its proofs with Insert in Output, replacing the command.
@@ -196,7 +196,7 @@ the backend jar with the runtime's `isabelle scala_build`.
 - **Layout.** A three-column responsive layout:
   - a resizable left sidebar with Sessions, Outline, Theorems and Problems;
   - a resizable, collapsible right sidebar.
-  - Settings are kept in `~/.config/isabellum/settings.json`.
+  - Settings are kept in `~/.config/deductum/settings.json`.
 - **Editing.**
   - Unboxed editors.
   - Goal-aware completion (`fix`, `assume`, `show`, `have`, `proof (intro …)` from the first subgoal).
@@ -214,7 +214,7 @@ the backend jar with the runtime's `isabelle scala_build`.
   - *Granularity.* An undo step is a word of typing, a run of deletions, or one discrete edit (a paste, a completion, a symbol, an inserted proof, a vim command). A step also ends at a pause of a second, a caret jump, Enter, or opening or closing a block. In vim mode a whole insert session is one step, as in vim.
   - The app sends each step to the host as its own edit (`Theory::steps`), so a step never merges with the next while an edit is in flight. Undo and redo wait until earlier edits have reached the host.
   - *Semantics.* Undo always consumes its step. Text that someone else changed since is left as they changed it: undo ranges are cut at later edits' boundaries, so only the characters both touched are kept (`split_at`). There are no "could not be applied" cards. The reply carries a one-line note ("Undid at line 24; kept what Claude changed there since") and where the undo acted, and the app moves the caret there. A step that later edits replaced entirely is passed over and counted in the note.
-- **Proof state** (prelude query `isabellum_goals`). Isabelle splits the state into parts: the chained facts, then for each subgoal its fixed variables (with types), assumptions and conclusion, pretty-printed at the panel's width. It also returns the whole state as text with the same settings.
+- **Proof state** (prelude query `deductum_goals`). Isabelle splits the state into parts: the chained facts, then for each subgoal its fixed variables (with types), assumptions and conclusion, pretty-printed at the panel's width. It also returns the whole state as text with the same settings.
   - The **Goals** view shows each subgoal as `fix` / `assume` / `show`. It also shows what the step changed (subgoals solved and new, against the previous command's state) and a Types switch. The **Text** view is Isabelle's own printout.
   - The command's own output (a theorem, a value, a warning, typed `sledgehammer`, `nitpick` or `quickcheck` findings, proof outlines) comes first, with Insert for the proofs it offers. Outlines are inserted line by line under the command.
   - The state shows beside the block it belongs to when the window has room for both columns, else under it. The right sidebar's Output tab was removed, and the pop-out proof window follows the same rule.
@@ -238,7 +238,7 @@ the backend jar with the runtime's `isabelle scala_build`.
 - **Prose.** A click opens prose with the caret where it landed: the pointer's place is replayed in the editor once it is laid out in the same typography. The prover's marking of a text's body leaves it in the prose font. Rendered prose joins a paragraph's source lines (the shared renderer keeps a single line break, as chats do). The theory's `end` is not shown.
 - **Hover in output.** The backend sends each message's hover tips (a term's type, what a name is), from the markup it otherwise strips. Goals and messages show them without asking the prover. Hover cards are as wide as their text.
 - **Sidebar.** Theory names are shown in full; sessions are rows marked by weight rather than filled buttons.
-- **The thin maths (C15).** This is the upstream fix the human recalled. In libcosmic's wgpu renderer (`iced/wgpu/src/image/vector.rs`), tiny-skia's premultiplied pixels went to a pipeline that blends straight alpha, so the alpha applied twice and the antialiased edges of light glyphs thinned. The fix divides it out. It is in this branch's libcosmic (not yet the main checkout's), and Isabellum builds with wgpu.
+- **The thin maths (C15).** This is the upstream fix the human recalled. In libcosmic's wgpu renderer (`iced/wgpu/src/image/vector.rs`), tiny-skia's premultiplied pixels went to a pipeline that blends straight alpha, so the alpha applied twice and the antialiased edges of light glyphs thinned. The fix divides it out. It is in this branch's libcosmic (not yet the main checkout's), and Deductum builds with wgpu.
 
 - **Proof tools typed in the text.**
   - With the caret on `sledgehammer`, `nitpick`, `quickcheck` and the like, its findings replace the proof state as they come, with Insert, elapsed time, a progress bar and Stop. Sledgehammer's settings show there too, and the state refreshes whenever the command at the caret says more.
@@ -256,7 +256,7 @@ the backend jar with the runtime's `isabelle scala_build`.
 - **The window, end to end.** `snapshot::Harness` draws the real view with the real renderer, keeps widget state (focus, carets) between frames, and sends mouse and keyboard events through the widgets. `live_ui` uses it against a real host: point at a shown lemma, click (it opens with the caret at the click), type through the editor widget (the text reaches the host), click outside (it closes), hover a name (the prover's tooltip), and use vim's normal mode (a block cursor). The live tests stop and discard their sessions on the host afterwards.
 
 - **Agents, end to end.**
-  - Isabellum's MCP server is registered with Claude Code and Codex on au-laptop (local host) and neo (au-laptop's host over ssh, `mcp --ssh d59500`).
+  - Deductum's MCP server is registered with Claude Code and Codex on au-laptop (local host) and neo (au-laptop's host over ssh, `mcp --ssh d59500`).
   - A client on another machine names files as that machine does; the host reaches them through COSMIC Terminal's sshfs mount of it (`translate_path`), and git there trusts mounted repositories.
   - Tested with real agents. Claude (`claude -p`) and Codex (`codex exec`) each opened a session on a neo folder, asked for rights, waited for the grant, proved a lemma, checked it, saved or left a note. A scripted MCP test covers the same, and another covers independent work: fork, prove in the copy without asking, preview, and the human merges it into the shared session as the agent's change.
   - Codex starts MCP servers without a conversation id: the adapter takes the Codex process as the conversation (so a grant holds for its run) and labels it Codex. Codex asks for approval of MCP tools itself.
@@ -281,7 +281,7 @@ the backend jar with the runtime's `isabelle scala_build`.
 - **The goal's construct, tinted.** The editor tints (accent at 14%) the construct the goal is for (the Isar statement around the caret, or its step if that is long), in a block and in the source view. The tint is drawn by the gap widget that holds an inline goal, so its lower part moves down with the text when the gap opens inside the construct. The source view is now always laid out at full height in a scroll view (centred at a readable width), so where its lines are drawn is known.
 - **Reference windows.** Alt+click opens a definition in a window of its own: the whole theory, read-only, scrolled to the definition, which is tinted, with tooltips under the pointer. In it, Ctrl+click moves that window to the next definition (Back returns) and Alt+click opens another window. Several can be open.
   - Theories of the session use the prover's markup.
-  - A library theory, which the session's prover has not checked, is read from disk without being opened as a document of the session (`read` with `peek`). Names in it are looked up through the prelude's `isabellum_entity` query, run in the main theory's context at the caret. It gives each kind of thing the name is (constant, fact, type, class, locale), with its full name, its defining file and line, and its statement or type. Verified live against HOL: `rev` → List.thy line 87; `append`, `rev_rev_ident`, `list`, `Nat.Suc`.
+  - A library theory, which the session's prover has not checked, is read from disk without being opened as a document of the session (`read` with `peek`). Names in it are looked up through the prelude's `deductum_entity` query, run in the main theory's context at the caret. It gives each kind of thing the name is (constant, fact, type, class, locale), with its full name, its defining file and line, and its statement or type. Verified live against HOL: `rev` → List.thy line 87; `append`, `rev_rev_ident`, `list`, `Nat.Suc`.
 - **Bracket pairs.** Isabelle colours a delimiter with a letter in it as a literal, like UTP's `)\<^sub>e`, but not the plain `(` that opens it. The matching bracket now gets the same colour, so `(P ∨ Q)ₑ` reads as one pair.
 - **The goal beside the text** is always level with the construct the caret is in, and moves only as far as it must to stay in sight. It moves up when it would run off the bottom of the window (never above its block's top or the window's), and down when the construct has scrolled up out of view. It is drawn by a widget (`Beside`) that takes no room in the page and scrolls with it. The popover it replaces was kept inside the window, and jumped to the top of the window when the goal did not fit below.
 - **Waiting, not stale.** The app now uses the revision each prover report covers. From the earliest change the prover has not seen, the text shows as waiting (grey) until a report covers it, and the goal panel says "Checking…" rather than "No proof state". Before, the old statuses stayed up while the prover caught up.
@@ -296,7 +296,7 @@ the backend jar with the runtime's `isabelle scala_build`.
 - **Highlighting numbers are unique across theories.** An editor keeps its highlighter while the number is the same, so a reference window moved to another theory showed the old theory's colours, shifted, with script characters in the wrong font.
 - **Hover does not touch a selection.** Finding what is under the pointer clicked the editor and restored its cursor, but a double- or triple-click selection cannot be restored that way, so it was lost as soon as the pointer moved. There is no hover while text is selected (vim's block cursor excepted).
 - **An edit the prover does not see** (typing in a keyword line's hint) keeps the report current, instead of leaving the theory waiting for a report that never comes.
-- **Completion in prose kept its line breaks wrong** (fixed). Accepting a completion in a paragraph being edited wrote the paragraph as shown back to the source: a space for each line break and zero-width spaces for its indent. It is now taken against the text as shown, as typing is. Two theories had picked this up (10 line breaks in `Timed_Circus_Assignment.thy` and `…_Assignment_Traces.thy`); they were repaired on disk, with backups in neo:/tmp/isabellum-zwsp-backup, and both hosts reloaded them.
+- **Completion in prose kept its line breaks wrong** (fixed). Accepting a completion in a paragraph being edited wrote the paragraph as shown back to the source: a space for each line break and zero-width spaces for its indent. It is now taken against the text as shown, as typing is. Two theories had picked this up (10 line breaks in `Timed_Circus_Assignment.thy` and `…_Assignment_Traces.thy`); they were repaired on disk, with backups in neo:/tmp/deductum-zwsp-backup, and both hosts reloaded them.
 - **Errors under a block** say what went wrong (the goal Isabelle lists after "Failed to finish proof" is the goal view's) and draw scripts in the scripts font. So do hover cards.
 - **Proof method names** (Isabelle's "operator" markup) are in the text's colour, as jEdit sets them, not dimmed.
 - **Floating buttons** (pop out) are drawn in a layer above the editor they float over. The literate block's button is anchored to the code's top right as laid out.

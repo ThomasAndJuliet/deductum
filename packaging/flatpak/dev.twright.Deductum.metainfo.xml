@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <component type="desktop-application">
-  <id>dev.twright.Isabellum</id>
+  <id>dev.twright.Deductum</id>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>GPL-3.0-only</project_license>
-  <name>Isabellum</name>
+  <name>Deductum</name>
   <summary>Isabelle theories as literate documents, worked on with agents</summary>
   <description>
     <p>
-      Isabellum opens a folder of Isabelle theories as a literate document and
+      Deductum opens a folder of Isabelle theories as a literate document and
       a source editor, checked continuously by one shared prover that coding
       agents use too, on this computer or another.
     </p>
@@ -25,7 +25,7 @@
     <name>Thomas Wright</name>
   </developer>
   <url type="homepage">https://github.com/pop-os/cosmic-term</url>
-  <launchable type="desktop-id">dev.twright.Isabellum.desktop</launchable>
+  <launchable type="desktop-id">dev.twright.Deductum.desktop</launchable>
   <categories>
     <category>Development</category>
     <category>Science</category>

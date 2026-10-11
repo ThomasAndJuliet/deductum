@@ -2,12 +2,12 @@
 
 Status: design, 2026-10-11 (Rocq deferred, C17c), on branch `multi-prover`
 (`~/Documents/cosmic-term-multi-prover`). No production code has changed for
-it yet. The branch starts from the Isabellum branch `worktree-2026-10-10-isabelle`
+it yet. The branch starts from the Deductum branch `worktree-2026-10-10-isabelle`
 at `4b6b42c3b`. Cerea's rendering split (`shared-prose`, `9a556ee36`) is merged
 into it, and `prose/` has been pulled up to Cerea's `9f8c181d`.
-`cargo check --bin isabellum` passes on the merged tree.
+`cargo check --bin deductum` passes on the merged tree.
 
-This document extends [isabellum-decisions.md](isabellum-decisions.md) and
+This document extends [deductum-decisions.md](deductum-decisions.md) and
 uses its labels. **Specified** means the human decided it. **Chosen** means
 the implementing agent decided it, under the standing authorisation. Behaviour
 from C1–C15 is unchanged unless a section here says otherwise. Coq is called
@@ -37,7 +37,7 @@ Coq 8.x projects.
 | C16a | A large extension, built in a new worktree, with **separate Isabelle, Lean and Coq/Rocq backends**. |
 | C16b | The UI **exposes the features that are relevant to the current backend**. |
 | C16c | The UI **manages projects and sessions across the backends**. |
-| C16d | The design includes the recent Isabellum changes and Cerea's worktree that **separated out the rendering engine** (`prose/prose-render`, `prose/prose-spell`). |
+| C16d | The design includes the recent Deductum changes and Cerea's worktree that **separated out the rendering engine** (`prose/prose-render`, `prose/prose-spell`). |
 
 C1–C15 remain the specification. Every backend keeps shared live sessions with
 agents (C2), Stop, Pause and Resume (C3, C7), host-owned buffers (C11),
@@ -61,9 +61,9 @@ terms in this table.
 ## 3. Components
 
 ```text
-Isabellum app (Rust, libcosmic)  ──┐                                  ┌─ drivers/isabelle.py ── JSON lines ──> isabelle isabellum_backend
+Deductum app (Rust, libcosmic)  ──┐                                  ┌─ drivers/isabelle.py ── JSON lines ──> isabelle deductum_backend
 agent's MCP adapter (Python)     ──┼── JSON lines (unchanged) ──> host core ┤                                         (Scala, Isabelle2025 PIDE)
-isabellum command, Terminal Agents ┘                     (sessions,   ├─ drivers/lean.py ─┐
+deductum command, Terminal Agents ┘                     (sessions,   ├─ drivers/lean.py ─┐
                                                           buffers, log,│                   ├─ drivers/lsp.py ── LSP ──> lake serve (Lean 4)
                                                           grants, ...) └─ drivers/rocq.py ─┘                   └─ LSP ──> coq-lsp (Rocq 9 / Coq 8.x)
 
@@ -73,14 +73,14 @@ prose/prose-spell   (subtree from Cerea): Harper; prose in every backend's liter
 
 | Component | Path (planned) | Role |
 |---|---|---|
-| Host core | `isabellum/host/isabellum_host.py` | As now: sessions, buffers, edit log, OT, undo, grants, notices, notes, autosave, disk watch, independent sessions, LLM plumbing. It no longer knows any prover. |
-| Driver interface | `isabellum/host/drivers/__init__.py` | The `Driver` base class and the registry of backends (§4). |
-| Isabelle driver | `isabellum/host/drivers/isabelle.py` | The current Isabelle-specific host code, moved here: runtimes, component registration, ROOT and logic suggestion, symbol table, keyword kinds, the backend process. |
-| LSP client | `isabellum/host/drivers/lsp.py` | JSON-RPC framing, UTF-16 positions, document versions, request cancellation. Standard library only, like the rest of the host. |
-| Lean driver | `isabellum/host/drivers/lean.py` | `lake serve`, goals (`$/lean/plainGoal`, RPC interactive goals), `$/lean/fileProgress`, "Try this" suggestions, scratch-document checking, Lake actions. |
-| Rocq driver | `isabellum/host/drivers/rocq.py` | `coq-lsp`, `proof/goals`, `coq/getDocument` sentence spans, `$/coq/fileProgress`, Petanque for checking without editing, `coq/saveVo`. |
-| Backend sources | `isabellum/backend/Isabelle2025/` | Unchanged. Lean and Rocq need no server-side code for the first version (§12 lists an optional Lean REPL). |
-| App | `src/bin/isabellum/` | The generic app, plus `prover/{isabelle,lean,rocq}/` profiles (§7). |
+| Host core | `deductum/host/deductum_host.py` | As now: sessions, buffers, edit log, OT, undo, grants, notices, notes, autosave, disk watch, independent sessions, LLM plumbing. It no longer knows any prover. |
+| Driver interface | `deductum/host/drivers/__init__.py` | The `Driver` base class and the registry of backends (§4). |
+| Isabelle driver | `deductum/host/drivers/isabelle.py` | The current Isabelle-specific host code, moved here: runtimes, component registration, ROOT and logic suggestion, symbol table, keyword kinds, the backend process. |
+| LSP client | `deductum/host/drivers/lsp.py` | JSON-RPC framing, UTF-16 positions, document versions, request cancellation. Standard library only, like the rest of the host. |
+| Lean driver | `deductum/host/drivers/lean.py` | `lake serve`, goals (`$/lean/plainGoal`, RPC interactive goals), `$/lean/fileProgress`, "Try this" suggestions, scratch-document checking, Lake actions. |
+| Rocq driver | `deductum/host/drivers/rocq.py` | `coq-lsp`, `proof/goals`, `coq/getDocument` sentence spans, `$/coq/fileProgress`, Petanque for checking without editing, `coq/saveVo`. |
+| Backend sources | `deductum/backend/Isabelle2025/` | Unchanged. Lean and Rocq need no server-side code for the first version (§12 lists an optional Lean REPL). |
+| App | `src/bin/deductum/` | The generic app, plus `prover/{isabelle,lean,rocq}/` profiles (§7). |
 | Renderer | `prose/prose-render` | Shared with Cerea and Terminal Agents. One addition is needed: prover code colours (§8.5). |
 
 **Chosen: Lean and Rocq drivers live inside the host process, not as separate
@@ -154,7 +154,7 @@ backend. LSP drivers fill `revision` from the `version` of
 ### 4.2 What moves out of the core
 
 The coupling survey of the host found that about a fifth of
-`isabellum_host.py` is Isabelle-specific. All of it moves into
+`deductum_host.py` is Isabelle-specific. All of it moves into
 `drivers/isabelle.py`, or becomes a driver call:
 
 | Now in the core | Becomes |
@@ -192,7 +192,7 @@ changes are additive:
   `search {query}` and `command {text}`. The old operation names stay as
   aliases for Isabelle.
 - `state` replies with the neutral goal model (§9.1). Isabelle's
-  `#isabellum:KIND` message parts are parsed in the Isabelle driver instead of
+  `#deductum:KIND` message parts are parsed in the Isabelle driver instead of
   in `goals.rs`.
 - New: `project_action {name, args}` and its `query` events for builds.
 
@@ -234,13 +234,13 @@ syntax.
 | Checking | Continuous; every opened theory is required (as now). | Continuous per open file. Each open file is a Lean worker process, so the host opens files with the prover only while some client views or checks them (§6.5). | Continuous (coq-lsp's default mode). |
 | Command spans | PIDE commands (`spans: prover`). | None over LSP. A lexical split on top-level commands, checked against `textDocument/documentSymbol` and `foldingRange` (`spans: lexical`). | `coq/getDocument`: one span per sentence (`spans: prover`). |
 | Status per span | PIDE status. | `$/lean/fileProgress` ranges and diagnostics. | `$/coq/fileProgress` and diagnostics. |
-| Goals at any position | `isabellum_goals`: facts, then per subgoal its fixes, assumptions and conclusion. | `$/lean/plainGoal` for text; `Lean.Widget.getInteractiveGoals` over `$/lean/rpc/call` for hypotheses, case tags and hover on subterms. `$/lean/plainTermGoal` gives the expected type in term mode. | `proof/goals` with `pp_format`: goals with hypotheses, plus shelved, given-up and unfocused goals (the bullet stack). |
+| Goals at any position | `deductum_goals`: facts, then per subgoal its fixes, assumptions and conclusion. | `$/lean/plainGoal` for text; `Lean.Widget.getInteractiveGoals` over `$/lean/rpc/call` for hypotheses, case tags and hover on subterms. `$/lean/plainTermGoal` gives the expected type in term mode. | `proof/goals` with `pp_format`: goals with hypotheses, plus shelved, given-up and unfocused goals (the bullet stack). |
 | Hover, definition | `info` (as now). | `textDocument/hover`, `definition`. | `textDocument/hover`; `definition` where coq-lsp provides it. |
 | Typed proof tools (offered with Insert) | `sledgehammer`, `try0`, `try`, `solve_direct`, `nitpick`, `quickcheck`, `nunchaku` (as now). | `exact?`, `apply?`, `rw?`, `simp?`, `aesop?`, `hint`, `grind`, and `hammer` when the project depends on LeanHammer. Their "Try this" messages and code actions become findings with Insert. | `hammer` (CoqHammer, when loaded), `sauto`/`best` and the like; their "Replace … with" output becomes findings with Insert. |
 | Counterexamples | Quickcheck, Nitpick. | `plausible` (when the project has it). | QuickChick (when the project has it). |
 | Search | Find Theorems. | `exact?`/`apply?` at the caret; Loogle, public or local, chosen in settings (C17e). | `Search` at the caret. |
-| Commands without editing (`command`) | `isabellum_command` (as now). | A scratch document (§9.4): `#check`, `#eval`, `#print`, `#reduce`. | Petanque at the caret's state, or a scratch document: `Check`, `Print`, `About`, `Compute`, `Search`. |
-| Checking LLM candidates | `isabellum_command` (`check_candidates: query`). | Scratch document (`scratch`). | Petanque `get_state_at_pos` then `run` (`petanque`). |
+| Commands without editing (`command`) | `deductum_command` (as now). | A scratch document (§9.4): `#check`, `#eval`, `#print`, `#reduce`. | Petanque at the caret's state, or a scratch document: `Check`, `Print`, `About`, `Compute`, `Search`. |
+| Checking LLM candidates | `deductum_command` (`check_candidates: query`). | Scratch document (`scratch`). | Petanque `get_state_at_pos` then `run` (`petanque`). |
 | Pause | Empty perspective plus cancel (as now). | Close every document in the server, keeping the server; edits keep going to the host's buffers. Resume reopens and rechecks from each file's header (`close_documents`). | `check_only_on_request` through `workspace/didChangeConfiguration` (`on_request`). |
 | Interrupt | `cancel_exec` (as now). | No "stop elaborating" request exists. Interrupt closes and reopens the files that are being checked. | `on_request` mode, then back to continuous. |
 | Stop a typed tool | Cancels only the tool's executions (as now). | Deleting or changing the line, as now. There is no separate Stop button (`stop: false`); the tool section says so. | Same as Lean. |
@@ -275,7 +275,7 @@ syntax.
 
 ### 6.1 Toolchains per machine
 
-`~/.config/isabellum/host.json` gets one list per backend. The existing
+`~/.config/deductum/host.json` gets one list per backend. The existing
 `runtimes` list is read as `isabelle`:
 
 ```json
@@ -350,10 +350,10 @@ offers to start one.
   - Rocq: toolchain (switch), project file, and the logical paths read from it.
   "Start session" is the same as now. A folder with no evidence offers all
   three backends.
-- **`isabellum .`** works as now. When the folder's existing sessions or its
+- **`deductum .`** works as now. When the folder's existing sessions or its
   detection are ambiguous, the app opens the new-session cards instead of
   guessing (C3: "multiple eligible sessions require selection").
-- **Terminal Agents' "Open in Isabellum"** (C10) works for every backend,
+- **Terminal Agents' "Open in Deductum"** (C10) works for every backend,
   because `find_sessions` is in the core.
 
 ### 6.5 Resources
@@ -371,7 +371,7 @@ checking.
 
 ### 6.6 Independent sessions per backend
 
-`fork_session` (a git worktree on `isabellum/<id>`) stays in the core. Two
+`fork_session` (a git worktree on `deductum/<id>`) stays in the core. Two
 backend details:
 
 - **Lean.** A new worktree has no `.lake`. The fork links the parent's
@@ -430,7 +430,7 @@ existing tests before the next backend is added (§11):
 | `literate.rs` (Isabelle text to Markdown) | `prover/isabelle/literate.rs` |
 | `symbols.rs`: the Isabelle table and scripts | `prover/isabelle/symbols.rs` |
 | `symbols.rs`: the `Decoded` offset map and fuzzy search | `codec.rs`, `input.rs` (generic) |
-| `goals.rs` (`#isabellum:` parts) | the Isabelle **host** driver; the app gets the neutral goal model |
+| `goals.rs` (`#deductum:` parts) | the Isabelle **host** driver; the app gets the neutral goal model |
 | `editor.rs`: `TOOLS`, `parse_goal`, `goal_completions`, `next_indent`, `construct_at`, `prose_markup`, `keyword_tokens`, `paired_brackets`, `Sem` classes | `prover/isabelle/{isar.rs, prose.rs, colours.rs}`; the replica, undo grouping and block editors stay |
 | `view.rs`: `PROOF_TEMPLATES`, `PROSE_TEMPLATES`, `subgoal_card` labels, the Sledgehammer panel, `sorry`/`oops` checks, `.thy` listing | profile palette and `present_goal`; a generic tool panel built from `tools[]`; `Profile::documents` |
 | `main.rs`: `InsertBlock` templates, operation routing, keyword-line detection, `InsertUsing`, `InsertOutput` | `Profile::{block_templates, keyword_line}`; the `facts_line` of §9.4; generic `tool` routing |
@@ -500,7 +500,7 @@ rules are the Markdown ones that Cerea's editor already implements (still open, 
 
 ### 8.3 Spelling
 
-`prose-spell` is now in the tree, but Isabellum does not use it yet. It
+`prose-spell` is now in the tree, but Deductum does not use it yet. It
 applies to prose blocks of every backend through `check_markdown` on the
 converter's Markdown, with marks mapped back through the source map.
 
@@ -519,7 +519,7 @@ stay uncoloured.
 
 **Chosen:** add a registration hook to `highlight.rs`,
 `register(lang, fn(&str) -> Tokens)`, so that an app supplies its own lexer
-for a language. Isabellum registers each profile's `lex`. The change is made
+for a language. Deductum registers each profile's `lex`. The change is made
 in Cerea's `prose/` and pulled into this branch by the subtree workflow (see
 Cerea's `docs/architecture.md`). Cerea and Terminal Agents are unaffected
 unless they register something.
@@ -601,7 +601,7 @@ placeholder, padded to the same length, so offsets do not change:
 Candidates are checked before they are offered, according to
 `check_candidates`:
 
-- `query` (Isabelle): `isabellum_command`, as now.
+- `query` (Isabelle): `deductum_command`, as now.
 - `petanque` (Rocq): `petanque/get_state_at_pos` at the placeholder, then
   `petanque/run` with the candidate. It passes when the focused goal is
   closed. Nothing in the document changes.
@@ -649,14 +649,14 @@ unchanged.
 
 Each step keeps every existing test passing before the next starts:
 
-- 43+ Rust tests (`cargo test --bin isabellum`);
+- 43+ Rust tests (`cargo test --bin deductum`);
 - `test_ot.py`, `test_keywords.py`, `test_undo.py`;
 - `integration_host.py`'s 28 checks against CyPhyAssure Isabelle2025 on au-laptop;
 - the `live_*` tests.
 
 | Step | Work | Evidence that it is done |
 |---|---|---|
-| 0 | Worktree, merge `shared-prose`, pull Cerea's `prose/` | Done: `cargo check --bin isabellum` passes. |
+| 0 | Worktree, merge `shared-prose`, pull Cerea's `prose/` | Done: `cargo check --bin deductum` passes. |
 | 1 | Host: `Driver` interface; Isabelle code moved to `drivers/isabelle.py`; protocol v2 fields; `meta.json` migration | Every Isabelle test above passes unchanged. A host restart keeps existing sessions on neo and au-laptop. |
 | 2 | App: `Profile` with the Isabelle implementation; modules moved (§7.2); neutral goal model; capability-driven panels | Snapshot PNGs of the literate and source views, goal, tools and panels are pixel-identical before and after (`CT_SNAPSHOTS`). |
 | 3 | `lsp.py` and the Lean driver; Lean profile; Lake detection and the new-session cards | `integration_lean.py` against v4.19.0 on neo: open, edit, goals at positions, a stale edit rebased, a typed `exact?` inserted, a `claude` line checked by scratch, Pause and Resume, Stop and a new epoch. Snapshots of a Lean demo. |
@@ -698,15 +698,15 @@ checking without editing, so the abstractions are tested against it early.
 
 | Id | Decision | Effect on the design |
 |---|---|---|
-| C17a | **The new name is Deductum.** It was checked on 2026-10-11 and is free on crates.io, PyPI and npm. There is no Flathub app, no GitHub repository and no software of that name on the web. Trademarks and domains were not checked. | Everything follows the name: binary and command `deductum`, app ID `dev.twright.Deductum`, the Flatpak, `~/.config/deductum`, `~/.local/state/deductum`, `~/.local/share/deductum` (the installed host), the MCP server `deductum`, and independent-session branches `deductum/<id>`. Existing Isabellum state, config and sessions are migrated on the first run, and the `isabelle_*` MCP tools stay as aliases. Terminal Agents' "Open in Isabellum" becomes "Open in Deductum". The rename is the first part of step 1 (§11). These documents are renamed with it. |
-| C17b | **Testing runs headlessly on neo.** | Every test uses the snapshot harness (`snapshot::Harness`) or the host tests, never a window. Provers that live on au-laptop (CyPhyAssure Isabelle2025, Rocq) are reached from neo over ssh, as `live_*` tests already do with `ISABELLUM_LIVE=d59500`. |
+| C17a | **The new name is Deductum.** It was checked on 2026-10-11 and is free on crates.io, PyPI and npm. There is no Flathub app, no GitHub repository and no software of that name on the web. Trademarks and domains were not checked. | Everything follows the name: binary and command `deductum`, app ID `dev.twright.Deductum`, the Flatpak, `~/.config/deductum`, `~/.local/state/deductum`, `~/.local/share/deductum` (the installed host), the MCP server `deductum`, and independent-session branches `deductum/<id>`. The installed Isabellum keeps running beside Deductum during the transition: Deductum has its own state, config, socket and Isabelle component (Scala tool `deductum_backend`, package `deductum`), so the two never share a session or a classpath. `deductum_host.py migrate-from-isabellum` moves Isabellum's sessions, state and config over, once the Isabellum host is stopped; it is explicit, not automatic, because two hosts holding the same folder would both autosave it. The `isabelle_*` MCP tools stay as aliases. Terminal Agents' "Open in Isabellum" becomes "Open in Deductum" (and still finds an Isabellum install). The rename is the first part of step 1 (§11); these documents were renamed with it. |
+| C17b | **Testing runs headlessly on neo.** | Every test uses the snapshot harness (`snapshot::Harness`) or the host tests, never a window. Provers that live on au-laptop (CyPhyAssure Isabelle2025, Rocq) are reached from neo over ssh, as `live_*` tests already do with `DEDUCTUM_LIVE=d59500`. |
 | C17c | **Rocq is future work.** (It may be installed on au-laptop when it is taken up.) | This round builds Isabelle and Lean only. The Rocq parts of this design stay as the plan for later. The generic layers (driver interface, capabilities, profiles, goal model, session identity) are kept general enough for it, so adding Rocq means adding a driver and a profile. |
 | C17d | **Use the notation users of each tool are used to.** | Each backend shows source and goals the way its usual editor does. Isabelle: as Isabelle/jEdit (symbols decoded). Lean: as the VS Code infoview (`case tag`, `x : T`, `⊢ goal`). Rocq: as CoqIDE and VsRocq (hypotheses above `============================`, source as written). The Rocq ASCII-to-Unicode display option is dropped. |
 | C17e | **Public Loogle is allowed, as a setting.** | A Lean search setting: Off, Local, or Public (loogle.lean-lang.org), default Public. The Search panel names the source it used. |
 | C17f | **The main Lean project is the formalisation of the causal semantics and DSRV**: `DSRVLean` (Lake package `dsrv`, library `DSRV`, toolchain v4.19.0, no Mathlib). | It is the real test for Lean, as tock-Circus is for Isabelle. The current copy is au-laptop's `~/Documents/Research/Repositories/DSRVLean` (3716 lines, including `CausalSemantics`, `CausalCorrectness`, `CausalPaperSemantics`). neo's `~/Documents/DSRVLean` is an older 757-line copy. Neither is a git repository, so independent sessions need the plain-copy fork (C8's "later extension"). Tests run on a fresh copy and never touch either original. |
 
 Still open: Cerea's inline editor for
-Markdown-native prose (default: keep Isabellum's paragraph-at-a-time editing
+Markdown-native prose (default: keep Deductum's paragraph-at-a-time editing
 for every backend).
 
 **Portability (checked 2026-10-11).** The app's sources, compiled on their own

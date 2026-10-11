@@ -2,7 +2,7 @@
 
 //! Vim keys for the editors. A small modal machine turns keys into the
 //! editor's own actions (moves, selections, edits), so every change still goes
-//! through the same path to the session host; `u` and Ctrl+R are Isabellum's
+//! through the same path to the session host; `u` and Ctrl+R are Deductum's
 //! undo and redo, which are the human's own (design C5).
 
 use cosmic::widget::text_editor::{Action, Edit, Motion};

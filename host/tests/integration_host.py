@@ -2,7 +2,7 @@
 
 Run on a machine with a supported runtime:
 
-    ISABELLUM_STATE_DIR=/tmp/isabellum-it python3 tests/integration_host.py
+    DEDUCTUM_STATE_DIR=/tmp/deductum-it python3 tests/integration_host.py
 
 It starts a private host, creates a session on a scratch theory folder, and checks
 editing, rebasing, undo, revert, notices, grants, autosave, external changes,
@@ -19,9 +19,9 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(HERE))
-os.environ.setdefault("ISABELLUM_STATE_DIR", tempfile.mkdtemp(prefix="isabellum-it-"))
+os.environ.setdefault("DEDUCTUM_STATE_DIR", tempfile.mkdtemp(prefix="deductum-it-"))
 
-import isabellum_host as H  # noqa: E402
+import deductum_host as H  # noqa: E402
 
 THY = """theory Demo
   imports Main
@@ -69,12 +69,12 @@ def wait_for(client, pred, timeout=240, what="condition"):
 
 def main():
     # A stand-in for the claude CLI, for the typed-keyword fill
-    fake = Path(tempfile.mkdtemp(prefix="isabellum-bin-"))
+    fake = Path(tempfile.mkdtemp(prefix="deductum-bin-"))
     (fake / "claude").write_text('#!/bin/sh\necho \'{"proofs": ["by simp", "by blast"], '
                                  '"using": ["mult_1_right", "no_such_fact_xyz"]}\'\n')
     (fake / "claude").chmod(0o755)
     os.environ["PATH"] = f"{fake}:{os.environ.get('PATH', '')}"
-    folder = Path(tempfile.mkdtemp(prefix="isabellum-thy-"))
+    folder = Path(tempfile.mkdtemp(prefix="deductum-thy-"))
     thy = folder / "Demo.thy"
     thy.write_text(THY)
     app = H.SyncClient.local()

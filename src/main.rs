@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Isabellum: Isabelle theories as literate documents, worked on together with
+//! Deductum: Isabelle theories as literate documents, worked on together with
 //! agents in one live prover session. A sibling of COSMIC Terminal Agents
 //! (design C7), sharing its rendering and its list of machines.
 //!
-//! The design record is `docs/isabellum-decisions.md`. The app is a client of
-//! the session host on each machine (`isabellum/host`), which owns sessions,
+//! The design record is `docs/deductum-decisions.md`. The app is a client of
+//! the session host on each machine (`deductum/host`), which owns sessions,
 //! buffers and provers; it keeps a replica of each open theory and shows it
 //! in a literate view and a source view.
 
@@ -28,8 +28,8 @@ mod live;
 
 /// LaTeX's fonts, New Computer Modern, for the literate view's prose; see `res/fonts/README`
 pub const FONTS: [&[u8]; 5] = [
-    // Raised and lowered small glyphs for \<^sup> and \<^sub>; see res/isabellum/make-scripts-font.py
-    include_bytes!("../../../res/isabellum/fonts/IsabellumScripts.ttf"),
+    // Raised and lowered small glyphs for \<^sup> and \<^sub>; see res/deductum/make-scripts-font.py
+    include_bytes!("../../../res/deductum/fonts/IsabellumScripts.ttf"),
     include_bytes!("../../../res/fonts/NewCM10-Regular.otf"),
     include_bytes!("../../../res/fonts/NewCM10-Bold.otf"),
     include_bytes!("../../../res/fonts/NewCM10-Italic.otf"),
@@ -59,7 +59,7 @@ use tokio::sync::mpsc;
 use editor::{Mode, Theory};
 use symbols::Table;
 
-pub const APP_ID: &str = "dev.twright.Isabellum";
+pub const APP_ID: &str = "dev.twright.Deductum";
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger_init();
@@ -518,7 +518,7 @@ struct UiSettings {
 }
 
 fn settings_path() -> std::path::PathBuf {
-    let base = std::env::var_os("HOME").map(std::path::PathBuf::from).unwrap_or_default().join(".config/isabellum");
+    let base = std::env::var_os("HOME").map(std::path::PathBuf::from).unwrap_or_default().join(".config/deductum");
     base.join("settings.json")
 }
 
@@ -714,11 +714,11 @@ impl App {
             Some(ws) => {
                 let name = self.sessions.get(&(ws.machine.clone(), ws.sid.clone())).and_then(|s| s["name"].as_str()).unwrap_or("session");
                 match &ws.theory {
-                    Some(t) => format!("{}{} — {} — Isabellum", if t.dirty { "• " } else { "" }, file_name(&t.path), name),
-                    None => format!("{name} — Isabellum"),
+                    Some(t) => format!("{}{} — {} — Deductum", if t.dirty { "• " } else { "" }, file_name(&t.path), name),
+                    None => format!("{name} — Deductum"),
                 }
             }
-            None => "Isabellum".into(),
+            None => "Deductum".into(),
         }
     }
 
@@ -745,7 +745,7 @@ impl App {
                     l.sender = Some(sender);
                     l.status = "connected".into();
                 }
-                self.send(&key, "hello", json!({"client": "app", "label": "Isabellum"}), Pending::Hello);
+                self.send(&key, "hello", json!({"client": "app", "label": "Deductum"}), Pending::Hello);
                 self.send(&key, "sessions", json!({}), Pending::Sessions);
                 self.send(&key, "symbol_table", json!({}), Pending::Symbols);
                 // Reattach after a reconnect
@@ -805,8 +805,8 @@ impl App {
                     if let Some(ws) = &mut self.workspace {
                         let q = match op {
                             "sledgehammer" => &mut ws.sledgehammer,
-                            "isabellum_command" => &mut ws.cex,
-                            "isabellum_goals" => &mut ws.goals,
+                            "deductum_command" => &mut ws.cex,
+                            "deductum_goals" => &mut ws.goals,
                             "goals_prev" => &mut ws.goals_prev,
                             _ => &mut ws.find,
                         };
@@ -939,8 +939,8 @@ impl App {
                 if let Some(ws) = &mut self.workspace {
                     let q = match op {
                         "sledgehammer" => &mut ws.sledgehammer,
-                        "isabellum_command" => &mut ws.cex,
-                            "isabellum_goals" => &mut ws.goals,
+                        "deductum_command" => &mut ws.cex,
+                            "deductum_goals" => &mut ws.goals,
                             "goals_prev" => &mut ws.goals_prev,
                         _ => &mut ws.find,
                     };
@@ -1204,7 +1204,7 @@ impl App {
                         if q.id.as_deref() == id && id.is_some() {
                             q.status = v["status"].as_str().unwrap_or("").to_string();
                             // The state keeps showing the last one until the new one is ready
-                            let pending = q.operation == "isabellum_goals" && matches!(q.status.as_str(), "waiting" | "running");
+                            let pending = q.operation == "deductum_goals" && matches!(q.status.as_str(), "waiting" | "running");
                             if !pending {
                                 q.messages = v["messages"].as_array().cloned().unwrap_or_default();
                             }
@@ -1547,7 +1547,7 @@ impl App {
         self.send(
             &machine,
             "query",
-            json!({"session": sid, "path": path, "offset": offset, "revision": rev, "operation": "isabellum_entity", "args": [name]}),
+            json!({"session": sid, "path": path, "offset": offset, "revision": rev, "operation": "deductum_entity", "args": [name]}),
             Pending::Entity(id, how),
         );
         Task::none()
@@ -1992,8 +1992,8 @@ impl cosmic::Application for App {
                     panel: Panel::Symbols,
                     output: None,
                     sledgehammer: QueryState { operation: "sledgehammer", ..Default::default() },
-                    goals: QueryState { operation: "isabellum_goals", ..Default::default() },
-                    goals_prev: QueryState { operation: "isabellum_goals", ..Default::default() },
+                    goals: QueryState { operation: "deductum_goals", ..Default::default() },
+                    goals_prev: QueryState { operation: "deductum_goals", ..Default::default() },
                     state_text: false,
                     show_types: false,
                     all_goals: false,
@@ -2010,7 +2010,7 @@ impl cosmic::Application for App {
                     palette_query: String::new(),
                     find: QueryState { operation: "find_theorems", ..Default::default() },
                     find_input: String::new(),
-                    cex: QueryState { operation: "isabellum_command", ..Default::default() },
+                    cex: QueryState { operation: "deductum_command", ..Default::default() },
                     fill: FillState::default(),
                     cex_params: String::new(),
                     activity: None,
@@ -2267,7 +2267,7 @@ impl cosmic::Application for App {
                 let margin = ((self.right_width - 120.0) / (view::z(13.0) * 0.6)).clamp(40.0, 160.0) as usize;
                 let types = if ws.show_types { "true" } else { "false" };
                 let prev = t.prover.commands.iter().position(|c| c.start <= offset && offset < c.end).and_then(|i| i.checked_sub(1)).map(|i| t.prover.commands[i].end.saturating_sub(1));
-                let running: Vec<(String, &'static str)> = [(&ws.goals, "isabellum_goals"), (&ws.goals_prev, "goals_prev")]
+                let running: Vec<(String, &'static str)> = [(&ws.goals, "deductum_goals"), (&ws.goals_prev, "goals_prev")]
                     .into_iter()
                     .filter(|(q, _)| matches!(q.status.as_str(), "waiting" | "running"))
                     .filter_map(|(q, tag)| Some((q.id.clone()?, tag)))
@@ -2290,16 +2290,16 @@ impl cosmic::Application for App {
                 for (id, _) in &running {
                     self.send(&machine, "cancel_query", json!({"session": sid, "query": id}), Pending::Plain);
                 }
-                for tag in ["isabellum_goals", "goals_prev"] {
+                for tag in ["deductum_goals", "goals_prev"] {
                     let at = if tag == "goals_prev" { prev } else { Some(offset) };
                     if let Some(at) = at {
-                        self.send(&machine, "query", json!({"session": sid, "path": path, "offset": at, "revision": rev, "operation": "isabellum_goals", "args": [margin.to_string(), types]}), Pending::Query(tag));
+                        self.send(&machine, "query", json!({"session": sid, "path": path, "offset": at, "revision": rev, "operation": "deductum_goals", "args": [margin.to_string(), types]}), Pending::Query(tag));
                     }
                 }
                 if prev.is_none()
                     && let Some(ws) = &mut self.workspace
                 {
-                    ws.goals_prev = QueryState { operation: "isabellum_goals", ..Default::default() };
+                    ws.goals_prev = QueryState { operation: "deductum_goals", ..Default::default() };
                 }
             }
             Message::Provers(p) => {
@@ -3086,12 +3086,12 @@ impl cosmic::Application for App {
                 let params = ws.cex_params.trim().trim_start_matches('[').trim_end_matches(']').trim().to_string();
                 let text = if params.is_empty() { cmd.to_string() } else { format!("{cmd} [{params}]") };
                 ws.panel = Panel::Quickcheck;
-                ws.cex = QueryState { operation: "isabellum_command", status: format!("running {text}"), ..Default::default() };
+                ws.cex = QueryState { operation: "deductum_command", status: format!("running {text}"), ..Default::default() };
                 self.send(
                     &machine,
                     "query",
-                    json!({"session": sid, "path": path, "offset": host, "revision": rev, "operation": "isabellum_command", "args": [text]}),
-                    Pending::Query("isabellum_command"),
+                    json!({"session": sid, "path": path, "offset": host, "revision": rev, "operation": "deductum_command", "args": [text]}),
+                    Pending::Query("deductum_command"),
                 );
             }
             Message::BlockViewAction(i, action) => {

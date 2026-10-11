@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! The `isabellum` command (design C3), like `zed .`:
+//! The `deductum` command (design C3), like `zed .`:
 //!
 //! ```text
-//! isabellum .
-//! isabellum /path/to/theories
-//! isabellum --machine d59500 /remote/path/to/theories
-//! isabellum --session SESSION_ID
+//! deductum .
+//! deductum /path/to/theories
+//! deductum --machine d59500 /remote/path/to/theories
+//! deductum --session SESSION_ID
 //! ```
 //!
 //! A running window gets the request over a Unix socket and opens or focuses
@@ -33,7 +33,7 @@ pub struct OpenRequest {
 }
 
 pub fn usage() -> &'static str {
-    "usage: isabellum [--machine NAME] [PATH | --session ID]"
+    "usage: deductum [--machine NAME] [PATH | --session ID]"
 }
 
 pub fn parse(args: Vec<String>) -> Option<OpenRequest> {
@@ -67,7 +67,7 @@ pub fn parse(args: Vec<String>) -> Option<OpenRequest> {
 
 fn socket_path() -> PathBuf {
     let dir = std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from).unwrap_or_else(std::env::temp_dir);
-    dir.join("isabellum.sock")
+    dir.join("deductum.sock")
 }
 
 /// Hand the request to a running window; true if one took it
@@ -77,7 +77,7 @@ pub fn forward(req: &OpenRequest) -> bool {
     stream.write_all(format!("{line}\n").as_bytes()).is_ok()
 }
 
-/// Take requests from later `isabellum` commands
+/// Take requests from later `deductum` commands
 pub fn listen() -> Task<Message> {
     cosmic::task::stream(cosmic::iced::stream::channel(8, |mut output: Sender<Message>| async move {
         let path = socket_path();

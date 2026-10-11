@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Isabellum's window drawn headless, as `src/thread/snapshot.rs` draws
+//! Deductum's window drawn headless, as `src/thread/snapshot.rs` draws
 //! threads: the real view, laid out and rendered with tiny-skia. Set
 //! `CT_SNAPSHOTS` to a directory to keep the frames as PNG files.
 
@@ -120,23 +120,23 @@ pub fn demo_app(mode: Mode) -> App {
                 {"kind": "state", "text": "proof (prove)\ngoal (1 subgoal):\n 1. \\<forall>x. x + 0 = x"}]})),
             sledgehammer: QueryState { operation: "sledgehammer", ..Default::default() },
             goals: QueryState {
-                operation: "isabellum_goals",
+                operation: "deductum_goals",
                 status: "finished".into(),
                 messages: [
-                    "#isabellum:fact 0\nlength xs = n",
-                    "#isabellum:count 2",
-                    "#isabellum:param 1\nxs :: 'a list",
-                    "#isabellum:prem 1\n0 < n",
-                    "#isabellum:concl 1\nxs \\<noteq> []",
-                    "#isabellum:param 2\nxs :: 'a list",
-                    "#isabellum:concl 2\nP n",
+                    "#deductum:fact 0\nlength xs = n",
+                    "#deductum:count 2",
+                    "#deductum:param 1\nxs :: 'a list",
+                    "#deductum:prem 1\n0 < n",
+                    "#deductum:concl 1\nxs \\<noteq> []",
+                    "#deductum:param 2\nxs :: 'a list",
+                    "#deductum:concl 2\nP n",
                 ]
                 .iter()
                 .map(|r| json!({"kind": "writeln", "raw": r, "text": r, "spans": []}))
                 .collect(),
                 ..Default::default()
             },
-            goals_prev: QueryState { operation: "isabellum_goals", ..Default::default() },
+            goals_prev: QueryState { operation: "deductum_goals", ..Default::default() },
             state_text: false,
             show_types: false,
             all_goals: false,
@@ -153,7 +153,7 @@ pub fn demo_app(mode: Mode) -> App {
             palette_query: String::new(),
             find: QueryState { operation: "find_theorems", ..Default::default() },
             find_input: String::new(),
-            cex: QueryState { operation: "isabellum_command", ..Default::default() },
+            cex: QueryState { operation: "deductum_command", ..Default::default() },
             fill: super::FillState {
                 status: "done".into(),
                 candidates: vec![json!({"text": "by (simp add: add.commute)", "ok": true, "message": ""}),
@@ -239,14 +239,14 @@ pub fn draw_element(element: cosmic::Element<'_, super::Message>, name: &str, si
 #[test]
 fn draws_the_literate_view() {
     let app = demo_app(Mode::Literate);
-    let frame = draw(&app, "isabellum-literate", Size::new(1400.0, 900.0));
+    let frame = draw(&app, "deductum-literate", Size::new(1400.0, 900.0));
     assert!(frame.chunks(4).any(|p| p[0] > 200));
 }
 
 #[test]
 fn draws_the_source_view() {
     let app = demo_app(Mode::Source);
-    draw(&app, "isabellum-source", Size::new(1400.0, 900.0));
+    draw(&app, "deductum-source", Size::new(1400.0, 900.0));
 }
 
 #[test]
@@ -265,17 +265,17 @@ fn draws_the_panels() {
         replace: Some((10, 15)),
         ..Default::default()
     };
-    draw(&app, "isabellum-sledgehammer", Size::new(1400.0, 900.0));
+    draw(&app, "deductum-sledgehammer", Size::new(1400.0, 900.0));
     app.workspace.as_mut().unwrap().panel = Panel::Agents;
-    draw(&app, "isabellum-agents", Size::new(1400.0, 900.0));
+    draw(&app, "deductum-agents", Size::new(1400.0, 900.0));
     app.workspace.as_mut().unwrap().panel = Panel::History;
     let t = app.workspace.as_mut().unwrap().theory.as_mut().unwrap();
     t.open_block(4, &Table::fallback());
-    draw(&app, "isabellum-history-editing", Size::new(1400.0, 900.0));
+    draw(&app, "deductum-history-editing", Size::new(1400.0, 900.0));
     // Editing prose shows its rendered preview; a proof pops out
     let t = app.workspace.as_mut().unwrap().theory.as_mut().unwrap();
     t.open_block(2, &Table::fallback());
-    draw(&app, "isabellum-prose-editing", Size::new(1400.0, 900.0));
+    draw(&app, "deductum-prose-editing", Size::new(1400.0, 900.0));
     let t = app.workspace.as_mut().unwrap().theory.as_mut().unwrap();
     t.open_block(3, &Table::fallback());
     let element = super::view::proof_window(&app);
@@ -288,7 +288,7 @@ fn draws_the_proof_window() {
     let t = app.workspace.as_mut().unwrap().theory.as_mut().unwrap();
     let i = t.blocks.iter().position(|b| b.name == "lemma").unwrap();
     t.open_block(i, &Table::fallback());
-    draw_element(super::view::proof_window(&app), "isabellum-proof-window", Size::new(1000.0, 700.0));
+    draw_element(super::view::proof_window(&app), "deductum-proof-window", Size::new(1000.0, 700.0));
 }
 
 #[test]
@@ -299,22 +299,22 @@ fn draws_a_prose_preview_alone() {
     let doc = t.docs[i].clone().unwrap();
     let typo = std::sync::Arc::new(super::view::typography(&cosmic::theme::active()));
     let el: cosmic::Element<'_, super::Message> = prose_render::rich::rich_text(doc.clone(), typo.clone()).into();
-    draw_element(el, "isabellum-preview-alone", Size::new(700.0, 200.0));
+    draw_element(el, "deductum-preview-alone", Size::new(700.0, 200.0));
     let el2: cosmic::Element<'_, super::Message> = cosmic::widget::column::with_capacity(2)
         .push(cosmic::widget::text_editor::text_editor(&t.source).height(cosmic::iced::Length::Fixed(80.0)))
         .push(prose_render::rich::rich_text(doc, typo))
         .into();
-    draw_element(el2, "isabellum-preview-under-editor", Size::new(700.0, 300.0));
+    draw_element(el2, "deductum-preview-under-editor", Size::new(700.0, 300.0));
     let el3: cosmic::Element<'_, super::Message> = cosmic::widget::column::with_capacity(2)
         .push(cosmic::iced::widget::stack![cosmic::widget::Space::new(), cosmic::widget::text_editor::text_editor(&t.source).height(cosmic::iced::Length::Fixed(80.0))])
         .push(prose_render::rich::rich_text(t.docs[i].clone().unwrap(), std::sync::Arc::new(super::view::typography(&cosmic::theme::active()))))
         .into();
-    draw_element(el3, "isabellum-preview-editor-layered", Size::new(700.0, 300.0));
+    draw_element(el3, "deductum-preview-editor-layered", Size::new(700.0, 300.0));
     let el4: cosmic::Element<'_, super::Message> = cosmic::widget::column::with_capacity(2)
         .push(cosmic::iced::widget::text_editor(&t.source).height(cosmic::iced::Length::Fixed(80.0)))
         .push(prose_render::rich::rich_text(t.docs[i].clone().unwrap(), std::sync::Arc::new(super::view::typography(&cosmic::theme::active()))))
         .into();
-    draw_element(el4, "isabellum-preview-iced-editor", Size::new(700.0, 300.0));
+    draw_element(el4, "deductum-preview-iced-editor", Size::new(700.0, 300.0));
 }
 
 /// Messages the view produces for a click at `at`
@@ -338,14 +338,14 @@ pub fn click(app: &App, at: cosmic::iced::Point, size: Size) -> Vec<super::Messa
 #[test]
 fn clicking_blocks_opens_their_source() {
     let app = demo_app(Mode::Literate);
-    // the prose paragraph, and the first lemma, as drawn in isabellum-literate.png
+    // the prose paragraph, and the first lemma, as drawn in deductum-literate.png
     let prose = click(&app, cosmic::iced::Point::new(500.0, 215.0), Size::new(1400.0, 900.0));
     assert!(prose.iter().any(|m| matches!(m, super::Message::EditBlock(_))), "{prose:?}");
     // A lemma takes the click itself, as text: it opens with the caret where the click landed
     let mut app = app;
     let lemma = click(&app, cosmic::iced::Point::new(500.0, 300.0), Size::new(1400.0, 900.0));
     // the pointer's place (hover), then the press, which the shown block's own editor never sees
-    draw(&app, "isabellum-literate-click", Size::new(1400.0, 900.0));
+    draw(&app, "deductum-literate-click", Size::new(1400.0, 900.0));
     for m in lemma.iter().filter(|m| matches!(m, super::Message::HoverMove(..))) {
         let _ = cosmic::Application::update(&mut app, m.clone());
     }
@@ -365,17 +365,17 @@ fn clicking_blocks_opens_their_source() {
 fn draws_navigation_and_inline_goals() {
     let mut app = demo_app(Mode::Literate);
     app.left = super::LeftMode::Theorems;
-    draw(&app, "isabellum-theorems", Size::new(1400.0, 900.0));
+    draw(&app, "deductum-theorems", Size::new(1400.0, 900.0));
     app.left = super::LeftMode::Problems;
     app.show_right = false;
-    draw(&app, "isabellum-problems-inline-goal", Size::new(1100.0, 900.0));
+    draw(&app, "deductum-problems-inline-goal", Size::new(1100.0, 900.0));
     let mut app = demo_app(Mode::Source);
     app.show_right = false;
-    draw(&app, "isabellum-source-inline-goal", Size::new(1100.0, 900.0));
+    draw(&app, "deductum-source-inline-goal", Size::new(1100.0, 900.0));
     // Wide enough: the goal sits beside the theory
     let mut app = demo_app(Mode::Literate);
     app.show_right = false;
-    draw(&app, "isabellum-goal-beside", Size::new(1700.0, 900.0));
+    draw(&app, "deductum-goal-beside", Size::new(1700.0, 900.0));
 }
 
 #[test]
@@ -385,7 +385,7 @@ fn sidebars_resize_and_the_header_shows_the_prover() {
     assert!(pressed.iter().any(|m| matches!(m, super::Message::DragStart(true))), "{pressed:?}");
     let header: cosmic::Element<'_, super::Message> =
         cosmic::widget::row::with_children(super::view::header_center(&app)).padding(8).into();
-    draw_element(header, "isabellum-header-status", Size::new(700.0, 48.0));
+    draw_element(header, "deductum-header-status", Size::new(700.0, 48.0));
 }
 
 #[test]
@@ -395,15 +395,15 @@ fn header_groups_keep_their_width() {
     app.mode_model.insert().text("Source");
     app.mode_model.activate(lit);
     let start: cosmic::Element<'_, super::Message> = cosmic::widget::row::with_children(super::view::header_start(&app)).into();
-    draw_element(start, "isabellum-header-start", Size::new(900.0, 48.0));
+    draw_element(start, "deductum-header-start", Size::new(900.0, 48.0));
 }
 
-/// `ISABELLUM_THY=path`: a real theory through both views
+/// `DEDUCTUM_THY=path`: a real theory through both views
 #[test]
 fn draws_a_real_theory() {
-    let Ok(path) = std::env::var("ISABELLUM_THY") else { return };
+    let Ok(path) = std::env::var("DEDUCTUM_THY") else { return };
     let text = std::fs::read_to_string(&path).unwrap();
-    for (mode, name) in [(Mode::Source, "isabellum-real-source"), (Mode::Literate, "isabellum-real-literate")] {
+    for (mode, name) in [(Mode::Source, "deductum-real-source"), (Mode::Literate, "deductum-real-literate")] {
         let mut app = demo_app(mode);
         let table = Arc::new(Table::fallback());
         let doc = json!({"text": text, "revision": 1, "prover": {}});
@@ -418,7 +418,7 @@ fn draws_a_real_theory() {
                 let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(i));
                 let be = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().block_editor.as_ref().unwrap();
                 eprintln!("wrap {:?}\nshown {:?}", be.wrap, be.shown());
-                draw(&app, "isabellum-real-prose-editing", Size::new(1400.0, 900.0));
+                draw(&app, "deductum-real-prose-editing", Size::new(1400.0, 900.0));
             }
         }
     }
@@ -428,18 +428,18 @@ fn draws_a_real_theory() {
 fn compares_superscript_glyphs() {
     let rows = ["A  tr˃ = tr˂   ok˃  st˃", "B  trᐳ = trᐸ   okᐳ  stᐳ", "C  tr⪧ = tr⪦   ok⪧  st⪧", "D  tr﹥ = tr﹤   ok﹥  st﹥", "E  tr⃗ trᵃ  x¹ x²", "F  tr' = tr   ok'  st'", "G  tr⁾ tr⁽ trᵒ"];
     let col = cosmic::widget::column::with_children(rows.iter().map(|r| cosmic::widget::text(r.to_string()).font(cosmic::font::mono()).size(16.0).into()).collect::<Vec<_>>()).padding(10);
-    draw_element(col.into(), "isabellum-sup-glyphs", Size::new(600.0, 220.0));
+    draw_element(col.into(), "deductum-sup-glyphs", Size::new(600.0, 220.0));
 }
 
 #[test]
 fn scripts_font_loads() {
     super::load_fonts();
     let mut fs = cosmic::iced::advanced::graphics::text::font_system().write().unwrap();
-    let found: Vec<String> = fs.raw().db().faces().flat_map(|f| f.families.iter().map(|(n, _)| n.clone())).filter(|n| n.contains("Isabellum")).collect();
+    let found: Vec<String> = fs.raw().db().faces().flat_map(|f| f.families.iter().map(|(n, _)| n.clone())).filter(|n| n.contains("Deductum")).collect();
     println!("faces: {found:?}");
     let ncm: Vec<String> = fs.raw().db().faces().flat_map(|f| f.families.iter().map(|(n, _)| n.clone())).filter(|n| n.contains("NewComputer")).collect();
     println!("ncm: {}", ncm.len());
-    let data = include_bytes!("../../../res/isabellum/fonts/IsabellumScripts.ttf");
+    let data = include_bytes!("../../../res/deductum/fonts/IsabellumScripts.ttf");
     println!("ttf-parser: {:?}", cosmic_text::fontdb::Database::new().len());
     let mut db = cosmic_text::fontdb::Database::new();
     db.load_font_data(data.to_vec());
@@ -459,7 +459,7 @@ fn clicking_prose_puts_the_caret_there() {
     let _ = cosmic::Application::update(&mut app, pointer.clone());
     let _ = cosmic::Application::update(&mut app, open);
     // The editor is laid out when drawn; then the click is replayed
-    draw(&app, "isabellum-prose-click", size);
+    draw(&app, "deductum-prose-click", size);
     let super::Message::ProsePointer(_, p) = pointer else { unreachable!() };
     let _ = cosmic::Application::update(&mut app, super::Message::BlockClickAt(cosmic::iced::Point::new(p.x, p.y - 2.0)));
     let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
@@ -481,7 +481,7 @@ fn inserts_and_deletes_blocks() {
     let be = t.block_editor.as_ref().expect("the new section opens");
     assert!(be.wrap.is_some(), "edited as its title");
     let i = t.blocks.iter().position(|b| b.start <= be.start && be.start <= b.end).unwrap();
-    draw(&app, "isabellum-new-section", Size::new(1400.0, 900.0));
+    draw(&app, "deductum-new-section", Size::new(1400.0, 900.0));
     let _ = cosmic::Application::update(&mut app, super::Message::DeleteBlock(i));
     let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
     assert_eq!(t.local, before);
@@ -495,16 +495,16 @@ fn vim_normal_mode_shows_a_block_cursor() {
     let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(i));
     app.vim.mode = super::vim::Mode::Normal;
     // (an editor moves by its laid-out text: drawn, as in the app)
-    draw(&app, "isabellum-vim-block", Size::new(1400.0, 900.0));
+    draw(&app, "deductum-vim-block", Size::new(1400.0, 900.0));
     let _ = cosmic::Application::update(&mut app, super::Message::Vim("0".into(), false));
-    draw(&app, "isabellum-vim-block", Size::new(1400.0, 900.0));
+    draw(&app, "deductum-vim-block", Size::new(1400.0, 900.0));
     let _ = cosmic::Application::update(&mut app, super::Message::Vim("l".into(), false));
     let be = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().block_editor.as_ref().unwrap();
     let c = be.content.cursor();
     assert_eq!(c.selection.map(|s| (s.line, s.column)), Some((0, 1)), "{c:?}");
     assert_eq!((c.position.line, c.position.column), (0, 2));
     // the next motion starts from the caret, not the block's end
-    draw(&app, "isabellum-vim-block", Size::new(1400.0, 900.0));
+    draw(&app, "deductum-vim-block", Size::new(1400.0, 900.0));
     let _ = cosmic::Application::update(&mut app, super::Message::Vim("l".into(), false));
     let be = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().block_editor.as_ref().unwrap();
     assert_eq!(be.content.cursor().selection.map(|s| s.column), Some(2));
@@ -726,7 +726,7 @@ fn draws_the_goal_beside_the_source() {
     let t = app.workspace.as_mut().unwrap().theory.as_mut().unwrap();
     let line = t.decoded.text.lines().position(|l| l.contains("apply simp")).unwrap();
     super::editor::place(&mut t.source, cosmic::widget::text_editor::Position { line, column: 4 });
-    draw(&app, "isabellum-source-goal-beside", Size::new(1800.0, 900.0));
+    draw(&app, "deductum-source-goal-beside", Size::new(1800.0, 900.0));
 }
 
 #[test]
@@ -933,12 +933,12 @@ fn a_reference_window_shows_its_theory_and_moves_on_ctrl_click() {
     assert!(r.library);
     assert_eq!((r.line, r.title.as_str()), (4, "Lib.mirror — Lib.thy, line 5"));
     assert!(r.theory.local[r.start..].starts_with("primrec mirror"));
-    draw_element(super::view::reference_window(&app, id), "isabellum-reference", Size::new(820.0, 420.0));
+    draw_element(super::view::reference_window(&app, id), "deductum-reference", Size::new(820.0, 420.0));
     // The name under the pointer (the hover looks it up by it)
     let hover_at = r.theory.local.find("Node (mirror r)").unwrap() + 7;
     assert_eq!(super::editor::name_at(&r.theory.local, hover_at).as_deref(), Some("mirror"));
     // Ctrl+click on a name found elsewhere: this window moves there, and Back knows where it was
-    let info = super::editor::entity_info(&[json!({"raw": "#isabellum:entity type\nLib.tree\n/isa/src/HOL/Lib.thy\n3\ntype tree"})]);
+    let info = super::editor::entity_info(&[json!({"raw": "#deductum:entity type\nLib.tree\n/isa/src/HOL/Lib.thy\n3\ntype tree"})]);
     let _ = app.ref_found(id, RefUse::Goto(false), info);
     let before = app.references[0].1.theory.highlight.0.generation;
     let d2 = json!({"file": "/isa/src/HOL/Lib.thy", "line": 3, "name": "Lib.tree"});
@@ -1109,11 +1109,11 @@ fn results_stay_with_their_cell() {
     assert!(super::view::fill_here(app.workspace.as_ref().unwrap()));
 }
 
-/// `ISABELLUM_SYMBOLS=/tmp/isa-symbols.json`: a UTP library theory in a reference window, with
+/// `DEDUCTUM_SYMBOLS=/tmp/isa-symbols.json`: a UTP library theory in a reference window, with
 /// the prover's real symbol table (scripts with no Unicode form are private-use characters)
 #[test]
 fn a_utp_reference_window_with_the_real_symbols() {
-    let (Ok(sym), Ok(text)) = (std::env::var("ISABELLUM_SYMBOLS"), std::fs::read_to_string("/tmp/isa-utp_rea_prog.thy")) else { return };
+    let (Ok(sym), Ok(text)) = (std::env::var("DEDUCTUM_SYMBOLS"), std::fs::read_to_string("/tmp/isa-utp_rea_prog.thy")) else { return };
     let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(sym).unwrap()).unwrap();
     let table = Arc::new(Table::new(serde_json::from_value(v["symbols"].clone()).unwrap()));
     let mut app = demo_app(Mode::Source);
