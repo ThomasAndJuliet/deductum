@@ -387,15 +387,29 @@ fn documents<'a>(app: &'a App, ws: &'a Workspace) -> Element<'a, Message> {
     let is_doc = |p: &str| documents.iter().any(|d| p.ends_with(d.as_str()));
     let projects: Vec<String> = entries.iter().map(path_of).filter(|p| !is_doc(p) && project_files.iter().any(|f| f == file_name(p))).collect();
     let all: Vec<&Value> = entries.iter().filter(|t| is_doc(&path_of(t))).copied().collect();
+    // A header that collapses the whole list (the open document stays in sight) or expands it
+    let key = (ws.machine.clone(), ws.sid.clone());
+    let collapsed = app.shell.collapsed.contains(&key);
+    let header = widget::row::with_capacity(3)
+        .spacing(6)
+        .align_y(Alignment::Center)
+        .push(tinted_icon(if collapsed { "go-next-symbolic" } else { "go-down-symbolic" }, 14, shell::muted))
+        .push(widget::text::caption(format!("{} document{}", all.len(), if all.len() == 1 { "" } else { "s" })));
+    col = col.push(widget::tooltip(
+        button::custom(header).width(Length::Fill).padding([2, 6]).class(nav_style(false)).on_press(Message::Shell(shell::Msg::ToggleDocuments)),
+        widget::text(if collapsed { "Show all the documents" } else { "Collapse the list (the open document stays)" }),
+        widget::tooltip::Position::Bottom,
+    ));
+    let open_path = ws.theory.as_ref().map(|t| t.path.as_str());
     // A big folder gets a filter
-    if all.len() > 10 {
+    if all.len() > 10 && !collapsed {
         col = col.push(
             widget::container(widget::text_input(format!("Filter {} documents", all.len()), &ws.theory_filter).on_input(Message::TheoryFilter))
                 .padding(Padding { bottom: 4.0, right: 4.0, ..Padding::ZERO }),
         );
     }
     let open = ws.theory.as_ref().map(|t| t.path.as_str());
-    for p in &projects {
+    for p in projects.iter().filter(|_| !collapsed) {
         let rel = p.strip_prefix(folder).unwrap_or(p).trim_start_matches('/');
         let row = widget::row::with_capacity(2)
             .spacing(6)
@@ -422,14 +436,29 @@ fn documents<'a>(app: &'a App, ws: &'a Workspace) -> Element<'a, Message> {
         groups.entry(dir.to_string()).or_default().push((shown.to_string(), *t));
     }
     if groups.is_empty() {
-        col = col.push(widget::container(widget::text::caption(if all.is_empty() { "No documents here yet" } else { "No document matches" })).padding([2, 6]));
+        if !collapsed {
+            col = col.push(widget::container(widget::text::caption(if all.is_empty() { "No documents here yet" } else { "No document matches" })).padding([2, 6]));
+        }
     }
     for (dir, items) in groups {
-        let indent = if dir.is_empty() { 0.0 } else { 10.0 };
-        if !dir.is_empty() {
-            col = col.push(widget::container(widget::text::caption(dir)).padding(Padding { top: 4.0, left: 6.0, ..Padding::ZERO }));
+        let indent = if dir.is_empty() || collapsed { 0.0 } else { 10.0 };
+        // A folder's heading collapses its documents (all but the open one); a filter shows them all
+        let dir_collapsed = !dir.is_empty() && filter.is_empty() && app.shell.collapsed_dirs.contains(&(ws.machine.clone(), ws.sid.clone(), dir.clone()));
+        if !dir.is_empty() && !collapsed {
+            let heading = widget::row::with_capacity(2)
+                .spacing(4)
+                .align_y(Alignment::Center)
+                .push(tinted_icon(if dir_collapsed { "go-next-symbolic" } else { "go-down-symbolic" }, 12, shell::muted))
+                .push(widget::text::caption(format!("{dir}{}", if dir_collapsed { format!(" ({})", items.len()) } else { String::new() })));
+            col = col.push(
+                widget::container(button::custom(heading).width(Length::Fill).padding([1, 4]).class(nav_style(false)).on_press(Message::Shell(shell::Msg::ToggleDocFolder(dir.clone()))))
+                    .padding(Padding { top: 4.0, left: 2.0, ..Padding::ZERO }),
+            );
         }
         for (name, t) in items {
+            if (collapsed || dir_collapsed) && t["path"].as_str() != open_path {
+                continue;
+            }
             let path = t["path"].as_str().unwrap_or("").to_string();
             let st = &t["status"];
             let status = if t["conflict"].as_bool() == Some(true) || st["failed"].as_u64().unwrap_or(0) > 0 {

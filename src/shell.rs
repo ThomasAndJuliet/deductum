@@ -31,6 +31,11 @@ pub struct Shell {
     pub settings_open: bool,
     /// Project actions' runs, by session and action name: running, or how the last one ended
     pub runs: HashMap<(String, String), Run>,
+    /// Sessions whose document list is collapsed in the sidebar (only the open document shows),
+    /// by machine and session
+    pub collapsed: std::collections::HashSet<(String, String)>,
+    /// Folders collapsed in a session's document list, by machine, session and folder
+    pub collapsed_dirs: std::collections::HashSet<(String, String, String)>,
 }
 
 /// A project action's run (`lake build`, building a heap)
@@ -72,6 +77,10 @@ pub enum Msg {
     NewToolchain(usize),
     NewDirs(String),
     OpenDocument(String),
+    /// Collapse or expand the open session's whole document list
+    ToggleDocuments,
+    /// Collapse or expand one folder of the open session's document list
+    ToggleDocFolder(String),
 }
 
 impl App {
@@ -199,6 +208,21 @@ impl App {
                 self.shell.settings.lean.loogle = l;
                 self.save_settings();
                 self.tell_hosts();
+            }
+            Msg::ToggleDocuments => {
+                if let Some(key) = self.workspace_ids() {
+                    if !self.shell.collapsed.remove(&key) {
+                        self.shell.collapsed.insert(key);
+                    }
+                }
+            }
+            Msg::ToggleDocFolder(dir) => {
+                if let Some((machine, sid)) = self.workspace_ids() {
+                    let key = (machine, sid, dir);
+                    if !self.shell.collapsed_dirs.remove(&key) {
+                        self.shell.collapsed_dirs.insert(key);
+                    }
+                }
             }
             Msg::ProjectAction(name) => {
                 let Some((machine, sid)) = self.workspace_ids() else { return Task::none() };
@@ -606,13 +630,12 @@ fn chip_style() -> theme::Button {
     }
 }
 
-/// (`compact`, in a narrow window: the state and what fails only)
-/// (`narrow`, narrower still: no backend mark, and a running tool without its time)
-fn prover_status<'a>(ws: &'a Workspace, t: &'a super::editor::Theory, backend: &str, toolchain: Option<String>, compact: bool, narrow: bool) -> Option<Element<'a, Message>> {
-    let act = ws.activity.as_ref()?;
-    let theories = act["theories"].as_array()?;
+/// The theory's imports, transitively, that the prover has not finished checking: each one's
+/// file name, how far it is, and whether it cannot load. The theory's own commands wait for
+/// these, so the header and the goal panel both say so
+pub fn pending_imports(ws: &Workspace, t: &super::editor::Theory) -> Vec<(String, u64, bool)> {
+    let Some(theories) = ws.activity.as_ref().and_then(|a| a["theories"].as_array()) else { return Vec::new() };
     let find = |path: &str| theories.iter().find(|th| th["path"].as_str() == Some(path));
-    // The current document's imports, transitively, that are not checked yet
     let mut waiting: Vec<(String, u64, bool)> = Vec::new();
     let mut seen = std::collections::HashSet::new();
     let mut stack: Vec<String> = find(&t.path)
@@ -633,6 +656,15 @@ fn prover_status<'a>(ws: &'a Workspace, t: &'a super::editor::Theory, backend: &
             }
         }
     }
+    waiting
+}
+
+/// (`compact`, in a narrow window: the state and what fails only)
+/// (`narrow`, narrower still: no backend mark, and a running tool without its time)
+fn prover_status<'a>(ws: &'a Workspace, t: &'a super::editor::Theory, backend: &str, toolchain: Option<String>, compact: bool, narrow: bool) -> Option<Element<'a, Message>> {
+    let act = ws.activity.as_ref()?;
+    let theories = act["theories"].as_array()?;
+    let waiting = pending_imports(ws, t);
     let running = act["running"].as_array().cloned().unwrap_or_default();
     let busy_theories = theories.iter().filter(|th| th["running"].as_u64().unwrap_or(0) > 0).count();
     let (finished, unprocessed, run_here, failed, consolidated) = t.status();

@@ -2034,3 +2034,29 @@ fn frame_matrix() {
         cosmic::theme::set_active(cosmic::theme::ThemeType::Dark);
     }
 }
+
+/// A tool typed where the prover has not got to yet (its imports still being checked, as when a
+/// session has just started) says what it waits for, not that there is no proof state
+#[test]
+fn a_tool_waiting_for_imports_says_so() {
+    let mut app = demo_app(Mode::Literate);
+    {
+        let ws = app.workspace.as_mut().unwrap();
+        let t = ws.theory.as_mut().unwrap();
+        let at = t.local.find("sorry").expect("the demo has a sorry");
+        let text = format!("{}sledgehammer{}", &t.local[..at], &t.local[at + 5..]);
+        let len = text.chars().count();
+        t.local = text.clone();
+        t.confirmed = text;
+        let start = t.local[..at].chars().count();
+        t.prover.commands = vec![super::theory::Command { start, end: start + 12, name: "sledgehammer".into(), status: super::theory::Status::Unprocessed }];
+        t.cursor = (start + 12).min(len);
+        ws.output = None;
+        ws.goals.messages.clear();
+    }
+    let ws = app.workspace.as_ref().unwrap();
+    let note = super::view::waiting_note(ws).expect("a note");
+    assert!(note.starts_with("sledgehammer starts when the prover reaches this line."), "{note}");
+    assert!(note.contains("Base.thy 45%"), "{note}");
+    draw(&app, "tool-waiting-for-imports", Size::new(1400.0, 900.0));
+}

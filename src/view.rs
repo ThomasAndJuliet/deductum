@@ -2673,6 +2673,38 @@ fn output_panel<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Ele
     thin(state_view(ws, table)).height(Length::Fill).into()
 }
 
+/// Why there is no proof state at the caret yet, when the prover has not reached its command:
+/// the imports it is still checking (a session that has just started checks every theory the
+/// document imports first, which can take minutes), or else that it has yet to get there. A
+/// tool typed there (sledgehammer, …) starts when it does. None when the command is checked
+pub fn waiting_note(ws: &Workspace) -> Option<String> {
+    let t = ws.theory.as_ref()?;
+    let at = t.cursor.saturating_sub(1);
+    let local = |o: usize| super::App::local_offset_pub(t, o);
+    let command = t.prover.commands.iter().find(|c| local(c.start) <= at && at < local(c.end).max(local(c.start) + 1))?;
+    if !matches!(command.status, super::theory::Status::Unprocessed) {
+        return None;
+    }
+    let tool = ws.caps.tools.iter().any(|tool| tool.typed == command.name || tool.name == command.name);
+    let starts = if tool { format!("{} starts when the prover reaches this line. ", command.name) } else { String::new() };
+    let waiting = super::shell::pending_imports(ws, t);
+    if waiting.is_empty() {
+        return Some(format!("{starts}Waiting for the prover to reach this line…"));
+    }
+    let blocked: Vec<&str> = waiting.iter().filter(|w| w.2).map(|w| w.0.as_str()).collect();
+    if !blocked.is_empty() {
+        return Some(format!("{starts}An import cannot load: {}.", blocked.join(", ")));
+    }
+    let names: Vec<String> = waiting.iter().take(3).map(|(n, pct, _)| format!("{n} {pct}%")).collect();
+    let more = if waiting.len() > 3 { format!(" and {} more", waiting.len() - 3) } else { String::new() };
+    Some(format!(
+        "{starts}Waiting for the prover to check {} imported theor{} first: {}{more}.",
+        waiting.len(),
+        if waiting.len() == 1 { "y" } else { "ies" },
+        names.join(", ")
+    ))
+}
+
 /// The proof state: as parts (the chained facts, then each subgoal as fix, assume and show,
 /// with what the command changed), or as Isabelle prints it; then any other output
 fn state_view<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Element<'a, Message> {
@@ -2686,7 +2718,7 @@ fn state_view<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Eleme
         let (s, e) = (super::App::local_offset_pub(t, s as usize), super::App::local_offset_pub(t, e as usize));
         let at = t.cursor.saturating_sub(1);
         if at < s || at >= e.max(s + 1) {
-            return widget::text::caption("Checking…").into();
+            return widget::text::caption(waiting_note(ws).unwrap_or_else(|| "Checking…".into())).into();
         }
     }
     let g = super::goals::Goals::parse(&ws.goals.messages);
@@ -2766,8 +2798,11 @@ fn state_view<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Eleme
         let checking = ws.theory.as_ref().is_some_and(|t| t.unchecked_from().is_some_and(|from| from <= t.cursor));
         let text = match ws.output.as_ref().and_then(|o| o["error"].as_str()) {
             Some(e) => e.to_string(),
-            None if checking => "Checking…".to_string(),
-            None => "No proof state here.".to_string(),
+            None => match waiting_note(ws) {
+                Some(note) => note,
+                None if checking => "Checking…".to_string(),
+                None => "No proof state here.".to_string(),
+            },
         };
         return widget::text::caption(text).into();
     }

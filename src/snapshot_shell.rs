@@ -481,3 +481,37 @@ fn shell_frame_matrix() {
         draw_in(light, || window(&app), &format!("matrix-shell-{theme}-1000-tool"), Size::new(1000.0, 700.0));
     }
 }
+
+#[test]
+fn a_project_s_documents_collapse_all_at_once_or_by_folder() {
+    let mut app = mixed_app();
+    // A bigger project: documents at the top and in two folders
+    let mut theories = vec![json!({"path": "/home/me/Research/Demo/ROOT", "status": null})];
+    for n in ["Demo", "More", "Extra", "Laws"] {
+        theories.push(json!({"path": format!("/home/me/Research/Demo/{n}.thy"), "status": {"consolidated": true}}));
+    }
+    for d in ["lib", "examples"] {
+        for n in ["Base", "Lists", "Sets"] {
+            theories.push(json!({"path": format!("/home/me/Research/Demo/{d}/{n}.thy"), "status": {"consolidated": true}}));
+        }
+    }
+    app.workspace.as_mut().unwrap().info.as_mut().unwrap()["theories"] = json!(theories);
+    let rows = |app: &App| {
+        let png = draw_in(false, || super::sidebar::sidebar(app), "probe", Size::new(300.0, 900.0));
+        png.len()
+    };
+    let _ = rows(&app);
+    draw_in(false, || super::sidebar::sidebar(&app), "shell-sidebar-documents-expanded", Size::new(300.0, 760.0));
+    // A folder's heading collapses it
+    let _ = cosmic::Application::update(&mut app, Message::Shell(Msg::ToggleDocFolder("lib".into())));
+    assert!(app.shell.collapsed_dirs.iter().any(|(_, _, d)| d == "lib"));
+    draw_in(false, || super::sidebar::sidebar(&app), "shell-sidebar-documents-folder-collapsed", Size::new(300.0, 760.0));
+    // The list's header collapses everything but the open document, and expands it again
+    let _ = cosmic::Application::update(&mut app, Message::Shell(Msg::ToggleDocuments));
+    let key = { let ws = app.workspace.as_ref().unwrap(); (ws.machine.clone(), ws.sid.clone()) };
+    assert!(app.shell.collapsed.contains(&key));
+    draw_in(false, || super::sidebar::sidebar(&app), "shell-sidebar-documents-collapsed", Size::new(300.0, 760.0));
+    draw_in(true, || super::sidebar::sidebar(&app), "shell-sidebar-documents-collapsed-light", Size::new(300.0, 760.0));
+    let _ = cosmic::Application::update(&mut app, Message::Shell(Msg::ToggleDocuments));
+    assert!(!app.shell.collapsed.contains(&key));
+}
