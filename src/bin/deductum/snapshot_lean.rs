@@ -309,3 +309,33 @@ fn typing_a_backslash_abbreviation_offers_the_character() {
     let c = super::editor::complete(t.profile, "  intro h\n  cases h with | inl h => ex", &*symbols, &HashMap::new(), &["exact".to_string()], None);
     assert!(c.iter().any(|c| c.text == "exact"), "words of the file");
 }
+
+#[test]
+fn clicking_a_lean_paragraph_puts_the_caret_there() {
+    let mut app = lean_app(Mode::Literate);
+    app.show_sidebar = false;
+    app.show_right = false;
+    let size = Size::new(1400.0, 900.0);
+    // down the page until a click lands on the module doc's text (not its maths or the heading)
+    let mut found = None;
+    for y in (140..300).step_by(8) {
+        let msgs = super::snapshot::click(&app, cosmic::iced::Point::new(700.0, y as f32), size);
+        let pointer = msgs.iter().rev().find(|m| matches!(m, super::Message::ProsePointer(..))).cloned();
+        let open = msgs.iter().find(|m| matches!(m, super::Message::EditBlock(_))).cloned();
+        if let (Some(p), Some(o)) = (pointer, open) {
+            found = Some((p, o));
+            break;
+        }
+    }
+    let (pointer, open) = found.expect("a click on the module doc");
+    let _ = cosmic::Application::update(&mut app, pointer.clone());
+    let _ = cosmic::Application::update(&mut app, open);
+    super::snapshot::draw(&app, "lean-prose-click", size);
+    let super::Message::ProsePointer(_, p) = pointer else { unreachable!() };
+    let _ = cosmic::Application::update(&mut app, super::Message::BlockClickAt(cosmic::iced::Point::new(p.x, p.y - 2.0)));
+    let be = theory(&app).block_editor.as_ref().unwrap();
+    let text = be.content.text();
+    let li = super::editor::LineIndex::new(&text);
+    let at = li.offset(&text, be.content.cursor().position);
+    assert!(at > 5 && at + 5 < text.chars().count(), "the caret is where the click was, not at an end: {at} of {}", text.chars().count());
+}

@@ -635,6 +635,8 @@ pub struct Theory {
     pub prover: Prover,
     pub blocks: Vec<Block>,
     pub docs: Vec<Option<Arc<Doc>>>,
+    /// Each prose block's Markdown offsets mapped to the source, where the profile can say
+    pub prose_maps: Vec<Option<crate::prover::ProseMap>>,
     doc_cache: HashMap<String, Arc<Doc>>,
     pub block_editor: Option<BlockEditor>,
     pub mode: Mode,
@@ -889,6 +891,7 @@ impl Theory {
             stale_from: None,
             blocks: Vec::new(),
             docs: Vec::new(),
+            prose_maps: Vec::new(),
             doc_cache: HashMap::new(),
             block_editor: None,
             mode,
@@ -1141,15 +1144,28 @@ impl Theory {
         typed.into_iter().chain(stale).min()
     }
 
+    /// The source offset standing for byte `md` of the Markdown that block `i` renders as, if the
+    /// profile keeps the text (Lean's docstrings): where a click in the rendered paragraph, or a
+    /// mark on it, is in the file
+    pub fn source_of_markdown(&self, i: usize, md: usize) -> Option<usize> {
+        let (start, _) = self.blocks.get(i)?.body?;
+        Some(start + self.prose_maps.get(i)?.as_ref()?.source_char(md))
+    }
+
     /// Recompute blocks, rendered prose and highlighting after the text or the prover changed
     pub fn refresh(&mut self, table: &dyn Symbols) {
         let prover = self.local_prover();
         self.blocks = self.profile.blocks(&self.local, &prover.commands, &self.kinds);
         let chars: Vec<char> = self.local.chars().collect();
         let mut docs = Vec::with_capacity(self.blocks.len());
+        let mut maps = Vec::with_capacity(self.blocks.len());
         let mut cache = std::mem::take(&mut self.doc_cache);
         let mut used = HashMap::new();
         for block in &self.blocks {
+            maps.push(match (block.kind, block.body) {
+                (theory::Kind::Text, Some((s, e))) if s <= e && e <= chars.len() => self.profile.prose_map(&chars[s..e].iter().collect::<String>()),
+                _ => None,
+            });
             let doc = match (block.kind, block.body) {
                 (theory::Kind::Heading(level), Some((s, e))) | (theory::Kind::Heading(level), Some((s, e)))
                     if s <= e && e <= chars.len() =>
@@ -1173,6 +1189,7 @@ impl Theory {
         }
         self.doc_cache = used;
         self.docs = docs;
+        self.prose_maps = maps;
         self.compute_highlight(&prover);
         self.compute_block_views();
     }
