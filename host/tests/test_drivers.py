@@ -267,8 +267,12 @@ class DriverTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([o["op"] for o in FakeDriver.sent], ["open"])
         s.close_unviewed()
         self.assertEqual([o["op"] for o in FakeDriver.sent], ["open"])
-        # not viewed any more, and no agent asked lately: closed, but the buffer stays
+        # not viewed any more: kept for a short grace (going back to it is cheap), then closed,
+        # and the buffer stays
         app.open_docs.clear()
+        s.close_unviewed()
+        self.assertEqual([o["op"] for o in FakeDriver.sent], ["open"])
+        doc.viewed -= s.driver_class.VIEW_GRACE_SECONDS + 1
         s.close_unviewed()
         self.assertEqual(s.driver_class.open_policy, "viewed")
         self.assertEqual([o["op"] for o in FakeDriver.sent], ["open", "close"])
@@ -283,10 +287,13 @@ class DriverTests(unittest.IsolatedAsyncioTestCase):
         s.close_unviewed()
         self.assertEqual([o["op"] for o in FakeDriver.sent][-1], "close")
 
-    async def test_isabelle_keeps_every_document_open(self):
+    async def test_isabelle_requires_only_viewed_theories(self):
+        # A theory looked at once and kept required would be checked again, with everything
+        # importing it, at every keystroke in a theory it imports
         s = H.Session(self.host, "i1", json.loads(json.dumps(OLD_META)))
         doc = H.Doc(s, "/tmp/x/A.thy")
-        self.assertTrue(s.wanted_in_prover(doc))
+        self.assertEqual(s.driver_class.open_policy, "viewed")
+        self.assertFalse(s.wanted_in_prover(doc))
 
     async def test_the_memory_budget(self):
         d = self.folder("FAKEROOT")

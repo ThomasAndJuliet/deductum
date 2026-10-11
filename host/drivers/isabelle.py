@@ -251,7 +251,10 @@ class IsabelleDriver(Driver):
     label = "Isabelle"
     documents = (".thy",)
     project_files = ("ROOT", "ROOTS")
-    open_policy = "all"
+    # Only the theories someone views (or an agent asked about lately) are required, as
+    # Isabelle/jEdit requires its open buffers: a theory once looked at but kept required would
+    # be checked again, with everything importing it, at every keystroke in a theory it imports
+    open_policy = "viewed"
     placeholder = "sorry"
     placeholder_commands = ("sorry", "oops")
     goal_commands = ("lemma", "theorem", "corollary", "proposition", "schematic_goal")
