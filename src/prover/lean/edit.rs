@@ -768,6 +768,128 @@ fn subscript(i: usize) -> char {
 
 // ---------------------------------------------------------------- insert palette
 
+/// What the caret is in, for the insert palette and the insert bar above the goal
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Place {
+    /// A term: a declaration's type or body, a binder, `have h : _`, `exact _`, a bracket
+    Term,
+    /// Where a tactic starts: at a line's start in a `by` block, after `by`, `·`, `;`, `<;>` or
+    /// a case's `=>`
+    Tactic,
+    /// A docstring or module doc, which are Markdown
+    Doc,
+}
+
+/// Where the caret is, after `before` (a declaration's text up to it), read lexically as the
+/// lexer reads Lean: comments (`--`, `/- … -/`, which nest), strings and brackets.
+///
+/// Inside a docstring or a module doc it is Markdown. Inside a string, a bracket or another
+/// comment it is a term (symbols are what is typed there). Otherwise it is a tactic's start
+/// when a `by` came before it outside brackets (the declaration's proof is a tactic block) and
+/// nothing but space stands between the last thing that ends a tactic (a line break, `by`, `·`,
+/// `;`, `<;>`, `=>`) and the caret; anything else, a declaration's header or body or a tactic's
+/// argument, is a term. The caret just after a whole tactic on its line is a term too: a tactic
+/// put there would join the word before it
+pub fn place(before: &str) -> Place {
+    let chars: Vec<char> = before.chars().collect();
+    let n = chars.len();
+    let word = |c: char| c.is_alphanumeric() || c == '_' || c == '\'' || c == '.' || c == '!' || c == '?';
+    // (each open comment: whether it is a doc)
+    let mut comments: Vec<bool> = Vec::new();
+    let (mut in_str, mut line_comment) = (false, false);
+    let mut brackets = 0usize;
+    let mut tactics = false;
+    // (where the text since the last tactic boundary starts)
+    let mut segment = 0;
+    let mut i = 0;
+    while i < n {
+        let c = chars[i];
+        let next = chars.get(i + 1).copied();
+        if line_comment {
+            if c == '\n' {
+                line_comment = false;
+                segment = i + 1;
+            }
+            i += 1;
+            continue;
+        }
+        if !comments.is_empty() {
+            if c == '-' && next == Some('/') {
+                comments.pop();
+                i += 2;
+                segment = i;
+                continue;
+            }
+            if c == '/' && next == Some('-') {
+                comments.push(false);
+                i += 2;
+                continue;
+            }
+            i += 1;
+            continue;
+        }
+        if in_str {
+            if c == '\\' {
+                i += 2;
+                continue;
+            }
+            if c == '"' {
+                in_str = false;
+            }
+            i += 1;
+            continue;
+        }
+        match c {
+            '"' => in_str = true,
+            '-' if next == Some('-') => {
+                line_comment = true;
+                i += 2;
+                continue;
+            }
+            '/' if next == Some('-') => {
+                let doc = matches!(chars.get(i + 2), Some('-' | '!')) && chars.get(i + 3) != Some(&'/');
+                comments.push(doc);
+                i += 2;
+                continue;
+            }
+            '(' | '[' | '{' | '⟨' => brackets += 1,
+            ')' | ']' | '}' | '⟩' => brackets = brackets.saturating_sub(1),
+            '\n' | ';' | '·' if brackets == 0 => segment = i + 1,
+            '<' if brackets == 0 && chars[i..].starts_with(&['<', ';', '>']) => {
+                i += 3;
+                segment = i;
+                continue;
+            }
+            // (a case's `=>` begins its tactics; a `fun`'s or a `match` arm's in a term does not)
+            '=' if brackets == 0 && next == Some('>') => {
+                let arm: String = chars[segment.min(i)..i].iter().collect();
+                let arm = arm.trim_start();
+                if arm.starts_with('|') || arm.starts_with("case ") || arm.starts_with("next") {
+                    segment = i + 2;
+                }
+                i += 2;
+                continue;
+            }
+            'b' if brackets == 0 && next == Some('y') && (i == 0 || !word(chars[i - 1])) && chars.get(i + 2).is_none_or(|c| !word(*c)) => {
+                tactics = true;
+                i += 2;
+                segment = i;
+                continue;
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    if let Some(doc) = comments.last() {
+        return if *doc { Place::Doc } else { Place::Term };
+    }
+    if in_str || line_comment || brackets > 0 {
+        return Place::Term;
+    }
+    if tactics && chars[segment.min(n)..].iter().all(|c| c.is_whitespace()) { Place::Tactic } else { Place::Term }
+}
+
+
 /// What can be inserted in a proof: a label, what goes before the selection (or the caret), what
 /// goes after it. A newline in these is followed by the indentation of the line it is on: use
 /// [`indented`]
@@ -1074,6 +1196,43 @@ mod tests {
         assert!(keyword_line("  claude").is_some());
         assert_eq!(indented("a\n  b", "    "), "a\n      b");
         assert_eq!(indented(&wrap(have, "P"), "  "), "have h : P := by\n    ");
+    }
+
+    #[test]
+    fn the_caret_is_in_a_term_a_tactic_or_a_doc() {
+        let at = |text: &str| place(text);
+        // a declaration's header and body are terms
+        assert_eq!(at("def merge (left right : List Nat) : "), Place::Term);
+        assert_eq!(at("def merge (left right : List Nat) : List Nat := "), Place::Term);
+        assert_eq!(at("def merge (left right : List Nat) : List Nat :=\n  "), Place::Term);
+        assert_eq!(at("theorem t (n : Nat) :\n    "), Place::Term);
+        assert_eq!(at("theorem t (n "), Place::Term);
+        // a tactic's start: after `by`, at a line's start in the block, after `·`, `;`, `=>`
+        assert_eq!(at("theorem t : p := by\n  "), Place::Tactic);
+        assert_eq!(at("theorem t : p := by "), Place::Tactic);
+        assert_eq!(at("theorem t : p ∧ q := by\n  constructor\n  · "), Place::Tactic);
+        assert_eq!(at("theorem t : p := by\n  intro h; "), Place::Tactic);
+        assert_eq!(at("theorem t : p := by\n  induction xs with\n  | nil => "), Place::Tactic);
+        assert_eq!(at("theorem t : p := by\n  cases h <;> "), Place::Tactic);
+        // in a tactic: its arguments are terms (have's statement, exact's term, a bracket)
+        assert_eq!(at("theorem t : p := by\n  have h : "), Place::Term);
+        assert_eq!(at("theorem t : p := by\n  exact "), Place::Term);
+        assert_eq!(at("theorem t : p := by\n  show "), Place::Term);
+        assert_eq!(at("theorem t : p := by\n  rw [h, "), Place::Term);
+        assert_eq!(at("theorem t : p := by\n  exact (fun x =>\n    "), Place::Term);
+        assert_eq!(at("theorem t : p := by\n  simp"), Place::Term, "just after a tactic");
+        assert_eq!(at("theorem t : p := by\n  exact fun x => "), Place::Term);
+        assert_eq!(at("theorem t : p := by\n  case succ n => "), Place::Tactic);
+        // `by` is a word: `decreasing_by`, `bygone` are not
+        assert_eq!(at("def f := bygone\n  "), Place::Term);
+        // docstrings and module docs are Markdown; other comments and strings hold terms
+        assert_eq!(at("/-- Adds "), Place::Doc);
+        assert_eq!(at("/-! # Intro\n\nSome "), Place::Doc);
+        assert_eq!(at("/-- Adds. -/\ndef add := by\n  "), Place::Tactic);
+        assert_eq!(at("theorem t : p := by\n  -- by "), Place::Term);
+        assert_eq!(at("theorem t : p := by\n  -- a note\n  "), Place::Tactic);
+        assert_eq!(at("theorem t : p := by\n  /- note -/ "), Place::Tactic);
+        assert_eq!(at("def s := \"by "), Place::Term);
     }
 
     #[test]

@@ -154,7 +154,14 @@ impl Profile for Isabelle {
     }
 
     fn in_term(&self, before: &str) -> bool {
-        before.matches('"').count() % 2 == 1
+        isar::in_term(before)
+    }
+
+    fn quick_entries(&self, context: InsertContext, caps: &Capabilities) -> Vec<PaletteEntry> {
+        match context {
+            InsertContext::Symbols => isar::QUICK_SYMBOLS.iter().map(|(l, b, a)| PaletteEntry::new(l, b, a)).collect(),
+            _ => self.palette(context, caps),
+        }
     }
 
     fn palette(&self, context: InsertContext, caps: &Capabilities) -> Vec<PaletteEntry> {

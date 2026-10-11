@@ -15,7 +15,7 @@ use cosmic::{iced, theme};
 use serde_json::Value;
 
 use super::editor::{Mode, Theory, highlight_format};
-use super::prover::{GoalBody, InsertContext, PaletteEntry, Setting, Tool};
+use super::prover::{GoalBody, Setting, Tool};
 use super::theory::{Block, Kind, Status};
 use prose_render::rich::{Typography, rich_text};
 use super::{App, LeftMode, Message, Panel, Workspace, file_name};
@@ -40,7 +40,7 @@ fn icon(name: &'static str) -> widget::icon::Icon {
     widget::icon::from_name(name).size(16).icon()
 }
 
-fn spacing() -> cosmic::cosmic_theme::Spacing {
+pub fn spacing() -> cosmic::cosmic_theme::Spacing {
     theme::active().cosmic().spacing
 }
 
@@ -92,7 +92,7 @@ fn marked_region(theme: &cosmic::Theme) -> (Color, Option<Color>) {
 
 /// Secondary text (a line number, a time, a hint): the text's colour, fainter. Taken from the
 /// theme as the text is drawn, not as the view is built, so it follows the theme it is drawn in
-fn muted() -> theme::Text {
+pub fn muted() -> theme::Text {
     theme::Text::Custom(|theme| {
         let c = theme.cosmic();
         iced::widget::text::Style { color: Some(Color { a: 0.65, ..Color::from(c.on_bg_color()) }), selected_fill: Color { a: 0.32, ..Color::from(c.accent.base) }, selected_text_color: None }
@@ -160,6 +160,7 @@ pub fn view(app: &App) -> Element<'_, Message> {
         // laid out, where it is read, rather than when the view is built: another window's view
         // (or, in the tests, another test's) built in between would otherwise leave its mode here
         set_vim_mode(app.vim_enabled.then_some(app.vim.mode));
+        super::insert::set_popout_open(app.popout.is_some());
         set_placement_override(app.goal_placement_override);
         set_view_height(size.height);
         layout(app, size.width)
@@ -495,7 +496,11 @@ fn workspace<'a>(app: &'a App, ws: &'a Workspace, right: bool, main_width: f32) 
                     let source_width = source_width(columns);
                     // (the goal column narrows to the room there is, down to a readable width)
                     let room = (main_width - source_width - z(70.0)).min(goal_width);
-                    let fits = (ws.output.is_some() || fill_here(ws)) && room >= z(320.0) && goal_beside_on();
+                    // (whether or not there is a goal at the moment: a click elsewhere clears the
+                    // goal until the prover's state there comes, and the layout must not change
+                    // with it)
+                    let fits = room >= z(320.0) && goal_beside_on();
+                    SOURCE_BESIDE.store(fits, std::sync::atomic::Ordering::Relaxed);
                     source(ws, t, if fits { None } else { Some(ws) }, &*app.table(&ws.machine), fits.then_some((room, source_width)), source_width.min(main_width - z(24.0)))
                 }
             };
@@ -899,6 +904,34 @@ fn blend(a: Color, b: Color, t: f32) -> Color {
     Color { r: a.r + (b.r - a.r) * t, g: a.g + (b.g - a.g) * t, b: a.b + (b.b - a.b) * t, a: a.a }
 }
 
+pub fn pop_out_button_id() -> widget::Id {
+    widget::Id::new("deductum-pop-out")
+}
+
+/// The pop-out button's size: no taller than a line of the source view, so that, centred on the
+/// proof's first line, it stays inside the proof's band there and inside a code cell's corner
+pub fn pop_out_size() -> f32 {
+    z(16.0).round() + 2.0 * z(2.0)
+}
+
+/// How far the pop-out button is inside the top right corner of the code it floats over: as far
+/// from the right as from the top, the top such that it is centred on the first line
+pub fn pop_out_inset() -> f32 {
+    (CODE_PADDING.top + code_line_height() / 2.0 - pop_out_size() / 2.0).max(1.0)
+}
+
+/// Pop out: the proof in a window of its own, a small icon button floating over the code (in
+/// both views)
+fn pop_out_button<'a>() -> Element<'a, Message> {
+    let button = widget::button::custom(widget::icon::from_name("window-pop-out-symbolic").size(z(16.0).round() as u16).icon())
+        .padding(z(2.0))
+        .width(Length::Fixed(pop_out_size()))
+        .height(Length::Fixed(pop_out_size()))
+        .class(theme::Button::Icon)
+        .on_press(Message::PopOut);
+    widget::container(widget::tooltip(button, widget::text("Pop out (the proof in a window of its own)"), widget::tooltip::Position::Bottom)).id(pop_out_button_id()).into()
+}
+
 /// A block's status strip, then its code
 fn framed<'a>(code: Element<'a, Message>, status: Status, marked: bool) -> Element<'a, Message> {
     let strip = widget::container(widget::Space::new())
@@ -1140,7 +1173,7 @@ pub fn set_vim_mode(mode: Option<super::vim::Mode>) {
     VIM_MODE.store(v, std::sync::atomic::Ordering::Relaxed);
 }
 
-fn vim_mode_now() -> Option<super::vim::Mode> {
+pub fn vim_mode_now() -> Option<super::vim::Mode> {
     match VIM_MODE.load(std::sync::atomic::Ordering::Relaxed) {
         1 => Some(super::vim::Mode::Normal),
         2 => Some(super::vim::Mode::Insert),
@@ -1504,7 +1537,7 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
     let palette = match (beside, open_item) {
         (Some((ws, width, _)), Some(i)) if anchor.is_none() || inline_goal(Some(ws), &*table).is_none() => {
             anchor = Some((i, 0.0));
-            Some(insert_palette(ws, t, &*table, width))
+            Some(super::insert::insert_palette(ws, t, &*table, width))
         }
         _ => None,
     };
@@ -1728,15 +1761,9 @@ fn block_editor_in<'a>(ws: Option<&'a Workspace>, t: &'a Theory, window: bool, i
             None => banded(super::gap::Gap::new(code, widget::Space::new().height(Length::Fixed(0.0)), 0.0)).into(),
         };
         // Pop out: a small button floating at the top right of the code, as in the source view
-        let pop: Element<'_, Message> = if be.kind == Kind::Formal {
-            widget::button::icon(widget::icon::from_name("window-pop-out-symbolic"))
-                .tooltip("Pop out (the proof in a window of its own)")
-                .on_press(Message::PopOut)
-                .into()
-        } else {
-            widget::Space::new().width(Length::Fixed(0.0)).height(Length::Fixed(0.0)).into()
-        };
-        let code: Element<'_, Message> = super::gap::Beside::new(code, pop, iced::Vector::new(4.0, 0.0)).right().fixed().into();
+        let pop: Element<'_, Message> = if be.kind == Kind::Formal { pop_out_button() } else { widget::Space::new().width(Length::Fixed(0.0)).height(Length::Fixed(0.0)).into() };
+        let inset = pop_out_inset();
+        let code: Element<'_, Message> = super::gap::Beside::new(code, pop, iced::Vector::new(inset, inset)).right().fixed().into();
         framed(code, t.shown_status(be.start, be.end, t.status_in(be.start, be.end).unwrap_or(Status::Finished)), true)
     };
     let mut col = widget::column::with_capacity(6).spacing(4).push(editor);
@@ -2070,6 +2097,7 @@ pub fn proof_window(app: &App) -> Element<'_, Message> {
     };
     // As the main window: the state beside the proof when there is room, else under it
     let content = widget::responsive(move |size| {
+        super::insert::set_popout_open(app.popout.is_some());
         let table = app.table(&ws.machine);
         // (the state on the page, so that its subgoal cards stand out from it as they do there)
         let state = widget::container(thin(widget::container(state_view(ws, &*table)).padding(Padding { right: z(10.0), ..Padding::ZERO }))).padding([sp.space_xs, sp.space_xs]).class(theme::Container::custom(|theme| iced::widget::container::Style {
@@ -2264,6 +2292,15 @@ pub fn last_wide() -> bool {
     WIDE.load(std::sync::atomic::Ordering::Relaxed)
 }
 
+static SOURCE_BESIDE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Whether the source view, as last laid out, had the goal's column beside the source (for the
+/// tests)
+#[cfg(test)]
+pub fn last_source_beside() -> bool {
+    SOURCE_BESIDE.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 /// The rule: a proof that fits comfortably in view keeps its goal with the whole proof (level
 /// with its top beside it, or under it); a longer one keeps it with the construct at the caret,
 /// so that it stays near (level with it beside, or just after it)
@@ -2283,99 +2320,6 @@ pub fn goal_placement(wide: bool, proof_lines: usize) -> GoalPlacement {
         false if height <= view_height() * 0.35 => GoalPlacement::UnderProof,
         false => GoalPlacement::AfterConstruct,
     }
-}
-
-/// What the caret is in, for the insert palette: maths or a term (symbols), prose (text
-/// templates), or a proof
-pub fn insert_context(t: &Theory) -> Option<InsertContext> {
-    let be = t.block_editor.as_ref()?;
-    // (the source as decoded, which the editor shows one character for one: maths shown set
-    // still has its `$` here)
-    let before: String = be.decoded.text.chars().take(be.caret()).collect();
-    if be.wrap.is_some() {
-        // (an unclosed `$` or `\(` before the caret: inside maths)
-        let dollars = before.matches('$').count() - before.matches("\\$").count();
-        let parens = before.matches("\\(").count() > before.matches("\\)").count();
-        return Some(if dollars % 2 == 1 || parens { InsertContext::Symbols } else { InsertContext::Prose });
-    }
-    if be.kind != Kind::Formal {
-        return None;
-    }
-    Some(if t.profile.in_term(&before) { InsertContext::Symbols } else { InsertContext::Proof })
-}
-
-/// The palette's list entries for the prose being edited: the profile's, for the caret's line
-pub fn list_entries(t: &Theory, table: &dyn super::codec::Symbols) -> Vec<PaletteEntry> {
-    let Some(be) = t.block_editor.as_ref().filter(|be| be.wrap.is_some()) else { return Vec::new() };
-    let before: String = be.decoded.text.chars().take(be.caret()).collect();
-    t.profile.lists(before.rsplit('\n').next().unwrap_or(""), table)
-}
-
-/// Beside the block being edited, when there is no goal: what can be inserted at the caret, by
-/// context (symbols in maths or a term, templates in prose, Isar in a proof), searchable. The
-/// entries are grouped by where they come from (lists, the context's own entries, symbols
-/// matching the search), each group under a heading; a search with no match says so
-fn insert_palette<'a>(ws: &'a Workspace, t: &'a Theory, table: &dyn super::codec::Symbols, width: f32) -> Element<'a, Message> {
-    let sp = spacing();
-    let context = insert_context(t).unwrap_or(InsertContext::Prose);
-    let query = ws.palette_query.trim().to_lowercase();
-    // (vim's block cursor is a selection of the character under it, not text to wrap)
-    let block_cursor = vim_mode_now() == Some(super::vim::Mode::Normal);
-    let selected = !block_cursor && t.block_editor.as_ref().and_then(|be| be.content.selection()).is_some_and(|s| !s.trim().is_empty());
-    let mut col = widget::column::with_capacity(8).spacing(sp.space_xxs);
-    let (title, hint) = match context {
-        InsertContext::Symbols => ("Insert a symbol", "Or type \\ and its name, then Tab"),
-        InsertContext::Prose if selected => ("Insert in the text", "Wraps the selection"),
-        InsertContext::Prose => ("Insert in the text", "At the caret, ready to type into"),
-        InsertContext::Proof if selected => ("Insert in the proof", "Wraps the selection"),
-        InsertContext::Proof => ("Insert in the proof", "At the caret"),
-    };
-    col = col.push(widget::row::with_capacity(2).align_y(Alignment::Center).push(widget::text::heading(title).width(Length::Fill)).push(widget::text::caption(hint).class(muted())));
-    col = col.push(widget::container(widget::search_input("Search", &ws.palette_query).on_input(Message::PaletteQuery).on_clear(Message::PaletteQuery(String::new()))).padding([sp.space_xxxs, 0]));
-    // (each group: its heading, and its entries: a label, and what goes before and after the
-    // selection or the caret)
-    let mut groups: Vec<(&'static str, Vec<(String, String, String)>)> = Vec::new();
-    let symbol = |c: char, label: String| (label, c.to_string(), String::new());
-    let entry = |e: PaletteEntry| (e.label, e.before, e.after);
-    let matches = |e: &PaletteEntry| query.is_empty() || e.label.contains(&query);
-    match context {
-        InsertContext::Symbols if !query.is_empty() => {
-            groups.push(("Symbols", table.search(&query, 40).into_iter().map(|(c, sym, how)| symbol(c, format!("{c}  {}", if how.is_empty() { sym.clone() } else { format!("{sym} {how}") }))).collect()));
-        }
-        InsertContext::Symbols => groups.push(("Common symbols", t.profile.palette(context, &ws.caps).into_iter().map(entry).collect())),
-        InsertContext::Prose | InsertContext::Proof => {
-            // Lists: in one, its next item (and a nested one); elsewhere, a list to begin
-            if context == InsertContext::Prose {
-                groups.push(("Lists", list_entries(t, table).into_iter().filter(matches).map(entry).collect()));
-            }
-            groups.push((if context == InsertContext::Prose { "Markup and antiquotations" } else { "Steps and tools" }, t.profile.palette(context, &ws.caps).into_iter().filter(matches).map(entry).collect()));
-            if !query.is_empty() {
-                groups.push(("Symbols", table.search(&query, 12).into_iter().map(|(c, sym, _)| symbol(c, format!("{c}  {sym}"))).collect()));
-            }
-        }
-    }
-    groups.retain(|(_, items)| !items.is_empty());
-    if groups.is_empty() {
-        col = col.push(widget::container(widget::text::body(format!("Nothing matches “{}”.", ws.palette_query.trim()))).padding([sp.space_xxs, 0]));
-    }
-    for (heading, items) in groups {
-        col = col.push(widget::container(widget::text::caption_heading(heading).class(muted())).padding(Padding { top: sp.space_xxs as f32, ..Padding::ZERO }));
-        let buttons: Vec<Element<'a, Message>> = items
-            .into_iter()
-            .map(|(label, before, after)| widget::button::text(label).class(theme::Button::Standard).on_press(Message::Wrap(before, after)).into())
-            .collect();
-        col = col.push(widget::flex_row(buttons).row_spacing(sp.space_xxs).column_spacing(sp.space_xxs));
-    }
-    // (on the page, outlined: a panel of its own beside the text, not a part of it)
-    widget::container(col)
-        .padding(sp.space_s)
-        .width(Length::Fixed(width))
-        .class(theme::Container::custom(|theme| iced::widget::container::Style {
-            background: Some(page_color(theme).into()),
-            border: Border { radius: 8.0.into(), width: 1.0, color: Color { a: 0.14, ..Color::from(theme.cosmic().on_bg_color()) } },
-            ..Default::default()
-        }))
-        .into()
 }
 
 /// Between a block and the goal beside it
@@ -2457,7 +2401,14 @@ fn source<'a>(ws: &'a Workspace, t: &'a Theory, inline: Option<&'a Workspace>, t
             border: Border { radius: 6.0.into(), ..Default::default() },
             ..Default::default()
         })).into()),
-        None => (beside.map_or(0.0, |(w, _)| w), widget::Space::new().width(Length::Fixed(0.0)).height(Length::Fixed(0.0)).into()),
+        // No goal: in prose (a module doc, a text block), what can be inserted there, as the
+        // literate view has it; beside a proof, nothing while its state comes
+        None => match beside {
+            Some((w, _)) if super::insert::insert_context(t).is_some_and(|c| c != super::prover::InsertContext::Proof) && !t.blocks.iter().any(|b| b.kind == Kind::Formal && b.start <= t.cursor && t.cursor <= b.end) => {
+                (w, super::insert::insert_palette(ws, t, table, w))
+            }
+            _ => (beside.map_or(0.0, |(w, _)| w), widget::Space::new().width(Length::Fixed(0.0)).height(Length::Fixed(0.0)).into()),
+        },
     };
     // (the goal's column and the space before it only when the goal is beside: an empty column
     // would put the page off centre)
@@ -2467,12 +2418,13 @@ fn source<'a>(ws: &'a Workspace, t: &'a Theory, inline: Option<&'a Workspace>, t
     let proof = t.blocks.iter().find(|b| b.start <= t.cursor && t.cursor <= b.end && b.kind == Kind::Formal);
     let (pop, pop_at): (Element<'a, Message>, iced::Vector) = match proof {
         Some(b) => (
-            widget::button::icon(widget::icon::from_name("window-pop-out-symbolic"))
-                .tooltip("Pop out (the proof in a window of its own)")
-                .on_press(Message::PopOut)
-                .into(),
-            // (centred on the proof's first line: the button is taller than a line)
-            iced::Vector::new(source_width - z(40.0), row_top(t.lines.position(&t.decoded.text, t.decoded.to_decoded(b.start)).line) - (z(32.0) - source_line_height()) / 2.0),
+            pop_out_button(),
+            // (centred on the proof's first line, as far inside the editor's right edge as in a
+            // code cell of the literate view)
+            iced::Vector::new(
+                source_width - pop_out_inset() - pop_out_size(),
+                row_top(t.lines.position(&t.decoded.text, t.decoded.to_decoded(b.start)).line) + (source_line_height() - pop_out_size()) / 2.0,
+            ),
         ),
         None => (widget::Space::new().width(Length::Fixed(0.0)).height(Length::Fixed(0.0)).into(), iced::Vector::ZERO),
     };
@@ -2716,9 +2668,19 @@ pub fn waiting_note(ws: &Workspace) -> Option<String> {
     ))
 }
 
+/// The goal panel: the insert bar (symbols, steps or markup for the caret, above the first
+/// subgoal, where they are wanted while the goal is shown), then the proof state
+fn state_view<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Element<'a, Message> {
+    let state = state_body(ws, table);
+    match super::insert::insert_bar(ws, table) {
+        Some(bar) => widget::column::with_capacity(2).spacing(spacing().space_xs).push(bar).push(state).into(),
+        None => state,
+    }
+}
+
 /// The proof state: as parts (the chained facts, then each subgoal as fix, assume and show,
 /// with what the command changed), or as Isabelle prints it; then any other output
-fn state_view<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Element<'a, Message> {
+fn state_body<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Element<'a, Message> {
     let sp = spacing();
     // While Isabelle has yet to check what changed at the caret, output about another command
     // (the one that was there before the edit) is not shown as if it were this one's
