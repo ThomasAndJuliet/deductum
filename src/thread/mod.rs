@@ -3,16 +3,13 @@
 //! Agent threads: a conversation with Claude shown as rich text rather than
 //! in a terminal. See AGENTS-PLAN.md, "Threads".
 
-pub mod chart;
 pub mod claude;
 pub mod codex;
-pub mod diagram;
+pub use prose_render::{diagram, markdown, math, rich};
+
 pub mod images;
-pub mod markdown;
-pub mod math;
 pub mod model;
 pub mod protocol;
-pub mod rich;
 pub mod session;
 pub mod tab;
 pub mod view;

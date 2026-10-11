@@ -43,36 +43,12 @@ i18n-embed-fl = "0.10"
 icu = { version = "2.1.1", features = ["compiled_data"] }
 rust-embed = "8"
 url = "2.5"
-# Agent threads: assistant markdown, and its LaTeX set as KaTeX does
-pulldown-cmark = { version = "0.13", default-features = false }
-ratex-parser = "=0.1.14"
-ratex-layout = "=0.1.14"
-ratex-types = "=0.1.14"
-ratex-svg = { version = "=0.1.14", features = ["embed-fonts"] }
+# Markdown, LaTeX, Mermaid, charts and images, shared with other apps
+prose-render = { path = "prose/prose-render" }
 # Decoders for the images threads show; iced's own build has none
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "gif"] }
-# The size of an SVG image, which iced draws with resvg, and where a
-# diagram's text lies
-usvg = { version = "0.45", default-features = false, features = ["text"] }
 # Charts in threads, drawn natively; from the shared diagrams repository
 chartgen = { path = "../chartgen-src/crates/chartgen" }
-# Mermaid diagrams in threads, laid out and drawn as SVG in pure Rust, as
-# Zed does; without ELK (EPL-licensed) and math
-merman = { version = "0.8", default-features = false, features = [
-    "svg",
-    "layout-cytoscape",
-    "diagram-flowchart",
-    "diagram-sequence",
-    "diagram-class",
-    "diagram-state",
-    "diagram-er",
-    "diagram-architecture",
-    "diagram-c4",
-    "diagram-mindmap",
-    "diagram-timeline",
-    "diagram-gantt",
-    "diagram-pie",
-] }
 secret-service = { version = "5.1.0", features = [
     "rt-tokio-crypto-rust",
 ], optional = true }
@@ -133,7 +109,7 @@ debug = true
 # libcosmic/ and `git log -- libcosmic`
 # The sudo agent's protocol, and the PAM module that uses it; see AGENTS-PLAN.md
 [workspace]
-members = [".", "sudo/protocol", "sudo/pam"]
+members = [".", "sudo/protocol", "sudo/pam", "prose/prose-render"]
 exclude = ["libcosmic", "vendor"]
 
 [patch."https://github.com/pop-os/libcosmic.git"]

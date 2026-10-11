@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! Selectable rich text: a parsed markdown [`Doc`] laid out with cosmic-text,
-//! with LaTeX set by [`super::math`], charts laid out by [`super::chart`]
-//! and Mermaid diagrams drawn by [`super::diagram`].
+//! with LaTeX set by [`crate::math`], charts laid out by [`crate::chart`]
+//! and Mermaid diagrams drawn by [`crate::diagram`].
 //!
 //! Each block is shaped into cosmic-text buffers the widget owns and draws
 //! itself, as the terminal draws its grid, so that every glyph can be hit
@@ -36,8 +36,8 @@ use cosmic::iced::core::{image::Renderer as _, renderer::Renderer as _, svg::Ren
 use cosmic::iced::{Background, Border, Color, Element, Event, Length, Point, Rectangle, Size, Vector};
 use cosmic_text::{Align, Attrs, Buffer, Cursor, Family, Metrics, Shaping, Style as FontStyle, Weight, Wrap};
 
-use super::markdown::{Block, Doc, Run, Style, TextKind};
-use super::{chart, diagram, math};
+use crate::markdown::{Block, Doc, Run, Style, TextKind};
+use crate::{chart, diagram, math};
 
 /// A place in a [`Doc`]: a block, and a byte offset into its linear text
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -545,7 +545,7 @@ fn image_size(path: &Path) -> Option<(u32, u32)> {
     if let Some(size) = sizes.get(path) {
         return *size;
     }
-    let size = super::images::dimensions(path);
+    let size = crate::images::dimensions(path);
     if sizes.len() > 4096 {
         sizes.clear();
     }
@@ -555,7 +555,7 @@ fn image_size(path: &Path) -> Option<(u32, u32)> {
 
 /// What the view shows for an image: its thumbnail, if it has one
 pub fn thumbnail_of(path: &Path) -> PathBuf {
-    let thumb = super::images::thumbnail_path(path);
+    let thumb = crate::images::thumbnail_path(path);
     if thumb.is_file() { thumb } else { path.to_path_buf() }
 }
 
@@ -1687,7 +1687,7 @@ impl<'a, Message> Widget<Message, cosmic::Theme, Renderer> for RichText<'a, Mess
                     }
                 }
                 Laid::Image(path, rect) => {
-                    if super::images::is_svg(path) {
+                    if crate::images::is_svg(path) {
                         let handle = adv_svg::Handle::from_path(path);
                         renderer.draw_svg(adv_svg::Svg::new(handle), *rect + at, visible);
                     } else {
@@ -1760,7 +1760,7 @@ impl<'a, Message: 'a> From<RichText<'a, Message>> for Element<'a, Message, cosmi
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::thread::markdown::parse;
+    use crate::markdown::parse;
 
     #[test]
     fn copies_formulas_as_latex_and_tables_with_tabs() {
