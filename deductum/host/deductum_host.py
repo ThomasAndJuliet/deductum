@@ -592,6 +592,10 @@ class Session:
                                                     "prover": doc.prover})
 
     def backend_open(self, doc: Doc) -> None:
+        # A project file (ROOT, a lakefile) is edited in the host's buffer but is no document of
+        # the prover's
+        if not doc.path.endswith(tuple(self.driver_class.documents)):
+            return
         if self.driver and self.driver.ready:
             with contextlib.suppress(HostError):
                 doc._prover_text = prover_text(doc.text, self.driver_class.placeholder)  # type: ignore[attr-defined]
@@ -807,7 +811,7 @@ class Session:
         nl = doc.text.find("\n", line_start)
         nl = len(doc.text) if nl < 0 else nl
         m = self.KEYWORD_LINE.match(doc.text[line_start:nl])
-        if not m:
+        if not m or getattr(client, "settings", {}).get("keywords") is False:
             return False
         start = line_start + len(m.group(1))
         # (asked once: a pause again on the same line does not ask again; a line changed since,
@@ -828,8 +832,10 @@ class Session:
         # `@name` asks the listening agent of that name
         kind = m.group(2)
         route = ("name:" + kind[1:]) if kind.startswith("@") else None
+        # (a line naming no model asks the one the human's settings name for that LLM, if any)
+        model = m.group(3) or (getattr(client, "settings", {}).get("models") or {}).get(kind) or None
         r = self.fill_hole(client, doc.path, start, doc.revision, "agent" if route else kind, hint,
-                           hole=[start, nl, kind], model=m.group(3) or None, route=route)
+                           hole=[start, nl, kind], model=model, route=route)
         self.keyword_holes[r["job"]] = {"path": doc.path, "start": start, "end": nl, "client": client, "line": line}
         return True
 
@@ -2137,6 +2143,9 @@ class Client:
         self.positions: Dict[str, Dict[str, Any]] = {}
         # Where the human is, by session, as the app last said (design: collaboration)
         self.views: Dict[str, Dict[str, Any]] = {}
+        # What the app's settings ask of keyword lines and searches (`client_settings`): whether
+        # its keyword lines ask at all, the models to ask when a line names none, Loogle
+        self.settings: Dict[str, Any] = {}
         self.closed = False
 
     def author(self) -> Dict[str, Any]:
@@ -2501,6 +2510,11 @@ class Host:
                     "backends": await asyncio.to_thread(self.backends_info)}
         if op == "ping":
             return {"pong": True}
+        if op == "client_settings":
+            # The app's settings that the host acts on for it (keyword lines, models, Loogle)
+            known = ("keywords", "models", "loogle")
+            client.settings.update({k: p[k] for k in known if k in p})
+            return {"settings": client.settings}
         # A client on another machine names files as that machine does; here they are reached
         # through COSMIC Terminal's sshfs mount of it
         for key in ("path", "folder"):

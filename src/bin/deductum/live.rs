@@ -56,6 +56,7 @@ fn app(target: link::Target) -> App {
         vim_enabled: false,
         mode_model: cosmic::widget::segmented_button::SingleSelectModel::default(),
         mode_entities: [cosmic::widget::segmented_button::Entity::default(); 2],
+        shell: Default::default(),
     }
 }
 
