@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Deductum session host.
 
-One host per user per machine owns Deductum's shared Isabelle sessions there
+One host per user per machine owns Deductum's shared proof sessions there
 (design C2/C3/C11 in .local-design/isabelle-app.md, docs/deductum-decisions.md):
-the authoritative unsaved text of each theory, its author-attributed edit log,
+the authoritative unsaved text of each document, its author-attributed edit log,
 undo and revert (C5/C7), editing grants (C6/C9), conflict notices for agents (C7),
-autosave and external changes (C13), independent agent sessions (C8), and the
-prover process for each session (``isabelle deductum_backend``, C12).
+autosave and external changes (C13), independent agent sessions (C8), and a prover
+driver for each session (docs/deductum-provers.md §4; ``drivers/``: Isabelle's
+``isabelle deductum_backend`` is C12, Lean's ``lake serve`` the other).
 
 Clients (the Deductum app, agents' MCP adapters, the command line) talk JSON lines
 over a Unix socket. Remote clients reach it through ``ssh MACHINE python3
@@ -41,8 +42,12 @@ from typing import Any, Dict, List, Optional, Tuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import deductum_ot as ot  # noqa: E402
+import drivers  # noqa: E402
+import prompts  # noqa: E402
+from drivers import HostError, log, read_json  # noqa: E402
+from drivers.isabelle import IsabelleDriver, find_runtimes, known_sessions, suggest_logic  # noqa: E402,F401
 
-PROTOCOL = 1
+PROTOCOL = 2
 VERSION = "0.1.0"
 HOME = Path.home()
 STATE_DIR = Path(os.environ.get("DEDUCTUM_STATE_DIR")
@@ -51,16 +56,13 @@ SOCKET_PATH = STATE_DIR / "host.sock"
 LOCK_PATH = STATE_DIR / "host.lock"
 LOG_PATH = STATE_DIR / "host.log"
 SHARE_DIR = Path(__file__).resolve().parent.parent
-CONFIG_PATH = Path(os.environ.get("XDG_CONFIG_HOME") or HOME / ".config") / "deductum" / "host.json"
+CONFIG_PATH = drivers.config_path()
+ISABELLUM_STATE_DIR = Path(os.environ.get("XDG_STATE_HOME") or HOME / ".local/state") / "isabellum"
 
 AUTOSAVE_DELAY = 2.0
 WATCH_INTERVAL = 1.0
 MEMORY_ENTRIES = 5000
 LIFECYCLES = ("Starting", "Running", "Paused", "Stopping", "Stopped", "Failed")
-
-
-def log(*args: Any) -> None:
-    print(time.strftime("%H:%M:%S"), *args, file=sys.stderr, flush=True)
 
 
 def now() -> float:
@@ -75,14 +77,6 @@ def write_json_atomic(path: Path, data: Any) -> None:
     os.replace(tmp, path)
 
 
-def read_json(path: Path, default: Any = None) -> Any:
-    try:
-        with open(path, encoding="utf-8") as f:
-            return json.load(f)
-    except (OSError, ValueError):
-        return default
-
-
 def file_key(path: str) -> str:
     return hashlib.sha1(path.encode()).hexdigest()[:16]
 
@@ -93,13 +87,6 @@ def stat_sig(path: str) -> Optional[Tuple[int, int]]:
         return (st.st_mtime_ns, st.st_size)
     except OSError:
         return None
-
-
-class HostError(Exception):
-    def __init__(self, message: str, code: str = "error", **data: Any):
-        super().__init__(message)
-        self.code = code
-        self.data = data
 
 
 # ---------------------------------------------------------------------------
@@ -148,142 +135,12 @@ def write_file_atomic(path: str, data: bytes) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Isabelle runtimes and session ROOTs (design C12)
+# Documents of a folder, by backend
 
 
-def runtime_identifier(isabelle: Path) -> Optional[str]:
-    home = isabelle.resolve().parent.parent
-    try:
-        return (home / "etc" / "ISABELLE_IDENTIFIER").read_text().strip() or None
-    except OSError:
-        return None
-
-
-def find_runtimes() -> List[Dict[str, Any]]:
-    candidates: List[Path] = []
-    config = read_json(CONFIG_PATH, {}) or {}
-    for p in config.get("runtimes", []):
-        candidates.append(Path(os.path.expanduser(p)))
-    if os.environ.get("DEDUCTUM_ISABELLE"):
-        candidates.append(Path(os.environ["DEDUCTUM_ISABELLE"]))
-    for pattern in ("Documents/Software/Isabelle*/bin/isabelle", "Software/Isabelle*/bin/isabelle",
-                    "Isabelle*/bin/isabelle", "opt/Isabelle*/bin/isabelle"):
-        candidates.extend(sorted(HOME.glob(pattern)))
-    for root in ("/opt", "/usr/local"):
-        candidates.extend(sorted(Path(root).glob("Isabelle*/bin/isabelle")))
-    which = shutil.which("isabelle")
-    if which:
-        candidates.append(Path(which))
-    seen = set()
-    out = []
-    for c in candidates:
-        try:
-            real = c.resolve()
-        except OSError:
-            continue
-        if real in seen or not real.is_file():
-            continue
-        seen.add(real)
-        ident = runtime_identifier(real)
-        out.append({
-            "path": str(real),
-            "identifier": ident,
-            "home": str(real.parent.parent),
-            "supported": bool(ident) and (SHARE_DIR / "backend" / ident).is_dir(),
-        })
-    out.sort(key=lambda r: (not r["supported"], r["path"]))
-    return out
-
-
-SESSION_RE = re.compile(
-    r'session\s+("[^"]+"|[\w\-.+]+)\s*(?:\([^)]*\))?\s*(?:in\s+("[^"]+"|[^\s=]+))?\s*='
-    r'\s*("[^"]+"|[\w\-.+]+)?', re.S)
-
-
-def parse_root(path: Path) -> List[Dict[str, str]]:
-    try:
-        text = path.read_text(errors="replace")
-    except OSError:
-        return []
-    text = re.sub(r"\(\*.*?\*\)", " ", text, flags=re.S)
-    out = []
-    for m in SESSION_RE.finditer(text):
-        name = m.group(1).strip('"')
-        sub = (m.group(2) or ".").strip('"')
-        parent = (m.group(3) or "").strip('"')
-        out.append({"name": name, "dir": str((path.parent / sub).resolve()), "parent": parent,
-                    "root": str(path)})
-    return out
-
-
-_known_sessions: Dict[str, List[str]] = {}
-
-
-def known_sessions(runtime: Optional[str]) -> List[str]:
-    """The sessions the runtime knows without extra directories (`isabelle sessions -a`)"""
-    if not runtime:
-        return []
-    if runtime not in _known_sessions:
-        try:
-            r = subprocess.run([runtime, "sessions", "-a"], capture_output=True, text=True, timeout=300)
-            _known_sessions[runtime] = [ln.strip() for ln in r.stdout.splitlines() if ln.strip()]
-        except (OSError, subprocess.TimeoutExpired):
-            _known_sessions[runtime] = []
-    return _known_sessions[runtime]
-
-
-def suggest_logic(folder: str, runtime: Optional[str] = None) -> Dict[str, Any]:
-    """The base logic and session directories for a theory folder.
-
-    Normally the parent of the session whose directory contains the folder (its
-    own heap would hold its theories as finished), with that session's ROOT
-    directory included. When the runtime already defines a session of that name
-    (an installed copy, as CyPhyAssure installs UTP2), adding the directory again
-    would clash: the folder's theories then open as drafts on the parent logic."""
-    known = known_sessions(runtime)
-
-    def resolve(name: str) -> Optional[str]:
-        if not known or name in known:
-            return name
-        for alt in (name.replace("-", "_"), name.replace("_", "-")):
-            if alt in known:
-                return alt
-        return None
-
-    f = Path(folder).resolve()
-    for d in [f] + list(f.parents):
-        root = d / "ROOT"
-        if root.is_file():
-            sessions = parse_root(root)
-            best = None
-            for s in sessions:
-                sd = Path(s["dir"])
-                if f == sd or sd in f.parents or (best is None and sd == d):
-                    if best is None or len(s["dir"]) > len(best["dir"]):
-                        best = s
-            if best is None and sessions:
-                best = sessions[0]
-            if best:
-                parent = resolve(best["parent"] or "HOL") or "HOL"
-                if known and best["name"] in known:
-                    return {"logic": parent, "dirs": [], "include_sessions": [], "session": best["name"],
-                            "sessions": sessions,
-                            "note": f"Session {best['name']} is also installed in this Isabelle, so this "
-                                    f"folder's theories open as drafts on {parent}."}
-                note = None
-                if best["parent"] and parent != best["parent"]:
-                    note = f"The parent session {best['parent']} is installed as {parent}."
-                if best["parent"] and resolve(best["parent"]) is None:
-                    note = (f"The parent session {best['parent']} is not installed; HOL is used instead. "
-                            "Set the base logic if it should be built.")
-                return {"logic": parent, "dirs": [str(d)], "include_sessions": [best["name"]],
-                        "session": best["name"], "sessions": sessions, "note": note}
-        if d == HOME or d == d.parent:
-            break
-    return {"logic": "HOL", "dirs": [], "include_sessions": [], "session": None, "sessions": [], "note": None}
-
-
-def list_theories(folder: str, limit: int = 3000) -> List[str]:
+def list_documents(folder: str, limit: int = 3000, classes: Optional[List[type]] = None) -> List[str]:
+    """The documents and project files of the backends (default: every registered one) under a folder"""
+    classes = classes if classes is not None else list(drivers.registry().values())
     out: List[str] = []
     base = Path(folder)
     for dirpath, dirnames, filenames in os.walk(base):
@@ -293,89 +150,14 @@ def list_theories(folder: str, limit: int = 3000) -> List[str]:
         if depth > 6:
             dirnames[:] = []
         for name in sorted(filenames):
-            if name.endswith(".thy") or name == "ROOT":
+            if any(c.is_document(name) for c in classes):
                 out.append(os.path.join(dirpath, name))
                 if len(out) >= limit:
                     return out
     return out
 
 
-_component_ready: Dict[str, str] = {}  # runtime -> its ISABELLE_HOME_USER, once registered
-_symbol_tables: Dict[str, List[Dict[str, Any]]] = {}
-
-
-def symbol_table(runtime: str) -> List[Dict[str, Any]]:
-    """The runtime's Isabelle symbols, from the files ISABELLE_SYMBOLS lists"""
-    if runtime in _symbol_tables:
-        return _symbol_tables[runtime]
-    r = subprocess.run([runtime, "getenv", "-b", "ISABELLE_SYMBOLS"], capture_output=True, text=True,
-                       timeout=120)
-    entries: Dict[str, Dict[str, Any]] = {}
-    for path in r.stdout.strip().split(":"):
-        try:
-            text = Path(path).read_text(errors="replace")
-        except OSError:
-            continue
-        for line in text.splitlines():
-            line = line.split("#", 1)[0].strip() if not line.lstrip().startswith("\\<") else line.strip()
-            if not line.startswith("\\<"):
-                continue
-            parts = line.split()
-            sym = parts[0]
-            e = entries.setdefault(sym, {"symbol": sym, "code": 0, "abbrevs": [], "groups": []})
-            i = 1
-            while i + 1 < len(parts):
-                key, val = parts[i].rstrip(":"), parts[i + 1]
-                if key == "code":
-                    try:
-                        e["code"] = int(val, 16) if val.startswith("0x") else int(val)
-                    except ValueError:
-                        pass
-                elif key == "abbrev":
-                    e["abbrevs"].append(val)
-                elif key == "group":
-                    e["groups"].append(val)
-                i += 2
-    _symbol_tables[runtime] = list(entries.values())
-    return _symbol_tables[runtime]
-
-
-def ensure_component(runtime: str, progress) -> None:
-    """Register the backend component with the runtime and build its jar"""
-    ident = runtime_identifier(Path(runtime))
-    comp = SHARE_DIR / "backend" / (ident or "")
-    if not ident or not comp.is_dir():
-        raise HostError(f"No Deductum backend for {ident or runtime}", "unsupported_runtime")
-    env = dict(os.environ)
-    home_user = _component_ready.get(runtime) or subprocess.run(
-        [runtime, "getenv", "-b", "ISABELLE_HOME_USER"], capture_output=True, text=True, timeout=120,
-        env=env).stdout.strip()
-    registry = Path(home_user) / "etc" / "components"
-    lines = []
-    with contextlib.suppress(OSError):
-        lines = [ln.strip() for ln in registry.read_text().splitlines()]
-    # (ready before, and still registered: another host, a test, may have registered its own since)
-    if _component_ready.get(runtime) and str(comp) in lines:
-        return
-    # Other copies of the backend (an old install, a test) would provide the same tool
-    for stale in [ln for ln in lines if ln != str(comp) and re.search(r"deductum[^/]*/backend/[^/]+/?$", ln)]:
-        progress(f"Unregistering a stale Deductum backend: {stale}")
-        subprocess.run([runtime, "components", "-x", stale], capture_output=True, text=True, timeout=300, env=env)
-    if str(comp) not in lines:
-        progress(f"Registering the Deductum backend with {ident}")
-        r = subprocess.run([runtime, "components", "-u", str(comp)], capture_output=True,
-                           text=True, timeout=300, env=env)
-        if r.returncode != 0:
-            raise HostError("Could not register backend: " + r.stderr.strip())
-    jar = comp / "lib" / "deductum_backend.jar"
-    sources = list((comp / "src").glob("*.scala")) + [comp / "etc" / "build.props"]
-    if not jar.is_file() or any(s.stat().st_mtime > jar.stat().st_mtime for s in sources):
-        progress("Building the Deductum backend")
-        r = subprocess.run([runtime, "scala_build"], capture_output=True, text=True, timeout=1800,
-                           env=env)
-        if r.returncode != 0 or not jar.is_file():
-            raise HostError("Backend build failed: " + (r.stdout + r.stderr)[-2000:])
-    _component_ready[runtime] = home_user
+list_theories = list_documents  # (the older name)
 
 
 # ---------------------------------------------------------------------------
@@ -507,109 +289,6 @@ class Doc:
 
 
 # ---------------------------------------------------------------------------
-# Backend process (design C12)
-
-
-class Backend:
-    def __init__(self, session: "Session"):
-        self.session = session
-        self.proc: Optional[asyncio.subprocess.Process] = None
-        self.next_id = 1
-        self.pending: Dict[int, asyncio.Future] = {}
-        self.ready = False
-        self.reader_task: Optional[asyncio.Task] = None
-        self.stderr_task: Optional[asyncio.Task] = None
-
-    async def start(self) -> None:
-        s = self.session
-        cmd = [s.meta["runtime"], "deductum_backend", "-l", s.meta["logic"]]
-        for d in s.meta.get("dirs", []):
-            cmd += ["-d", d]
-        for name in s.meta.get("include_sessions", []):
-            cmd += ["-i", name]
-        for opt in s.meta.get("options", []):
-            cmd += ["-o", opt]
-        log("starting backend", s.id, " ".join(cmd))
-        self.proc = await asyncio.create_subprocess_exec(
-            *cmd, stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE, start_new_session=True, limit=64 * 1024 * 1024)
-        self.reader_task = asyncio.create_task(self.read_loop())
-        self.stderr_task = asyncio.create_task(self.stderr_loop())
-
-    async def read_loop(self) -> None:
-        assert self.proc and self.proc.stdout
-        try:
-            while True:
-                line = await self.proc.stdout.readline()
-                if not line:
-                    break
-                try:
-                    msg = json.loads(line)
-                except ValueError:
-                    continue
-                if "reply" in msg:
-                    fut = self.pending.pop(msg["reply"], None)
-                    if fut and not fut.done():
-                        fut.set_result(msg)
-                else:
-                    try:
-                        self.session.on_backend_event(msg)
-                    except Exception as exn:  # keep reading whatever an event does
-                        log("backend event error", repr(exn))
-        finally:
-            code = await self.proc.wait()
-            for fut in self.pending.values():
-                if not fut.done():
-                    fut.set_exception(HostError("Prover stopped", "stopped"))
-            self.pending.clear()
-            self.session.on_backend_exit(self, code)
-
-    async def stderr_loop(self) -> None:
-        assert self.proc and self.proc.stderr
-        tail: List[str] = []
-        while True:
-            line = await self.proc.stderr.readline()
-            if not line:
-                break
-            text = line.decode(errors="replace").rstrip()
-            tail = (tail + [text])[-40:]
-            self.session.stderr_tail = tail
-
-    def send(self, obj: Dict[str, Any]) -> None:
-        if not self.proc or not self.proc.stdin or self.proc.returncode is not None:
-            raise HostError("Prover is not running", "stopped")
-        self.proc.stdin.write((json.dumps(obj, ensure_ascii=False) + "\n").encode())
-
-    async def request(self, obj: Dict[str, Any], timeout: float = 120.0) -> Dict[str, Any]:
-        rid = self.next_id
-        self.next_id += 1
-        fut = asyncio.get_running_loop().create_future()
-        self.pending[rid] = fut
-        self.send(dict(obj, id=rid))
-        try:
-            return await asyncio.wait_for(fut, timeout)
-        finally:
-            self.pending.pop(rid, None)
-
-    async def stop(self) -> None:
-        if not self.proc or self.proc.returncode is not None:
-            return
-        with contextlib.suppress(Exception):
-            assert self.proc.stdin
-            self.proc.stdin.close()
-        try:
-            await asyncio.wait_for(self.proc.wait(), 20)
-        except asyncio.TimeoutError:
-            with contextlib.suppress(ProcessLookupError):
-                os.killpg(self.proc.pid, signal.SIGTERM)
-            try:
-                await asyncio.wait_for(self.proc.wait(), 10)
-            except asyncio.TimeoutError:
-                with contextlib.suppress(ProcessLookupError):
-                    os.killpg(self.proc.pid, signal.SIGKILL)
-
-
-# ---------------------------------------------------------------------------
 # Helpers for authors, paths and line diffs
 
 
@@ -621,16 +300,53 @@ KEYWORD_PATTERN = r"^((?:[^\"\n]*?[ \t])?)(claude|codex|@[A-Za-z][\w.\-]*)(?:\[(
 KEYWORD_LINES = re.compile(KEYWORD_PATTERN, re.M)
 
 
-def prover_text(text: str) -> str:
+def prover_text(text: str, placeholder: str = "sorry") -> str:
     """The text as the prover sees it: a line asking `claude` or `codex` for a proof reads as
-    `sorry`, padded to the same length (so offsets are the same), and the goal there is the
-    goal it asks about, as with `sledgehammer`; the human's text keeps the keyword"""
+    the backend's placeholder (`sorry`), padded to the same length (so offsets are the same), and
+    the goal there is the goal it asks about, as with `sledgehammer`; the human's text keeps the keyword"""
     if "claude" not in text and "codex" not in text and "@" not in text:
         return text
+    n = len(placeholder)
     def hole(m: "re.Match[str]") -> str:
         rest = m.group(0)[len(m.group(1)):]
-        return m.group(1) + "sorry" + " " * (len(rest) - 5)
+        return m.group(1) + placeholder + " " * (len(rest) - n)
     return KEYWORD_LINES.sub(hole, text)
+
+
+def backends_info(only: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Each registered backend with its documents and installed toolchains (`hello`, `toolchains`)"""
+    out = []
+    for name, cls in drivers.registry().items():
+        if only and name != only:
+            continue
+        try:
+            toolchains = cls.toolchains()
+        except Exception as exn:
+            log("toolchains failed", name, repr(exn))
+            toolchains = []
+        out.append({"backend": name, "label": cls.label, "documents": list(cls.documents),
+                    "project_files": list(cls.project_files), "toolchains": toolchains})
+    return out
+
+
+def link_fork_dirs(top: str, worktree: Path, folder: str, rels: Tuple[str, ...]) -> None:
+    """In a fork's worktree, link the read-only dependency directories the parent has but a
+    checkout lacks (Lean's `.lake/packages`: otherwise every fork would fetch them again, design
+    §6.6), looking from the session's folder up to the repository"""
+    d = Path(folder).resolve()
+    for base in [d] + list(d.parents):
+        for rel in rels:
+            src = base / rel
+            if not src.is_dir():
+                continue
+            dst = worktree / os.path.relpath(src, os.path.realpath(top))
+            if dst.exists() or dst.is_symlink():
+                continue
+            with contextlib.suppress(OSError):
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                os.symlink(src, dst)
+        if str(base) == os.path.realpath(top) or base == base.parent:
+            break
 
 
 def path_inside(path: str, folder: str) -> bool:
@@ -676,6 +392,24 @@ def git(*args: str, cwd: Optional[str] = None) -> str:
 # Sessions
 
 
+def driver_class_for(meta: Dict[str, Any]) -> type:
+    """The driver class of a session record (a record without `backend` is an Isabelle one). A
+    backend this machine lacks gets a stand-in that fails to start, so the session still shows"""
+    name = meta.get("backend") or "isabelle"
+    cls = drivers.registry().get(name)
+    if cls is not None:
+        return cls
+
+    class Missing(drivers.Driver):
+        backend = name
+        label = name
+
+        async def start(self) -> None:
+            raise HostError(f"This machine has no {name} driver", "no_driver")
+
+    return Missing
+
+
 class Session:
     def __init__(self, host: "Host", sid: str, meta: Dict[str, Any]):
         self.host = host
@@ -683,7 +417,9 @@ class Session:
         self.meta = meta
         self.dir = STATE_DIR / "sessions" / sid
         self.docs: Dict[str, Doc] = {}
-        self.backend: Optional[Backend] = None
+        # The backend's driver class always; its instance (the prover) only while one is started
+        self.driver_class = driver_class_for(meta)
+        self.driver: Optional[drivers.Driver] = None
         self.stderr_tail: List[str] = []
         self.theory_status: Dict[str, Any] = {}
         self.queries: Dict[str, Dict[str, Any]] = {}
@@ -710,6 +446,8 @@ class Session:
         self.listen_event = asyncio.Event()
         self.cpu_sample: Optional[Tuple[float, float]] = None
         self.last_activity: Optional[Dict[str, Any]] = None
+        meta.setdefault("backend", self.driver_class.backend)
+        self.driver_class.migrate_meta(meta)
         meta.setdefault("grants", [])
         meta.setdefault("requests", [])
         meta.setdefault("notices", {})
@@ -771,9 +509,14 @@ class Session:
         failed = sum(1 for st in self.theory_status.values() if st and st.get("failed"))
         return {
             "id": self.id, "name": self.meta.get("name") or Path(self.meta["folder"]).name,
-            "folder": self.meta["folder"], "logic": self.meta["logic"],
-            "runtime": self.meta["runtime"], "identifier": self.meta.get("identifier"),
+            "folder": self.meta["folder"], "logic": self.meta.get("logic", ""),
+            "runtime": self.meta.get("runtime", self.meta.get("toolchain", "")),
+            "identifier": self.meta.get("identifier"),
             "dirs": self.meta.get("dirs", []), "include_sessions": self.meta.get("include_sessions", []),
+            "backend": self.meta["backend"], "project": self.meta["project"],
+            "toolchain": {"id": self.meta["toolchain"],
+                          "label": self.driver_class.toolchain_label(self.meta["toolchain"], self.meta)},
+            "capabilities": self.capabilities(), "documents": list(self.driver_class.documents),
             "lifecycle": self.lifecycle, "message": self.meta.get("message"),
             "epoch": self.meta.get("epoch", 0), "owner": self.meta.get("owner"),
             "parent": {k: v for k, v in (self.meta.get("parent") or {}).items() if k != "base"} or None,
@@ -787,6 +530,14 @@ class Session:
             "prover_options": self.meta.get("prover_options", {}),
             "machine": socket.gethostname(),
         }
+
+    def capabilities(self) -> Dict[str, Any]:
+        """What this session's prover can do; asked of a stand-in when none is started"""
+        try:
+            return (self.driver or self.driver_class(self)).capabilities()
+        except Exception as exn:
+            log("capabilities failed", self.id, repr(exn))
+            return {}
 
     # ----- documents
 
@@ -803,16 +554,48 @@ class Session:
         if not doc.opened:
             doc.opened = True
             self.persist(doc)
-        if self.backend and self.backend.ready:
+        if self.driver and self.driver.ready:
             if not getattr(doc, "_sent_open", False):
                 self.backend_open(doc)
         return doc
 
+    def note_agent_query(self, path: str) -> None:
+        """An agent asked about a document: with the "viewed" open policy it stays open in the
+        prover for a while"""
+        doc = self.docs.get(os.path.realpath(os.path.expanduser(path)))
+        if doc is not None:
+            doc.agent_query = now()  # type: ignore[attr-defined]
+
+    def wanted_in_prover(self, doc: Doc) -> bool:
+        """Whether the prover should have the document open: always with the "all" policy; with
+        "viewed" only while a client subscribes or an agent queried it lately"""
+        if self.driver_class.open_policy != "viewed":
+            return True
+        if any((self.id, doc.path) in c.open_docs for c in self.host.clients):
+            return True
+        return now() - getattr(doc, "agent_query", 0.0) < self.driver_class.VIEWED_SECONDS
+
+    def close_unviewed(self) -> None:
+        """Close in the prover the documents nobody views (the host keeps buffer and log)"""
+        if self.driver_class.open_policy != "viewed" or not (self.driver and self.driver.ready):
+            return
+        for doc in self.docs.values():
+            if getattr(doc, "_sent_open", False) and not self.wanted_in_prover(doc):
+                with contextlib.suppress(HostError):
+                    self.driver.send({"op": "close", "file": doc.path})
+                doc._sent_open = False  # type: ignore[attr-defined]
+                doc.prover = {}
+                self.theory_status.pop(doc.path, None)
+                for key in [k for k in self.running_since if k[0] == doc.path]:
+                    del self.running_since[key]
+                self.host.broadcast_doc(self, doc, {"event": "doc_prover", "session": self.id, "path": doc.path,
+                                                    "prover": doc.prover})
+
     def backend_open(self, doc: Doc) -> None:
-        if self.backend and self.backend.ready:
+        if self.driver and self.driver.ready:
             with contextlib.suppress(HostError):
-                doc._prover_text = prover_text(doc.text)  # type: ignore[attr-defined]
-                self.backend.send({"op": "open", "file": doc.path, "text": doc._prover_text,  # type: ignore[attr-defined]
+                doc._prover_text = prover_text(doc.text, self.driver_class.placeholder)  # type: ignore[attr-defined]
+                self.driver.send({"op": "open", "file": doc.path, "text": doc._prover_text,  # type: ignore[attr-defined]
                                    "rev": doc.revision})
                 doc._sent_open = True  # type: ignore[attr-defined]
 
@@ -852,16 +635,17 @@ class Session:
         self.update_trackers(doc, entry, old)
         if author["kind"] == "agent":
             self.track_agent_change(doc, entry)
-        if self.backend and self.backend.ready and getattr(doc, "_sent_open", False):
+        if self.driver and self.driver.ready and getattr(doc, "_sent_open", False):
             # (as the prover sees the text: where a keyword line is, what changes there differs)
+            hole = self.driver_class.placeholder
             seen = getattr(doc, "_prover_text", None)
             if seen is None:
-                seen = prover_text(old)
-            shown = prover_text(new)
+                seen = prover_text(old, hole)
+            shown = prover_text(new, hole)
             sent = change if seen == old and shown == new else ot.diff(seen, shown)
             doc._prover_text = shown  # type: ignore[attr-defined]
             with contextlib.suppress(HostError):
-                self.backend.send({
+                self.driver.send({
                     "op": "edit", "file": doc.path, "rev": doc.revision,
                     "edits": [{"start": s, "end": e, "text": t} for s, e, t in ot.sequential(sent)],
                 })
@@ -971,12 +755,12 @@ class Session:
                             "(isabelle_resolve_conflict)", "disk_conflict")
         txn = txn or uuid.uuid4().hex[:12]
         # Deleting a proof tool typed in the text (sledgehammer, nitpick, …) stops it
-        tools_hit = any(c[2] in TOOLS and any(s0 < c[1] and c[0] < e0 for s0, e0, _ in rebased)
+        tools_hit = any(c[2] in self.driver_class.tool_names and any(s0 < c[1] and c[0] < e0 for s0, e0, _ in rebased)
                         for c in (doc.prover.get("commands") or []))
         entry = self.commit(doc, author, "edit", rebased, txn=txn, request=request, client=client)
-        if tools_hit and self.backend and self.backend.ready:
+        if tools_hit and self.driver and self.driver.ready:
             with contextlib.suppress(HostError):
-                self.backend.send({"op": "cancel_tools"})
+                self.driver.send({"op": "cancel_tools"})
         if author["kind"] == "human":
             if not doc.undo_stack or doc.undo_stack[-1] != txn:
                 doc.undo_stack.append(txn)
@@ -996,7 +780,7 @@ class Session:
         """A line reading `claude` or `codex`, perhaps with a hint after it, that the human ends
         with Enter asks that LLM to fill it, like typing `sledgehammer`: the line becomes `sorry`
         (in the same undo step), and the LLM's checked proofs for it come as fill events"""
-        if self.lifecycle != "Running" or not (self.backend and self.backend.ready):
+        if self.lifecycle != "Running" or not (self.driver and self.driver.ready):
             return
         shift = 0
         for s0, e0, t in entry["change"]:
@@ -1245,7 +1029,7 @@ class Session:
 
         def is_theory_level(name: str) -> bool:
             k = kinds.get(name, "")
-            return k.startswith("thy_") or k.startswith("document_") or name in ("end", "theory")
+            return k.startswith("thy_") or k.startswith("document_") or name in self.driver_class.theory_end_commands
 
         start_i = idx
         while start_i > 0 and not is_goal(commands[start_i][2]):
@@ -1349,11 +1133,10 @@ class Session:
                     start, end = self.proof_range(doc, at)
                     v["proof"] = {"line": ot.lines_cols(doc.text, start)[0], "text": doc.text[start:end][:4000]}
                     # The lemma: its name and statement, for "prove this lemma"
-                    m = re.match(r"\s*(lemma|theorem|corollary|proposition|schematic_goal)\b\s*(?:([^\s:\"\[]+)(?:\s*\[[^\]]*\])?\s*:)?",
-                                 doc.text[start:end])
+                    m = self.driver_class.statement_regex.match(doc.text[start:end])
                     if m:
                         statement = doc.text[start:end]
-                        first = re.search(r"\n\s*(proof|by|apply|using|unfolding|sorry|oops|including|supply)\b", statement)
+                        first = self.driver_class.proof_start_regex.search(statement)
                         v["lemma"] = {"kind": m.group(1), "name": m.group(2), "line": v["proof"]["line"],
                                       "statement": (statement[:first.start()] if first else statement)[:2000]}
                     break
@@ -1597,7 +1380,8 @@ class Session:
         # passed to the prover (it reads them from disk)
         t = now()
         if t - self.watch_listed > 5:
-            listed = [p for p in list_theories(self.meta["folder"], 1500) if p.endswith(".thy")]
+            listed = [p for p in list_documents(self.meta["folder"], 1500, [self.driver_class])
+                      if p.endswith(self.driver_class.documents)]
             self.watch_listed = t
             if self.watch_listed_once and set(listed) != set(self.watch_list):
                 for c in self.attached_clients():
@@ -1606,8 +1390,9 @@ class Session:
             self.watch_list = listed
             for p in self.watch_list:
                 self.watch_sigs.setdefault(p, stat_sig(p))
-        if not (self.backend and self.backend.ready):
+        if not (self.driver and self.driver.ready):
             return
+        self.close_unviewed()
         changed = []
         for p in self.watch_list:
             if p in self.docs:
@@ -1619,11 +1404,13 @@ class Session:
         if changed:
             self.backend_disk_changed(changed)
 
-    def prover_stats(self) -> Optional[Dict[str, Any]]:
-        """CPU and memory of the prover's process group (the JVM and the ML process)"""
-        if not (self.backend and self.backend.proc and self.backend.proc.returncode is None):
+    def group_usage(self) -> Optional[Tuple[int, int]]:
+        """Ticks of CPU time and pages of memory of the prover's process group (the JVM and the
+        ML process; Lean's server and its workers)"""
+        proc = self.driver.proc if self.driver else None
+        if not (proc and proc.returncode is None):
             return None
-        pgid = self.backend.proc.pid
+        pgid = proc.pid
         ticks = 0
         rss_pages = 0
         try:
@@ -1641,6 +1428,14 @@ class Session:
                 rss_pages += int(fields[21])
         except OSError:
             return None
+        return ticks, rss_pages
+
+    def prover_stats(self) -> Optional[Dict[str, Any]]:
+        """CPU and memory of the prover's process group"""
+        usage = self.group_usage()
+        if usage is None:
+            return None
+        ticks, rss_pages = usage
         hz = os.sysconf("SC_CLK_TCK")
         cpu_s = ticks / hz
         t = time.monotonic()
@@ -1674,22 +1469,23 @@ class Session:
 
     def push_activity(self) -> None:
         apps = [c for c in self.attached_clients() if c.kind == "app"]
-        if not apps or not (self.backend and self.backend.ready):
+        if not apps or not (self.driver and self.driver.ready):
             return
         act = self.activity()
         for c in apps:
             c.push({"event": "activity", "session": self.id, "activity": act})
 
     def backend_disk_changed(self, paths: List[str]) -> None:
-        if self.backend and self.backend.ready:
+        if self.driver and self.driver.ready:
             with contextlib.suppress(HostError):
-                self.backend.send({"op": "disk_changed", "files": paths})
+                self.driver.send({"op": "disk_changed", "files": paths})
 
     # ----- lifecycle (C3, C7)
 
     def start(self) -> None:
         if self.lifecycle in ("Starting", "Running", "Paused", "Stopping"):
             return
+        self.host.check_memory_budget()
         self.meta["epoch"] = self.meta.get("epoch", 0) + 1
         self.meta["desired"] = "running"
         for doc in self.docs.values():
@@ -1699,15 +1495,13 @@ class Session:
 
     async def _start(self) -> None:
         try:
-            await asyncio.to_thread(ensure_component, self.meta["runtime"],
-                                    lambda m: self.session_log(m))
-            self.backend = Backend(self)
-            await self.backend.start()
+            self.driver = self.driver_class(self)
+            await self.driver.start()
         except HostError as exn:
-            self.backend = None
+            self.driver = None
             self.set_lifecycle("Failed", str(exn))
         except Exception as exn:
-            self.backend = None
+            self.driver = None
             self.set_lifecycle("Failed", f"Could not start the prover: {exn}")
 
     def session_log(self, text: str) -> None:
@@ -1721,19 +1515,19 @@ class Session:
             raise HostError(f"Cannot pause a session that is {self.lifecycle}", "bad_state")
         self.save_all()
         self.meta["desired"] = "paused"
-        assert self.backend
-        self.backend.send({"op": "checking", "on": False})
+        assert self.driver
+        self.driver.send({"op": "checking", "on": False})
         for qid, q in list(self.queries.items()):
             if q.get("status") not in ("finished", "canceled", "failed"):
                 with contextlib.suppress(HostError):
-                    self.backend.send({"op": "cancel_query", "query": qid})
+                    self.driver.send({"op": "cancel_query", "query": qid})
         self.set_lifecycle("Paused", None)
 
     def resume(self) -> None:
         if self.lifecycle == "Paused":
             self.meta["desired"] = "running"
-            assert self.backend
-            self.backend.send({"op": "checking", "on": True})
+            assert self.driver
+            self.driver.send({"op": "checking", "on": True})
             self.set_lifecycle("Running", None)
         elif self.lifecycle in ("Stopped", "Failed"):
             self.start()
@@ -1746,15 +1540,15 @@ class Session:
         self.save_all()
         self.meta["desired"] = "stopped"
         self.set_lifecycle("Stopping", "Stopping the prover")
-        if self.backend:
-            await self.backend.stop()
-        self.backend = None
+        if self.driver:
+            await self.driver.stop()
+        self.driver = None
         self.set_lifecycle("Stopped", None)
 
-    def on_backend_exit(self, backend: Backend, code: int) -> None:
-        if backend is not self.backend:
+    def on_backend_exit(self, backend: "drivers.Driver", code: int) -> None:
+        if backend is not self.driver:
             return
-        self.backend = None
+        self.driver = None
         for doc in self.docs.values():
             doc._sent_open = False  # type: ignore[attr-defined]
         for qid, q in list(self.queries.items()):
@@ -1767,7 +1561,7 @@ class Session:
             tail = "\n".join(self.stderr_tail[-8:])
             self.set_lifecycle("Failed", f"The prover exited (code {code})" + (": " + tail if tail else ""))
 
-    def require_checking(self) -> Backend:
+    def require_checking(self) -> "drivers.Driver":
         if self.lifecycle == "Paused":
             raise HostError("The session is paused; checking and queries resume when the human resumes "
                             "it", "paused")
@@ -1775,26 +1569,26 @@ class Session:
             raise HostError("The session is stopped; the human can resume it", "stopped")
         if self.lifecycle == "Failed":
             raise HostError("The session failed: " + (self.meta.get("message") or ""), "failed")
-        if not self.backend or not self.backend.ready:
+        if not self.driver or not self.driver.ready:
             raise HostError("The prover is still starting", "starting")
-        return self.backend
+        return self.driver
 
     # ----- backend events
 
     def on_backend_event(self, msg: Dict[str, Any]) -> None:
         ev = msg.get("event")
         if ev == "ready":
-            assert self.backend
-            self.backend.ready = True
+            assert self.driver
+            self.driver.ready = True
             self.meta["identifier"] = msg.get("identifier") or self.meta.get("identifier")
             for doc in self.docs.values():
-                if doc.opened:
+                if doc.opened and self.wanted_in_prover(doc):
                     self.backend_open(doc)
             if self.meta.get("prover_options"):
-                self.backend.send({"op": "options", "set": [f"{k}={v}" for k, v in
+                self.driver.send({"op": "options", "set": [f"{k}={v}" for k, v in
                                                             self.meta["prover_options"].items()]})
             if self.meta.get("desired") == "paused":
-                self.backend.send({"op": "checking", "on": False})
+                self.driver.send({"op": "checking", "on": False})
                 self.set_lifecycle("Paused", None)
             else:
                 self.set_lifecycle("Running", None)
@@ -1804,7 +1598,7 @@ class Session:
             if phase == "failed":
                 self.set_lifecycle("Failed", msg.get("message") or "The prover failed")
             elif phase == "building":
-                self.meta["message"] = "Building the session image for " + self.meta["logic"]
+                self.meta["message"] = self.driver.building_message() if self.driver else "Building"
                 self.host.broadcast_session(self)
         elif ev in ("build", "log"):
             self.session_log(msg.get("text", ""))
@@ -1814,10 +1608,10 @@ class Session:
             self.query_event(msg)
 
     async def load_syntax(self) -> None:
-        if not (self.backend and self.backend.ready):
+        if not (self.driver and self.driver.ready):
             return
         with contextlib.suppress(Exception):
-            r = await self.backend.request({"op": "syntax"})
+            r = await self.driver.request({"op": "syntax"})
             self.syntax_kinds = r.get("syntax", {}).get("kinds", {})
 
     def node_event(self, msg: Dict[str, Any]) -> None:
@@ -1935,31 +1729,10 @@ class Session:
         q = self.queries.get(qid)
         if not q:
             raise HostError("No such query", "not_found")
-        if self.backend and self.backend.ready:
-            self.backend.send({"op": "cancel_query", "query": qid})
+        if self.driver and self.driver.ready:
+            self.driver.send({"op": "cancel_query", "query": qid})
 
     # ----- filling a hole with an LLM, checked by the prover
-
-    FACTS_PROMPT = """You are helping to set up Sledgehammer for an Isabelle/HOL proof. The theory uses
-Isabelle {identifier} with base logic {logic}. Below is the start of the theory, the text before the
-gap, the lemma with the gap marked {marker}, and the proof state at the gap.
-
-Name up to 8 existing facts (lemmas, definitions such as foo_def, simp and intro rules) that a
-proof search would most need to close the goal at {marker}: they go in a "using" line in front of
-Sledgehammer to guide it. Only facts that exist in this context.{hint}
-
-Answer at once with only a JSON object and nothing else:
-{{"using": ["fact_name", "..."]}}
-
-=== theory start ===
-{header}
-=== text before the gap ===
-{before}
-=== lemma ({marker} marks the gap) ===
-{lemma}
-=== proof state at the gap ===
-{state}
-"""
 
     async def _ask_llm(self, agent: str, model: Optional[str], prompt: str, cwd: str,
                        tag: str, conversation: Optional[str] = None, start: bool = False) -> Tuple[str, str]:
@@ -2125,31 +1898,6 @@ Answer at once with only a JSON object and nothing else:
             q["future"].set_result({"proofs": proofs, "using": using, "message": message})
         return {"accepted": True}
 
-    FILL_PROMPT = """You are helping to finish an Isabelle/HOL proof. The theory uses Isabelle {identifier}
-with base logic {logic}. Below is the start of the theory, the text before the gap, the lemma
-with the gap marked {marker}, and the proof state at the gap.
-
-Propose up to {n} different replacements for {marker}: each must be complete proof text that
-closes the goal at that point, for example "by (simp add: foo_def)", "by auto", or an Isar
-proof block ("proof ... qed"), indented like the surrounding text. Prefer short, robust proofs
-using facts that exist in this context.{hint}
-
-Also name up to 8 existing facts (lemmas, definitions such as foo_def, simp rules) that a proof
-search would most need here: they go in a "using" line in front of Sledgehammer to guide it.
-
-Answer with only a JSON object and nothing else:
-{{"proofs": ["best proof", "..."], "using": ["fact_name", "..."]}}
-
-=== theory start ===
-{header}
-=== text before the gap ===
-{before}
-=== lemma ({marker} marks the gap) ===
-{lemma}
-=== proof state at the gap ===
-{state}
-"""
-
     @staticmethod
     def parse_fill_answer(answer: str, n: int) -> Tuple[List[str], List[str]]:
         """Proofs and facts from an LLM's answer: {"proofs": [...], "using": [...]}, or a bare
@@ -2175,8 +1923,8 @@ Answer with only a JSON object and nothing else:
         self.queries[qid] = {"id": qid, "client": None, "path": doc.path, "operation": "deductum_command",
                              "args": [text], "revision": doc.revision, "status": "waiting", "messages": [],
                              "started": now()}
-        assert self.backend
-        self.backend.send({"op": "query", "query": qid, "file": doc.path, "offset": offset,
+        assert self.driver
+        self.driver.send({"op": "query", "query": qid, "file": doc.path, "offset": offset,
                            "operation": "deductum_command", "args": [text]})
         q = await self.await_query(qid, timeout)
         errors = [m["text"] for m in q.get("messages", []) if m.get("kind") == "error"]
@@ -2185,11 +1933,14 @@ Answer with only a JSON object and nothing else:
         return errors
 
     async def existing_facts(self, doc: Doc, offset: int, facts: List[str]) -> List[str]:
-        if not await self.run_command_at(doc, offset, "thm " + " ".join(facts)):
+        """The facts that exist in the context there; all of them where the backend cannot check"""
+        check = self.driver_class.fact_check_text
+        all_text = check(facts)
+        if all_text is None or not await self.run_command_at(doc, offset, all_text):
             return facts
         kept = []
         for f in facts:
-            if not await self.run_command_at(doc, offset, "thm " + f, 30):
+            if not await self.run_command_at(doc, offset, check([f]) or "", 30):
                 kept.append(f)
         return kept
 
@@ -2200,9 +1951,9 @@ Answer with only a JSON object and nothing else:
             if q and q.get("status") in ("finished", "failed", "canceled"):
                 return q
             await asyncio.sleep(0.3)
-        if self.backend and self.backend.ready:
+        if self.driver and self.driver.ready:
             with contextlib.suppress(HostError):
-                self.backend.send({"op": "cancel_query", "query": qid})
+                self.driver.send({"op": "cancel_query", "query": qid})
         return {"status": "timeout", "messages": [], "error": "timed out"}
 
     def fill_hole(self, client: "Client", path: str, offset: int, revision: Optional[int], agent: str,
@@ -2212,17 +1963,18 @@ Answer with only a JSON object and nothing else:
         doc = self.get_doc(path)
         pos = doc.map_offset(offset, revision)
         commands = doc.prover.get("commands") or []
+        names = self.driver_class.placeholder_commands
         for c in ([] if hole else commands):
-            if c[2] in ("sorry", "oops") and c[1] >= pos:
+            if c[2] in names and c[1] >= pos:
                 hole = c
                 break
         if hole is None:
             for c in reversed(commands):
-                if c[2] in ("sorry", "oops") and c[0] <= pos:
+                if c[2] in names and c[0] <= pos:
                     hole = c
                     break
         if hole is None:
-            raise HostError("No sorry or oops at or after the caret", "no_hole")
+            raise HostError(f"No {' or '.join(names)} at or after the caret", "no_hole")
         job = uuid.uuid4().hex[:10]
         task = asyncio.get_running_loop().create_task(
             self._fill(client, job, doc, hole, agent, hint, n, model, route))
@@ -2247,28 +1999,27 @@ Answer with only a JSON object and nothing else:
             kinds = self.syntax_kinds
             for c in reversed([c for c in (doc.prover.get("commands") or []) if c[0] < start]):
                 goal_start = c[0]
-                if kinds.get(c[2], "").startswith("thy_goal") or c[2] in ("lemma", "theorem", "corollary",
-                                                                          "proposition", "schematic_goal"):
+                if kinds.get(c[2], "").startswith("thy_goal") or c[2] in self.driver_class.goal_commands:
                     break
             marker = "<<<GAP>>>"
             lemma = text[goal_start:start] + marker + text[end:end + 1]
-            header_end = text.find("begin")
-            header = text[:header_end + 5] if header_end >= 0 else text[:400]
+            header = self.driver_class.header_of(text)
             before = text[max(0, goal_start - 6000):goal_start]
             self._fill_push(client, job, status="asking", candidates=[])
             state = ""
-            if self.backend and self.backend.ready:
-                r = await self.backend.request({"op": "state", "file": doc.path, "offset": max(0, start - 1),
+            if self.driver and self.driver.ready:
+                r = await self.driver.request({"op": "state", "file": doc.path, "offset": max(0, start - 1),
                                                 "margin": 100})
                 state = "\n".join(m.get("text", "") for m in r.get("messages", []))
-            prompt = self.FILL_PROMPT.format(
-                identifier=self.meta.get("identifier") or "", logic=self.meta["logic"], marker=marker, n=n,
+            logic = (self.meta.get("project") or {}).get("logic") or ""
+            prompt = prompts.fill_prompt(self.driver_class.backend).format(
+                identifier=self.meta.get("identifier") or "", logic=logic, marker=marker, n=n,
                 hint=("\nThe user adds: " + hint) if hint.strip() else "", header=header, before=before,
                 lemma=lemma, state=state or "(not available)")
             # The facts to guide Sledgehammer, asked for on their own as well: they come sooner than
             # proofs, and matter most when the LLM cannot find a proof itself
-            facts_prompt = self.FACTS_PROMPT.format(
-                identifier=self.meta.get("identifier") or "", logic=self.meta["logic"], marker=marker,
+            facts_prompt = prompts.facts_prompt(self.driver_class.backend).format(
+                identifier=self.meta.get("identifier") or "", logic=logic, marker=marker,
                 hint=("\nThe user adds: " + hint) if hint.strip() else "", header=header, before=before,
                 lemma=lemma, state=state or "(not available)")
             shared: Dict[str, Any] = {"status": "asking", "results": [], "using": []}
@@ -2335,8 +2086,8 @@ Answer with only a JSON object and nothing else:
                 self.queries[qid] = {"id": qid, "client": None, "path": doc.path, "operation": "deductum_command",
                                      "args": [res["text"]], "revision": doc.revision, "status": "waiting",
                                      "messages": [], "started": now()}
-                assert self.backend
-                self.backend.send({"op": "query", "query": qid, "file": doc.path, "offset": start,
+                assert self.driver
+                self.driver.send({"op": "query", "query": qid, "file": doc.path, "offset": start,
                                    "operation": "deductum_command", "args": [res["text"]]})
                 q = await self.await_query(qid, 120)
                 # (a duplicate fact comes after the proof succeeded: see the prelude)
@@ -2490,50 +2241,86 @@ class Host:
             if (session.id, doc.path) in c.open_docs:
                 c.push(event)
 
-    def find_session(self, folder: str, runtime: str, logic: str) -> Optional[Session]:
+    def find_session(self, folder: str, backend: str, toolchain: str, project: Dict[str, Any]) -> Optional[Session]:
+        """The shared session of that (folder, backend, toolchain, project); for Isabelle the
+        project key is its logic"""
+        cls = drivers.registry().get(backend)
+        key = cls.project_key(project) if cls else json.dumps(project, sort_keys=True)
         for s in self.sessions.values():
-            if (s.meta["folder"] == folder and s.meta["runtime"] == runtime and s.meta["logic"] == logic
+            if (s.meta["folder"] == folder and s.meta["backend"] == backend
+                    and s.meta["toolchain"] == toolchain
+                    and s.driver_class.project_key(s.meta["project"]) == key
                     and not s.meta.get("owner")):
                 return s
         return None
+
+    def driver_class(self, backend: str) -> type:
+        cls = drivers.registry().get(backend)
+        if cls is None:
+            raise HostError(f"Unknown backend {backend}; this machine has: " + ", ".join(drivers.registry()),
+                            "unknown_backend")
+        return cls
+
+    def detect_backend(self, folder: str) -> str:
+        """The backend for a folder when the request names none: the one backend that detects
+        it, else Isabelle (as before there were several)"""
+        classes = drivers.registry()
+        if len(classes) > 1:
+            found = [name for name, cls in classes.items() if cls.detect(folder)]
+            if len(found) == 1:
+                return found[0]
+        return "isabelle"
+
+    def detections(self, folder: str) -> List[Dict[str, Any]]:
+        out = []
+        for cls in drivers.registry().values():
+            with contextlib.suppress(Exception):
+                d = cls.detect(folder)
+                if d:
+                    out.append(d)
+        return out
+
+    def backends_info(self, only: Optional[str] = None) -> List[Dict[str, Any]]:
+        return backends_info(only)
+
+    def check_memory_budget(self) -> None:
+        """Refuse to start a prover when the running ones already use the configured budget
+        (`memory_budget_gb` in host.json); no budget, no limit"""
+        budget = drivers.read_config().get("memory_budget_gb")
+        if not isinstance(budget, (int, float)) or budget <= 0:
+            return
+        used = 0
+        for s in self.sessions.values():
+            usage = s.group_usage()
+            if usage:
+                used += usage[1] * os.sysconf("SC_PAGE_SIZE")
+        if used >= budget * 1e9:
+            raise HostError(f"The running provers use {used / 1e9:.1f} GB, the memory budget is {budget:g} GB; "
+                            "stop a session before starting another", "memory_budget",
+                            used_gb=round(used / 1e9, 2), budget_gb=budget)
 
     def create_session(self, params: Dict[str, Any], owner: Optional[Dict[str, Any]] = None,
                        parent: Optional[Dict[str, Any]] = None) -> Session:
         folder = os.path.realpath(os.path.expanduser(params.get("folder") or ""))
         if not os.path.isdir(folder):
             raise HostError(f"No such folder: {folder}", "not_found")
-        runtimes = find_runtimes()
-        runtime = params.get("runtime")
-        if runtime:
-            runtime = os.path.realpath(os.path.expanduser(runtime))
-        else:
-            supported = [r for r in runtimes if r["supported"]]
-            if not supported:
-                raise HostError("No supported Isabelle runtime on this machine; Deductum needs "
-                                "Isabelle2025 (CyPhyAssure). Found: " +
-                                ", ".join(f"{r['identifier']} ({r['path']})" for r in runtimes),
-                                "unsupported_runtime")
-            runtime = supported[0]["path"]
-        suggestion = suggest_logic(folder, runtime)
-        logic = params.get("logic") or suggestion["logic"]
-        dirs = params.get("dirs")
-        if dirs is None:
-            dirs = suggestion["dirs"]
-        include = params.get("include_sessions")
-        if include is None:
-            include = suggestion["include_sessions"] if logic != suggestion.get("session") else []
+        backend = params.get("backend") or self.detect_backend(folder)
+        cls = self.driver_class(backend)
+        resolved = cls.resolve_session(params, folder)
+        toolchain, project = resolved["toolchain"], resolved["project"]
         if not owner and not params.get("new"):
-            existing = self.find_session(folder, runtime, logic)
+            existing = self.find_session(folder, backend, toolchain, project)
             if existing:
                 if params.get("start", True) and existing.lifecycle in ("Stopped", "Failed") \
                         and existing.meta.get("lifecycle_auto", True) and params.get("resume"):
                     existing.start()
                 return existing
+        if params.get("start", True):
+            self.check_memory_budget()
         sid = uuid.uuid4().hex[:8]
         meta = {
             "id": sid, "name": params.get("name") or Path(folder).name, "folder": folder,
-            "runtime": runtime, "identifier": runtime_identifier(Path(runtime)), "logic": logic,
-            "dirs": [os.path.realpath(d) for d in dirs], "include_sessions": include,
+            "backend": backend, "toolchain": toolchain, "project": project, **resolved.get("meta", {}),
             "options": params.get("options", []), "owner": owner, "parent": parent, "created": now(),
             "lifecycle": "Stopped", "desired": "stopped",
         }
@@ -2555,13 +2342,17 @@ class Host:
         if params.get("session"):
             source = self.session(params["session"])
             folder = source.meta["folder"]
-            base_params = {k: source.meta[k] for k in ("runtime", "logic", "include_sessions", "options")}
-            dirs = source.meta.get("dirs", [])
+            backend, cls = source.meta["backend"], source.driver_class
+            toolchain, project = source.meta["toolchain"], source.meta["project"]
+            options = source.meta.get("options", [])
         else:
             source = None
             folder = os.path.realpath(os.path.expanduser(params.get("folder") or ""))
-            base_params = {k: params[k] for k in ("runtime", "logic", "include_sessions") if params.get(k)}
-            dirs = params.get("dirs") or suggest_logic(folder, params.get("runtime"))["dirs"]
+            backend = params.get("backend") or self.detect_backend(folder)
+            cls = self.driver_class(backend)
+            resolved = cls.resolve_session(params, folder)
+            toolchain, project = resolved["toolchain"], resolved["project"]
+            options = params.get("options", [])
         try:
             top = git("rev-parse", "--show-toplevel", cwd=folder).strip()
         except HostError:
@@ -2575,6 +2366,8 @@ class Host:
 
         def moved(p: str) -> str:
             return str(worktree / os.path.relpath(p, top)) if path_inside(p, top) else p
+
+        link_fork_dirs(top, worktree, folder, cls.fork_links)
 
         base: Dict[str, Any] = {}
         if source:
@@ -2590,11 +2383,14 @@ class Host:
                                                                   "label": params.get("label", "agent")}
         if not owner.get("key"):
             raise HostError("An independent session needs an owning agent")
-        params2 = dict(base_params, folder=moved(folder), dirs=[moved(d) for d in dirs],
-                       name=params.get("name") or f"{Path(folder).name} ({owner['label']})", new=True,
-                       start=params.get("start", True))
+        params2 = {"backend": backend, "toolchain": toolchain, "options": options,
+                   "project": cls.relocate_project(project, moved), "folder": moved(folder),
+                   "name": params.get("name") or f"{Path(folder).name} ({owner['label']})", "new": True,
+                   "start": params.get("start", True)}
+        # (the parent's own project, for merging into a session of it that does not exist yet)
         parent = {"session": source.id if source else None, "folder": folder, "repo": top,
-                  "worktree": str(worktree), "branch": branch, "head": head, "base": base}
+                  "worktree": str(worktree), "branch": branch, "head": head, "base": base,
+                  "backend": backend, "toolchain": toolchain, "project": project}
         s = self.create_session(params2, owner=owner, parent=parent)
         client.attach(s)
         return s
@@ -2605,8 +2401,8 @@ class Host:
             raise HostError("Not an independent session", "bad_state")
         wt, top = parent["worktree"], parent["repo"]
         out = []
-        for p in list_theories(s.meta["folder"]):
-            if not p.endswith(".thy"):
+        for p in list_documents(s.meta["folder"], classes=[s.driver_class]):
+            if not p.endswith(s.driver_class.documents):
                 continue
             rel = os.path.relpath(p, wt)
             doc = s.docs.get(os.path.realpath(p))
@@ -2629,8 +2425,11 @@ class Host:
         parent = s.meta["parent"]
         target = self.sessions.get(parent.get("session") or "")
         if target is None:
-            target = self.create_session({"folder": parent["folder"], "runtime": s.meta["runtime"],
-                                          "logic": s.meta["logic"], "start": False})
+            # (a fork made before sessions had a backend recorded its Isabelle logic only)
+            project = parent.get("project") or ({"logic": s.meta["logic"]} if "logic" in s.meta else {})
+            target = self.create_session({"folder": parent["folder"], "backend": s.meta["backend"],
+                                          "toolchain": parent.get("toolchain") or s.meta["toolchain"],
+                                          "project": project, "start": False})
             parent["session"] = target.id
         owner = s.meta["owner"]
         results = []
@@ -2698,7 +2497,8 @@ class Host:
                 client.key = f"{ident['provider']}:{ident['conversation']}"
             client.location = p.get("location") or {}
             return {"protocol": PROTOCOL, "version": VERSION, "client": client.id, "key": client.key,
-                    "machine": socket.gethostname(), "home": str(HOME), "runtimes": find_runtimes()}
+                    "machine": socket.gethostname(), "home": str(HOME), "runtimes": find_runtimes(),
+                    "backends": await asyncio.to_thread(self.backends_info)}
         if op == "ping":
             return {"pong": True}
         # A client on another machine names files as that machine does; here they are reached
@@ -2708,14 +2508,26 @@ class Host:
                 p[key] = translate_path(p[key], client.location.get("machine"))
         if op == "runtimes":
             return {"runtimes": find_runtimes()}
+        if op == "toolchains":
+            if p.get("backend"):
+                self.driver_class(p["backend"])
+            backends = await asyncio.to_thread(self.backends_info, p.get("backend"))
+            return {"backends": backends,
+                    "toolchains": [dict(t, backend=b["backend"]) for b in backends for t in b["toolchains"]]}
         if op == "suggest":
             folder = os.path.realpath(os.path.expanduser(p["folder"]))
             runtimes = find_runtimes()
             runtime = p.get("runtime") or next((r["path"] for r in runtimes if r["supported"]), None)
+            # (`suggestion` and `runtimes` are the Isabelle case, for older apps)
             suggestion = await asyncio.to_thread(suggest_logic, folder, runtime)
-            return {"suggestion": suggestion, "runtimes": runtimes}
+            detections = await asyncio.to_thread(self.detections, folder)
+            return {"suggestion": suggestion, "runtimes": runtimes, "detections": detections}
         if op == "list_dir":
             path = os.path.realpath(os.path.expanduser(p.get("path") or str(HOME)))
+            # Documents and project files of every backend; inside a session, of its backend
+            classes = list(drivers.registry().values())
+            if p.get("session") in self.sessions:
+                classes = [self.sessions[p["session"]].driver_class]
             entries = []
             with contextlib.suppress(OSError):
                 for e in sorted(os.scandir(path), key=lambda e: e.name.lower()):
@@ -2723,26 +2535,29 @@ class Host:
                         continue
                     if e.is_dir():
                         entries.append({"name": e.name, "dir": True})
-                    elif e.name.endswith(".thy") or e.name == "ROOT":
+                    elif any(c.is_document(e.name) for c in classes):
                         entries.append({"name": e.name, "dir": False})
             return {"path": path, "parent": str(Path(path).parent), "entries": entries}
         if op == "sessions":
             return {"sessions": [s.summary() for s in self.sessions.values()]}
         if op == "symbol_table":
-            runtime = p.get("runtime")
-            if not runtime and p.get("session") in self.sessions:
-                runtime = self.sessions[p["session"]].meta["runtime"]
-            if not runtime:
-                supported = [r for r in find_runtimes() if r["supported"]] or find_runtimes()
-                if not supported:
-                    return {"symbols": []}
-                runtime = supported[0]["path"]
-            return {"symbols": await asyncio.to_thread(symbol_table, runtime)}
+            # Isabelle's symbols; other backends have none
+            cls, toolchain = IsabelleDriver, p.get("runtime") or p.get("toolchain")
+            if p.get("session") in self.sessions:
+                sess = self.sessions[p["session"]]
+                cls, toolchain = sess.driver_class, toolchain or sess.meta["toolchain"]
+            elif p.get("backend"):
+                cls = self.driver_class(p["backend"])
+            return {"symbols": await asyncio.to_thread(cls.symbol_table, toolchain)}
         if op == "session_create":
             # Warm the runtime's session list off the event loop; suggestions use it
             supported = [r["path"] for r in find_runtimes() if r["supported"]]
-            runtime = p.get("runtime") or (supported[0] if supported else None)
-            await asyncio.to_thread(known_sessions, runtime)
+            runtime = p.get("toolchain") or p.get("runtime") or (supported[0] if supported else None)
+            if not p.get("backend") and p.get("folder"):
+                p["backend"] = await asyncio.to_thread(self.detect_backend, os.path.realpath(
+                    os.path.expanduser(p["folder"])))
+            if p.get("backend", "isabelle") == "isabelle":
+                await asyncio.to_thread(known_sessions, runtime)
             if client.kind == "agent" and p.get("independent"):
                 s = self.fork_session(client, p)
             else:
@@ -2768,13 +2583,15 @@ class Host:
             return {}
 
         s = self.session(p.get("session"))
+        if client.kind == "agent" and isinstance(p.get("path"), str):
+            s.note_agent_query(p["path"])
         if op == "session_info":
             client.attach(s)
             info = s.summary()
             info["theories"] = [{"path": t, "status": s.theory_status.get(t),
                                  "dirty": s.docs[t].dirty if t in s.docs else False,
                                  "conflict": bool(s.docs[t].conflict) if t in s.docs else False}
-                                for t in list_theories(s.meta["folder"])]
+                                for t in list_documents(s.meta["folder"], classes=[s.driver_class])]
             info["docs"] = [d.summary() for d in s.docs.values()]
             info["logs"] = s.logs[-100:]
             info["seen"] = s.meta["seen"]
@@ -2806,9 +2623,12 @@ class Host:
         if op == "configure":
             if client.kind == "agent":
                 raise HostError("Only the human configures sessions", "forbidden")
-            for k in ("logic", "dirs", "include_sessions", "name", "options", "runtime"):
+            for k in ("logic", "dirs", "include_sessions", "name", "options", "runtime", "toolchain"):
                 if k in p:
                     s.meta[k] = p[k]
+            if isinstance(p.get("project"), dict):
+                s.meta["project"] = dict(s.meta["project"], **p["project"])
+            s.driver_class.sync_meta(s.meta, p)
             s.persist()
             self.broadcast_session(s)
             return {"session": s.summary()}
@@ -2936,13 +2756,19 @@ class Host:
         if op == "prover_options":
             # Options of the running prover, such as Sledgehammer's timeout and provers;
             # kept with the session and set again on each start
-            allowed = ("sledgehammer_timeout", "sledgehammer_provers")
+            allowed = s.driver_class.option_allowlist
             settings = {k: str(v) for k, v in (p.get("set") or {}).items() if k in allowed}
             s.meta.setdefault("prover_options", {}).update(settings)
             s.persist()
-            if s.backend and s.backend.ready:
-                await s.backend.request({"op": "options", "set": [f"{k}={v}" for k, v in settings.items()]})
+            if s.driver and s.driver.ready:
+                await s.driver.request({"op": "options", "set": [f"{k}={v}" for k, v in settings.items()]})
             return {"options": s.meta["prover_options"]}
+        if op == "project_action":
+            # A backend's project-level action (build the heap, lake build, ...); it needs no
+            # running prover
+            self.check_lifecycle_rights(client, s)
+            driver = s.driver or s.driver_class(s)
+            return {"result": await driver.project_action(str(p.get("name") or ""), p.get("args") or {})}
         if op == "grant":
             if client.kind == "agent":
                 raise HostError("Only the human grants editing rights", "forbidden")
@@ -3003,7 +2829,7 @@ class Host:
                 raise HostError("The human reviews and merges independent work", "forbidden")
             return self.merge_apply(client, s, p.get("files"))
         if op == "symbols":
-            backend = s.require_checking() if s.lifecycle != "Paused" else s.backend
+            backend = s.require_checking() if s.lifecycle != "Paused" else s.driver
             if backend is None:
                 raise HostError("The prover is not running", "stopped")
             r = await backend.request({"op": "symbols"})
@@ -3117,9 +2943,13 @@ class Host:
             loop.add_signal_handler(sig, self.stopping.set)
         watcher = asyncio.create_task(self.watch_loop())
         for sid in self.resume_after_load:
-            with contextlib.suppress(Exception):
+            try:
                 log("resuming", sid, "after the host restarted")
                 self.sessions[sid].start()
+            except HostError as exn:  # (the memory budget, say: the session waits to be resumed)
+                self.sessions[sid].set_lifecycle("Stopped", str(exn))
+            except Exception as exn:
+                log("resuming failed", sid, repr(exn))
         self.resume_after_load.clear()
         await self.stopping.wait()
         watcher.cancel()
@@ -3168,8 +2998,7 @@ def host_running() -> bool:
         s.close()
 
 
-# Proof tools typed in the text: their findings come with Insert, and they stop when deleted
-TOOLS = ("sledgehammer", "try", "try0", "nitpick", "quickcheck", "solve_direct", "nunchaku")
+TOOLS = IsabelleDriver.TOOLS  # (the Isabelle proof tools; each driver has its own `tool_names`)
 
 
 def translate_path(path: str, machine: Optional[str]) -> str:
@@ -3322,6 +3151,103 @@ class SyncClient:
             del self.events[:-500]
 
 
+def socket_accepts(path: Path) -> bool:
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        s.settimeout(2)
+        s.connect(str(path))
+        return True
+    except OSError:
+        return False
+    finally:
+        s.close()
+
+
+def rewrite_prefix(value: Any, old: str, new: str) -> Any:
+    """`value` (parsed JSON) with every string that starts with the path `old` moved to `new`"""
+    if isinstance(value, str):
+        return new + value[len(old):] if value == old or value.startswith(old + "/") else value
+    if isinstance(value, list):
+        return [rewrite_prefix(v, old, new) for v in value]
+    if isinstance(value, dict):
+        return {k: rewrite_prefix(v, old, new) for k, v in value.items()}
+    return value
+
+
+def migrate_from_isabellum(old_state: Optional[Path] = None, old_config: Optional[Path] = None,
+                           new_state: Optional[Path] = None, new_config: Optional[Path] = None,
+                           say: Any = print) -> int:
+    """Move Isabellum's sessions and worktrees, and its host.json, to Deductum's places (C17a).
+    Explicit, not automatic: two hosts holding one folder would both autosave it. Only when the
+    Isabellum host is stopped and Deductum has no sessions yet."""
+    old_state = old_state or ISABELLUM_STATE_DIR
+    old_config = old_config or Path(os.environ.get("XDG_CONFIG_HOME") or HOME / ".config") / "isabellum" / "host.json"
+    new_state = new_state or STATE_DIR
+    new_config = new_config or drivers.config_path()
+    if socket_accepts(old_state / "host.sock"):
+        say("The Isabellum host is running (" + str(old_state / "host.sock") + "). Stop it first "
+            "(close the Isabellum app, then run its stop-host), then run this again. Nothing was changed.")
+        return 1
+    if any((new_state / "sessions").glob("*/meta.json")):
+        say("Deductum already has sessions in " + str(new_state / "sessions") + ". Nothing was changed.")
+        return 1
+    old_sessions, old_worktrees = old_state / "sessions", old_state / "worktrees"
+    if not old_sessions.is_dir() and not old_worktrees.is_dir() and not old_config.is_file():
+        say("Nothing to migrate: no Isabellum sessions, worktrees or config found.")
+        return 0
+    new_state.mkdir(parents=True, exist_ok=True)
+    moved_sessions = 0
+    new_worktrees = new_state / "worktrees"
+    if old_worktrees.is_dir():
+        new_worktrees.mkdir(parents=True, exist_ok=True)
+        for wt in sorted(old_worktrees.iterdir()):
+            shutil.move(str(wt), str(new_worktrees / wt.name))
+    if old_sessions.is_dir():
+        (new_state / "sessions").mkdir(parents=True, exist_ok=True)
+        for d in sorted(old_sessions.iterdir()):
+            target = new_state / "sessions" / d.name
+            shutil.move(str(d), str(target))
+            moved_sessions += 1
+            # Independent sessions live in worktrees, which moved: their paths (and the names of
+            # their per-document files, which are hashes of the path) follow
+            old_prefix, new_prefix = str(old_worktrees), str(new_worktrees)
+            meta = read_json(target / "meta.json")
+            if meta is None:
+                continue
+            repo_wts = []
+            if (meta.get("parent") or {}).get("worktree", "").startswith(old_prefix + "/"):
+                repo_wts.append((meta["parent"]["repo"], meta["parent"]["worktree"].replace(old_prefix, new_prefix, 1)))
+            write_json_atomic(target / "meta.json", rewrite_prefix(meta, old_prefix, new_prefix))
+            for f in sorted((target / "docs").glob("*.json")) if (target / "docs").is_dir() else []:
+                data = read_json(f)
+                if not data or "path" not in data:
+                    continue
+                path = rewrite_prefix(data["path"], old_prefix, new_prefix)
+                if path == data["path"]:
+                    continue
+                write_json_atomic(target / "docs" / (file_key(path) + ".json"), rewrite_prefix(data, old_prefix, new_prefix))
+                f.unlink()
+                log_file = target / "logs" / (file_key(data["path"]) + ".jsonl")
+                if log_file.is_file():
+                    log_file.rename(target / "logs" / (file_key(path) + ".jsonl"))
+            for repo, wt in repo_wts:
+                # (git keeps the worktree's place in the repository: tell it where it went)
+                with contextlib.suppress(Exception):
+                    git("worktree", "repair", wt, cwd=repo)
+    if old_config.is_file():
+        if new_config.is_file():
+            say("Left " + str(new_config) + " as it is (it exists already); Isabellum's is " + str(old_config) + ".")
+        else:
+            cfg = read_json(old_config, {}) or {}
+            if isinstance(cfg, dict) and "runtimes" in cfg:
+                runtimes = [{"path": r} if isinstance(r, str) else r for r in cfg.pop("runtimes") or []]
+                cfg["isabelle"] = list(cfg.get("isabelle") or []) + runtimes
+            write_json_atomic(new_config, cfg)
+            say("Copied the config to " + str(new_config))
+    say(f"Moved {moved_sessions} session(s) from {old_state} to {new_state}. Start Deductum to use them.")
+    return 0
+
+
 def main(argv: List[str]) -> int:
     cmd = argv[1] if len(argv) > 1 else "help"
     if cmd == "daemon":
@@ -3357,7 +3283,13 @@ def main(argv: List[str]) -> int:
     if cmd == "runtimes":
         print(json.dumps(find_runtimes(), indent=2))
         return 0
-    print("usage: deductum_host.py daemon|connect|mcp|status|runtimes|find|stop-host")
+    if cmd == "toolchains":
+        print(json.dumps(backends_info(), indent=2))
+        return 0
+    if cmd == "migrate-from-isabellum":
+        return migrate_from_isabellum()
+    print("usage: deductum_host.py daemon|connect|mcp|status|runtimes|toolchains|find|stop-host|"
+          "migrate-from-isabellum")
     return 2
 
 
