@@ -793,12 +793,19 @@ fn hovering_a_shown_block_follows_the_pointer() {
     let mut app = demo_app(Mode::Literate);
     let mut h = Harness::new(Size::new(1400.0, 900.0));
     h.draw(&app, "hover-shown");
+    // along a row of a shown block, wherever the page puts it: the first row the pointer hovers
     let mut offsets = Vec::new();
-    for x in [380.0, 420.0, 460.0, 500.0, 540.0] {
-        for m in h.move_to(&app, cosmic::iced::Point::new(x, 253.0)) {
-            let _ = cosmic::Application::update(&mut app, m);
+    for y in (200..500).step_by(6) {
+        offsets.clear();
+        for x in (300..1100).step_by(20) {
+            for m in h.move_to(&app, cosmic::iced::Point::new(x as f32, y as f32)) {
+                let _ = cosmic::Application::update(&mut app, m);
+            }
+            offsets.push(app.workspace.as_ref().unwrap().hover.as_ref().filter(|h| matches!(h.target, super::HoverTarget::View(_))).map(|h| (h.target, h.offset)));
         }
-        offsets.push(app.workspace.as_ref().unwrap().hover.as_ref().map(|h| (h.target, h.offset)));
+        if offsets.iter().flatten().count() >= 5 {
+            break;
+        }
     }
     eprintln!("{offsets:?}");
     let distinct: std::collections::HashSet<_> = offsets.iter().flatten().map(|(_, o)| *o).collect();
@@ -1520,3 +1527,51 @@ fn moving_from_a_paragraph_through_the_next_into_a_code_block() {
     }
 }
 
+
+/// A read-only view (the goal, a tool's output) focused by a click takes copying and selecting
+/// only: j, k, the arrows, d and Enter go on to the page's block navigation
+#[test]
+fn a_focused_goal_view_leaves_navigation_keys_alone() {
+    use cosmic::iced::keyboard::{Key, Modifiers, key::{Named, NativeCode, Physical}};
+    use cosmic::widget::text_editor::{Binding as B, KeyPress, Status};
+    let press = |key: Key, modifiers: Modifiers, text: Option<&str>| KeyPress {
+        key: key.clone(),
+        modified_key: key,
+        physical_key: Physical::Unidentified(NativeCode::Unidentified),
+        modifiers,
+        text: text.map(Into::into),
+        status: Status::Focused { is_hovered: false },
+    };
+    for (key, text) in [(Key::Character("j".into()), Some("j")), (Key::Character("k".into()), Some("k")), (Key::Character("d".into()), Some("d")), (Key::Named(Named::ArrowDown), None), (Key::Named(Named::ArrowUp), None), (Key::Named(Named::Enter), None)] {
+        assert!(super::view::read_only_binding(press(key.clone(), Modifiers::empty(), text)).is_none(), "{key:?} goes on to the page");
+    }
+    assert!(matches!(super::view::read_only_binding(press(Key::Character("c".into()), Modifiers::CTRL, Some("c"))), Some(B::Copy)), "Ctrl+C copies");
+    assert!(matches!(super::view::read_only_binding(press(Key::Named(Named::ArrowDown), Modifiers::SHIFT, None)), Some(B::Select(_))), "Shift+Down selects");
+}
+
+/// The toolbar's toggle: off, the goal is under the proof even with room beside, and the page
+/// is centred
+#[test]
+fn the_goal_beside_can_be_turned_off() {
+    let mut app = demo_app(Mode::Literate);
+    app.show_right = false;
+    app.show_sidebar = false;
+    let i = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.name == "lemma").unwrap();
+    let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(i));
+    let mut h = Harness::new(Size::new(1320.0, 800.0));
+    h.draw(&app, "beside-on");
+    assert!(super::view::last_wide(), "beside with room for it");
+    let _ = cosmic::Application::update(&mut app, super::Message::ToggleGoalBeside);
+    let png = h.draw(&app, "beside-off");
+    let off = super::view::last_wide();
+    let _ = cosmic::Application::update(&mut app, super::Message::ToggleGoalBeside);
+    assert!(!off, "under the proof when turned off");
+    // centred: as much room left of the page as right of it
+    let img = image::RgbaImage::from_raw(1320, 800, png).unwrap();
+    let bg = *img.get_pixel(12, 400);
+    // (inside the window's edges and its scroll bar)
+    let cols: Vec<u32> = (8..1290).filter(|&x| (40..780).step_by(2).any(|y| img.get_pixel(x, y) != &bg)).collect();
+    let (l, r) = (cols[0], 1306 - cols[cols.len() - 1]);
+    eprintln!("page from {} to {}: left {l}, right {r}", cols[0], cols[cols.len() - 1]);
+    assert!((l as i32 - r as i32).abs() < 60, "centred (left {l}, right {r})");
+}
