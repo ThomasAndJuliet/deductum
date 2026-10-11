@@ -4,7 +4,7 @@ Isabellum opens a folder of Isabelle theories and shows it as a literate
 document. You and any number of agents work in the same live prover session.
 The app is a sibling of COSMIC Terminal Agents and lives in the same repository.
 
-On branch `multi-prover`, Isabellum is being extended to Lean and Rocq (Coq)
+On branch `multi-prover`, Isabellum is being renamed **Deductum** (C17a) and extended to Lean and Rocq (Coq)
 backends alongside Isabelle (C16). That design is in
 [isabellum-provers.md](isabellum-provers.md). The rest of this record still
 describes the Isabelle-only app as implemented.
