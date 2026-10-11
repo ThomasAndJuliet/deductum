@@ -3,7 +3,8 @@
 //! Markdown rendered for COSMIC: a parsed [`markdown::Doc`] laid out and
 //! drawn by the selectable [`rich::RichText`] widget, with LaTeX
 //! ([`math`]), Mermaid diagrams ([`diagram`]), charts ([`chart`]) and
-//! images ([`images`]); and [`pan_zoom`], an image to drag and zoom, for
+//! images ([`images`]), and code coloured by its language
+//! ([`highlight`]); and [`pan_zoom`], an image to drag and zoom, for
 //! images in windows of their own.
 //!
 //! Shared by Cerea, Isabellum and Terminal Agents' threads; it lives in
@@ -11,6 +12,7 @@
 
 pub mod chart;
 pub mod diagram;
+pub mod highlight;
 pub mod images;
 pub mod markdown;
 pub mod math;
