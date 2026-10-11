@@ -137,12 +137,11 @@ fn short_folder(folder: &str, home: Option<&str>) -> String {
         Some(rest) if rest.starts_with('/') => ("~/", rest.trim_start_matches('/')),
         _ => ("", folder),
     };
-    let parts: Vec<&str> = rest.rsplit('/').filter(|p| !p.is_empty()).take(3).collect();
+    let parts: Vec<&str> = rest.split('/').filter(|p| !p.is_empty()).collect();
     match parts.as_slice() {
-        [last, parent, _, ..] => format!("…/{parent}/{last}"),
-        [last, parent] => format!("{prefix}{parent}/{last}"),
-        [last] => format!("{prefix}{last}"),
-        _ => folder.to_string(),
+        [.., parent, last] if parts.len() > 3 || (parts.len() == 3 && !prefix.is_empty()) => format!("…/{parent}/{last}"),
+        _ if prefix.is_empty() => folder.to_string(),
+        _ => format!("{prefix}{}", parts.join("/")),
     }
 }
 
@@ -593,4 +592,17 @@ fn project<'a>(app: &'a App, ws: &'a Workspace) -> Element<'a, Message> {
         col = col.push(widget::text::caption("This session's backend offers no project actions."));
     }
     col.into()
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn folders_read_short() {
+        use super::short_folder;
+        assert_eq!(short_folder("/home/me/Demo", None), "/home/me/Demo");
+        assert_eq!(short_folder("/home/me/Demo", Some("/home/me")), "~/Demo");
+        assert_eq!(short_folder("/home/me/Research/Demo/", Some("/home/me/")), "~/Research/Demo");
+        assert_eq!(short_folder("/home/me/Research/Repositories/DSRVLean", Some("/home/me")), "…/Repositories/DSRVLean");
+        assert_eq!(short_folder("/srv/a/b/c", None), "…/b/c");
+    }
 }
