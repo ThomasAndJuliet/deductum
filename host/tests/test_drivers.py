@@ -491,5 +491,24 @@ class PerBackendText(unittest.TestCase):
         self.assertIn("Isabelle", prompts.fill_prompt("unknown"))
 
 
+class DetectBudget(unittest.TestCase):
+    def test_a_small_folder_is_still_counted_and_a_slow_walk_stops(self):
+        import tempfile
+        from drivers import isabelle
+        with tempfile.TemporaryDirectory() as d:
+            os.makedirs(os.path.join(d, "a", "b"))
+            for n in ("x.thy", "a/y.thy", "a/b/z.thy"):
+                open(os.path.join(d, n), "w").close()
+            found = isabelle.IsabelleDriver.detect(d)
+            self.assertIn("3 .thy files", found["evidence"])
+            saved = isabelle.DETECT_SECONDS
+            isabelle.DETECT_SECONDS = -1
+            try:
+                # (no time left: the walk stops before it has counted anything)
+                self.assertIsNone(isabelle.IsabelleDriver.detect(d))
+            finally:
+                isabelle.DETECT_SECONDS = saved
+
+
 if __name__ == "__main__":
     unittest.main()
