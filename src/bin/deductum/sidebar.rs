@@ -266,7 +266,8 @@ fn session_row<'a>(app: &'a App, machine: &str, sid: &str, v: &'a Value, indent:
     if agents > 0 {
         detail.push(format!("{agents}\u{a0}agent{}", if agents == 1 { "" } else { "s" }));
     }
-    if let Some(mb) = memory_mb(app, machine, sid, v) {
+    // (its memory where the sidebar has room for it; the machine's total is above in any case)
+    if let Some(mb) = memory_mb(app, machine, sid, v).filter(|_| app.left_width >= 280.0) {
         detail.push(gigabytes(mb));
     }
     let text = widget::column::with_capacity(2)

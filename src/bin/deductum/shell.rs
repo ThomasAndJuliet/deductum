@@ -412,7 +412,7 @@ pub fn header_start(app: &App) -> Vec<Element<'_, Message>> {
     }
     if let Some(t) = app.workspace.as_ref().and_then(|w| w.theory.as_ref()) {
         items.push(widget::Space::new().width(Length::Fixed(4.0)).into());
-        items.push(mode_switch(t.mode));
+        items.push(mode_switch(t.mode, app.window_width < 1100.0));
         items.push(widget::Space::new().width(Length::Fixed(sp().space_s as f32)).into());
         items.push(icon_button("edit-undo-symbolic", "Undo your last edit (Ctrl+Z)", t.can_undo.then_some(Message::Undo)));
         items.push(icon_button("edit-redo-symbolic", "Redo (Ctrl+Shift+Z)", t.can_redo.then_some(Message::Redo)));
@@ -424,11 +424,12 @@ pub fn header_start(app: &App) -> Vec<Element<'_, Message>> {
 }
 
 /// Literate or Source: two equal segments in one rounded frame, the current one filled
-pub fn mode_switch<'a>(mode: Mode) -> Element<'a, Message> {
+/// (`narrow`: segments as wide as their words, for a narrow window's header)
+pub fn mode_switch<'a>(mode: Mode, narrow: bool) -> Element<'a, Message> {
     let segment = |label: &'static str, this: Mode| {
         let on = mode == this;
         button::custom(widget::text::body(label).width(Length::Fill).align_x(Alignment::Center))
-            .width(Length::Fixed(92.0))
+            .width(Length::Fixed(if narrow { 76.0 } else { 92.0 }))
             .padding([5, 10])
             .class(segment_style(on))
             .on_press(Message::SetMode(this))
@@ -505,7 +506,7 @@ pub fn header_end(app: &App) -> Vec<Element<'_, Message>> {
             _ => {}
         }
         // (a narrow window keeps its room for the document's own controls)
-        if ws.info.is_some() && app.window_width >= 1000.0 {
+        if ws.info.is_some() && app.window_width >= 1250.0 {
             items.push(widget::Space::new().width(Length::Fixed(sp().space_xxs as f32)).into());
             items.push(icon_button("folder-open-symbolic", "Open the session's folder in Files", Some(Message::OpenFolder(link::Opener::Files))));
             items.push(icon_button("accessories-text-editor-symbolic", "Open the session's folder in Zed", Some(Message::OpenFolder(link::Opener::Zed))));
@@ -549,7 +550,7 @@ pub fn header_center(app: &App) -> Vec<Element<'_, Message>> {
     let toolchain = summary.and_then(|s| s["toolchain"]["label"].as_str()).filter(|l| !l.is_empty()).map(str::to_string);
     let backend = summary.and_then(|s| s["backend"].as_str()).unwrap_or("isabelle").to_string();
     match (&ws.theory, lifecycle.as_str()) {
-        (Some(t), "Running") => prover_status(ws, t, &backend, toolchain, app.window_width < 1250.0).into_iter().collect(),
+        (Some(t), "Running") => prover_status(ws, t, &backend, toolchain, app.window_width < 1250.0, app.window_width < 1100.0).into_iter().collect(),
         (_, "") => Vec::new(),
         (_, lc) => {
             let (icon_name, tint): (&'static str, fn(&cosmic::Theme) -> Color) = match lc {
@@ -606,7 +607,8 @@ fn chip_style() -> theme::Button {
 }
 
 /// (`compact`, in a narrow window: the state and what fails only)
-fn prover_status<'a>(ws: &'a Workspace, t: &'a super::editor::Theory, backend: &str, toolchain: Option<String>, compact: bool) -> Option<Element<'a, Message>> {
+/// (`narrow`, narrower still: no backend mark, and a running tool without its time)
+fn prover_status<'a>(ws: &'a Workspace, t: &'a super::editor::Theory, backend: &str, toolchain: Option<String>, compact: bool, narrow: bool) -> Option<Element<'a, Message>> {
     let act = ws.activity.as_ref()?;
     let theories = act["theories"].as_array()?;
     let find = |path: &str| theories.iter().find(|th| th["path"].as_str() == Some(path));
@@ -654,7 +656,9 @@ fn prover_status<'a>(ws: &'a Workspace, t: &'a super::editor::Theory, backend: &
         "Starting".to_string()
     };
     let mut row = widget::row::with_capacity(10).spacing(s.space_xs).align_y(Alignment::Center);
-    row = row.push(backend_mark(backend));
+    if !narrow {
+        row = row.push(backend_mark(backend));
+    }
     if let Some(tc) = toolchain.filter(|_| !compact) {
         row = row.push(widget::text::caption(tc).wrapping(iced::widget::text::Wrapping::None)).push(divider(14.0));
     }
@@ -709,9 +713,10 @@ fn prover_status<'a>(ws: &'a Workspace, t: &'a super::editor::Theory, backend: &
         if ws.tools_stopping {
             trow = trow.push(widget::text::body(format!("{name}: stopping…")));
         } else {
-            trow = trow
-                .push(widget::text(name.clone()).size(13.0).font(cosmic::font::mono()))
-                .push(widget::text::body(format!("{seconds} s")));
+            trow = trow.push(widget::text(name.clone()).size(13.0).font(cosmic::font::mono()));
+            if !narrow {
+                trow = trow.push(widget::text::body(format!("{seconds} s")));
+            }
             if ws.caps.typed_tool(&name).is_some_and(|t| t.stop) {
                 trow = trow.push(
                     widget::tooltip(

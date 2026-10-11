@@ -421,3 +421,52 @@ fn every_part_of_the_window_says_the_same_about_a_connection() {
     let _ = cosmic::Application::update(&mut app, Message::Save);
     assert_eq!(app.status, None, "no \"Not connected to local\" for the machine the bar speaks for");
 }
+
+/// `CT_SNAPSHOTS`: whole windows (the header over the view) where the shell meets the document:
+/// the settings page narrow, the new-session form at 1000 px, both sidebars round a Lean document
+/// at 1100 px, and the header with a running tool at 1000 px, in both themes
+#[test]
+fn shell_frame_matrix() {
+    if std::env::var("CT_SNAPSHOTS").is_err() {
+        return;
+    }
+    for (light, theme) in [(true, "light"), (false, "dark")] {
+        // the settings page at 800 px, alone and beside the sidebar
+        let mut app = mixed_app();
+        app.shell.settings_open = true;
+        app.window_width = 800.0;
+        app.show_sidebar = false;
+        draw_in(light, || window(&app), &format!("matrix-shell-{theme}-800-settings"), Size::new(800.0, 860.0));
+        app.show_sidebar = true;
+        app.left_width = 260.0;
+        draw_in(light, || window(&app), &format!("matrix-shell-{theme}-800-settings-sidebar"), Size::new(800.0, 860.0));
+        // the new-session form at 1000 px
+        let mut app = new_session_app(Some("isabelle"), both());
+        app.window_width = 1000.0;
+        draw_in(light, || window(&app), &format!("matrix-shell-{theme}-1000-new-session"), Size::new(1000.0, 1200.0));
+        // a Lean document between both sidebars at 1100 px, a theorem open
+        let mut app = super::snapshot_lean::lean_app(Mode::Literate);
+        app.show_sidebar = true;
+        app.show_right = true;
+        app.window_width = 1100.0;
+        app.left_width = 240.0;
+        app.right_width = 300.0;
+        {
+            let s = app.sessions.get_mut(&("local".to_string(), "s1".to_string())).unwrap();
+            s["toolchain"] = json!({"id": "leanprover/lean4:v4.19.0", "label": "Lean v4.19.0"});
+            s["documents"] = json!([".lean"]);
+        }
+        app.workspace.as_mut().unwrap().activity = Some(json!({"prover": {"cpu": 120, "rss_mb": 1840}, "running": [], "theories": []}));
+        let i = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.name == "theorem").unwrap();
+        let _ = cosmic::Application::update(&mut app, Message::EditBlock(i));
+        draw_in(light, || window(&app), &format!("matrix-shell-{theme}-1100-lean-sidebars"), Size::new(1100.0, 860.0));
+        // the header with a running tool at 1000 px
+        let mut app = mixed_app();
+        app.window_width = 1000.0;
+        app.show_sidebar = false;
+        app.show_right = false;
+        app.workspace.as_mut().unwrap().activity = Some(json!({"prover": {"cpu": 390, "rss_mb": 3200},
+            "running": [{"name": "sledgehammer", "seconds": 12, "line": 9}, {"name": "by", "seconds": 7, "line": 12}], "theories": []}));
+        draw_in(light, || window(&app), &format!("matrix-shell-{theme}-1000-tool"), Size::new(1000.0, 700.0));
+    }
+}
