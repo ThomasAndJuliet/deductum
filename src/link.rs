@@ -172,8 +172,11 @@ fn bundle_version(bundle: &std::path::Path) -> String {
 /// Where the host is installed on the target, and the environment it runs with: normally
 /// `~/.local/share/deductum` and the user's state; `DEDUCTUM_REMOTE_ROOT` (for tests) installs
 /// and runs a host of its own there, with its own state, beside the user's
-fn remote_root() -> (String, String) {
-    match std::env::var("DEDUCTUM_REMOTE_ROOT") {
+fn remote_root(target: &Target) -> (String, String) {
+    // (`DEDUCTUM_LOCAL_ROOT` is the same for this computer's host alone, so that a test can run a
+    // host of its own here beside the real one it reaches on another machine)
+    let var = if target.destination.is_none() && std::env::var_os("DEDUCTUM_LOCAL_ROOT").is_some() { "DEDUCTUM_LOCAL_ROOT" } else { "DEDUCTUM_REMOTE_ROOT" };
+    match std::env::var(var) {
         Ok(root) if !root.is_empty() => (root.clone(), format!("DEDUCTUM_STATE_DIR={root}/state ")),
         _ => ("~/.local/share/deductum".to_string(), String::new()),
     }
@@ -184,7 +187,7 @@ async fn install(target: &Target) -> Result<(), String> {
     let Some(bundle) = bundle() else { return Ok(()) };
     // Running from the installed copy itself: nothing to install
     let installed = home().join(".local/share/deductum");
-    let (root, _) = remote_root();
+    let (root, _) = remote_root(target);
     if target.destination.is_none()
         && root.starts_with('~')
         && std::fs::canonicalize(&bundle).ok().is_some_and(|b| std::fs::canonicalize(&installed).ok() == Some(b))
@@ -235,7 +238,7 @@ async fn install(target: &Target) -> Result<(), String> {
 }
 
 fn connect_command(target: &Target) -> tokio::process::Command {
-    let (root, env) = remote_root();
+    let (root, env) = remote_root(target);
     let script = format!("{env}python3 {root}/host/deductum_host.py connect");
     let mut cmd = match &target.destination {
         None => host_command("sh", &["-c".into(), script.clone()]),

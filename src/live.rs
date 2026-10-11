@@ -62,7 +62,7 @@ pub(super) fn app(target: link::Target) -> App {
 }
 
 /// The test sessions off the host again (stopped, then discarded once stopped), and their folders
-fn cleanup(dest: &str) {
+pub(super) fn cleanup(dest: &str) {
     ssh(dest, r#"cd ~/.local/share/deductum/host && python3 - <<'PY'
 import time, deductum_host as H
 c = H.SyncClient.local(); c.request("hello", client="cli")
@@ -84,7 +84,7 @@ rm -rf /tmp/deductum-live-*
 "#);
 }
 
-fn ssh(dest: &str, script: &str) -> String {
+pub(super) fn ssh(dest: &str, script: &str) -> String {
     let out = std::process::Command::new("ssh").args(["-o", "BatchMode=yes", dest, "/bin/bash", "-s"]).stdin(std::process::Stdio::piped()).stdout(std::process::Stdio::piped()).spawn().and_then(|mut c| {
         use std::io::Write;
         c.stdin.take().unwrap().write_all(script.as_bytes())?;
