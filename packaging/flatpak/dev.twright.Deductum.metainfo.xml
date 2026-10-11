@@ -4,17 +4,18 @@
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>GPL-3.0-only</project_license>
   <name>Deductum</name>
-  <summary>Isabelle theories as literate documents, worked on with agents</summary>
+  <summary>Isabelle and Lean proofs as literate documents, worked on with agents</summary>
   <description>
     <p>
-      Deductum opens a folder of Isabelle theories as a literate document and
-      a source editor, checked continuously by one shared prover that coding
-      agents use too, on this computer or another.
+      Deductum opens a folder of Isabelle theories or a Lean package as a
+      literate document and a source editor, checked continuously by one
+      shared prover that coding agents use too, on this computer or another.
     </p>
     <ul>
-      <li>A literate view set like the generated LaTeX document, and a source
-      view with Isabelle symbols</li>
-      <li>Goals at any position, Sledgehammer and Find Theorems</li>
+      <li>A literate view set like a typeset document (Isabelle's text blocks,
+      Lean's doc comments), and a source view</li>
+      <li>Goals at any position; Sledgehammer and Find Theorems for Isabelle,
+      exact?-style suggestions and Loogle search for Lean</li>
       <li>Sessions that keep running when the window closes, with Pause, Stop
       and Resume</li>
       <li>Agents edit only where you grant rights; your undo is your own, and

@@ -1,4 +1,4 @@
-# Deductum, the sibling of COSMIC Agent Terminal for Isabelle theories
+# Deductum, the sibling of COSMIC Agent Terminal for Isabelle and Lean proofs
 # (docs/deductum-decisions.md). This manifest packages a release binary
 # built beforehand in the same SDK (`cargo build --release --bin deductum`),
 # with the session host and prover backend sources the app installs on each
@@ -15,7 +15,7 @@ finish-args:
   - --socket=fallback-x11
   - --share=ipc
   - --device=dri
-  # The session host, ssh, tar and Isabelle run on the host through
+  # The session host, ssh, tar and the provers (Isabelle, Lean) run on the host through
   # flatpak-spawn --host; the runtime has none of them
   - --talk-name=org.freedesktop.Flatpak
   # `deductum .` resolves paths as the shell sees them
