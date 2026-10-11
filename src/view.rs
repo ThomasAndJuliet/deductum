@@ -1788,9 +1788,19 @@ fn block_editor_in<'a>(ws: Option<&'a Workspace>, t: &'a Theory, window: bool, i
 /// nothing on the page; a faint region behind it, reaching past the text without taking room,
 /// says that it is being edited
 fn prose_editor<'a>(t: &'a Theory, be: &'a super::editor::BlockEditor, vim_mode: Option<super::vim::Mode>) -> Element<'a, Message> {
-    let (scale, bold) = match be.kind {
-        Kind::Heading(level) => (match level { 1 => 1.55, 2 => 1.32, 3 => 1.16, 4 => 1.05, _ => 1.0 }, true),
-        _ => (1.0, false),
+    // (a paragraph that is a Markdown heading, in a Lean module doc, is set as the heading it is)
+    let markdown_heading = (be.kind == Kind::Text && be.wrap.is_some()).then(|| {
+        let text = be.content.text();
+        let hashes = text.chars().take_while(|c| *c == '#').count();
+        (1..=6).contains(&hashes).then(|| text.chars().nth(hashes).is_some_and(|c| c == ' ')).unwrap_or(false).then_some(hashes as u8)
+    });
+    let level = match be.kind {
+        Kind::Heading(level) => Some(level),
+        _ => markdown_heading.flatten(),
+    };
+    let (scale, bold) = match level {
+        Some(level) => (match level { 1 => 1.55, 2 => 1.32, 3 => 1.16, 4 => 1.05, _ => 1.0 }, true),
+        None => (1.0, false),
     };
     let serif = cosmic::iced::Font {
         weight: if bold { cosmic::iced::font::Weight::Bold } else { cosmic::iced::font::Weight::Normal },
@@ -1803,7 +1813,8 @@ fn prose_editor<'a>(t: &'a Theory, be: &'a super::editor::BlockEditor, vim_mode:
         .font(serif)
         .size(size * scale)
         .line_height(iced::widget::text::LineHeight::Relative(if bold { 1.25 } else { 1.5 }))
-        .padding(Padding::ZERO)
+        // (a Markdown heading in a text block is set a little lower, as the renderer sets its headings)
+        .padding(if markdown_heading.flatten().is_some() { Padding { top: z(4.0), bottom: z(2.0), ..Padding::ZERO } } else { Padding::ZERO })
         .on_action(Message::BlockAction)
         .key_binding(key_bindings(!t.completions.is_empty(), vim_mode))
         .style(|theme: &cosmic::Theme, _status| {

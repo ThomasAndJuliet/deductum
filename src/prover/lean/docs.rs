@@ -176,6 +176,34 @@ impl Docs {
         self.segs.iter().map(|s| (s.md, s.len, s.ch)).collect()
     }
 
+    /// The same with its soft line breaks read as Markdown reads them (see [`reflow`]): each is one
+    /// space, and the indentation the next line has in the source is dropped, so that a wrapped
+    /// list item does not show a gap. The map follows: the space stands for the line break, and
+    /// the dropped indentation stands for nothing
+    pub fn flowed(&self) -> Docs {
+        let flowed = reflow(&self.markdown);
+        let mut markdown = String::with_capacity(self.markdown.len());
+        let mut segs: Vec<Seg> = Vec::new();
+        let mut after_soft = false;
+        for s in &self.segs {
+            let text = &self.markdown[s.md..s.md + s.len];
+            if text == "\n" {
+                let soft = flowed.as_bytes()[s.md] == b' ';
+                segs.push(Seg { md: markdown.len(), len: 1, byte: s.byte, ch: s.ch });
+                markdown.push(if soft { ' ' } else { '\n' });
+                after_soft = soft;
+                continue;
+            }
+            let skip = if after_soft { text.len() - text.trim_start_matches([' ', '\t']).len() } else { 0 };
+            after_soft = false;
+            if skip < s.len {
+                segs.push(Seg { md: markdown.len(), len: s.len - skip, byte: s.byte + skip, ch: s.ch + skip });
+                markdown.push_str(&text[skip..]);
+            }
+        }
+        Docs { markdown, segs, ..self.clone() }
+    }
+
     /// The source range of a Markdown byte range, in code points
     pub fn source_chars(&self, range: std::ops::Range<usize>) -> std::ops::Range<usize> {
         let start = self.source_char(range.start);
@@ -562,6 +590,22 @@ mod tests {
             }
         }
         assert!(seen > 10, "{seen}");
+    }
+
+    #[test]
+    fn flowed_text_keeps_a_map_and_drops_the_indent_of_wrapped_lines() {
+        let src = "/--\n  - one item\n    that wraps\n  - two\n-/";
+        let d = to_markdown(src).flowed();
+        assert_eq!(d.markdown, "- one item that wraps\n- two");
+        for needle in ["one", "wraps", "two"] {
+            let m = d.markdown.find(needle).unwrap();
+            let at = d.source_byte(m);
+            assert_eq!(&src[at..at + needle.len()], needle, "{needle}");
+            assert_eq!(d.markdown_offset(at), m);
+        }
+        // the space stands for the line break
+        let m = d.markdown.find("item that").unwrap() + 4;
+        assert_eq!(&src[d.source_byte(m)..d.source_byte(m) + 1], "\n");
     }
 
     #[test]

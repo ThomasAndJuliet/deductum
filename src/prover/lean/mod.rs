@@ -190,6 +190,23 @@ fn worst(commands: &[Command]) -> Status {
 }
 
 /// The title of a module doc that is only a heading: its level and the span of the title in `text`
+/// A prose body without the whitespace around its text (the comment's own line breaks and
+/// indentation are not part of what is edited). An empty one is a place on a line of its own
+fn trimmed(chars: &[char], body: (usize, usize)) -> (usize, usize) {
+    let (s, e) = (body.0.min(chars.len()), body.1.min(chars.len()));
+    let first = (s..e).find(|&i| !chars[i].is_whitespace());
+    match first {
+        Some(f) => {
+            let last = (f..e).rev().find(|&i| !chars[i].is_whitespace()).map_or(f, |i| i + 1);
+            (f, last)
+        }
+        None => {
+            let at = if chars.get(s) == Some(&'\n') { s + 1 } else { s };
+            (at.min(e), at.min(e))
+        }
+    }
+}
+
 fn heading_title(chars: &[char], body: (usize, usize)) -> Option<(u8, (usize, usize))> {
     let line_start = (body.0..body.1).find(|&i| !chars[i].is_whitespace())?;
     let hashes = chars[line_start..body.1].iter().take_while(|c| **c == '#').count();
@@ -219,13 +236,13 @@ fn lean_blocks(text: &str, prover: &[Command]) -> Vec<Block> {
                     (blocks::Kind::Heading(_), Some((level, title))) if b.doc.is_none() && chars.get(b.start + 2) == Some(&'!') => {
                         out.push(prose(Kind::Heading(level.min(6)), b.start, b.end, Some(title)));
                     }
-                    _ => out.push(prose(Kind::Text, b.start, b.end, Some(body))),
+                    _ => out.push(prose(Kind::Text, b.start, b.end, Some(trimmed(&chars, body)))),
                 }
             }
             blocks::Kind::Comment => out.push(prose(Kind::Comment, b.start, b.end, None)),
             blocks::Kind::Header | blocks::Kind::Formal => {
                 if let Some((ds, de)) = b.doc {
-                    out.push(prose(Kind::Text, ds, de, b.body));
+                    out.push(prose(Kind::Text, ds, de, b.body.map(|body| trimmed(&chars, body))));
                 }
                 let (start, end) = b.code;
                 let mut commands: Vec<Command> = b.commands.iter().map(command).collect();
@@ -251,25 +268,33 @@ fn parse_state(state: &str) -> Option<Goal> {
     Some(Goal { vars: g.hyps.iter().map(|(n, t)| format!("{n} : {t}")).collect(), premises: Vec::new(), conclusion: g.target })
 }
 
-/// Markdown as the paragraph editor shows it: line breaks as spaces (the paragraph wraps as the
-/// page does), except in fenced code, where every line break matters. One character for one
+/// Markdown as the paragraph editor shows it, one character for one: a soft line break (the
+/// paragraph wraps as the page does) is a space; the line breaks that matter (in code fences,
+/// before list items and headings, hard breaks) stay. The indentation the source gives its lines
+/// is not text: after a soft break all of it, after the others as much as every line has in
+/// common (what the comment's own layout adds), is zero-width, so that the text sits where the
+/// rendered paragraph did. Indentation beyond that (a nested item, code in a fence) shows
 fn shown_markdown(text: &str) -> String {
-    let shown: Vec<char> = crate::editor::shown_text(text, true).chars().collect();
-    let chars: Vec<char> = text.chars().collect();
-    let mut out = shown.clone();
-    let mut fence = false;
-    let mut at = 0;
-    for line in text.split_inclusive('\n') {
-        let n = line.chars().count();
-        let t = line.trim_start();
-        let marker = t.starts_with("```") || t.starts_with("~~~");
-        if fence || marker {
-            out[at..at + n].copy_from_slice(&chars[at..at + n]);
+    let lines: Vec<&str> = text.split('\n').collect();
+    let indent = |l: &str| l.chars().take_while(|c| *c == ' ' || *c == '\t').count();
+    let common = lines.iter().skip(1).filter(|l| !l.trim().is_empty()).map(|l| indent(l)).min().unwrap_or(0);
+    // Which line breaks are soft is decided on the text as Markdown reads it: without the indentation
+    // every line has (otherwise a wrapped line is taken for an indented code block)
+    let dedented: Vec<String> = lines.iter().enumerate().map(|(k, l)| if k == 0 { l.to_string() } else { l.chars().skip(indent(l).min(common)).collect() }).collect();
+    let joined = dedented.join("\n");
+    let soft: Vec<bool> = joined.chars().zip(docs::reflow(&joined).chars()).filter(|(a, _)| *a == '\n').map(|(_, b)| b == ' ').collect();
+    let mut out: Vec<char> = Vec::with_capacity(text.len());
+    for (k, line) in lines.iter().enumerate() {
+        let n = indent(line);
+        let soft_before = k > 0 && soft[k - 1];
+        if k > 0 {
+            out.push(if soft_before { ' ' } else { '\n' });
         }
-        if marker {
-            fence = !fence;
+        // (what the source indents a line by is not text: zero-width)
+        let hidden = if soft_before { n } else { n.min(common) };
+        for (c, ch) in line.chars().enumerate() {
+            out.push(if c < hidden { '\u{200B}' } else { ch });
         }
-        at += n;
     }
     out.into_iter().collect()
 }
@@ -364,13 +389,13 @@ impl Profile for Lean {
 
     fn prose(&self, body: &str, _codec: &dyn Codec) -> String {
         // (the Markdown as written, without the common indentation)
-        docs::reflow(&docs::to_markdown(body).markdown)
+        docs::to_markdown(body).flowed().markdown
     }
 
     fn prose_map(&self, body: &str) -> Option<super::ProseMap> {
-        let d = docs::to_markdown(body);
+        let d = docs::to_markdown(body).flowed();
         let runs = d.segments();
-        Some(super::ProseMap { markdown: docs::reflow(&d.markdown), runs })
+        Some(super::ProseMap { markdown: d.markdown, runs })
     }
 
     fn snippet_at(&self, text: &str, at: usize) -> Option<String> {
@@ -790,6 +815,35 @@ mod tests {
         assert_eq!(Lean.message_summary("type mismatch\n  h\nhas type\n  p : Prop\nbut is expected to have type\n  q : Prop"), "type mismatch\n  h\nhas type\n  p : Prop\nbut is expected to have type\n  q : Prop");
         assert_eq!(Lean.message_summary("linarith failed to find a contradiction\ncase a\nx : ℝ\n⊢ False"), "linarith failed to find a contradiction (case a)");
         assert_eq!(Lean.message_summary("declaration uses 'sorry'"), "declaration uses 'sorry'");
+    }
+
+    #[test]
+    fn the_paragraph_editor_shows_text_not_the_files_indentation() {
+        let strip = |s: String| s.replace('\u{200B}', "");
+        // a docstring indented by four in the file: wrapped lines read as one, nothing indents
+        let text = "A docstring, indented\n    in the file by four\n    spaces.";
+        let shown = Lean.shown_prose(text, None, &LeanSymbols);
+        assert_eq!(shown.chars().count(), text.chars().count(), "one character for one");
+        assert_eq!(strip(shown), "A docstring, indented in the file by four spaces.");
+        // a list: its items stay on lines of their own, the continuation keeps what it has beyond the common indent
+        let text = "Items:\n  - one\n    wraps\n  - two";
+        assert_eq!(strip(Lean.shown_prose(text, None, &LeanSymbols)), "Items:\n- one wraps\n- two");
+        // a fence: its lines and their relative indentation stay
+        let text = "Code:\n  ```lean\n  def a := 1\n    def b := 2\n  ```";
+        assert_eq!(strip(Lean.shown_prose(text, None, &LeanSymbols)), "Code: ```lean\ndef a := 1\n  def b := 2\n```".replace("Code: ```", "Code:\n```"));
+    }
+
+    #[test]
+    fn prose_bodies_are_trimmed_so_the_editor_has_no_blank_first_line() {
+        let text = "/-!\n  Plain text,\n  two lines.\n-/\n\n/-- A doc. -/\ndef x := 1\n";
+        let bs = Lean.blocks(text, &[], &HashMap::new());
+        let body = |b: &Block| { let (s, e) = b.body.unwrap(); text_of(text, s, e) };
+        assert_eq!(body(&bs[0]), "Plain text,\n  two lines.");
+        assert_eq!(body(&bs[1]), "A doc.");
+        // an empty one is a place on a line of its own
+        let bs = Lean.blocks("/-!\n\n-/\n", &[], &HashMap::new());
+        let (s, e) = bs[0].body.unwrap();
+        assert_eq!((s, e), (4, 4));
     }
 
     #[test]
