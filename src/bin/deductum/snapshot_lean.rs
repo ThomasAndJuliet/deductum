@@ -225,7 +225,12 @@ fn the_palette_in_a_proof_and_in_prose() {
     app.show_right = false;
     let proof = block_named(&app, "theorem and_swap'");
     update(&mut app, super::Message::EditBlock(proof));
-    let ctx = |app: &App| super::view::insert_context(theory(app));
+    let ctx = |app: &App| super::insert::insert_context(theory(app));
+    // (at a tactic's start: the second line's indent, before `constructor`)
+    {
+        let be = app.workspace.as_mut().unwrap().theory.as_mut().unwrap().block_editor.as_mut().unwrap();
+        super::editor::place(&mut be.content, cosmic::widget::text_editor::Position { line: 1, column: 2 });
+    }
     assert_eq!(ctx(&app), Some(super::prover::InsertContext::Proof));
     // (the palette takes the goal's place while there is none)
     app.workspace.as_mut().unwrap().goals = QueryState { operation: "deductum_goals", ..Default::default() };
@@ -235,6 +240,8 @@ fn the_palette_in_a_proof_and_in_prose() {
         use cosmic::widget::text_editor::{Action, Motion};
         update(&mut app, super::Message::BlockAction(Action::Move(Motion::DocumentEnd)));
     }
+    // (just after the last tactic: a term, the tactic's argument being what may be typed there)
+    assert_eq!(ctx(&app), Some(super::prover::InsertContext::Symbols));
     h.draw(&app, "lean-palette-proof");
     update(&mut app, super::Message::Wrap("\n  exact?".into(), String::new()));
     assert!(theory(&app).local.contains("exact hp\n  exact?"), "inserted at the caret: {:?}", theory(&app).local);
@@ -517,4 +524,410 @@ fn opening_lean_prose_does_not_move_its_text() {
         }
     }
     println!("{}", report.join("\n"));
+}
+
+/// Where the source view's text begins, between `y` rows: the leftmost column with text on it
+/// (far from the background, which a faint tint such as the construct's is not). It moves if
+/// the page changes between one column and two
+fn left_edge(png: &[u8], w: u32, h: u32, y: std::ops::Range<u32>) -> u32 {
+    let img = image::RgbaImage::from_raw(w, h, png.to_vec()).unwrap();
+    let bg = *img.get_pixel(w - 3, h - 3);
+    let far = |p: &image::Rgba<u8>| (0..3).map(|i| (p[i] as i32 - bg[i] as i32).abs()).sum::<i32>() > 150;
+    (0..w).find(|&x| y.clone().step_by(2).any(|yy| far(img.get_pixel(x, yy)))).unwrap_or(w)
+}
+
+/// "In two column mode source view for Lean every time I click the source it flicks in and out
+/// of single column mode": clicks in the source view (in a tactic, a def's body, a blank line, a
+/// docstring), each drawn before the prover's state there comes (a click in another block clears
+/// the goal) and after; the page's text stays where it was in every frame. The same for Isabelle,
+/// and for both literate views as blocks open
+#[test]
+fn the_layout_does_not_change_as_clicks_move_the_caret() {
+    let (w, h) = (1400u32, 900u32);
+    for lean in [true, false] {
+        for mode in [Mode::Source, Mode::Literate] {
+            let mut harness = Harness::new(Size::new(w as f32, h as f32));
+            super::view::set_goal_beside(true);
+            let mut app = if lean { lean_app(mode) } else { demo_app(mode) };
+            app.show_sidebar = false;
+            app.show_right = false;
+            app.window_width = w as f32;
+            let app_output = app.workspace.as_ref().unwrap().output.clone().unwrap();
+            // (the state for a command at `at`: a click in another block clears it, as the app
+            // does, until the prover's state there comes)
+            let output = |at: usize| {
+                let mut o = app_output.clone();
+                o["command"]["start"] = json!(at);
+                o["command"]["end"] = json!(at + 1);
+                o
+            };
+            app.workspace.as_mut().unwrap().output = Some(output(0));
+            let goals = app.workspace.as_ref().unwrap().goals.clone();
+            let name = |what: &str| format!("flicker-{}-{}-{what}", if lean { "lean" } else { "isabelle" }, if mode == Mode::Source { "source" } else { "literate" });
+            let first = harness.draw(&app, &name("0"));
+            // (the layout's own decision, two columns or one; and, in the source view, where its
+            // text is drawn: the literate view's open block has a marker reaching to its left)
+            let columns = || if mode == Mode::Source { super::view::last_source_beside() } else { super::view::last_wide() };
+            assert!(columns(), "{}: two columns to begin with", name(""));
+            let source = mode == Mode::Source;
+            let edge = left_edge(&first, w, h, 60..h - 60);
+            let spots: &[&str] = if lean { &["induction xs with", "left ++ right", "\n\ntheorem and_swap'", "A variable observation", "exact hq"] } else { &["apply simp", "(a::nat) + b", "\n\n(* the second", "We prove that", "by simp"] };
+            for (k, spot) in spots.iter().enumerate() {
+                // The spot's line, as the source view draws it (or its block, opened, in the
+                // literate view), clicked
+                let t = theory(&app);
+                let at = t.local.find(spot).map(|b| t.local[..b].chars().count()).unwrap() + if spot.starts_with('\n') { 1 } else { 2 };
+                if mode == Mode::Source {
+                    let line = t.lines.position(&t.decoded.text, t.decoded.to_decoded(at)).line;
+                    // (where line 0 is: calibrated by a click, whose line says)
+                    let probe = 300.0;
+                    for m in harness.click(&app, cosmic::iced::Point::new(500.0, probe)) {
+                        update(&mut app, m);
+                    }
+                    let probed = theory(&app).source.cursor().position.line as f32;
+                    let lh = super::view::source_line_height();
+                    let y = probe + (line as f32 - probed) * lh;
+                    let x = 300.0;
+                    for m in harness.click(&app, cosmic::iced::Point::new(x, y)) {
+                        update(&mut app, m);
+                    }
+                    let got = theory(&app).source.cursor().position.line;
+                    assert_eq!(got, line, "{}: the click at {y} lands on the line of {spot:?}", name(""));
+                } else {
+                    // (a blank line between blocks is no block to open: a click there closes the open one)
+                    match theory(&app).blocks.iter().position(|b| b.start <= at && at <= b.end) {
+                        Some(i) => update(&mut app, super::Message::EditBlock(i)),
+                        None => update(&mut app, super::Message::CloseBlock),
+                    }
+                }
+                // (a click in another block: the goal is gone until the prover answers)
+                let png = harness.draw(&app, &name(&format!("{}-clicked", k + 1)));
+                let now = left_edge(&png, w, h, 60..h - 60);
+                assert!(columns(), "{}: one column after a click at {spot:?}", name(""));
+                assert!(!source || now.abs_diff(edge) <= 2, "{}: the page's text moved from x {edge} to {now} after a click at {spot:?}", name(""));
+                // the state there arrives
+                let ws = app.workspace.as_mut().unwrap();
+                ws.output = Some(output(at));
+                ws.goals = goals.clone();
+                let png = harness.draw(&app, &name(&format!("{}-state", k + 1)));
+                let now = left_edge(&png, w, h, 60..h - 60);
+                assert!(columns(), "{}: one column when the state came at {spot:?}", name(""));
+                assert!(!source || now.abs_diff(edge) <= 2, "{}: the page's text moved from x {edge} to {now} when the state came at {spot:?}", name(""));
+            }
+        }
+    }
+}
+
+/// Where the pop-out button and the editor it floats over are laid out, and how far the page is
+/// scrolled (what is drawn is that much higher)
+struct PopOutPlace {
+    editor: cosmic::widget::Id,
+    scroll: cosmic::widget::Id,
+    pop: Option<cosmic::iced::Rectangle>,
+    cell: Option<cosmic::iced::Rectangle>,
+    scrolled: cosmic::iced::Vector,
+}
+
+impl cosmic::iced::advanced::widget::Operation<()> for PopOutPlace {
+    fn traverse(&mut self, operate: &mut dyn FnMut(&mut dyn cosmic::iced::advanced::widget::Operation<()>)) {
+        operate(self);
+    }
+
+    fn container(&mut self, id: Option<&cosmic::widget::Id>, bounds: cosmic::iced::Rectangle) {
+        if id == Some(&super::view::pop_out_button_id()) {
+            self.pop = Some(bounds);
+        }
+    }
+
+    fn focusable(&mut self, id: Option<&cosmic::widget::Id>, bounds: cosmic::iced::Rectangle, _state: &mut dyn cosmic::iced::advanced::widget::operation::Focusable) {
+        if id == Some(&self.editor) {
+            self.cell = Some(bounds);
+        }
+    }
+
+    fn scrollable(
+        &mut self,
+        id: Option<&cosmic::widget::Id>,
+        _bounds: cosmic::iced::Rectangle,
+        _content: cosmic::iced::Rectangle,
+        translation: cosmic::iced::Vector,
+        _state: &mut dyn cosmic::iced::advanced::widget::operation::Scrollable,
+    ) {
+        if id == Some(&self.scroll) {
+            self.scrolled = translation;
+        }
+    }
+}
+
+/// "The pop-out button is in slightly the wrong position in both source view and literate view":
+/// it must sit inside the top right corner of the code it belongs to (the open block's cell, or
+/// the proof's first line in the source view), as far from the right edge as from the top,
+/// centred on the first line, whatever the prover, theme, width and scrolling. Measured from the
+/// layout, and checked against the frame: the icon is drawn inside the button's place
+#[test]
+fn the_pop_out_button_sits_in_the_corner_of_its_proof() {
+    let fillers: String = (0..30).map(|i| format!("lemma filler{i}: \"True\"\n  by simp\n\n")).collect();
+    let long_isabelle = super::snapshot::DEMO.replace("lemma broken", &format!("{fillers}lemma broken"));
+    let mut report = Vec::new();
+    for lean in [true, false] {
+        for mode in [Mode::Literate, Mode::Source] {
+            for dark in [true, false] {
+                for (w, h) in [(800u32, 760u32), (1400, 900)] {
+                    for scrolled in [false, true] {
+                        let mut harness = Harness::new(Size::new(w as f32, h as f32));
+                        light(!dark);
+                        super::view::set_goal_beside(true);
+                        // (near the top, or far down the document and scrolled to)
+                        let (mut app, target) = match (lean, scrolled) {
+                            (true, false) => (lean_app_with(mode, &proofs_only()), "theorem append_nil_right"),
+                            (true, true) => (lean_app(mode), "theorem and_swap'"),
+                            (false, false) => (demo_app(mode), "lemma add_zero"),
+                            (false, true) => {
+                                let mut app = demo_app(mode);
+                                let doc = json!({"text": long_isabelle, "revision": 1, "prover": {}});
+                                app.workspace.as_mut().unwrap().theory = Some(Theory::new("/tmp/Long.thy".into(), &doc, &super::prover::isabelle::symbols::Table::fallback(), Arc::new(HashMap::new()), mode, super::prover::profile(None)));
+                                (app, "lemma broken")
+                            }
+                        };
+                        app.show_sidebar = false;
+                        app.show_right = false;
+                        app.window_width = w as f32;
+                        let t = theory(&app);
+                        let at = t.local.find(target).map(|b| t.local[..b].chars().count()).unwrap();
+                        let i = t.blocks.iter().position(|b| b.start <= at && at <= b.end).unwrap();
+                        if mode == Mode::Literate {
+                            update(&mut app, super::Message::EditBlock(i));
+                        } else {
+                            let t = app.workspace.as_mut().unwrap().theory.as_mut().unwrap();
+                            t.cursor = at + 3;
+                            let pos = t.lines.position(&t.decoded.text, t.decoded.to_decoded(at + 3));
+                            super::editor::place(&mut t.source, pos);
+                        }
+                        let (editor, scroll) = if mode == Mode::Literate { (super::view::block_editor_id(), super::view::literate_scroll_id()) } else { (super::view::source_editor_id(), super::view::source_scroll_id()) };
+                        let mut place = PopOutPlace { editor: editor.clone(), scroll: scroll.clone(), pop: None, cell: None, scrolled: cosmic::iced::Vector::ZERO };
+                        let name = format!("popout-{}-{}-{}-{w}{}", if lean { "lean" } else { "isabelle" }, if mode == Mode::Source { "source" } else { "literate" }, if dark { "dark" } else { "light" }, if scrolled { "-scrolled" } else { "" });
+                        harness.draw(&app, &name);
+                        harness.operate(&app, &mut place);
+                        if scrolled {
+                            // the page scrolled so that the proof is in the middle of the view
+                            let pop = place.pop.expect("a pop-out button");
+                            harness.move_to(&app, cosmic::iced::Point::new(w as f32 / 3.0, h as f32 / 2.0));
+                            let by = pop.y - h as f32 / 2.0;
+                            harness.events(&app, &[cosmic::iced::Event::Mouse(cosmic::iced::mouse::Event::WheelScrolled { delta: cosmic::iced::mouse::ScrollDelta::Pixels { x: 0.0, y: -by } })]);
+                            harness.draw(&app, &name);
+                            harness.operate(&app, &mut place);
+                        }
+                        let png = harness.draw(&app, &name);
+                        let (pop, cell) = (place.pop.expect("a pop-out button"), place.cell.expect("the editor"));
+                        let drawn = cosmic::iced::Rectangle { y: pop.y - place.scrolled.y, x: pop.x - place.scrolled.x, ..pop };
+                        // Where the proof's first line is: the cell's first line, or the source
+                        // view's line of the proof's start
+                        let lh = if mode == Mode::Literate { super::view::z(13.0) * 1.4 } else { super::view::source_line_height() };
+                        let img = image::RgbaImage::from_raw(w, h, png.clone()).unwrap();
+                        let (first_top, right) = if mode == Mode::Literate {
+                            (cell.y + 5.0, cell.x + cell.width)
+                        } else {
+                            // (the source view's lines wrap: the proof's first row is where the
+                            // construct's tint begins, the caret being on it, at the editor's left)
+                            let x = (cell.x + 3.0) as u32;
+                            let above = *img.get_pixel(x, (drawn.y - 25.0).max(0.0) as u32);
+                            let tint = ((drawn.y - 15.0).max(0.0) as u32..(drawn.y + 15.0) as u32).find(|&y| img.get_pixel(x, y) != &above);
+                            // (with no construct known, the line's place, no line above it wrapping)
+                            let t = theory(&app);
+                            let line = t.lines.position(&t.decoded.text, t.decoded.to_decoded(t.blocks[i].start)).line;
+                            let top = tint.map_or(cell.y + cosmic::theme::active().cosmic().spacing.space_s as f32 + line as f32 * lh - place.scrolled.y, |y| y as f32);
+                            (top + place.scrolled.y, cell.x + cell.width)
+                        };
+                        let (right_inset, centre_off) = (right - (pop.x + pop.width), (pop.y + pop.height / 2.0) - (first_top + lh / 2.0));
+                        let top_inset = pop.y - if mode == Mode::Literate { cell.y } else { first_top };
+                        // The icon drawn inside the button's place: ink there, centred
+                        let bg = *img.get_pixel(drawn.x as u32 - 2, (drawn.y + drawn.height / 2.0) as u32);
+                        let far = |p: &image::Rgba<u8>| (0..3).map(|k| (p[k] as i32 - bg[k] as i32).abs()).sum::<i32>() > 120;
+                        let (mut xs, mut ys) = (Vec::new(), Vec::new());
+                        for y in (drawn.y as i32 - 6).max(0)..((drawn.y + drawn.height) as i32 + 6).min(h as i32) {
+                            for x in (drawn.x as i32 - 6)..((drawn.x + drawn.width) as i32 + 6).min(w as i32) {
+                                if far(img.get_pixel(x as u32, y as u32)) {
+                                    xs.push(x as f32);
+                                    ys.push(y as f32);
+                                }
+                            }
+                        }
+                        assert!(xs.len() > 10, "{name}: the icon is drawn where the button is ({drawn:?})");
+                        let ink = ((xs.iter().cloned().fold(f32::MAX, f32::min) + xs.iter().cloned().fold(0.0, f32::max)) / 2.0, (ys.iter().cloned().fold(f32::MAX, f32::min) + ys.iter().cloned().fold(0.0, f32::max)) / 2.0);
+                        let off = (ink.0 - (drawn.x + drawn.width / 2.0), ink.1 - (drawn.y + drawn.height / 2.0));
+                        report.push(format!("{name}: pop {pop:?} cell {cell:?} right inset {right_inset:.1} top inset {top_inset:.1} off the first line's centre {centre_off:.1} icon off its place {off:?}"));
+                        assert!(off.0.abs() <= 2.5 && off.1.abs() <= 2.5, "{name}: the icon is drawn {off:?} from the button's place");
+                        assert!(centre_off.abs() <= 1.0, "{name}: centred on the first line ({centre_off:.1} off)");
+                        assert!((2.0..=8.0).contains(&right_inset), "{name}: inside the right edge ({right_inset:.1})");
+                        if mode == Mode::Literate {
+                            assert!(top_inset >= 1.0, "{name}: inside the cell's top ({top_inset:.1})");
+                            assert!((right_inset - top_inset).abs() <= 1.0, "{name}: as far from the right as from the top ({right_inset:.1}, {top_inset:.1})");
+                        } else {
+                            assert!(top_inset >= -1.0, "{name}: within the first line's band ({top_inset:.1})");
+                        }
+                        light(false);
+                    }
+                }
+            }
+        }
+    }
+    eprintln!("{}", report.join("\n"));
+}
+
+/// The insert bar above Lean's goal: symbols (⟨⟩ and → among them) in a `def`'s body where the
+/// goal is its expected type, tactics at a tactic's start, Markdown in a docstring, the whole
+/// palette when opened; dark and light, beside and under, 800 and 1400 px; in the source view and
+/// the proof window too
+#[test]
+fn the_insert_bar_sits_above_the_lean_goal() {
+    use super::prover::InsertContext;
+    use super::snapshot::{caret_in_block, insert_bar_bounds};
+    let ctx = |app: &App| super::insert::insert_context(theory(app));
+    let expected = |app: &mut App| {
+        app.workspace.as_mut().unwrap().goals.messages = goal_parts(&[("", &["left right : List Nat"], "List Nat")]);
+    };
+    for dark in [true, false] {
+        for (w, h, beside) in [(1400.0, 900.0, true), (1400.0, 900.0, false), (800.0, 760.0, true), (800.0, 760.0, false)] {
+            let mut harness = Harness::new(Size::new(w, h));
+            light(!dark);
+            super::view::set_goal_beside(beside);
+            let mut app = lean_app(Mode::Literate);
+            app.show_sidebar = false;
+            app.show_right = false;
+            app.window_width = w;
+            let name = |what: &str| format!("bar-lean-{what}-{}-{}{}", if dark { "dark" } else { "light" }, w as u32, if beside { "-beside" } else { "-under" });
+            // a def's body, its expected type in the goal panel: symbols
+            let i = block_named(&app, "def merge");
+            update(&mut app, super::Message::EditBlock(i));
+            // (the page scrolled to it)
+            harness.draw(&app, &name("opening"));
+            super::snapshot::scroll_to_open_block(&mut harness, &app);
+            expected(&mut app);
+            caret_in_block(&mut app, ":= left", 3);
+            assert_eq!(ctx(&app), Some(InsertContext::Symbols), "a def's body is a term");
+            harness.draw(&app, &name("def"));
+            assert!(insert_bar_bounds(&mut harness, &app).is_some(), "{}: a bar above the goal", name("def"));
+            let quick: Vec<String> = super::prover::LEAN.quick_entries(InsertContext::Symbols, &app.workspace.as_ref().unwrap().caps).into_iter().map(|e| e.label).collect();
+            assert!(quick.iter().take(10).any(|l| l == "⟨⟩") && quick.iter().take(4).any(|l| l == "→"), "{quick:?}");
+            update(&mut app, super::Message::InsertBar(true));
+            harness.draw(&app, &name("def-open"));
+            update(&mut app, super::Message::InsertBar(false));
+            // a tactic's start in a proof: tactics
+            let i = block_named(&app, "theorem and_swap'");
+            update(&mut app, super::Message::EditBlock(i));
+            // (the page scrolled to it)
+            harness.draw(&app, &name("opening"));
+            super::snapshot::scroll_to_open_block(&mut harness, &app);
+            app.workspace.as_mut().unwrap().goals.messages = goal_parts(&[("", &["p q : Prop", "hp : p", "hq : q"], "q ∧ p")]);
+            caret_in_block(&mut app, "constructor", 0);
+            assert_eq!(ctx(&app), Some(InsertContext::Proof), "a tactic's start");
+            harness.draw(&app, &name("tactic"));
+            update(&mut app, super::Message::InsertBar(true));
+            harness.draw(&app, &name("tactic-open"));
+            // a search for tactics by label
+            update(&mut app, super::Message::PaletteQuery("simp".into()));
+            harness.draw(&app, &name("tactic-search"));
+            update(&mut app, super::Message::PaletteQuery(String::new()));
+            update(&mut app, super::Message::InsertBar(false));
+            // in a tactic's argument (have's statement): symbols again
+            caret_in_block(&mut app, "exact hq", 6);
+            assert_eq!(ctx(&app), Some(InsertContext::Symbols), "exact's term");
+            light(false);
+            super::view::set_goal_beside(true);
+        }
+    }
+    // The source view's goal pane (a def's body), and the proof window (a tactic's start)
+    let mut app = lean_app(Mode::Source);
+    app.show_sidebar = false;
+    app.show_right = false;
+    expected(&mut app);
+    {
+        let t = app.workspace.as_mut().unwrap().theory.as_mut().unwrap();
+        let at = t.local.find(":= left").map(|b| t.local[..b].chars().count()).unwrap() + 3;
+        t.cursor = at;
+        let pos = t.lines.position(&t.decoded.text, at);
+        super::editor::place(&mut t.source, pos);
+    }
+    assert_eq!(ctx(&app), Some(InsertContext::Symbols), "the source view: a def's body");
+    let mut harness = Harness::new(Size::new(1400.0, 900.0));
+    harness.draw(&app, "bar-lean-source-1400");
+    assert!(insert_bar_bounds(&mut harness, &app).is_some(), "a bar above the source view's goal");
+    super::view::set_goal_beside(false);
+    harness.draw(&app, "bar-lean-source-1400-under");
+    super::view::set_goal_beside(true);
+    // a declaration's docstring (part of its block): Markdown
+    {
+        let t = app.workspace.as_mut().unwrap().theory.as_mut().unwrap();
+        let at = t.local.find("keeps the causes").map(|b| t.local[..b].chars().count()).unwrap();
+        t.cursor = at;
+        let pos = t.lines.position(&t.decoded.text, at);
+        super::editor::place(&mut t.source, pos);
+    }
+    assert_eq!(ctx(&app), Some(InsertContext::Prose), "a docstring is Markdown");
+    app.workspace.as_mut().unwrap().output = Some(json!({"command": {"name": "theorem", "status": "finished"}, "messages": []}));
+    harness.draw(&app, "bar-lean-source-docstring");
+    drop(harness);
+    {
+        let t = app.workspace.as_mut().unwrap().theory.as_mut().unwrap();
+        let at = t.local.find("  constructor").map(|b| t.local[..b].chars().count()).unwrap() + 2;
+        t.cursor = at;
+    }
+    update(&mut app, super::Message::PopOut);
+    assert!(app.popout.is_some());
+    caret_in_block(&mut app, "constructor", 0);
+    super::snapshot::draw_element(super::view::proof_window(&app), "bar-lean-proof-window", Size::new(1000.0, 600.0));
+    assert_eq!(ctx(&app), Some(InsertContext::Proof), "the proof window: a tactic's start");
+}
+
+/// In a Lean `def`'s body: → from the bar's row at the caret, then ⟨⟩ (found by its character)
+/// around a selection; each one entry of the history, Unicode in the source, the editor still
+/// focused with its caret after the insertion
+#[test]
+fn a_chip_on_the_lean_bar_inserts_unicode_and_wraps_the_selection() {
+    use super::snapshot::{caret_in_block, click_chip};
+    use cosmic::widget::text_editor::{Cursor, Position};
+    let mut app = lean_app(Mode::Literate);
+    app.show_sidebar = false;
+    app.show_right = false;
+    let mut h = Harness::new(Size::new(1400.0, 900.0));
+    super::view::set_goal_beside(true);
+    let i = block_named(&app, "def merge");
+            update(&mut app, super::Message::EditBlock(i));
+    h.focus(&app, super::view::block_editor_id());
+    caret_in_block(&mut app, ":= left", 3);
+    h.draw(&app, "lean-chip-0");
+    let local = |app: &App| theory(app).local.clone();
+    for m in click_chip(&mut h, &app, "→") {
+        let task = cosmic::Application::update(&mut app, m);
+        h.run_task(&app, task);
+    }
+    for m in h.type_text(&app, " ") {
+        update(&mut app, m);
+    }
+    assert!(local(&app).contains(":= → left ++ right"), "→ at the caret, typing after it: {:?}", local(&app));
+    h.draw(&app, "lean-chip-1-arrow");
+    // ⟨⟩ around `left`
+    {
+        let be = app.workspace.as_mut().unwrap().theory.as_mut().unwrap().block_editor.as_mut().unwrap();
+        let text = be.content.text();
+        let s = text[..text.find("left ++").unwrap()].chars().count();
+        let li = super::editor::LineIndex::new(&text);
+        let p = li.position(&text, s);
+        be.content.move_to(Cursor { position: Position { line: p.line, column: p.column + 4 }, selection: Some(p) });
+    }
+    update(&mut app, super::Message::PaletteQuery("⟨".into()));
+    h.draw(&app, "lean-chip-2-search");
+    for m in click_chip(&mut h, &app, "⟨") {
+        let task = cosmic::Application::update(&mut app, m);
+        h.run_task(&app, task);
+    }
+    for m in h.type_text(&app, "!") {
+        update(&mut app, m);
+    }
+    assert!(local(&app).contains(":= → ⟨left⟩! ++ right"), "the selection wrapped, the caret after it: {:?}", local(&app));
+    let t = theory(&app);
+    for (_, text) in &t.steps {
+        assert_eq!(text.contains("⟨left"), text.contains("left⟩"), "a step with half the wrap: {text:?}");
+    }
+    h.draw(&app, "lean-chip-3-wrapped");
 }

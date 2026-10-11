@@ -155,6 +155,7 @@ pub fn demo_app(mode: Mode) -> App {
             gap_hover: None,
             tools_stopping: false,
             palette_query: String::new(),
+            insert_open: false,
             find: QueryState { operation: "find_theorems", ..Default::default() },
             find_input: String::new(),
             cex: QueryState { operation: "deductum_command", ..Default::default() },
@@ -588,6 +589,34 @@ impl Harness {
         let mut ui = UserInterface::build(super::view::view(app), self.size, self.cache.take().unwrap_or_default(), &mut self.renderer);
         ui.operate(&self.renderer, &mut cosmic::iced::advanced::widget::operation::focusable::focus::<()>(id));
         self.cache = Some(ui.into_cache());
+    }
+
+    /// An operation over the widgets as laid out (to find where something is)
+    pub fn operate(&mut self, app: &App, operation: &mut dyn cosmic::iced::advanced::widget::Operation<()>) {
+        let mut ui = UserInterface::build(super::view::view(app), self.size, self.cache.take().unwrap_or_default(), &mut self.renderer);
+        ui.operate(&self.renderer, operation);
+        self.cache = Some(ui.into_cache());
+    }
+
+    /// What an update's task does to the widgets, as the app's runtime would do it now: its
+    /// widget operations (a focus, a scroll) run on the view; anything that waits (a timer, the
+    /// host) is left. How many operations ran
+    pub fn run_task(&mut self, app: &App, task: cosmic::app::Task<super::Message>) -> usize {
+        use cosmic::iced::futures::StreamExt;
+        let Some(mut stream) = cosmic::iced::runtime::task::into_stream(task) else { return 0 };
+        // (as the runtime would: on Tokio, whose timers some tasks wait on; whatever is not ready
+        // within a moment is left)
+        let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().expect("a runtime");
+        let mut ran = 0;
+        while let Ok(Some(action)) = runtime.block_on(async { tokio::time::timeout(std::time::Duration::from_millis(30), stream.next()).await }) {
+            if let cosmic::iced::runtime::Action::Widget(mut operation) = action {
+                let mut ui = UserInterface::build(super::view::view(app), self.size, self.cache.take().unwrap_or_default(), &mut self.renderer);
+                ui.operate(&self.renderer, operation.as_mut());
+                self.cache = Some(ui.into_cache());
+                ran += 1;
+            }
+        }
+        ran
     }
 
     pub fn move_to(&mut self, app: &App, at: cosmic::iced::Point) -> Vec<super::Message> {
@@ -1671,7 +1700,7 @@ fn the_insert_palette_follows_the_context() {
     app.show_sidebar = false;
     let ti = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.kind == super::theory::Kind::Text).unwrap();
     let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(ti));
-    let ctx = |app: &App| super::view::insert_context(app.workspace.as_ref().unwrap().theory.as_ref().unwrap());
+    let ctx = |app: &App| super::insert::insert_context(app.workspace.as_ref().unwrap().theory.as_ref().unwrap());
     assert_eq!(ctx(&app), Some(super::prover::InsertContext::Prose));
     let mut h = Harness::new(Size::new(1320.0, 800.0));
     h.draw(&app, "palette-prose");
@@ -1906,12 +1935,12 @@ fn list_items_are_offered_in_a_list() {
         let shown = be.content.text();
         eprintln!("line {line}: {:?}", shown.split('\n').nth(line));
         super::editor::place(&mut be.content, cosmic::widget::text_editor::Position { line, column: 3 });
-        super::view::list_entries(app.workspace.as_ref().unwrap().theory.as_ref().unwrap(), &table)
+        super::insert::list_entries(app.workspace.as_ref().unwrap().theory.as_ref().unwrap(), &table)
     };
     let end = |app: &mut App| {
         let be = app.workspace.as_mut().unwrap().theory.as_mut().unwrap().block_editor.as_mut().unwrap();
         be.content.perform(cosmic::widget::text_editor::Action::Move(cosmic::widget::text_editor::Motion::DocumentEnd));
-        super::view::list_entries(app.workspace.as_ref().unwrap().theory.as_ref().unwrap(), &table)
+        super::insert::list_entries(app.workspace.as_ref().unwrap().theory.as_ref().unwrap(), &table)
     };
     let _ = at;
     // (the block opens on its last paragraph, the items)
@@ -2059,4 +2088,208 @@ fn a_tool_waiting_for_imports_says_so() {
     assert!(note.starts_with("sledgehammer starts when the prover reaches this line."), "{note}");
     assert!(note.contains("Base.thy 45%"), "{note}");
     draw(&app, "tool-waiting-for-imports", Size::new(1400.0, 900.0));
+}
+
+/// The caret in the open block's editor, `plus` characters after the first `needle` (as the
+/// editor shows the text, decoded)
+pub fn caret_in_block(app: &mut App, needle: &str, plus: usize) {
+    let be = app.workspace.as_mut().unwrap().theory.as_mut().unwrap().block_editor.as_mut().unwrap();
+    let text = be.content.text();
+    let at = text[..text.find(needle).unwrap_or_else(|| panic!("{needle:?} in {text:?}"))].chars().count() + plus;
+    let li = super::editor::LineIndex::new(&text);
+    super::editor::place(&mut be.content, li.position(&text, at));
+}
+
+/// Where the insert bar above the goal is (the page unscrolled), if it is drawn: where it is laid
+/// out, moved as far as the goal beside the text is moved to its place
+pub fn insert_bar_bounds(h: &mut Harness, app: &App) -> Option<cosmic::iced::Rectangle> {
+    struct Find(Option<cosmic::iced::Rectangle>);
+    impl cosmic::iced::advanced::widget::Operation<()> for Find {
+        fn traverse(&mut self, operate: &mut dyn FnMut(&mut dyn cosmic::iced::advanced::widget::Operation<()>)) {
+            operate(self);
+        }
+        fn container(&mut self, id: Option<&cosmic::widget::Id>, bounds: cosmic::iced::Rectangle) {
+            if id == Some(&super::insert::insert_bar_id()) {
+                self.0 = Some(bounds);
+            }
+        }
+    }
+    let mut find = Find(None);
+    h.operate(app, &mut find);
+    let beside = app.workspace.as_ref().unwrap().theory.as_ref().is_some_and(|t| t.mode == Mode::Literate) && super::view::goal_beside_on() && super::view::last_wide();
+    find.0.map(|b| if beside { b + super::gap::goal_moved() } else { b })
+}
+
+/// The bar's chip that inserts `before`, clicked through the widgets (found along the bar's row,
+/// left to right): the messages the click sent
+pub fn click_chip(h: &mut Harness, app: &App, before: &str) -> Vec<super::Message> {
+    let bar = insert_bar_bounds(h, app).expect("an insert bar");
+    // (its row: the search field's height, at the bar's top)
+    let y = bar.y + 4.0 + 16.0;
+    let mut x = bar.x + 4.0;
+    while x < bar.x + bar.width {
+        let msgs = h.click(app, cosmic::iced::Point::new(x, y));
+        if msgs.iter().any(|m| matches!(m, super::Message::Wrap(b, _) if b == before)) {
+            return msgs;
+        }
+        x += 4.0;
+    }
+    panic!("no chip for {before:?} on the bar at {bar:?}");
+}
+
+/// The insert bar above the goal, in an Isabelle proof: symbols inside the statement's quotes,
+/// proof steps at a step's place, the whole palette when opened; dark and light, the goal beside
+/// and under, 800 and 1400 px wide; in the source view and the proof window too
+#[test]
+fn the_insert_bar_sits_above_the_isabelle_goal() {
+    use super::prover::InsertContext;
+    let ctx = |app: &App| super::insert::insert_context(app.workspace.as_ref().unwrap().theory.as_ref().unwrap());
+    for dark in [true, false] {
+        for (w, h, beside) in [(1400.0, 900.0, true), (1400.0, 900.0, false), (800.0, 760.0, true), (800.0, 760.0, false)] {
+            let mut harness = Harness::new(Size::new(w, h));
+            cosmic::theme::set_active(if dark { cosmic::theme::ThemeType::Dark } else { cosmic::theme::ThemeType::Light });
+            super::view::set_goal_beside(beside);
+            let mut app = demo_app(Mode::Literate);
+            app.show_right = false;
+            app.show_sidebar = false;
+            app.window_width = w;
+            let i = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.name == "lemma").unwrap();
+            let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(i));
+            let name = |what: &str| format!("bar-isabelle-{what}-{}-{}{}", if dark { "dark" } else { "light" }, w as u32, if beside { "-beside" } else { "-under" });
+            // inside the statement's quotes: symbols
+            caret_in_block(&mut app, "x::nat", 0);
+            assert_eq!(ctx(&app), Some(InsertContext::Symbols));
+            harness.draw(&app, &name("term"));
+            assert!(insert_bar_bounds(&mut harness, &app).is_some(), "{}: a bar above the goal", name("term"));
+            // at a step's place: steps
+            caret_in_block(&mut app, "apply", 0);
+            assert_eq!(ctx(&app), Some(InsertContext::Proof));
+            harness.draw(&app, &name("step"));
+            // opened: the whole palette, the goals below it
+            let _ = cosmic::Application::update(&mut app, super::Message::InsertBar(true));
+            harness.draw(&app, &name("step-open"));
+            caret_in_block(&mut app, "x::nat", 0);
+            harness.draw(&app, &name("term-open"));
+            // a search: by name, and by the character itself
+            let _ = cosmic::Application::update(&mut app, super::Message::PaletteQuery("subseteq".into()));
+            harness.draw(&app, &name("term-search"));
+            let _ = cosmic::Application::update(&mut app, super::Message::InsertBar(false));
+            harness.draw(&app, &name("term-search-row"));
+            let _ = cosmic::Application::update(&mut app, super::Message::PaletteQuery(String::new()));
+            cosmic::theme::set_active(cosmic::theme::ThemeType::Dark);
+            super::view::set_goal_beside(true);
+        }
+    }
+    // The source view's goal pane, and the proof window
+    // (the theme and the toggle are the process's: set while this test has the UI's turn)
+    let mut harness = Harness::new(Size::new(1400.0, 900.0));
+    cosmic::theme::set_active(cosmic::theme::ThemeType::Dark);
+    super::view::set_goal_beside(true);
+    let mut app = demo_app(Mode::Source);
+    app.show_right = false;
+    app.show_sidebar = false;
+    {
+        let t = app.workspace.as_mut().unwrap().theory.as_mut().unwrap();
+        let line = t.decoded.text.lines().position(|l| l.contains("lemma add_zero")).unwrap();
+        let column = t.decoded.text.lines().nth(line).unwrap().find("x::").unwrap();
+        super::editor::place(&mut t.source, cosmic::widget::text_editor::Position { line, column });
+        t.cursor = DEMO.find("x::nat").unwrap();
+    }
+    assert_eq!(ctx(&app), Some(InsertContext::Symbols), "in the source view, inside the quotes");
+    harness.draw(&app, "bar-isabelle-source-1400");
+    assert!(insert_bar_bounds(&mut harness, &app).is_some(), "a bar above the source view's goal");
+    drop(harness);
+    let _ = cosmic::Application::update(&mut app, super::Message::PopOut);
+    assert!(app.popout.is_some());
+    caret_in_block(&mut app, "apply", 0);
+    draw_element(super::view::proof_window(&app), "bar-isabelle-proof-window", Size::new(1000.0, 600.0));
+    assert_eq!(ctx(&app), Some(InsertContext::Proof), "the proof window's block, in the source view");
+}
+
+/// A chip on the bar inserts at the caret (its symbol, in the source as its `\<name>`), wraps a
+/// selection with a pair (a cartouche), is one entry of the history, and leaves the editor
+/// focused with its caret after what was inserted: typing goes on there
+#[test]
+fn a_chip_on_the_bar_inserts_at_the_caret_and_keeps_the_focus() {
+    use cosmic::widget::text_editor::{Cursor, Position};
+    let mut app = demo_app(Mode::Literate);
+    app.show_right = false;
+    app.show_sidebar = false;
+    let i = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.name == "lemma").unwrap();
+    let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(i));
+    let mut h = Harness::new(Size::new(1400.0, 900.0));
+    super::view::set_goal_beside(true);
+    h.focus(&app, super::view::block_editor_id());
+    caret_in_block(&mut app, "x + 0", 0);
+    h.draw(&app, "chip-0");
+    let local = |app: &App| app.workspace.as_ref().unwrap().theory.as_ref().unwrap().local.clone();
+    // 1. a symbol at the caret, clicked through the widgets
+    let msgs = click_chip(&mut h, &app, "∃");
+    for m in msgs {
+        let task = cosmic::Application::update(&mut app, m);
+        h.run_task(&app, task);
+    }
+    assert!(local(&app).contains("x::nat. \\<exists>x + 0"), "the symbol at the caret, as its name in the source: {:?}", local(&app));
+    // typing goes on in the editor, after the symbol
+    for m in h.type_text(&app, "y") {
+        let _ = cosmic::Application::update(&mut app, m);
+    }
+    assert!(local(&app).contains("\\<exists>yx + 0"), "focus and caret kept: {:?}", local(&app));
+    h.draw(&app, "chip-1-inserted");
+    // 2. a pair around a selection: one step of the history
+    {
+        let be = app.workspace.as_mut().unwrap().theory.as_mut().unwrap().block_editor.as_mut().unwrap();
+        let text = be.content.text();
+        let s = text[..text.find("x + 0").unwrap()].chars().count();
+        let li = super::editor::LineIndex::new(&text);
+        let line = li.position(&text, s).line;
+        let col = li.position(&text, s).column;
+        be.content.move_to(Cursor { position: Position { line, column: col + 5 }, selection: Some(Position { line, column: col }) });
+    }
+    // (found by searching for its character: the pair is the bar's first match)
+    let _ = cosmic::Application::update(&mut app, super::Message::PaletteQuery("‹".into()));
+    h.draw(&app, "chip-2-search");
+    let msgs = click_chip(&mut h, &app, "‹");
+    for m in msgs {
+        let task = cosmic::Application::update(&mut app, m);
+        h.run_task(&app, task);
+    }
+    assert!(local(&app).contains("\\<open>x + 0\\<close>"), "the selection wrapped: {:?}", local(&app));
+    for m in h.type_text(&app, "z") {
+        let _ = cosmic::Application::update(&mut app, m);
+    }
+    assert!(local(&app).contains("\\<open>x + 0\\<close>z"), "the caret after the wrapped selection, focused: {:?}", local(&app));
+    let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+    for (_, text) in &t.steps {
+        assert_eq!(text.contains("\\<open>x + 0"), text.contains("x + 0\\<close>"), "a step with half the wrap: {text:?}");
+    }
+    h.draw(&app, "chip-2-wrapped");
+    super::view::set_goal_beside(true);
+}
+
+/// Scroll the literate page with the wheel until the open block's top is a third of the way
+/// down the window, as a reader would to work on it
+pub fn scroll_to_open_block(h: &mut Harness, app: &App) {
+    struct Find(Option<cosmic::iced::Rectangle>, cosmic::iced::Vector);
+    impl cosmic::iced::advanced::widget::Operation<()> for Find {
+        fn traverse(&mut self, operate: &mut dyn FnMut(&mut dyn cosmic::iced::advanced::widget::Operation<()>)) {
+            operate(self);
+        }
+        fn focusable(&mut self, id: Option<&cosmic::widget::Id>, bounds: cosmic::iced::Rectangle, _state: &mut dyn cosmic::iced::advanced::widget::operation::Focusable) {
+            if id == Some(&super::view::block_editor_id()) {
+                self.0 = Some(bounds);
+            }
+        }
+        fn scrollable(&mut self, id: Option<&cosmic::widget::Id>, _b: cosmic::iced::Rectangle, _c: cosmic::iced::Rectangle, translation: cosmic::iced::Vector, _s: &mut dyn cosmic::iced::advanced::widget::operation::Scrollable) {
+            if id == Some(&super::view::literate_scroll_id()) {
+                self.1 = translation;
+            }
+        }
+    }
+    let mut find = Find(None, cosmic::iced::Vector::ZERO);
+    h.operate(app, &mut find);
+    let Some(block) = find.0 else { return };
+    let by = block.y - find.1.y - h.size.height / 3.0;
+    h.move_to(app, cosmic::iced::Point::new(h.size.width / 4.0, h.size.height / 2.0));
+    h.events(app, &[cosmic::iced::Event::Mouse(cosmic::iced::mouse::Event::WheelScrolled { delta: cosmic::iced::mouse::ScrollDelta::Pixels { x: 0.0, y: -by } })]);
 }

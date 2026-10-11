@@ -458,8 +458,27 @@ impl Profile for Lean {
         edit::goal_completions(prefix, replace, &g).into_iter().map(|c| Completion { back: 0, replace: c.replace, text: c.text, label: c.label }).collect()
     }
 
-    fn in_term(&self, _before: &str) -> bool {
-        false
+    fn in_term(&self, before: &str) -> bool {
+        edit::place(before) == edit::Place::Term
+    }
+
+    fn formal_context(&self, before: &str) -> InsertContext {
+        match edit::place(before) {
+            edit::Place::Term => InsertContext::Symbols,
+            edit::Place::Tactic => InsertContext::Proof,
+            edit::Place::Doc => InsertContext::Prose,
+        }
+    }
+
+    fn quick_entries(&self, context: InsertContext, caps: &Capabilities) -> Vec<PaletteEntry> {
+        match context {
+            // (the anonymous constructor's brackets as a pair, wrapping the selection)
+            InsertContext::Symbols => ["∀", "∃", "→", "↔", "∧", "∨", "¬", "⟨⟩", "≤", "≥", "≠", "∈", "⊢", "ℕ", "↦", "×", "∘", "ℤ", "ℝ", "⊆", "∪", "∩", "λ"]
+                .iter()
+                .map(|c| if *c == "⟨⟩" { PaletteEntry::new(c, "⟨", "⟩") } else { PaletteEntry::new(c, c, "") })
+                .collect(),
+            _ => self.palette(context, caps),
+        }
     }
 
     fn palette(&self, context: InsertContext, caps: &Capabilities) -> Vec<PaletteEntry> {

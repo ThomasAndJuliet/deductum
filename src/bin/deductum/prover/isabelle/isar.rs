@@ -87,6 +87,48 @@ pub const COMMON_SYMBOLS: &[&str] = &[
     "β", "γ", "δ", "σ", "τ", "φ", "ψ", "ω", "⦇", "⦈", "⟦", "⟧", "‹", "›", "⇩", "⇧",
 ];
 
+/// The symbols the insert bar above the goal offers in a term, most wanted first: the logic,
+/// then relations and sets, then the brackets (a pair wraps the selection)
+pub const QUICK_SYMBOLS: &[(&str, &str, &str)] = &[
+    ("∀", "∀", ""),
+    ("∃", "∃", ""),
+    ("⟶", "⟶", ""),
+    ("⟷", "⟷", ""),
+    ("∧", "∧", ""),
+    ("∨", "∨", ""),
+    ("¬", "¬", ""),
+    ("⟹", "⟹", ""),
+    ("≤", "≤", ""),
+    ("≥", "≥", ""),
+    ("≠", "≠", ""),
+    ("∈", "∈", ""),
+    ("‹›", "‹", "›"),
+    ("λ", "λ", ""),
+    ("⊆", "⊆", ""),
+    ("∪", "∪", ""),
+    ("∩", "∩", ""),
+    ("×", "×", ""),
+    ("∘", "∘", ""),
+    ("⟦⟧", "⟦", "⟧"),
+    ("⦇⦈", "⦇", "⦈"),
+];
+
+/// Whether the caret, after `before` (decoded) in a formal block, is inside a term: inside a
+/// string (`"…"`) or a cartouche (`‹…›`, which nest). A string inside a cartouche, or a
+/// cartouche inside a string, is still a term
+pub fn in_term(before: &str) -> bool {
+    let (mut quoted, mut depth) = (false, 0usize);
+    for c in before.chars() {
+        match c {
+            '"' if depth == 0 => quoted = !quoted,
+            '‹' if !quoted => depth += 1,
+            '›' if !quoted => depth = depth.saturating_sub(1),
+            _ => {}
+        }
+    }
+    quoted || depth > 0
+}
+
 /// The first subgoal in a proof state's text (`goal (n subgoals):  1. …`)
 pub fn parse_goal(state: &str) -> Option<Goal> {
     let mut lines = state.lines().skip_while(|l| !l.trim_start().starts_with("1. "));
