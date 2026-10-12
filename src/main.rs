@@ -45,6 +45,8 @@ mod live;
 mod live_lean;
 #[cfg(test)]
 mod live_mixed;
+#[cfg(test)]
+mod live_tools;
 
 /// LaTeX's fonts, New Computer Modern, for the literate view's prose; see `res/fonts/README`
 pub const FONTS: [&[u8]; 5] = [
@@ -2684,6 +2686,13 @@ impl cosmic::Application for App {
                 }
                 if let Some(t) = self.workspace.as_mut().and_then(|w| w.theory.as_mut()) {
                     t.end_group();
+                }
+                // A tool started from the opened palette: the palette folds back to its row, so
+                // that the tool's findings come where the goal was, not below the palette
+                if let Some(ws) = &mut self.workspace
+                    && (ws.caps.typed_tool(before.trim()).is_some() || ws.profile.keyword_line(before.trim()))
+                {
+                    ws.insert_open = false;
                 }
                 tasks.push(widget::text_input::focus(focus));
                 return Task::batch(tasks);

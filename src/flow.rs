@@ -303,7 +303,11 @@ pub fn report(ws: &Workspace) -> Option<Report> {
     let status = t.caret_signature().2;
     let running = status == Status::Running;
     let messages: Vec<Value> = out["messages"].as_array().into_iter().flatten().filter(|m| m["kind"] != "state").cloned().collect();
-    let stopped = !running && messages.iter().any(|m| m["kind"] == "error" && m["text"].as_str().is_some_and(|x| ws.profile.interrupted(x)));
+    // Stopped: Isabelle's Interrupt, or (as Isabelle2025 leaves a cancelled sledgehammer) a
+    // failed run with no error to say why
+    let errors = messages.iter().filter(|m| m["kind"] == "error").count();
+    let stopped = !running
+        && (messages.iter().any(|m| m["kind"] == "error" && m["text"].as_str().is_some_and(|x| ws.profile.interrupted(x))) || (status == Status::Failed && errors == 0));
     let mut report = Report { tool: name.clone(), running, stoppable: tool.stop, outcome: Outcome::Running(String::new()), offers: Vec::new(), notes: Vec::new() };
     // The tool's text replaced (a proof inserted for it): what it said is history
     let (cs, ce, _) = t.caret_command()?;
@@ -421,6 +425,13 @@ pub fn report(ws: &Workspace) -> Option<Report> {
         *said = format!("{name} closes the goal here; nothing to insert.");
     }
     Some(report)
+}
+
+/// Whether the output at the caret is a typed tool's whose text has been replaced since (a proof
+/// inserted for it, a `claude` line in its place): what it said is not shown as if it were about
+/// what is there now
+pub fn stale_tool_output(ws: &Workspace) -> bool {
+    ws.output.as_ref().and_then(|o| o["command"]["name"].as_str()).is_some_and(|n| ws.caps.typed_tool(n).is_some()) && report(ws).is_none()
 }
 
 /// An LLM's proofs for its hole (a `claude` or `codex` line), the checked ones first, and the
