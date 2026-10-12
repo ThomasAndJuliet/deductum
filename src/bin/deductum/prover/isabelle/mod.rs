@@ -160,6 +160,15 @@ impl Profile for Isabelle {
     fn quick_entries(&self, context: InsertContext, caps: &Capabilities) -> Vec<PaletteEntry> {
         match context {
             InsertContext::Symbols => isar::QUICK_SYMBOLS.iter().map(|(l, b, a)| PaletteEntry::new(l, b, a)).collect(),
+            // On the bar's one row, the proof tools first: they are what is reached for while
+            // a goal is shown (sledgehammer, nitpick, …), and the steps follow as room allows
+            InsertContext::Proof => {
+                let (tools, steps): (Vec<_>, Vec<_>) = isar::PROOF_TEMPLATES
+                    .iter()
+                    .filter(|(_, _, _, tool)| tool.is_none_or(|t| caps.typed_tool(t).is_some()))
+                    .partition(|(_, _, _, tool)| tool.is_some());
+                tools.into_iter().chain(steps).map(|(l, b, a, _)| PaletteEntry::new(l, b, a)).collect()
+            }
             _ => self.palette(context, caps),
         }
     }

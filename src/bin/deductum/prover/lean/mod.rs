@@ -508,6 +508,12 @@ impl Profile for Lean {
                 .iter()
                 .map(|c| if *c == "⟨⟩" { PaletteEntry::new(c, "⟨", "⟩") } else { PaletteEntry::new(c, c, "") })
                 .collect(),
+            // On the bar's one row, the searching tactics first (exact?, apply?, …): what is
+            // reached for while a goal is shown; the other tactics follow as room allows
+            InsertContext::Proof => {
+                let (tools, steps): (Vec<_>, Vec<_>) = self.palette(context, caps).into_iter().partition(|e| e.label.ends_with('?'));
+                tools.into_iter().chain(steps).collect()
+            }
             _ => self.palette(context, caps),
         }
     }
