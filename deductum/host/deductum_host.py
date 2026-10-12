@@ -2077,6 +2077,7 @@ class Session:
                     facts_task.cancel()
                     raise
                 candidates, using = self.parse_fill_answer(answer, n)
+                candidates = list(dict.fromkeys(prompts.fit_candidate(self.driver_class.backend, text[:start], c) for c in candidates))
                 if not candidates and not using:
                     raise HostError(f"{agent} gave no candidates: " + (answer.strip()[:300] or err[:300]))
             results = [{"text": c, "ok": None, "message": ""} for c in candidates]

@@ -495,6 +495,16 @@ class PerBackendText(unittest.TestCase):
             self.assertIn("<<<GAP>>>", prompts.fill_prompt(backend).format(**fields))
             self.assertIn("using", prompts.facts_prompt(backend).format(**fields))
         self.assertIn("Lean 4", prompts.fill_prompt("lean"))
+
+    def test_lean_proposals_in_a_tactic_block_lose_their_by(self):
+        import prompts
+        before = "theorem t (xs : List Nat) : xs.reverse.reverse = xs := by\n  "
+        self.assertEqual(prompts.fit_candidate("lean", before, "by simp"), "simp")
+        self.assertEqual(prompts.fit_candidate("lean", before, "by\n  induction xs\n  simp"), "induction xs\n  simp")
+        self.assertEqual(prompts.fit_candidate("lean", before, "simp [List.reverse_reverse]"), "simp [List.reverse_reverse]")
+        # (a term gap keeps it, and Isabelle's `by` is a proof method)
+        self.assertEqual(prompts.fit_candidate("lean", "theorem t : 2 < 5 := ", "by decide"), "by decide")
+        self.assertEqual(prompts.fit_candidate("isabelle", "lemma \"x = x\"\n  ", "by simp"), "by simp")
         self.assertIn("Isabelle", prompts.fill_prompt("unknown"))
 
 

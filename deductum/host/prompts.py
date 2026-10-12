@@ -120,3 +120,30 @@ def fill_prompt(backend: str) -> str:
 
 def facts_prompt(backend: str) -> str:
     return FACTS.get(backend) or FACTS["isabelle"]
+
+
+def fit_candidate(backend: str, before: str, text: str) -> str:
+    """A proposed proof fitted to where the gap is. In a Lean tactic block (the gap starts its
+    line after `by`, or follows `by` on its own) the proof is tactics: models often answer with a
+    whole `by …` proof anyway, which does not parse there, so the `by` goes and a block under it
+    is set at the gap's column (live, claude[haiku] answered `by simp` for every gap after
+    `:= by`, and each failed with "unexpected token 'by'")"""
+    if backend != "lean":
+        return text
+    line = before.rsplit("\n", 1)[-1]
+    at_line_start = not line.strip()
+    tactic = before.rstrip().endswith(" by") or before.rstrip().endswith(":=by") or (at_line_start and " by" in before[-4000:])
+    body = text.strip("\n")
+    if not tactic or not (body.startswith("by ") or body.startswith("by\n") or body == "by"):
+        return text
+    rest = body[2:]
+    if not rest.startswith("\n"):
+        return rest.strip()
+    lines = [ln for ln in rest.split("\n")[1:]]
+    indents = [len(ln) - len(ln.lstrip()) for ln in lines if ln.strip()]
+    if not indents:
+        return text
+    cut = min(indents)
+    column = " " * len(line) if at_line_start else ""
+    out = [ln[cut:] for ln in lines]
+    return "\n".join([out[0]] + [column + ln if ln.strip() else ln for ln in out[1:]])
