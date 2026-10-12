@@ -1128,6 +1128,26 @@ impl Theory {
     fn local_prover(&self) -> Prover {
         let delta = ot::diff(&self.confirmed, &self.local);
         let mut prover = if delta.is_empty() { self.prover.clone() } else { self.prover.mapped(&delta) };
+        // A keyword line (`claude[haiku] hint`) reaches the prover as a `sorry` padded to its
+        // length, and the prover's command ends with the `sorry`: here it covers the line as typed
+        // (else the rest of the keyword was text of its own after the cell, and the caret at the
+        // line's end was in no command)
+        let unfinished = self.profile.unfinished();
+        if prover.commands.iter().any(|c| unfinished.contains(&c.name.as_str())) {
+            let chars: Vec<char> = self.local.chars().collect();
+            for c in prover.commands.iter_mut().filter(|c| unfinished.contains(&c.name.as_str()) && c.end <= chars.len() && c.start < c.end) {
+                let typed: String = chars[c.start..c.end].iter().collect();
+                if typed == c.name {
+                    continue;
+                }
+                let line_start = chars[..c.start].iter().rposition(|&ch| ch == '\n').map_or(0, |p| p + 1);
+                let line_end = chars[c.end..].iter().position(|&ch| ch == '\n').map_or(chars.len(), |p| c.end + p);
+                let line: String = chars[line_start..line_end].iter().collect();
+                if self.profile.keyword_line(&line) {
+                    c.end = chars[..line_end].iter().rposition(|ch| !ch.is_whitespace()).map_or(c.end, |i| (i + 1).max(c.end));
+                }
+            }
+        }
         // What the prover has not seen yet (typing not sent, or changes it has not reported on)
         // and everything after it is being checked again: waiting, not as it was
         if let Some(from) = self.unchecked_from() {
@@ -1459,7 +1479,19 @@ impl Theory {
             return false;
         }
         let Some(block) = self.blocks.iter().find(|b| b.start <= m.start && m.start < b.end.max(b.start + 1)) else { return false };
-        block.commands.iter().any(|c| self.typed_tools.contains(&c.name) && c.end <= m.start)
+        block.commands.iter().any(|c| self.typed_tools.contains(&c.name) && c.end <= m.start) || self.waits_on_previous(m)
+    }
+
+    /// Whether an error only says that the proof before its block is unfinished because a tool
+    /// typed there is the proof's last step (Isabelle's "Bad context for command" on the next
+    /// lemma, while sledgehammer runs in the one before it)
+    pub fn waits_on_previous(&self, m: &ProverMessage) -> bool {
+        if m.kind != "error" || !m.text.contains("Bad context for command") {
+            return false;
+        }
+        let Some(i) = self.blocks.iter().position(|b| b.start <= m.start && m.start < b.end.max(b.start + 1)) else { return false };
+        let previous = self.blocks[..i].iter().rev().find(|b| b.kind == theory::Kind::Formal);
+        previous.and_then(|b| b.commands.last()).is_some_and(|c| self.typed_tools.contains(&c.name))
     }
 
     /// A block's status as shown: a proof waiting on a tool typed in it is unfinished, not failed
