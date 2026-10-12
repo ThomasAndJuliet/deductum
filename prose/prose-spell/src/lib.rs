@@ -254,6 +254,11 @@ impl Checker {
                 if s > e {
                     return None;
                 }
+                // About what was masked out (the space a formula or a mention
+                // left), not about the prose
+                if (s..e).any(|i| chars[i] != original[i]) {
+                    return None;
+                }
                 let covered: String = original[s..e].iter().collect();
                 let replacements = lint
                     .suggestions
@@ -500,6 +505,13 @@ mod tests {
         assert!(words.contains(&"recieved"), "{issues:?}");
         assert!(words.contains(&"sitee"), "{issues:?}");
         assert!(!words.iter().any(|w| w.contains("fooo") || w.contains("exmple") || w.contains("qwzx")), "{issues:?}");
+    }
+
+    #[test]
+    fn nothing_is_reported_about_what_was_masked() {
+        let mut c = Checker::new(Settings { strictness: Strictness::Grammar, ..Settings::default() });
+        let text = "It holds for every real \\(\\xi\\), and for every $x$, too.";
+        assert!(c.check_markdown(text).is_empty(), "{:?}", c.check_markdown(text));
     }
 
     #[test]
