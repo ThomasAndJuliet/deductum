@@ -779,4 +779,4 @@ passes on a generated project, on a copy of DSRVLean and through the real host c
 Isabelle integration script passes on au-laptop; the live tests pass: 8 against Isabelle2025 on
 au-laptop (tock-Circus included), `live_lean` against `lake serve` on DSRVLean, and
 `live_mixed` with an Isabelle session on au-laptop and a Lean session on neo in one window,
-the Lean session created through the new-session page.
+the Lean session created through the new-session page; and `live_tools_isabelle` / `live_tools_lean`, which drive every interactive tool from typing to an inserted, checked proof against Isabelle2025 and Lean 4.19 on neo (all testing runs on neo since 2026-10-12, where CyPhyAssure Isabelle2025 now is too).
