@@ -746,8 +746,8 @@ plan above.
   pixel-identical on all 67 frames.
 - **MCP**: `proof_*` tools with `isabelle_*` aliases; `proof_run_tool`, `proof_search`,
   `proof_command`, `proof_capabilities`.
-- **prose-render**: `highlight::register` lets the app colour Lean and Isabelle code in prose (to
-  be upstreamed to Cerea's `prose/`).
+- **prose-render**: `highlight::register` lets the app colour Lean and Isabelle code in prose
+  (upstream in Cerea).
 
 - **Settings** (`settings.rs`, `settings_page.rs`): a typed, versioned settings file
   (`~/.config/deductum/settings.json`) and a COSMIC settings page (Ctrl+,): theme, text size,
@@ -765,9 +765,10 @@ plan above.
   search with Insert, `exact?`/`apply?` at the caret, Lean keyword lines and templates.
 - **UI review**: 26 of the 32 items from the review of the baseline frames were fixed, 6
   rejected where they would undo a recorded decision (`.local-design/ui-review-baseline.md`).
-- **prose-render** gained `highlight::register` and `RichText::on_hover`. Both belong upstream in
-  Cerea's `prose/` and should be pushed there with `git subtree push` (or re-made there) before
-  the next `subtree pull`, or the pull will conflict.
+- **prose-render** gained `highlight::register` and `RichText::on_hover`. Both are upstream in
+  Cerea's `prose/` (Cerea commit `0ced1b61`, 2026-10-12, applied there as a patch because Cerea's
+  `prose/` is a plain folder, not a subtree), and this branch pulled Cerea's `prose/` back, so the
+  two copies are the same.
 - **Updating a host**: every installed host file counts toward the bundle's version, and an
   installed host that is running is stopped before new sources are unpacked, so it never keeps
   serving old code (its running sessions resume, a new epoch, with the next client).
