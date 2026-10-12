@@ -367,6 +367,62 @@ the backend jar with the runtime's `isabelle scala_build`.
   cell's top (its icon drawn about 10 px off centre) in the literate view and 6 px above the
   proof's first line in the source view.
 
+## The proof tools' flow (2026-10-12)
+
+The human: the tools are for interactive use and need a good flow. Walking every tool through
+the window against real provers found the friction below; these are the decisions made for it
+(chosen, within the decisions above: tools typed in the proof, findings beside the goal and
+belonging to their cell, settings folded under the tool, no Sledgehammer button).
+
+- **Findings, not the tool's log.** A tool's section lists what it found, read by `flow.rs`
+  from what the prover printed. Isabelle's progress lines (`e found a proof...`,
+  `cvc5: Duplicate proof`, `Sledgehammering...`, `Done`) are left out; Sledgehammer printed 20
+  lines for two proofs. Each proof is listed once with the provers that found it and the time
+  its check took (`e · 5 ms`), in the order found, with try0's own choice and Lean's Try this
+  first and proofs whose check failed or timed out last. The status beside the tool's name says
+  how far it is (`running · 3 s`, `2 proofs found`, `counterexample found`); five proofs show
+  at first and the rest are a click away.
+- **The keyboard takes them.** At the tool's line, Alt+Enter takes the highlighted offer (the
+  first) and Alt+Up or Alt+Down picks another; the panel and the footer say so. Insert, by key
+  or click, replaces exactly the tool's text (or the hole of a `claude` line), as one undo step,
+  with the caret just after the proof in the open block as in the source view, and the editor
+  focused again, so typing goes on there. Esc while a tool (or an LLM) runs at the caret stops
+  it and leaves the block open, saying `stopping…` at once; the next Esc finishes the block.
+- **Outcomes said plainly, with what to do next.** A counterexample is a table of each part
+  (Nitpick's free variables, Quickcheck's values and evaluated terms) with "the statement is
+  false for these values". No counterexample, no proof, a timeout or a Lean error is a sentence,
+  and the next step is offered the same way as a proof: Sledgehammer again with twice the time
+  (`sledgehammer [timeout = 60]`, its other options kept) or asking `claude` in its place after a
+  Sledgehammer that found nothing; Sledgehammer after try0, solve_direct, try or a counterexample
+  search that found nothing; the tactic a Lean error suggests (`apply?` after `exact?`).
+  `solve_direct`'s facts are offered as `by (rule fact)` (checked live). A stopped tool reads as
+  stopped: a cancelled Isabelle2025 sledgehammer fails without an Interrupt, which had read as
+  "closes the goal".
+- **`claude` and `codex` lines show the same way**: a section with the model, its state and
+  time, Stop (and Esc), its proofs with the checked ones first, then the facts for Sledgehammer
+  as an offer of their own. Their proofs show with the caret at the end of the keyword: the
+  prover's command for the line is the padded `sorry`, which ended before the keyword did, so
+  the rest of the keyword had also shown as stray text after the cell. A Lean proposal in a
+  tactic block loses a leading `by` (the host's `prompts.fit_candidate`): live, every proposal of
+  `claude[haiku]` for a gap after `:= by` began with `by` and failed to parse.
+- **Nothing stale or alarming on the way.** Until the prover has seen the tool's line, the
+  section says it is waiting or checking; once a proof replaced the tool, the tool's old output
+  is not shown. While a tool is the last step of a proof, the lemma after it (Isabelle's "Bad
+  context for command") reads as waiting for that proof, not as failing. A tool started from the
+  opened insert palette folds the palette back to its row, so its findings come where the goal
+  was. Symbol chips on the insert bar set their glyphs at 19 px on squarish chips.
+- **Evidence.** `snapshot_tools.rs` draws every panel state from recorded host messages (dark
+  and light; beside, under and 800 px) and drives Alt+Enter, Alt+Down, a click on Insert, Esc
+  and more time through the widgets. `live_tools.rs` drives each flow through the window against
+  CyPhyAssure Isabelle2025 on neo (a host of its own): sledgehammer running 1.8 s after the last
+  key and its first proof at 2.4 s, inserted and checked 1.4 s after Alt+Enter, undone in one
+  step; from the insert palette with Alt+Down; solve_direct, try0, nitpick and quickcheck
+  counterexamples in about 1 s; nothing found, more time, Esc; claude asked 0.5 s after
+  Alt+Down, Alt+Enter, and a typed `claude[haiku]` line's checked proof inserted. And against
+  Lean 4.19.0: `exact?`, `rw?`, `simp?`, `apply?` suggested 0.5 s after typing and checked
+  0.6 s after Alt+Enter; `exact?` failing, then `apply?` run with Alt+Enter; omega's failure;
+  decide closing its goal; a `claude[haiku]` line.
+
 ## Not yet implemented
 
 - **Layout maths in the line being edited** (matrices, aligned displays) shows as source there; it renders in the rest of the block and beneath the line.
