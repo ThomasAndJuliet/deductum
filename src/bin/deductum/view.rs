@@ -1252,7 +1252,10 @@ fn messages_view<'a>(t: &Theory, block: &Block, table: &dyn super::codec::Symbol
         .filter(|m| current || m.kind == "error" || m.text.contains("counterexample"))
         .collect();
     if msgs.is_empty() {
-        return waiting.then(|| widget::text::caption("Unfinished: pick a proof the tool finds (beside the proof state)").into());
+        // (a lemma after a proof that ends with a tool waits for that proof, not for a tool of its own)
+        let after = t.messages_in(block.start, block.end).iter().any(|m| t.waits_on_previous(m));
+        let note = if after { "Checked once the proof before it is finished" } else { "Unfinished: pick a proof the tool finds (beside the proof state)" };
+        return waiting.then(|| widget::text::caption(note).into());
     }
     let mut col = widget::column::with_capacity(msgs.len()).spacing(2);
     for m in msgs.into_iter().take(6) {
@@ -1265,8 +1268,13 @@ fn messages_view<'a>(t: &Theory, block: &Block, table: &dyn super::codec::Symbol
 /// The goal at the caret, under the proof being edited, when the right sidebar is hidden
 /// A claude or codex job's proofs belong to the cell its line is in: shown there only
 pub fn fill_here(ws: &Workspace) -> bool {
-    let (Some(_), Some((start, _)), Some(t)) = (&ws.fill.job, ws.fill.replace, &ws.theory) else { return false };
+    let (Some(_), Some((start, end)), Some(t)) = (&ws.fill.job, ws.fill.replace, &ws.theory) else { return false };
     let at = super::App::local_offset_pub(t, start);
+    // On its line: the caret at the end of `claude[haiku]` is past the `sorry` the prover sees
+    // there, so past the end of the cell as the prover's commands make it
+    if at <= t.cursor && t.cursor <= super::App::local_offset_pub(t, end) {
+        return true;
+    }
     t.blocks.iter().find(|b| b.start <= t.cursor && t.cursor <= b.end).is_none_or(|b| b.start <= at && at <= b.end)
 }
 
@@ -2859,6 +2867,8 @@ fn tool_section<'a>(ws: &'a Workspace, tool: &'a Tool, r: super::flow::Report, t
     let fitting = r.offers.iter().filter(|o| matches!(o.act, super::flow::Act::Insert(_)) && o.ok.is_none()).count();
     let status = match &r.outcome {
         Outcome::Waiting(_) => "waiting".to_string(),
+        // (Esc or Stop pressed: said at once, though the provers take a moment to give up)
+        _ if r.running && ws.tools_stopping => "stopping…".to_string(),
         _ if r.running => format!("running · {secs} s"),
         Outcome::Proofs if found == 0 => format!("{fitting} {} that {}", if fitting == 1 { "fact" } else { "facts" }, if fitting == 1 { "fits" } else { "fit" }),
         Outcome::Proofs => format!("{found} {} found", if found == 1 { "proof" } else { "proofs" }),
@@ -2875,7 +2885,7 @@ fn tool_section<'a>(ws: &'a Workspace, tool: &'a Tool, r: super::flow::Report, t
         .push(widget::text::heading(r.tool.clone()))
         .push(widget::text::caption(status).class(muted()).width(Length::Fill));
     // (a tool that cannot be stopped on its own goes when its line is changed)
-    if r.running && r.stoppable {
+    if r.running && r.stoppable && !ws.tools_stopping {
         head = head.push(widget::tooltip(widget::button::text("Stop").on_press(Message::StopTools), widget::text::caption("Stop it (Esc)"), widget::tooltip::Position::Bottom));
     }
     let mut col = widget::column::with_capacity(8).spacing(sp.space_xs).push(head);
@@ -3066,7 +3076,7 @@ fn tool_settings<'a>(ws: &'a Workspace, tool: &'a Tool) -> Element<'a, Message> 
 fn tool_output<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Element<'a, Message> {
     let sp = spacing();
     let mut col = widget::column::with_capacity(8).spacing(sp.space_xxs);
-    if let Some(out) = &ws.output {
+    if let Some(out) = ws.output.as_ref().filter(|_| !super::flow::stale_tool_output(ws)) {
         // (a tool's Interrupt is its being stopped: said in its heading, not as an error)
         for m in out["messages"].as_array().into_iter().flatten().filter(|m| m["kind"] != "state" && !(m["kind"] == "error" && m["text"].as_str().is_some_and(|t| ws.profile.interrupted(t)))) {
             col = col.push(message_view(ws, m, table));
@@ -3275,6 +3285,7 @@ fn state_text<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Eleme
     match &ws.output {
         None => col = col.push(widget::text::caption("Move the caret into a proof to see its state.")),
         Some(out) if out.get("error").is_some() => col = col.push(widget::text::body(out["error"].as_str().unwrap_or("").to_string())),
+        Some(_) if super::flow::stale_tool_output(ws) => col = col.push(widget::text::caption("Checking…")),
         Some(out) => {
             if let Some(c) = out.get("command").filter(|c| c.is_object()) {
                 col = col.push(widget::text::caption(format!(
