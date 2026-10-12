@@ -30,11 +30,50 @@ pub fn mask_markdown(text: &str) -> String {
             _ => {}
         }
     }
+    for range in latex_maths(text) {
+        keep[range].fill(false);
+    }
     let mut out: String = text
         .char_indices()
         .map(|(i, c)| if keep[i] || c == '\n' { c } else { ' ' })
         .collect();
     blank_urls(&mut out);
+    out
+}
+
+/// Maths CommonMark does not know but Terminal Agents' threads and Cerea
+/// read: `\\(…\\)`, `\\[…\\]`, and `\\begin{align}`…`\\end{align}` and the like
+fn latex_maths(text: &str) -> Vec<std::ops::Range<usize>> {
+    const ENVIRONMENTS: [&str; 8] = ["align", "align*", "equation", "equation*", "gather", "gather*", "multline", "eqnarray"];
+    let mut out = Vec::new();
+    let bytes = text.as_bytes();
+    let mut i = 0;
+    while i + 1 < bytes.len() {
+        if bytes[i] == b'\\' {
+            let close = match bytes[i + 1] {
+                b'(' => Some("\\)"),
+                b'[' => Some("\\]"),
+                _ => None,
+            };
+            if let Some(close) = close
+                && let Some(end) = text[i + 2..].find(close)
+            {
+                out.push(i..i + 2 + end + 2);
+                i += 2 + end + 2;
+                continue;
+            }
+            if let Some(env) = ENVIRONMENTS.iter().find(|env| text[i..].starts_with(&format!("\\begin{{{env}}}"))) {
+                let end_tag = format!("\\end{{{env}}}");
+                let end = text[i..].find(&end_tag).map_or(text.len(), |e| i + e + end_tag.len());
+                out.push(i..end);
+                i = end;
+                continue;
+            }
+            i += 2;
+            continue;
+        }
+        i += 1;
+    }
     out
 }
 
@@ -78,6 +117,15 @@ mod tests {
         assert!(!masked.contains("x^2"));
         assert!(!masked.contains("let x"));
         assert_eq!(masked.lines().count(), text.lines().count());
+    }
+
+    #[test]
+    fn latex_delimited_maths_is_hidden() {
+        let text = "See \\(xqz\\) and\n\\[\n\\hat f(\\xi) = qwzx\n\\]\n\\begin{align}\nzzq &= 1\n\\end{align}\nfine words.\n";
+        let masked = mask_markdown(text);
+        assert!(!masked.contains("xqz") && !masked.contains("qwzx") && !masked.contains("zzq") && !masked.contains("hat"));
+        assert!(masked.contains("See") && masked.contains("fine words."));
+        assert_eq!(masked.chars().count(), text.chars().count());
     }
 
     #[test]
