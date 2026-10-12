@@ -216,7 +216,10 @@ impl<S: cosmic::iced::futures::Stream<Item = (String, link::Event)>> Live<S> {
     fn proved(&self, needle: &str) -> bool {
         let t = self.theory();
         let Some(at) = t.local.find(needle).map(|b| t.local[..b].chars().count()) else { return false };
-        t.settled() && t.blocks.iter().find(|b| b.start <= at && at <= b.end).is_some_and(|b| b.status == Status::Finished)
+        // (checked without an error and with no sorry left; a warning, such as simp's about a
+        // rule it already has, still proves it)
+        t.settled()
+            && t.blocks.iter().find(|b| b.start <= at && at <= b.end).is_some_and(|b| matches!(b.status, Status::Finished | Status::Warned) && !t.source_text(b.start, b.end).contains("sorry"))
     }
 }
 
