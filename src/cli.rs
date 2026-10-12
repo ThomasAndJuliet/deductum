@@ -47,6 +47,16 @@ pub fn parse(args: Vec<String>) -> Option<OpenRequest> {
                 println!("{}", usage());
                 std::process::exit(0);
             }
+            // The version stamp of the host sources this app carries (what it writes to an
+            // installed host's VERSION), so that a deployment can install the host itself and the
+            // app will not install it again, restarting it, when it next connects
+            "--bundle-version" => {
+                match super::link::bundle() {
+                    Some(bundle) => println!("{}", super::link::bundle_version(&bundle)),
+                    None => eprintln!("no host sources found beside this app"),
+                }
+                std::process::exit(0);
+            }
             _ if arg.starts_with("--machine=") => req.machine = Some(arg["--machine=".len()..].to_string()),
             _ if arg.starts_with("--session=") => req.session = Some(arg["--session=".len()..].to_string()),
             _ => req.path = Some(arg),
