@@ -56,7 +56,10 @@ fn commands(text: &str, tool: &str, tool_name: &str, status: &str) -> Vec<Value>
         } else {
             "finished"
         };
-        out.push(json!([start, start + n - indent, name, st]));
+        // (a keyword line is a `sorry` padded to its length, and the prover's command is the
+        // `sorry`, as recorded: the rest of the line is in no command)
+        let len = if name == "sorry" && tool_name == "sorry" && tool.len() > 5 && line.trim().starts_with(tool) { 5 } else { n - indent };
+        out.push(json!([start, start + len, name, st]));
     }
     out
 }
@@ -243,7 +246,8 @@ pub fn scenes() -> Vec<(&'static str, ToolScene)> {
         ("sledgehammer-found", ToolScene::isabelle("sledgehammer", "running", sledgehammer_running())),
         ("sledgehammer-done", ToolScene::isabelle("sledgehammer", "finished", sledgehammer_done())),
         ("sledgehammer-nothing", ToolScene::isabelle("sledgehammer", "finished", vec![msg("writeln", "Sledgehammering...", &[]), msg("writeln", "No proof found", &[])])),
-        ("sledgehammer-stopped", ToolScene::isabelle("sledgehammer", "failed", vec![msg("writeln", "Sledgehammering...", &[]), msg("error", "Interrupt", &[])])),
+        // (as recorded: a cancelled sledgehammer fails without an error)
+        ("sledgehammer-stopped", ToolScene::isabelle("sledgehammer", "failed", vec![msg("writeln", "Sledgehammering...", &[])])),
         ("nitpick-counterexample", ToolScene::isabelle("nitpick", "finished", nitpick_counterexample())),
         ("nitpick-timeout", ToolScene::isabelle("nitpick", "finished", vec![msg("writeln", "Nitpicking formula...", &[]), msg("writeln", "Nitpick ran out of time after checking 7 of 10 scopes", &[])])),
         ("quickcheck-counterexample", ToolScene::isabelle("quickcheck", "finished", quickcheck_counterexample())),
@@ -433,6 +437,20 @@ fn alt_enter_takes_lean_suggestions_and_llm_proofs() {
     assert!(theory(&app).local.contains("add.commute)!"), "{:?}", theory(&app).local);
 }
 
+/// A `claude[haiku]` line's proofs show with the caret where typing left it, at the line's end,
+/// past the `sorry` the prover sees there
+#[test]
+fn llm_proofs_show_with_the_caret_at_the_end_of_the_keyword() {
+    let mut scene = ToolScene::isabelle("claude[haiku]", "warned", vec![]);
+    scene.fill = Some(("done", claude_candidates(), vec![]));
+    let mut app = scene.app(1400.0);
+    caret_in_block(&mut app, "claude[haiku]", "claude[haiku]".len());
+    app.workspace.as_mut().unwrap().theory.as_mut().unwrap().sync_block_cursor();
+    let ws = app.workspace.as_ref().unwrap();
+    assert!(super::view::fill_here(ws), "the job's proofs belong here");
+    assert_eq!(super::flow::offers_here(ws)[0].code, "by (simp add: add.commute)");
+}
+
 /// More time is the tool's line again with twice its timeout, the caret on it (so its new run
 /// shows); a counterexample search that found none offers Sledgehammer the same way
 #[test]
@@ -450,4 +468,69 @@ fn again_with_more_time_rewrites_the_tool_line() {
     assert_eq!(t.source_text(s, e), "sledgehammer [timeout = 60]");
     h.draw(&app, "again-checking");
     assert!(matches!(super::flow::report(app.workspace.as_ref().unwrap()).unwrap().outcome, super::flow::Outcome::Waiting(_)), "until the prover has seen the new line, the panel waits");
+}
+
+
+
+#[test]
+fn zz_debug_focus() {
+    for height in [950.0, 260.0, 200.0] {
+        let mut h = Harness::new(Size::new(1400.0, height));
+        super::view::set_goal_beside(true);
+        let scene = ToolScene::isabelle("sorry", "warned", vec![]);
+        let mut app = scene.app(1400.0);
+        let t = app.workspace.as_mut().unwrap().theory.as_mut().unwrap();
+        let be = t.block_editor.as_mut().unwrap();
+        let text = be.content.text();
+        let li = super::editor::LineIndex::new(&text);
+        super::editor::place(&mut be.content, li.position(&text, text.chars().count()));
+        t.sync_block_cursor();
+        h.focus(&app, super::view::block_editor_id());
+        h.draw(&app, &format!("dbg-{height}-0"));
+        for i in 0..3 {
+            h.frame(&app);
+            let msgs = h.key(&app, cosmic::iced::keyboard::Key::Named(cosmic::iced::keyboard::key::Named::Backspace), None);
+            println!("{height} {i}: {} completions {msgs:?}", theory(&app).completions.len());
+            for m in msgs {
+                update(&mut app, &mut h, m);
+            }
+            h.draw(&app, &format!("dbg-{height}-{}", i + 1));
+        }
+    }
+}
+
+
+/// The prover's command for a keyword line ends with the `sorry` it stands for; the cell takes
+/// the whole line, with no stray "e[haiku]" after it
+#[test]
+fn a_keyword_line_stays_in_its_cell() {
+    let scene = ToolScene::isabelle("claude[haiku]", "warned", vec![]);
+    let text = scene.text();
+    let prover = json!({"revision": 1, "status": {}, "commands": commands(&text, "claude[haiku]", "sorry", "warned"), "messages": []});
+    let doc = json!({"text": text, "revision": 1, "prover": prover});
+    let t = Theory::new("/x/Flow.thy".into(), &doc, &*crate::prover::profile(None).symbols(None), Arc::new(HashMap::new()), Mode::Literate, crate::prover::profile(None));
+    let shown: Vec<String> = t.blocks.iter().map(|b| t.local.chars().skip(b.start).take(b.end - b.start).collect()).collect();
+    assert!(shown.iter().any(|b| b.starts_with("lemma comm") && b.ends_with("claude[haiku]")), "{shown:?}");
+    assert!(t.blocks.iter().all(|b| b.kind != super::theory::Kind::Comment), "{shown:?}");
+}
+
+/// While a tool is the last step of a proof, Isabelle says "Bad context" of the lemma after it:
+/// that lemma reads as waiting (unfinished), not as failing
+#[test]
+fn the_lemma_after_a_running_tool_is_not_shown_failing() {
+    let scene = ToolScene::isabelle("sledgehammer", "running", vec![]);
+    let text = scene.text();
+    let mut cmds = commands(&text, "sledgehammer", "sledgehammer", "running");
+    let wrong = text[..text.find("lemma wrong").unwrap()].chars().count();
+    for c in cmds.iter_mut().filter(|c| c[0] == json!(wrong)) {
+        c[3] = json!("failed");
+    }
+    let prover = json!({"revision": 1, "status": {}, "commands": cmds, "messages": [{"start": wrong, "end": wrong + 5, "kind": "error", "text": "Bad context for command \"lemma\" -- using reset state"}]});
+    let doc = json!({"text": text, "revision": 1, "prover": prover});
+    let mut t = Theory::new("/x/Flow.thy".into(), &doc, &*crate::prover::profile(None).symbols(None), Arc::new(HashMap::new()), Mode::Literate, crate::prover::profile(None));
+    t.typed_tools = crate::prover::profile(None).default_capabilities().typed_tools();
+    let b = t.blocks.iter().find(|b| b.start == wrong).expect("the next lemma");
+    assert_eq!(b.status, super::theory::Status::Failed);
+    assert_eq!(t.shown_status(b.start, b.end, b.status), super::theory::Status::Warned);
+    assert!(t.messages_in(b.start, b.end).iter().all(|m| t.waits_on_previous(m)));
 }

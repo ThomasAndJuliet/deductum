@@ -638,6 +638,13 @@ impl Harness {
         self.key_with(app, key, text, cosmic::iced::keyboard::Modifiers::empty())
     }
 
+    /// A frame drawn and not kept, as the app's runtime draws one before the next event: the
+    /// widgets bring their state up to the page as laid out (a test that sends keys after the
+    /// page changed shape, with no frame in between, can find the editor without its focus)
+    pub fn frame(&mut self, app: &App) {
+        let _ = self.render(app, None);
+    }
+
     /// A key with modifiers held (Alt+Enter)
     pub fn key_with(&mut self, app: &App, key: cosmic::iced::keyboard::Key, text: Option<&str>, modifiers: cosmic::iced::keyboard::Modifiers) -> Vec<super::Message> {
         use cosmic::iced::keyboard::{Event as K, Location, key::{NativeCode, Physical}};
@@ -666,6 +673,10 @@ impl Harness {
 
     /// A frame, saved under `CT_SNAPSHOTS` as `name.png`
     pub fn draw(&mut self, app: &App, name: &str) -> Vec<u8> {
+        self.render(app, Some(name))
+    }
+
+    fn render(&mut self, app: &App, name: Option<&str>) -> Vec<u8> {
         let theme = cosmic::theme::active();
         let mut ui = UserInterface::build(super::view::view(app), self.size, self.cache.take().unwrap_or_default(), &mut self.renderer);
         // (a moment before any editor took focus: its caret is in the visible half of its blink
@@ -683,7 +694,9 @@ impl Harness {
         self.cache = Some(ui.into_cache());
         let physical = cosmic::iced::Size::new(self.size.width as u32, self.size.height as u32);
         let rgba = self.renderer.screenshot(physical, 1.0, theme.cosmic().bg_color().into());
-        if let Some(dir) = std::env::var_os("CT_SNAPSHOTS").filter(|d| !d.is_empty()) {
+        if let Some(dir) = std::env::var_os("CT_SNAPSHOTS").filter(|d| !d.is_empty())
+            && let Some(name) = name
+        {
             image::RgbaImage::from_raw(physical.width, physical.height, rgba.clone())
                 .expect("a frame")
                 .save(std::path::Path::new(&dir).join(format!("{name}.png")))
