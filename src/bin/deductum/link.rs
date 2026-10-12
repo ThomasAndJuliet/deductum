@@ -152,7 +152,7 @@ pub fn bundle() -> Option<PathBuf> {
     candidates.into_iter().find(|p| p.join("host/deductum_host.py").is_file())
 }
 
-fn bundle_version(bundle: &std::path::Path) -> String {
+pub fn bundle_version(bundle: &std::path::Path) -> String {
     // Every file that is installed (as `install` packs them), so that a change to any of them,
     // a driver or a prompt as much as the host itself, installs the new sources
     fn walk(dir: &std::path::Path, rel: &str, out: &mut Vec<(String, std::path::PathBuf)>) {
