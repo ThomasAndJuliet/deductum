@@ -36,6 +36,28 @@ type Tokens = Arc<Vec<(Range<usize>, Class)>>;
 
 static CACHE: LazyLock<Mutex<HashMap<u64, Tokens>>> = LazyLock::new(Default::default);
 
+/// A lexer an app supplies for a language syntect has no grammar for: the
+/// byte ranges of `code` and their classes, in order
+pub type Lexer = fn(&str) -> Vec<(Range<usize>, Class)>;
+
+/// Lexers apps registered, by language name, lower case
+static LEXERS: LazyLock<Mutex<HashMap<String, Lexer>>> = LazyLock::new(Default::default);
+
+/// Colour code blocks in `lang` (and each of `aliases`) with `lexer`. An app
+/// that knows a language better than syntect (a proof assistant's, say)
+/// registers it once at startup; it takes precedence over a grammar
+pub fn register(lang: &str, aliases: &[&str], lexer: Lexer) {
+    let mut lexers = LEXERS.lock().unwrap();
+    for name in std::iter::once(lang).chain(aliases.iter().copied()) {
+        lexers.insert(name.trim().to_lowercase(), lexer);
+    }
+    CACHE.lock().unwrap().clear();
+}
+
+fn registered(lang: &str) -> Option<Lexer> {
+    LEXERS.lock().unwrap().get(&lang.trim().to_lowercase()).copied()
+}
+
 /// The grammar for a code block's language, by its name or an extension
 fn syntax(lang: &str) -> Option<&'static SyntaxReference> {
     let lang = lang.trim().to_lowercase();
@@ -64,7 +86,7 @@ fn syntax(lang: &str) -> Option<&'static SyntaxReference> {
 
 /// Whether `lang` names a language that is coloured
 pub fn knows(lang: &str) -> bool {
-    syntax(lang).is_some()
+    registered(lang).is_some() || syntax(lang).is_some()
 }
 
 /// The class of the innermost scope in `stack` that has one
@@ -129,7 +151,10 @@ pub fn tokens(code: &str, lang: &str) -> Tokens {
     if let Some(found) = CACHE.lock().unwrap().get(&key) {
         return found.clone();
     }
-    let tokens = Arc::new(syntax(lang).map_or_else(Vec::new, |syntax| parse(code, syntax)));
+    let tokens = Arc::new(match registered(lang) {
+        Some(lexer) => lexer(code),
+        None => syntax(lang).map_or_else(Vec::new, |syntax| parse(code, syntax)),
+    });
     let mut cache = CACHE.lock().unwrap();
     if cache.len() > 2048 {
         cache.clear();
@@ -213,6 +238,16 @@ mod tests {
         assert_eq!(class_of("// hi"), Some(Class::Comment));
         assert_eq!(class_of("\"s\""), Some(Class::String));
         assert_eq!(class_of("42"), Some(Class::Number));
+    }
+
+    #[test]
+    fn registered_lexers_take_precedence() {
+        fn words(code: &str) -> Vec<(Range<usize>, Class)> {
+            code.find("lemma").map(|at| vec![(at..at + 5, Class::Keyword)]).unwrap_or_default()
+        }
+        register("toy-prover", &["toy"], words);
+        assert!(knows("toy-prover") && knows("TOY"));
+        assert_eq!(tokens("  lemma x", "toy").as_slice(), &[(2..7, Class::Keyword)]);
     }
 
     #[test]
