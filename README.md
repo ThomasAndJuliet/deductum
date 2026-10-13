@@ -13,7 +13,6 @@ all targets and tests the complete Rust workspace with all features, including
 Deductum's headless UI/unit tests, and runs all Python host unit-test modules:
 
 ```sh
-cargo --offline --locked check --workspace --all-targets --all-features
 cargo --offline --locked test --workspace --all-targets --all-features
 python3 -m unittest discover -s deductum/host/tests -p "test_*.py"
 ```

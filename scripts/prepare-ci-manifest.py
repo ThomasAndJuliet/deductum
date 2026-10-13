@@ -5,8 +5,7 @@ source = Path(__file__).resolve().parents[1] / 'packaging/flatpak/dev.twright.De
 text = source.read_text()
 needle = '  - cargo --offline --locked build --release --bin deductum\n'
 assert text.count(needle) == 1
-checks = ('  - cargo --offline --locked check --workspace --all-targets --all-features\n'
-          '  - cargo --offline --locked test --workspace --all-targets --all-features\n'
+checks = ('  - cargo --offline --locked test --workspace --all-targets --all-features\n'
           '  - python3 -m unittest discover -s deductum/host/tests -p "test_*.py"\n')
 env_needle = '    CARGO_HOME: /run/build/deductum/cargo\n'
 assert text.count(env_needle) == 1
