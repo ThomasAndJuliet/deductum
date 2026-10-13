@@ -5,6 +5,12 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+# Every release-branch push keeps its own slot, including pending runs.
+# PRs and feature branches replace only superseded work for the same ref.
+concurrency:
+  group: >-
+    ${{ github.workflow }}-${{ github.event_name }}-${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.run_id || github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'push' || github.ref != 'refs/heads/main' }}
 jobs:
   flatpak:
     name: Deductum workspace tests and Flatpak

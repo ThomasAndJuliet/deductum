@@ -47,6 +47,11 @@ The release workflow waits for the entire CI workflow, including both prover
 integrations, to succeed before submitting to Neo's trusted reusable publisher.
 Other branches and pull requests do not publish stable.
 
+CI cancels superseded runs for the same pull request or feature branch to save
+hosted runner minutes. Each push to `main` uses its own concurrency group and
+never automatically cancels another release-branch push, including a pending
+run. Every passing default-branch push retains its publication opportunity.
+
 Neo independently verifies the repository, source, successful CI run and immutable
 artifact before its offline publisher signs the private stable release. GitHub
 holds no signing key. The repository variable `NEO_CI_MINIMUM_RUN_NUMBER` and Neo's
