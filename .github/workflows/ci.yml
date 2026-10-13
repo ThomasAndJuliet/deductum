@@ -1,7 +1,6 @@
 name: CI
 on:
   push:
-  pull_request:
   workflow_dispatch:
 permissions:
   contents: read
@@ -26,18 +25,24 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Reuse the build validated for this commit on its branch
+        id: reuse
+        if: runner.environment == 'self-hosted' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: neo-ci-build-cache reuse ci-artifact
       - name: Verify hosted-runner cleanup boundaries
-        if: runner.environment == 'github-hosted'
+        if: (runner.environment == 'github-hosted') && steps.reuse.outputs.reused != 'true'
         run: python3 scripts/test-reclaim-hosted-runner-storage.py
       - name: Reclaim unused hosted-runner toolchains before SDK updates
-        if: runner.environment == 'github-hosted'
+        if: (runner.environment == 'github-hosted') && steps.reuse.outputs.reused != 'true'
         run: python3 scripts/reclaim-hosted-runner-storage.py
       - name: Prepare the SDK test and build manifest
+        if: steps.reuse.outputs.reused != 'true'
         run: python3 scripts/prepare-ci-manifest.py
       - name: Share neo's compilation cache with the Flatpak build
-        if: runner.environment == 'self-hosted'
+        if: (runner.environment == 'self-hosted') && steps.reuse.outputs.reused != 'true'
         run: neo-ci-sccache-manifest packaging/flatpak/dev.twright.Deductum.ci.yml
       - name: Check all targets, test the complete workspace and build Deductum
+        if: steps.reuse.outputs.reused != 'true'
         uses: flatpak/flatpak-github-actions/flatpak-builder@0fadf5d65cdfbdb9c94c7a2f3637c41206cc1a70 # v6
         with:
           manifest-path: packaging/flatpak/dev.twright.Deductum.ci.yml
@@ -47,7 +52,11 @@ jobs:
           cache: false
           branch: stable
       - name: Validate the finished package and record tested source provenance
+        if: steps.reuse.outputs.reused != 'true'
         run: python3 scripts/package-ci-release.py build-flatpak
+      - name: Keep this validated build on neo for its release-branch push
+        if: runner.environment == 'self-hosted' && github.event_name == 'push' && github.ref != 'refs/heads/main' && steps.reuse.outputs.reused != 'true'
+        run: neo-ci-build-cache store ci-artifact
       - name: Preserve this successful release-branch build
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
