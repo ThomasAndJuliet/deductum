@@ -14,6 +14,7 @@ concurrency:
 jobs:
   flatpak:
     name: Deductum workspace tests and Flatpak
+    if: vars.CI_RUNNER != 'neo'
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     # A disposable build runner needs nested Flatpak sandboxes. Production
@@ -21,16 +22,21 @@ jobs:
     container:
       image: ghcr.io/flathub-infra/flatpak-github-actions:freedesktop-25.08
       options: --privileged
-    steps:
+    steps: &flatpak-steps
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Verify hosted-runner cleanup boundaries
+        if: runner.environment == 'github-hosted'
         run: python3 scripts/test-reclaim-hosted-runner-storage.py
       - name: Reclaim unused hosted-runner toolchains before SDK updates
+        if: runner.environment == 'github-hosted'
         run: python3 scripts/reclaim-hosted-runner-storage.py
       - name: Prepare the SDK test and build manifest
         run: python3 scripts/prepare-ci-manifest.py
+      - name: Share neo's compilation cache with the Flatpak build
+        if: runner.environment == 'self-hosted'
+        run: neo-ci-sccache-manifest packaging/flatpak/dev.twright.Deductum.ci.yml
       - name: Check all targets, test the complete workspace and build Deductum
         uses: flatpak/flatpak-github-actions/flatpak-builder@0fadf5d65cdfbdb9c94c7a2f3637c41206cc1a70 # v6
         with:
@@ -53,6 +59,15 @@ jobs:
           if-no-files-found: error
           retention-days: 7
           compression-level: 0
+  # The same steps on the household runners (neo-infrastructure
+  # services/ci-runners); the CI_RUNNER organisation variable chooses.
+  flatpak-neo:
+    name: Deductum workspace tests and Flatpak on neo
+    if: vars.CI_RUNNER == 'neo'
+    runs-on: [self-hosted, neo]
+    timeout-minutes: 120
+    steps: *flatpak-steps
+
   provers:
     name: Real Isabelle and Lean backend integrations
     runs-on: ubuntu-24.04
