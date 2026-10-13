@@ -14,7 +14,7 @@ concurrency:
 jobs:
   flatpak:
     name: Deductum workspace tests and Flatpak
-    if: vars.CI_RUNNER != 'neo'
+    if: vars.CI_RUNNER == 'hosted'
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     # A disposable build runner needs nested Flatpak sandboxes. Production
@@ -60,10 +60,11 @@ jobs:
           retention-days: 7
           compression-level: 0
   # The same steps on the household runners (neo-infrastructure
-  # services/ci-runners); the CI_RUNNER organisation variable chooses.
+  # services/ci-runners), the default. Set the CI_RUNNER variable to
+  # hosted to use GitHub-hosted runners instead.
   flatpak-neo:
     name: Deductum workspace tests and Flatpak on neo
-    if: vars.CI_RUNNER == 'neo'
+    if: vars.CI_RUNNER != 'hosted'
     runs-on: [self-hosted, neo]
     timeout-minutes: 120
     steps: *flatpak-steps
