@@ -48,14 +48,16 @@ def check(cond, what):
         FAILURES.append(what)
 
 
-def wait_for(client, pred, timeout=240, what="condition"):
-    t0 = time.time()
-    while time.time() - t0 < timeout:
+def wait_for(client, pred, timeout=240, what="condition", on_wait=None):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
         for i, ev in enumerate(client.events):
             if pred(ev):
                 del client.events[:i + 1]
                 return ev
         client.events.clear()
+        if on_wait is not None:
+            on_wait()
         try:
             client.sock.settimeout(1.0)
             msg = client.read_message()
@@ -327,22 +329,72 @@ def main():
     check(r["started"] and any(c.get("ok") for c in ev.get("candidates", [])), "a paused-on claude line is filled too")
     check("canceled" in app.request("cancel_tools", session=sid), "proof tools can be stopped on their own")
 
-    # A typed sledgehammer, stopped while it runs: it stops, as if its time ran out
+    # Exercise the actual StopToolsAgain policy: six attempts at most, 3s apart.
+    # A cancellation reply counts queued execution IDs, not completed interrupts.
     doc = app.request("read", session=sid, path=str(thy))["doc"]
     at = doc["text"].rindex("\nend")
+    inserted = '\nlemma zz: "rev (rev (xs::nat list)) = xs"\n  sledgehammer\n  sorry\n'
     app.request("edit", session=sid, path=str(thy), revision=doc["revision"],
-                edits=[{"start": at, "end": at, "text": '\nlemma zz: "rev (rev (xs::nat list)) = xs"\n  sledgehammer\n  sorry\n'}], txn="sh")
+                edits=[{"start": at, "end": at, "text": inserted}], txn="sh")
+    current = app.request("read", session=sid, path=str(thy))["doc"]
+    target = at + inserted.index("sledgehammer")
+    revision = current["revision"]
+    snapshots = []
+
     def sh_cmd(e):
-        return [c for c in (e.get("prover") or {}).get("commands", []) if c[2] == "sledgehammer"]
-    wait_for(app, lambda e: e.get("event") == "doc_prover" and any(c[3] == "running" for c in sh_cmd(e)), timeout=120,
-             what="sledgehammer running")
+        if (e.get("event") != "doc_prover" or e.get("session") != sid
+                or e.get("path") != str(thy)):
+            return []
+        prover = e.get("prover") or {}
+        # Frontend revision and the inserted command's span fence out old events;
+        # backend revisions restart with a new prover epoch and are diagnostic only.
+        if prover.get("revision") != revision:
+            return []
+        commands = [c for c in prover.get("commands", [])
+                    if c[2] == "sledgehammer" and c[0] <= target < c[1]]
+        if commands:
+            snapshots.append({"revision": prover.get("revision"),
+                              "backend_revision": prover.get("backend_revision"),
+                              "commands": commands})
+            del snapshots[:-8]
+        return commands
+
+    wait_for(app, lambda e: any(c[3] == "running" for c in sh_cmd(e)), timeout=120,
+             what="new sledgehammer running")
+    stop_started = time.monotonic()
     n = app.request("cancel_tools", session=sid).get("canceled", 0)
-    ev = wait_for(app, lambda e: e.get("event") == "doc_prover" and sh_cmd(e) and all(c[3] != "running" for c in sh_cmd(e)),
-                  timeout=60, what="sledgehammer stopped")
+    print("     StopToolsAgain attempt 1 targeted", n, "execution IDs", flush=True)
+    # Preserve the original first-request targeting assertion, before any wait.
+    check(n >= 1, "stop reaches a running sledgehammer (%d executions)" % n)
+    attempts = 1
+
+    def repeat_stop():
+        nonlocal attempts
+        if attempts < 6 and time.monotonic() - stop_started >= 3 * attempts:
+            count = app.request("cancel_tools", session=sid).get("canceled", 0)
+            attempts += 1
+            print("     StopToolsAgain attempt", attempts, "targeted", count,
+                  "execution IDs", flush=True)
+
+    try:
+        ev = wait_for(app, lambda e: sh_cmd(e) and all(c[3] != "running" for c in sh_cmd(e)),
+                      timeout=max(0, 60 - (time.monotonic() - stop_started)),
+                      what="sledgehammer stopped", on_wait=repeat_stop)
+    except SystemExit:
+        # Only scalar state and this generated theory's command spans/statuses;
+        # never dump source buffers, environment, provider credentials or config.
+        print("     stop timeout target:", json.dumps({"session": sid, "path": str(thy),
+              "revision": revision, "offset": target, "attempts": attempts,
+              "snapshots": snapshots}, ensure_ascii=True), flush=True)
+        latest = app.request("read", session=sid, path=str(thy))["doc"].get("prover") or {}
+        print("     latest prover state:", json.dumps({"revision": latest.get("revision"),
+              "backend_revision": latest.get("backend_revision"),
+              "status": latest.get("status"), "commands": latest.get("commands")},
+              ensure_ascii=True), flush=True)
+        raise
     c = sh_cmd(ev)[0]
     msgs = [m["text"][:60] for m in ev["prover"]["messages"] if m["start"] >= c[0] and m["end"] <= c[1]]
     print("     stopped sledgehammer:", c[3], msgs)
-    check(n >= 1, "stop reaches a running sledgehammer (%d executions)" % n)
 
     app.request("revoke", session=sid, grant=g["id"])
     try:
