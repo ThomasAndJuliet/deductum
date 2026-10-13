@@ -1,0 +1,85 @@
+{
+ "base": {
+  "chartspec": 1,
+  "id": "p3-64-income-waterfall",
+  "job": {
+   "kind": "explain",
+   "text": "Show how the year's gains and costs make the net income"
+  },
+  "title": {
+   "text": "From Sales to Net Income, 2022",
+   "kind": "descriptive"
+  },
+  "data": {
+   "x": {
+    "kind": "nominal",
+    "values": [
+     "Product sales",
+     "Consulting income",
+     "Cost of goods",
+     "Admin expenses",
+     "Net income"
+    ],
+    "roles": {
+     "Net income": "total"
+    }
+   },
+   "measure": {
+    "name": "income",
+    "kind": "amount",
+    "zero": "meaningful",
+    "unit": {
+     "prefix": "$",
+     "magnitude": 6,
+     "what": "income"
+    }
+   },
+   "series": [
+    {
+     "id": "income",
+     "name": "Income",
+     "values": [
+      3.7,
+      3.55,
+      -2.2,
+      -0.6,
+      4.45
+     ]
+    }
+   ],
+   "parts": {
+    "meaningful_total": true,
+    "all_parts": true,
+    "overlap": false
+   }
+  },
+  "facts": {
+   "message": "cumulative_subtotals"
+  },
+  "source": {
+   "book": "p. 257–258 (s. 0237–0238)",
+   "notes": "07 #9",
+   "shows": "running subtotals of parts of both signs: a waterfall (R7-11, G1.38), in the income statement's own order (D-43); the sign check does not apply to it"
+  }
+ },
+ "variants": [
+  {
+   "name": "compare",
+   "patch": {
+    "facts": {
+     "message": "compare_parts_precisely"
+    },
+    "job": {
+     "kind": "lookup",
+     "text": "Compare the year's gains and costs"
+    },
+    "title": {
+     "text": "Gains and Costs, 2022"
+    },
+    "source": {
+     "shows": "the same parts when they must be compared precisely: a bar chart, the waterfall's bars starting at different heights (R7-11)"
+    }
+   }
+  }
+ ]
+}

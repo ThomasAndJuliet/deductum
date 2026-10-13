@@ -1,0 +1,108 @@
+{
+ "base": {
+  "chartspec": 1,
+  "id": "r1-63-museum-visits-inset",
+  "job": {
+   "kind": "other",
+   "text": "Let the Small Venues Fund panel compare 2025 visits across the nine smaller venues (the only ones eligible), with Northgate shown alongside for context; printed A4 panel papers"
+  },
+  "title": {
+   "text": "Visits to Northgate Museums Trust Venues, 2025",
+   "kind": "descriptive"
+  },
+  "data": {
+   "x": {
+    "kind": "nominal",
+    "values": [
+     "Northgate Museum & Art Gallery",
+     "Harbour Maritime Museum",
+     "Castle Keep & Grounds",
+     "Hartley Museum of Textiles",
+     "Victoria Mill Engine House",
+     "Ropewalk Folk Museum",
+     "St Bede's Chapel & Undercroft",
+     "Lowfield Tram Depot",
+     "Weavers' Cottages",
+     "Old Grammar School Gallery"
+    ]
+   },
+   "measure": {
+    "name": "visits",
+    "kind": "count",
+    "zero": "meaningful",
+    "min": 0,
+    "unit": {
+     "noun": "visits counted at the door",
+     "magnitude": 3,
+     "scale_title": "Visits counted at the door (thousands)"
+    }
+   },
+   "series": [
+    {
+     "id": "visits",
+     "name": "Visits",
+     "values": [
+      1840.0,
+      142.3,
+      96.8,
+      88.5,
+      61.2,
+      47.9,
+      33.7,
+      29.8,
+      18.3,
+      12.1
+     ]
+    }
+   ]
+  },
+  "facts": {
+   "message": "compare",
+   "small_values_matter": true
+  },
+  "chart": {
+   "type": "auto"
+  },
+  "inset": {
+   "kind": "auto",
+   "position": "auto"
+  },
+  "scale": {
+   "magnitude": 3
+  },
+  "reasons": {
+   "scale.magnitude": "the inset's scale is in thousands; the same magnitude on the main scale lets the panel read both scales as one set of numbers"
+  },
+  "source": {
+   "shows": "an outlier inset at the text width (eval round 1, B06): no empty area of the plot holds the small chart with its own names, so it stands beside the members' bars, on their rows, sharing the names (the owner's exception for an aligned inset when space is short); wide, at 480 pt, the inset in the plot's empty area with its names repeated; ascending, the members above the outlier: nothing holds the inset, which is not drawn, with a warning",
+   "status": "generated"
+  }
+ },
+ "variants": [
+  {
+   "name": "wide",
+   "patch": {
+    "layout": {
+     "width": 480
+    }
+   }
+  },
+  {
+   "name": "ascending",
+   "patch": {
+    "chart": {
+     "type": "auto",
+     "sort": "asc"
+    },
+    "reasons": {
+     "chart.sort": "to show where the inset goes when the outlier is the last row (a test)"
+    }
+   },
+   "expect": {
+    "findings": [
+     "6.6"
+    ]
+   }
+  }
+ ]
+}

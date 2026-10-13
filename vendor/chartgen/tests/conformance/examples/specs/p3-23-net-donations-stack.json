@@ -1,0 +1,99 @@
+{
+ "base": {
+  "chartspec": 1,
+  "id": "p3-23-net-donations-stack",
+  "job": {
+   "kind": "answer",
+   "text": "What fraction of our net donations does each region represent?"
+  },
+  "insight": {
+   "important": "East's net donations were more than the whole net total"
+  },
+  "title": {
+   "text": "East Raised More Than the Whole Net Total",
+   "kind": "insight",
+   "descriptive": "Net Donations by Region, 2022"
+  },
+  "data": {
+   "x": {
+    "kind": "nominal",
+    "values": [
+     "East",
+     "South",
+     "North",
+     "Central",
+     "West"
+    ]
+   },
+   "measure": {
+    "name": "net donations",
+    "kind": "amount",
+    "zero": "meaningful",
+    "unit": {
+     "prefix": "$",
+     "magnitude": 3,
+     "noun": "in net donations",
+     "fallback": "net donations per region"
+    }
+   },
+   "series": [
+    {
+     "id": "net",
+     "name": "Net donations",
+     "values": [
+      34,
+      8.5,
+      8,
+      -4.3,
+      -16.5
+     ]
+    }
+   ],
+   "parts": {
+    "meaningful_total": true,
+    "all_parts": true,
+    "overlap": false
+   }
+  },
+  "facts": {
+   "message": "fraction_of_total"
+  },
+  "chart": {
+   "type": "stacked_bar"
+  },
+  "layout": {
+   "width": 260
+  },
+  "source": {
+   "book": "p. 255–257 (s. 0235–0236)",
+   "notes": "07 #8",
+   "shows": "a stack of parts of both signs: refused, since it shows neither the net total nor parts that can be compared, and its height means nothing (R7-04, G0.15 [L]); the procedure's bar chart with its grey Total bar is P3-63"
+  }
+ },
+ "variants": [
+  {
+   "name": "drawn",
+   "patch": {
+    "overrides": [
+     {
+      "rule": "R7-04",
+      "reason": "the book's stack of mixed signs, rebuilt to show its four problems (s. 0236)"
+     }
+    ],
+    "source": {
+     "shows": "the same stack drawn through an override, as the book does: the gains stacked up from zero and the losses down, the net total nowhere, the zero line signed"
+    }
+   },
+   "expect": {
+    "refused": [
+     "R7-04"
+    ]
+   }
+  }
+ ],
+ "expect": {
+  "refused": [
+   "R7-04"
+  ]
+ }
+}

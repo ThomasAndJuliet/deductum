@@ -1,0 +1,265 @@
+{
+ "key": "p3-53-station-temperatures",
+ "file": "p3-53-station-temperatures.json",
+ "variant": null,
+ "requested_type": "auto",
+ "report": {
+  "chart": "p3-53-station-temperatures",
+  "style": "plain",
+  "variant": null,
+  "type": "heatmap",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "R6-36",
+    "level": "guided",
+    "text": "type heatmap: 32 series, more than a stack of small charts holds (about 20–30): a heatmap, a row per series (G1.20, G7.35; D-28)",
+    "guide": []
+   },
+   {
+    "rule": "R5-26",
+    "level": "locked",
+    "text": "the title wraps onto two lines",
+    "guide": []
+   },
+   {
+    "rule": "R6-36",
+    "level": "guided",
+    "text": "no values in the cells; the values do not fit their cells: the colour alone, read against the key (G5.13)",
+    "guide": []
+   },
+   {
+    "rule": "R12-6",
+    "level": "guided",
+    "text": "the cells strong: a heatmap, whose colour is the message: the steps at full strength (owner, 1 Oct 2026)",
+    "guide": []
+   },
+   {
+    "rule": "R3-13",
+    "level": "guided",
+    "text": "the cells: a diverging palette; the audience sees a dividing value, 0: two ramps meeting at a neutral there (G4.11, G4.12)",
+    "guide": []
+   },
+   {
+    "rule": "R3-18",
+    "level": "locked",
+    "text": "the cells: the sides are not judged good or bad (no measure.good): blue below 0, orange above, the pair safe for colour-vision deficiency and free of red (G4.17, G4.18)",
+    "guide": []
+   },
+   {
+    "rule": "G4.29",
+    "level": "guided",
+    "text": "the cells: the distances from 0 are fairly even (the fullest of seven equal steps would hold 27 % of them): equal steps on rounded values, the most honest cut",
+    "guide": []
+   },
+   {
+    "rule": "R4-9",
+    "level": "locked",
+    "text": "a key: a bar of the 7 classes, “Temperature against the 1961–1990 average (°C)” above it, −3, −2, −1, 0, +1, +2, +3 under it, a tick at the dividing value, and a separate entry for the 8 values not known, above the grid at its right (G5.13, s. 0204)",
+    "guide": []
+   },
+   {
+    "rule": "G4.34",
+    "level": "locked",
+    "text": "the lightest step #ddeef8: OKLab ΔE 0.065 from the page and 0.215 from the missing grey; the breaks in the key rounded and formatted as a set",
+    "guide": []
+   },
+   {
+    "rule": "R3-9",
+    "level": "locked",
+    "text": "the cells coloured in classes, diverging about 0, equal steps of the distance from it, 3 classes a side, at +1, +2, +3, darker meaning further from the dividing value on each side (G4.12, G4.14)",
+    "guide": []
+   },
+   {
+    "rule": "R6-23",
+    "level": "locked",
+    "text": "8 values not known in grey cells, never the colour of zero (G7.35)",
+    "guide": []
+   },
+   {
+    "rule": "R2-40",
+    "level": "locked",
+    "text": "time axis: every 5th year, on the years divisible by 5 (round years, which the eye counts on; every label would crowd)",
+    "guide": []
+   }
+  ],
+  "findings": [],
+  "overrides": [],
+  "expect": {},
+  "expect_met": true,
+  "source": {
+   "notes": "03-04 #8, #9 (diverging about the audience's dividing value); 06 T14",
+   "shows": "a heatmap of many series over time whose colour diverges about a value the audience sees as dividing, the stations' own long-term average (0 °C), with no good or bad side (no measure.good): blue below and orange above, the colour-blind-safe ramp, free of red (G4.11, G4.17); symmetric about 0 and keyed by a graduated bar with a tick at 0; a few years not recorded, grey; synthetic data in the shape of the UK record (a warming trend, cold 1986 and 2010, warm 2014 and 2022); variant sequential, the same values on one ramp (a guided departure, reported), where the cold years no longer read as cold; variant diverging-about-the-middle, a diverging ramp asked for without a dividing value, refused (R3-13)",
+   "status": "generated"
+  },
+  "summary": {
+   "orientation": "vertical",
+   "plot": [
+    84.22,
+    87.2,
+    368.0,
+    431.84
+   ],
+   "heatmap": {
+    "rows": [
+     "aberporth",
+     "armagh",
+     "ballypatrick",
+     "bradford",
+     "braemar",
+     "camborne",
+     "cambridge",
+     "cardiff",
+     "chivenor",
+     "dunstaffnage",
+     "durham",
+     "eastbourne",
+     "eskdalemuir",
+     "heathrow",
+     "hurn",
+     "lerwick",
+     "leuchars",
+     "lowestoft",
+     "manston",
+     "nairn",
+     "newton-rigg",
+     "oxford",
+     "paisley",
+     "ross-on-wye",
+     "shawbury",
+     "sheffield",
+     "stornoway",
+     "sutton-bonington",
+     "tiree",
+     "valley",
+     "waddington",
+     "whitby"
+    ],
+    "columns": [
+     "1981",
+     "1982",
+     "1983",
+     "1984",
+     "1985",
+     "1986",
+     "1987",
+     "1988",
+     "1989",
+     "1990",
+     "1991",
+     "1992",
+     "1993",
+     "1994",
+     "1995",
+     "1996",
+     "1997",
+     "1998",
+     "1999",
+     "2000",
+     "2001",
+     "2002",
+     "2003",
+     "2004",
+     "2005",
+     "2006",
+     "2007",
+     "2008",
+     "2009",
+     "2010",
+     "2011",
+     "2012",
+     "2013",
+     "2014",
+     "2015",
+     "2016",
+     "2017",
+     "2018",
+     "2019",
+     "2020",
+     "2021",
+     "2022"
+    ],
+    "labelled": false,
+    "ramp": "diverging",
+    "cells": "strong",
+    "classing": "linear",
+    "breaks": [
+     "1",
+     "2"
+    ],
+    "domain": [
+     "0",
+     "3"
+    ],
+    "dividing": "0",
+    "key": [
+     "Temperature against the 1961–1990 average (°C)",
+     "−3",
+     "−2",
+     "−1",
+     "0",
+     "+1",
+     "+2",
+     "+3",
+     "Missing"
+    ],
+    "pitch": 10.77,
+    "values": null,
+    "censored": null
+   },
+   "width": 368.0,
+   "height": 447.89,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job make_aware: insight “Since about 2000 almost every station has been warmer than its 1961–1990 average in almost every year”",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-1",
+    "level": "guided",
+    "text": "a graph, the values to be compared or a pattern seen (G1.11)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 2,
+    "name": "variables",
+    "rule": "R6-36",
+    "level": "guided",
+    "text": "group: data over time. 32 series, more than a stack of small charts holds (about 20–30): a heatmap, a row per series (G1.20, G7.35; D-28)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type, the series told apart by colour (G1.59)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "heatmaps are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "data over time"
+   }
+  ],
+  "copies": []
+ },
+ "output_sha256": "1a73f803a3634cf9d5b9353bf30c0ce7e4c10af5ed229f1aae65959347c905ad"
+}

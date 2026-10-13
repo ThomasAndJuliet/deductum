@@ -1,0 +1,18 @@
+[package]
+name = "chartgen-layout"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+figkit-placement = { path = "../figkit-placement" }
+chartgen-model.workspace = true
+chartgen-format = { path = "../chartgen-format" }
+chartgen-scales = { path = "../chartgen-scales" }
+chartgen-statistics = { path = "../chartgen-statistics" }
+chartgen-geometry.workspace = true
+chartgen-style.workspace = true
+chartgen-colour-space = { path = "../chartgen-colour-space" }
+serde_json.workspace = true
+rust_decimal.workspace = true
+chrono = { version = "0.4", default-features = false, features = ["std"] }

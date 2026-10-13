@@ -1,0 +1,12 @@
+[package]
+name = "chartgen-web"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+chartgen-protocol = { path = "../chartgen-protocol" }
+wasm-bindgen = "0.2"

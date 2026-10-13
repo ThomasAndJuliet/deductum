@@ -1,0 +1,209 @@
+{
+ "key": "p3-15-smith-quarter-border",
+ "file": "p3-15-smith-quarter-border.json",
+ "variant": null,
+ "requested_type": "auto",
+ "report": {
+  "chart": "p3-15-smith-quarter-border",
+  "style": "plain",
+  "variant": null,
+  "type": "pie",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "R7-07",
+    "level": "guided",
+    "text": "type pie: fractions of the total are the message: a pie, which shows ½, ⅓ and ¼ at a glance and announces the whole (G1.36)",
+    "guide": []
+   },
+   {
+    "rule": "R7-35",
+    "level": "guided",
+    "text": "slices largest first, clockwise from 12 o'clock: Mrs. Smith, Mrs. Jones, Mr. & Mrs. Perez, The Chetley Family, Ms. Flaherty",
+    "guide": []
+   },
+   {
+    "rule": "R7-32",
+    "level": "locked",
+    "text": "each slice its own colour, handed out in slice order (D-22 (a)): Mrs. Smith series-1, Mrs. Jones series-2, Mr. & Mrs. Perez series-3, The Chetley Family series-4, Ms. Flaherty series-5",
+    "guide": []
+   },
+   {
+    "rule": "R7-34",
+    "level": "locked",
+    "text": "each part named outside its slice (G7.27)",
+    "guide": []
+   },
+   {
+    "rule": "R7-33",
+    "level": "locked",
+    "text": "no outlines: true gaps 1.0 pt wide between the slices (G7.26s: 0.7 % of the diameter)",
+    "guide": []
+   },
+   {
+    "rule": "R3-7",
+    "level": "locked",
+    "text": "highlighted by a border in the strong shade inside: Mrs. Smith; the others keep their colour",
+    "guide": []
+   }
+  ],
+  "findings": [
+   {
+    "rule": "R15-5",
+    "severity": "info",
+    "message": "highlight[0].method border departs from the procedure, which gives strong (a slice in the strong shade of its hue (D-9); a border works too (G7.30, G8.9))",
+    "path": "highlight[0].method",
+    "reason": "the book's outlined slice (s. 0368)",
+    "level": "guided",
+    "recommended": "strong",
+    "guide": [],
+    "title": "highlight what the insight names, by a method chosen for the marks"
+   }
+  ],
+  "overrides": [],
+  "expect": {},
+  "expect_met": true,
+  "source": {
+   "book": "p. 402 (s. 0368)",
+   "notes": "13-15 F10",
+   "shows": "a design choice that features the insight: the chart type chosen from the message, a fraction of the whole, so a pie, where a quarter is seen at a glance (G1.36, G8.1); Mrs. Smith's slice outlined in the strong shade of its own colour, kept inside the slice, the others unchanged (G7.30, G8.9); the names alone outside the slices, as the book's (labels.parts name, open); the book's taupe for Ms. Flaherty is the palette's fifth colour here, grey being reserved (G4.15)",
+   "status": "generated"
+  },
+  "summary": {
+   "kind": "pie",
+   "pies": 1,
+   "radius": 73.6,
+   "centres": [
+    [
+     184.0,
+     124.46
+    ]
+   ],
+   "order": [
+    "Mrs. Smith",
+    "Mrs. Jones",
+    "Mr. & Mrs. Perez",
+    "The Chetley Family",
+    "Ms. Flaherty"
+   ],
+   "labels": "name",
+   "leaders": [],
+   "width": 368.0,
+   "height": 225.19,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job make_aware: insight “Mrs. Smith contributed almost a quarter of all donations”",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-1",
+    "level": "guided",
+    "text": "a graph, the values to be compared or a pattern seen (G1.11)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 2,
+    "name": "variables",
+    "rule": "RP3-2",
+    "level": "guided",
+    "text": "one plot: categories along x and 1 series; a further variable would go to small multiples (data.dims, G1.18)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 3,
+    "name": "location",
+    "rule": "R8-2",
+    "level": "guided",
+    "text": "not a map: where the values are is not the message (facts.location_matters; G1.24, G1.25)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "RP2-7",
+    "level": "guided",
+    "text": "group: breakdowns of totals. One total of 5 parts (07 §4.1, G1.8)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-02",
+    "level": "locked",
+    "text": "check, meaningful total: passes: the values add up to a total someone would quote (parts.meaningful_total)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-03",
+    "level": "locked",
+    "text": "check, all parts: passes: every part of the total is shown (parts.all_parts)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-05",
+    "level": "locked",
+    "text": "check, overlap: passes: no part contains or overlaps another (parts.overlap)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-04",
+    "level": "locked",
+    "text": "check, signs: passes: the parts are all of one sign",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-07",
+    "level": "guided",
+    "text": "fractions of the total are the message: a pie, which shows ½, ⅓ and ¼ at a glance and announces the whole (G1.36)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type (G1.59)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "pies are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   }
+  ],
+  "copies": []
+ },
+ "output_sha256": "44382a4825cb5983ce64f7b4ad55883d72e9cef4266bfcc7000999fb71f7af0b"
+}

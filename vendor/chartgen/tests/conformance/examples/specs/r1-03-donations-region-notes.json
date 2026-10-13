@@ -1,0 +1,93 @@
+{
+ "chartspec": 1,
+ "id": "r1-03-donations-region-notes",
+ "job": {
+  "kind": "lookup",
+  "text": "Look up each region's donations in 2022"
+ },
+ "title": {
+  "text": "Donations by Region, 2022",
+  "kind": "descriptive"
+ },
+ "data": {
+  "x": {
+   "kind": "nominal",
+   "values": [
+    "Far West",
+    "Rockies",
+    "Midwest",
+    "N. England",
+    "Gr. Lakes",
+    "Southeast",
+    "Plains",
+    "Southwest"
+   ]
+  },
+  "measure": {
+   "name": "donations",
+   "kind": "amount",
+   "zero": "meaningful",
+   "min": 0,
+   "unit": {
+    "prefix": "$",
+    "noun": "in donations",
+    "magnitude": 3
+   }
+  },
+  "series": [
+   {
+    "id": "donations",
+    "name": "Donations",
+    "values": [
+     273,
+     268,
+     215,
+     195,
+     175,
+     172,
+     144,
+     {
+      "status": "missing"
+     }
+    ]
+   }
+  ]
+ },
+ "chart": {
+  "type": "bar"
+ },
+ "source": {
+  "book": "p. 327 (s. 0298); p. 19 (s. 0020)",
+  "notes": "p1-06-donations-missing, with notes (owner, 1 Oct 2026: footnotes)",
+  "shows": "footnotes on category names (shortened names spelled out) and on an empty slot's note; the marked names right-aligned with their marks; a plain note last"
+ },
+ "notes": [
+  {
+   "text": "N. England: New England.",
+   "on": [
+    {
+     "category": "N. England"
+    }
+   ]
+  },
+  {
+   "text": "Gr. Lakes: Great Lakes.",
+   "on": [
+    {
+     "category": "Gr. Lakes"
+    }
+   ]
+  },
+  {
+   "text": "The Southwest office had not reported when the chart was made.",
+   "on": [
+    {
+     "status": "missing"
+    }
+   ]
+  },
+  {
+   "text": "Amounts in thousands of dollars, rounded."
+  }
+ ]
+}

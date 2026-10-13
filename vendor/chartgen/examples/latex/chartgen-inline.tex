@@ -1,0 +1,13 @@
+\documentclass{article}
+\usepackage[margin=25mm]{geometry}
+\usepackage{chartgen}
+\chartgenset{program=../../bin/chartgen-tex,
+  module=../../lib/libchartgen_luatex.so,width=.9\linewidth}
+\title{A chart measured in the document}
+\date{}
+\begin{document}
+\maketitle
+
+\chartgen{visits-by-season.json}
+
+\end{document}

@@ -1,0 +1,191 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p2-21-donations-ad-blitz",
+    "job": {
+      "kind": "answer",
+      "text": "Which regions' donations rose most after the ad blitz?"
+    },
+    "insight": {
+      "important": "North's donations rose most, by 41 %, although South gained the most dollars"
+    },
+    "title": {
+      "text": "North Rose Most After the Ad Blitz; South Gained the Most Dollars",
+      "kind": "insight",
+      "descriptive": "Donations by Region Before and After the Ad Blitz, Q1 and Q2 2022"
+    },
+    "data": {
+      "x": {
+        "kind": "time",
+        "grid": "quarter",
+        "values": [
+          "2022-Q1",
+          "2022-Q2"
+        ],
+        "names": {
+          "2022-Q1": "Before blitz",
+          "2022-Q2": "After blitz"
+        }
+      },
+      "measure": {
+        "name": "donations",
+        "kind": "amount",
+        "zero": "meaningful",
+        "min": 0,
+        "good": "higher",
+        "persistence": "summary",
+        "unit": {
+          "prefix": "$",
+          "magnitude": 3,
+          "what": "donations"
+        }
+      },
+      "series": [
+        {
+          "id": "east",
+          "name": "East",
+          "values": [
+            482,
+            517
+          ]
+        },
+        {
+          "id": "central",
+          "name": "Central",
+          "values": [
+            372,
+            318
+          ]
+        },
+        {
+          "id": "south",
+          "name": "South",
+          "values": [
+            356,
+            455
+          ]
+        },
+        {
+          "id": "north",
+          "name": "North",
+          "values": [
+            123,
+            174
+          ]
+        },
+        {
+          "id": "west",
+          "name": "West",
+          "values": [
+            88,
+            113
+          ]
+        }
+      ]
+    },
+    "source": {
+      "book": "p. 200–204 (s. 0186–0190)",
+      "notes": "06 T9",
+      "shows": "the change between two periods as an arrow chart: the values before and after in dollars beside the change in %, sharing the rows (G1.47); rows by the value before, largest first (D-40); green for a rise and red for a fall, since more donations are better (G7.22); the key over the ends of one arrow. The book names the periods only before and after the blitz; the quarters are ours"
+    }
+  },
+  "variants": [
+    {
+      "name": "clustered",
+      "patch": {
+        "chart": {
+          "type": "bar"
+        },
+        "source": {
+          "shows": "the book's most common version, clustered bars of the two periods: refused, since they show the values side by side with nothing to suggest change and no change in % (R6-14, G1.47)"
+        }
+      },
+      "expect": {
+        "refused": [
+          "R6-17"
+        ],
+        "findings": [
+          "R6-15"
+        ]
+      }
+    },
+    {
+      "name": "absolute-only",
+      "patch": {
+        "chart": {
+          "change_panels": "absolute"
+        },
+        "source": {
+          "shows": "the dollar panel alone: refused, since shown only absolute changes most readers name South, not North, as the most improved (G1.47)"
+        }
+      },
+      "expect": {
+        "refused": [
+          "R6-17"
+        ]
+      }
+    },
+    {
+      "name": "absolute-only-overridden",
+      "patch": {
+        "chart": {
+          "change_panels": "absolute"
+        },
+        "overrides": [
+          {
+            "rule": "R6-17",
+            "reason": "the book's version with the dollar panel alone, rebuilt for comparison (s. 0187)"
+          }
+        ],
+        "source": {
+          "shows": "the dollar panel alone, drawn through an override, as the book shows it before adding the % panel: South's long arrow looks like the biggest improvement"
+        }
+      },
+      "expect": {
+        "findings": [
+          "R6-17"
+        ]
+      }
+    },
+    {
+      "name": "by-change",
+      "patch": {
+        "facts": {
+          "message": "change"
+        },
+        "source": {
+          "shows": "the same arrows when the change itself is the message: rows by the change in %, largest first (D-40)"
+        }
+      },
+      "expect": {
+        "findings": []
+      }
+    },
+    {
+      "name": "no-good-direction",
+      "patch": {
+        "job": {
+          "kind": "lookup",
+          "text": "Look up each region's donations before and after the ad blitz"
+        },
+        "insight": null,
+        "title": {
+          "text": "Donations by Region Before and After the Ad Blitz, Q1 and Q2 2022",
+          "kind": "descriptive",
+          "descriptive": null
+        },
+        "data": {
+          "measure": {
+            "good": null
+          }
+        },
+        "source": {
+          "shows": "a look-up version with no good or bad reading declared: rises in the palette's first colour and falls in its second, never red and green (G7.22, D-40)"
+        }
+      },
+      "expect": {
+        "findings": []
+      }
+    }
+  ]
+}

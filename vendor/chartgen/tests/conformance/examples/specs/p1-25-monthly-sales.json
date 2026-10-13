@@ -1,0 +1,104 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p1-25-monthly-sales",
+    "job": {
+      "kind": "lookup",
+      "text": "Look up the total sales of each month so far this year"
+    },
+    "title": {
+      "text": "Monthly Sales, Jan–Jun 2022",
+      "kind": "descriptive"
+    },
+    "data": {
+      "x": {
+        "kind": "time",
+        "grid": "month",
+        "values": [
+          "2022-01",
+          "2022-02",
+          "2022-03",
+          "2022-04",
+          "2022-05",
+          "2022-06"
+        ]
+      },
+      "measure": {
+        "name": "sales",
+        "kind": "amount",
+        "zero": "meaningful",
+        "min": 0,
+        "persistence": "summary",
+        "unit": {
+          "prefix": "$",
+          "magnitude": 6,
+          "what": "total sales per month"
+        }
+      },
+      "series": [
+        {
+          "id": "sales",
+          "name": "Sales",
+          "values": [
+            1.87,
+            1.73,
+            2.3,
+            1.81,
+            2.07,
+            2.5
+          ]
+        }
+      ]
+    },
+    "source": {
+      "book": "p. 230 (s. 0212)",
+      "notes": "06 T18",
+      "shows": "one line, in the single-line colour, with no label or legend (the title and the scale say what it is); the year on row 2 left out, the title gives it; straight segments between monthly totals hide nothing (G1.55)"
+    }
+  },
+  "variants": [
+    {
+      "name": "incomplete-july",
+      "patch": {
+        "data": {
+          "x": {
+            "values": [
+              "2022-01",
+              "2022-02",
+              "2022-03",
+              "2022-04",
+              "2022-05",
+              "2022-06",
+              "2022-07"
+            ]
+          },
+          "as_of": "2022-07-10",
+          "series": [
+            {
+              "id": "sales",
+              "name": "Sales",
+              "values": [
+                1.87,
+                1.73,
+                2.3,
+                1.81,
+                2.07,
+                2.5,
+                0.62
+              ]
+            }
+          ]
+        },
+        "title": {
+          "text": "Monthly Sales, Jan–Jul 2022"
+        },
+        "source": {
+          "shows": "July counted only to July 10: a partial month would look like a collapse, so it is left out (G2.40); drawing it apart, as a point with “As of July 10”, is for a later stage"
+        }
+      },
+      "expect": {
+        "findings": []
+      }
+    }
+  ]
+}

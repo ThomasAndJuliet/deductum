@@ -1,0 +1,85 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p2-58-caller-satisfaction",
+    "job": {
+      "kind": "make_aware",
+      "text": "Make the call-centre managers aware of which centres fall short of the satisfaction target"
+    },
+    "insight": {
+      "important": "South and East fell short of the target of 7 out of 10"
+    },
+    "title": {
+      "text": "South and East Fell Short of the Satisfaction Target",
+      "kind": "insight",
+      "descriptive": "Average Caller Satisfaction Rating by Call Centre, January 2020"
+    },
+    "data": {
+      "x": {
+        "kind": "nominal",
+        "values": [
+          "West",
+          "South",
+          "North",
+          "Central",
+          "East"
+        ]
+      },
+      "measure": {
+        "name": "average caller satisfaction rating",
+        "kind": "score",
+        "zero": "arbitrary",
+        "min": 0,
+        "max": 10,
+        "good": "higher",
+        "dividing_point": {
+          "comparison": "target"
+        },
+        "unit": {
+          "what": "average rating, on 10"
+        }
+      },
+      "series": [
+        {
+          "id": "rating",
+          "name": "Rating",
+          "values": [
+            7.8,
+            6.6,
+            7.3,
+            7.9,
+            6.2
+          ]
+        }
+      ],
+      "comparisons": [
+        {
+          "id": "target",
+          "kind": "target",
+          "label": "Target",
+          "values": [
+            7
+          ]
+        }
+      ]
+    },
+    "source": {
+      "book": "p. 409 (s. 0375)",
+      "notes": "13-15 F13",
+      "shows": "the book's call-centre table redrawn as a dot plot (the ratings' zero is arbitrary, D-30): the target as a dotted line, labelled at its end, and each centre good or bad by it, in red and green (G4.16, G8.13, D-18)"
+    }
+  },
+  "variants": [
+    {
+      "name": "bw",
+      "patch": {
+        "audience": {
+          "bw_risk": true
+        },
+        "source": {
+          "shows": "the same chart for black and white (audience.bw_risk): a bad dot filled and a good one open, so that the centres short of the target stand out without colour (D-18)"
+        }
+      }
+    }
+  ]
+}

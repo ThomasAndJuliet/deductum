@@ -1,0 +1,156 @@
+{
+ "base": {
+  "chartspec": 1,
+  "id": "r1-09-notes-not-drawn",
+  "job": {
+   "kind": "lookup",
+   "text": "Look up each region's population in 2022"
+  },
+  "title": {
+   "text": "Population by Region, 2022",
+   "kind": "descriptive"
+  },
+  "data": {
+   "x": {
+    "kind": "nominal",
+    "values": [
+     "East",
+     "Central",
+     "Coast",
+     "South",
+     "North"
+    ]
+   },
+   "measure": {
+    "name": "population",
+    "kind": "count",
+    "zero": "meaningful",
+    "min": 0,
+    "unit": {
+     "noun": "inhabitants"
+    }
+   },
+   "series": [
+    {
+     "id": "population",
+     "name": "Population",
+     "values": [
+      21000000,
+      14500000,
+      13300000,
+      6800000,
+      2400000
+     ]
+    }
+   ]
+  },
+  "chart": {
+   "type": "bar",
+   "value_labels": "off"
+  },
+  "reasons": {
+   "chart.value_labels": "the book's figure keeps its scale (p. 61): this example shows the magnitude stated once, on the top label"
+  },
+  "source": {
+   "book": "p. 59–61 (s. 0058–0061)",
+   "notes": "p1-02-population-by-region, with notes (owner, 1 Oct 2026: footnotes)",
+   "shows": "a note whose mark has no place: the series' name is not drawn (one series, no legend), so the note stands under the chart without a mark and the report says so (CG-8, warn)"
+  },
+  "notes": [
+   {
+    "text": "Resident population, mid-year estimates.",
+    "on": [
+     {
+      "series": "population"
+     }
+    ]
+   }
+  ]
+ },
+ "expect": {
+  "findings": [
+   "CG-8"
+  ]
+ },
+ "variants": [
+  {
+   "name": "gap-in-line",
+   "expect": {
+    "findings": [
+     "CG-8"
+    ]
+   },
+   "patch": {
+    "job": {
+     "kind": "lookup",
+     "text": "Look up the population each year"
+    },
+    "title": {
+     "text": "Population of the East, 2015–2022"
+    },
+    "data": {
+     "x": {
+      "kind": "time",
+      "grid": "year",
+      "values": [
+       "2015",
+       "2016",
+       "2017",
+       "2018",
+       "2019",
+       "2020",
+       "2021",
+       "2022"
+      ]
+     },
+     "measure": {
+      "persistence": "summary"
+     },
+     "series": [
+      {
+       "id": "population",
+       "name": "Population",
+       "values": [
+        19100000,
+        19400000,
+        19600000,
+        19800000,
+        20300000,
+        {
+         "status": "missing",
+         "note": "No count in 2020: the survey was suspended."
+        },
+        20700000,
+        21000000
+       ]
+      }
+     ]
+    },
+    "chart": {
+     "type": "line",
+     "value_labels": null
+    },
+    "reasons": null,
+    "notes": null
+   }
+  },
+  {
+   "name": "unbreakable",
+   "expect": {
+    "refused": [
+     "CG-8"
+    ]
+   },
+   "patch": {
+    "layout": {
+     "width": 200
+    },
+    "notes": [
+     {
+      "text": "Source: https://statistics.example.org/population/regional-estimates/2022/mid-year/table-4"
+     }
+    ]
+   }
+  }
+ ]
+}

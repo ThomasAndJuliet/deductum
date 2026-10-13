@@ -1,0 +1,226 @@
+{
+ "key": "p1-08-donations-narrow-range--wide",
+ "file": "p1-08-donations-narrow-range.json",
+ "variant": "wide",
+ "requested_type": "bar",
+ "report": {
+  "chart": "p1-08-donations-narrow-range",
+  "style": "plain",
+  "variant": "wide",
+  "type": "bar",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "R2-24",
+    "level": "locked",
+    "text": "bars start at zero",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "scale 0–300 by 50",
+    "guide": []
+   },
+   {
+    "rule": "R2-23",
+    "level": "guided",
+    "text": "a narrow-range inset: the values lie in a narrow range far from zero (232 to 274: the gap from zero is at least their spread) and the small differences among them matter (facts.small_differences_matter); the main scale keeps zero, and the inset shows every mark on a truncated scale, 230–280 by 10 (the largest step below the lowest value, so the lowest bar keeps a stub above the lowest gridline) (G2.7)",
+    "guide": []
+   },
+   {
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "nominal categories sorted by value, descending",
+    "guide": []
+   },
+   {
+    "rule": "R9-10",
+    "level": "locked",
+    "text": "every name fits under its bar, neighbours at least 10 pt apart: vertical bars",
+    "guide": []
+   },
+   {
+    "rule": "R2-21",
+    "level": "locked",
+    "text": "labels as a set, 0 decimals: 0, 50, 100, 150, 200, 250, $300K",
+    "guide": []
+   },
+   {
+    "rule": "R5-10",
+    "level": "locked",
+    "text": "digits hidden: thousands, stated once on the top label (R2-05, D-3): “$300K in donations”",
+    "guide": []
+   },
+   {
+    "rule": "R2-07",
+    "level": "locked",
+    "text": "the unit phrase on the top label: “$300K in donations”; the top gridline starts after it",
+    "guide": []
+   },
+   {
+    "rule": "6.6",
+    "level": "guided",
+    "text": "the category labels repeated in the inset: labelled twice the figure is 451 pt high, within 468 pt (--inset-share-height × its width) (G2.27, D-56)",
+    "guide": []
+   },
+   {
+    "rule": "R2-23",
+    "level": "guided",
+    "text": "the inset above the main chart, spanning its width, at the same positions (s. 0081, s. 0297)",
+    "guide": []
+   },
+   {
+    "rule": "6.6",
+    "level": "locked",
+    "text": "the inset's form: a frame round the band 200–300 of the main chart, across its width, a larger frame round a complete small chart (230–280 by 10, its unit restated on its top label (“$280K in donations”), the category labels repeated, no title, text at inset size), two links forming a widening cone, beneath the frames (G2.27)",
+    "guide": []
+   },
+   {
+    "rule": "R9-6",
+    "level": "locked",
+    "text": "the inset's bars run 27.7 pt past its lowest gridline (230) and fade to transparent there: they do not start at zero, and nothing below the gridline pretends to be a length (G2.28)",
+    "guide": []
+   }
+  ],
+  "findings": [],
+  "overrides": [],
+  "expect": {},
+  "expect_met": true,
+  "source": {
+   "book": "p. 324–325 (s. 0296–0297)",
+   "notes": "08-12 #2",
+   "shows": "the same at 520 pt, where the names fit under columns, and at the book’s plot proportion (0.4): the inset above the main chart, as the book draws it (s. 0297), the bars at the same positions in both panels, the inset’s fading below 230, the frame round the main chart’s 200–300 band across its width, the links from the inset’s lower corners to the band’s upper corners; shown at print size across the margins",
+   "status": "generated"
+  },
+  "summary": {
+   "scale": "0–300 by 50",
+   "labels": [
+    "0",
+    "50",
+    "100",
+    "150",
+    "200",
+    "250",
+    "$300K"
+   ],
+   "top": "$300K in donations",
+   "scale_title": null,
+   "orientation": "vertical",
+   "plot": [
+    39.75,
+    245.08,
+    509.25,
+    432.88
+   ],
+   "band": 58.69,
+   "inset": {
+    "kind": "narrow_range",
+    "position": "above",
+    "scale": "230–280 by 10",
+    "band": "200–300",
+    "frame": [
+     0.75,
+     16.82,
+     519.25,
+     223.65
+    ],
+    "source": [
+     6.75,
+     238.65,
+     513.25,
+     313.48
+    ]
+   },
+   "width": 520.0,
+   "height": 450.77,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job lookup: no insight stated (a descriptive title will do, D-55)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-1",
+    "level": "guided",
+    "text": "a graph, the values to be compared or a pattern seen (G1.11)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 2,
+    "name": "variables",
+    "rule": "RP3-2",
+    "level": "guided",
+    "text": "one plot: categories along x and 1 series; a further variable would go to small multiples (data.dims, G1.18)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 3,
+    "name": "location",
+    "rule": "R8-2",
+    "level": "guided",
+    "text": "not a map: where the values are is not the message (facts.location_matters; G1.24, G1.25)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-01",
+    "level": "guided",
+    "text": "not parts of a total (no data.parts, no breakdown message; G1.1)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 7,
+    "name": "values across categories",
+    "rule": "R9-1",
+    "level": "guided",
+    "text": "group: bar charts. Values compared across categories (G1.9)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 7,
+    "name": "values across categories",
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "one scale from zero: bars, sorted by value when the categories are nominal (02 D1)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type (G1.59)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "bar charts are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "bar charts"
+   }
+  ],
+  "copies": []
+ },
+ "output_sha256": "3b8cd57c83d0ba2040c6f39a50b7d68b5dacf424f93dd709bac9f2611bcb0b0f"
+}

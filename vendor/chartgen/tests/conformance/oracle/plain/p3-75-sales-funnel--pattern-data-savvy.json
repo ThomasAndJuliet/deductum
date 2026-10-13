@@ -1,0 +1,208 @@
+{
+ "key": "p3-75-sales-funnel--pattern-data-savvy",
+ "file": "p3-75-sales-funnel.json",
+ "variant": "pattern-data-savvy",
+ "requested_type": "auto",
+ "report": {
+  "chart": "p3-75-sales-funnel",
+  "style": "plain",
+  "variant": "pattern-data-savvy",
+  "type": "line",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "R6-41",
+    "level": "guided",
+    "text": "type line: the pattern across ordered categories is the message, for a data-savvy audience: a line, the categories' order giving it its sense (08-12 DP-2, G1.58)",
+    "guide": []
+   },
+   {
+    "rule": "R2-25",
+    "level": "locked",
+    "text": "the values are not far from zero compared with their spread",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "scale 0–10,000 by 2,000",
+    "guide": []
+   },
+   {
+    "rule": "R6-27",
+    "level": "locked",
+    "text": "no point markers: no value is isolated and no straight run hides one",
+    "guide": []
+   },
+   {
+    "rule": "R2-07",
+    "level": "locked",
+    "text": "the unit phrase on the top label: “10K prospects”; the top gridline starts after it",
+    "guide": []
+   },
+   {
+    "rule": "R2-21",
+    "level": "locked",
+    "text": "labels as a set, 0 decimals: 0, 2, 4, 6, 8, 10K",
+    "guide": []
+   },
+   {
+    "rule": "R5-10",
+    "level": "locked",
+    "text": "digits hidden: thousands, stated once on the top label (R2-05, D-3): “10K prospects”",
+    "guide": []
+   },
+   {
+    "rule": "R5-26",
+    "level": "locked",
+    "text": "the title wraps onto two lines",
+    "guide": []
+   }
+  ],
+  "findings": [
+   {
+    "rule": "R2-32",
+    "severity": "info",
+    "message": "5 values against 6 scale labels: labelling the values directly would put fewer numbers on the chart (phase 2)",
+    "level": "locked",
+    "guide": [],
+    "title": "fewer values than scale labels: label the values directly"
+   },
+   {
+    "rule": "R2-11",
+    "severity": "info",
+    "message": "the unit phrase “prospects” is one word; say what is counted, which subset and per what period",
+    "path": "data.measure.unit.noun",
+    "level": "locked",
+    "guide": [],
+    "title": "a unit phrase specific enough for one reading"
+   }
+  ],
+  "overrides": [],
+  "expect": {},
+  "expect_met": true,
+  "source": {
+   "book": "p. 360 (s. 0328)",
+   "notes": "08-12 #15",
+   "shows": "the stages' pattern the message, for a data-savvy audience: a line across the ordered stages, the bar-chart tree's first question (08-12 DP-2; R6-41, G1.58)",
+   "status": "generated"
+  },
+  "summary": {
+   "scale": "0–10,000 by 2,000",
+   "labels": [
+    "0",
+    "2",
+    "4",
+    "6",
+    "8",
+    "10K"
+   ],
+   "top": "10K prospects",
+   "scale_title": null,
+   "orientation": "vertical",
+   "plot": [
+    19.0,
+    51.05,
+    368.0,
+    260.45
+   ],
+   "slot": 69.8,
+   "labelling": "none",
+   "label_shifts": {},
+   "leaders": [],
+   "markers": [],
+   "colours": {
+    "prospects": "single"
+   },
+   "width": 368.0,
+   "height": 290.72,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job answer: insight “Prospects fall away at every stage, most steeply between contacting support and subscribing”",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-1",
+    "level": "guided",
+    "text": "a graph, the values to be compared or a pattern seen (G1.11)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 2,
+    "name": "variables",
+    "rule": "RP3-2",
+    "level": "guided",
+    "text": "one plot: categories along x and 1 series; a further variable would go to small multiples (data.dims, G1.18)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 3,
+    "name": "location",
+    "rule": "R8-2",
+    "level": "guided",
+    "text": "not a map: where the values are is not the message (facts.location_matters; G1.24, G1.25)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-01",
+    "level": "guided",
+    "text": "not parts of a total (no data.parts, no breakdown message; G1.1)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 7,
+    "name": "values across categories",
+    "rule": "R9-1",
+    "level": "guided",
+    "text": "group: bar charts. Values compared across categories (G1.9)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 7,
+    "name": "values across categories",
+    "rule": "R6-41",
+    "level": "guided",
+    "text": "the pattern across ordered categories is the message, for a data-savvy audience: a line, the categories' order giving it its sense (08-12 DP-2, G1.58)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type (G1.59)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "line charts are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "bar charts"
+   }
+  ],
+  "copies": []
+ },
+ "output_sha256": "05cf63cde51ff1e9cd2fad867d149b24ad14725946b6eaa70f31ca8168a95b77"
+}

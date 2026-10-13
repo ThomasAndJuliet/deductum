@@ -1,0 +1,11 @@
+[package]
+name = "chartgen-colour-space"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+figkit-colour = { path = "../figkit-colour" }
+
+[dev-dependencies]
+serde_json.workspace = true

@@ -1,0 +1,17 @@
+[package]
+name = "chartgen-policy"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+chartgen-model.workspace = true
+chartgen-format = { path = "../chartgen-format" }
+chartgen-scales = { path = "../chartgen-scales" }
+chartgen-statistics = { path = "../chartgen-statistics" }
+serde_json.workspace = true
+regex = "1"
+chrono = { version = "0.4", default-features = false, features = ["std"] }
+
+[dev-dependencies]
+chartgen-data = { path = "../chartgen-data" }

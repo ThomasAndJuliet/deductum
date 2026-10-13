@@ -1,0 +1,12 @@
+[package]
+name = "figkit-scene"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+figkit-model = { path = "../figkit-model" }
+figkit-geometry = { path = "../figkit-geometry" }
+figkit-colour = { path = "../figkit-colour" }
+serde.workspace = true
+serde_json.workspace = true

@@ -1,0 +1,38 @@
+name: Rulings flag
+
+# Labels pull requests that touch Juliet's rulings (tests/rulings/, RULINGS.md) or the architecture
+# contract. The label tells agents not to merge (AGENTS.md); it does not block.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read        # gh pr diff reads the changed files
+  pull-requests: write
+  issues: write         # labels and comments go through the issues API
+
+jobs:
+  flag:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      PR: ${{ github.event.pull_request.number }}
+    steps:
+      - name: Label changes to rulings or ARCHITECTURE.md
+        run: |
+          set -euo pipefail
+          # Fail loudly if the changed files cannot be read: a silent pass would let a
+          # ruling change through unflagged.
+          files=$(gh pr diff "$PR" --name-only)
+          echo "$files"
+          if grep -qE '^(tests/rulings/|docs/chartgen/RULINGS\.md$|ARCHITECTURE\.md$)' <<<"$files"; then
+            labels=$(gh pr view "$PR" --json labels --jq '.labels[].name')
+            if ! grep -qx needs-juliet <<<"$labels"; then
+              gh pr edit "$PR" --add-label needs-juliet
+              gh pr comment "$PR" --body "This pull request changes the rulings (\`tests/rulings/\`, \`docs/chartgen/RULINGS.md\`) or \`ARCHITECTURE.md\`, so it needs Juliet's approval before merging (see AGENTS.md)."
+            fi
+            echo "flagged: needs-juliet"
+          else
+            echo "no ruling or architecture changes"
+          fi

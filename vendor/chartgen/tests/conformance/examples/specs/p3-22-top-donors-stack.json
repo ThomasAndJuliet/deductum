@@ -1,0 +1,96 @@
+{
+ "base": {
+  "chartspec": 1,
+  "id": "p3-22-top-donors-stack",
+  "job": {
+   "kind": "answer",
+   "text": "How much did the three largest donors give together?"
+  },
+  "insight": {
+   "important": "The three largest donors gave over $900K together"
+  },
+  "title": {
+   "text": "The Three Largest Donors Gave Over $900K",
+   "kind": "insight",
+   "descriptive": "Donations of the Three Largest Donors, 2022"
+  },
+  "data": {
+   "x": {
+    "kind": "nominal",
+    "values": [
+     "Smith and Co.",
+     "Black, Finson & Assoc.",
+     "Mr and Mrs Mayworth"
+    ]
+   },
+   "measure": {
+    "name": "donations",
+    "kind": "amount",
+    "zero": "meaningful",
+    "min": 0,
+    "unit": {
+     "prefix": "$",
+     "magnitude": 3,
+     "noun": "in donations",
+     "fallback": "donations per donor"
+    }
+   },
+   "series": [
+    {
+     "id": "donations",
+     "name": "Donations",
+     "values": [
+      375,
+      348,
+      200
+     ]
+    }
+   ],
+   "parts": {
+    "meaningful_total": true,
+    "all_parts": false,
+    "overlap": false
+   }
+  },
+  "facts": {
+   "message": "subtotal_amount"
+  },
+  "chart": {
+   "type": "stacked_bar"
+  },
+  "layout": {
+   "width": 260
+  },
+  "source": {
+   "book": "p. 253–255 (s. 0233–0235)",
+   "notes": "07 #7",
+   "shows": "the three largest donors stacked, as if they were all the donors: refused, since readers take the stack's top for the total of all donations (R7-03, G0.13 [L]); the procedure's bar chart is P3-62"
+  }
+ },
+ "variants": [
+  {
+   "name": "drawn",
+   "patch": {
+    "overrides": [
+     {
+      "rule": "R7-03",
+      "reason": "the book's stack of a subset, rebuilt for comparison (s. 0234)"
+     }
+    ],
+    "source": {
+     "shows": "the same stack drawn through an override, as the book draws it to show the misreading: its top reads as the total of all donations"
+    }
+   },
+   "expect": {
+    "refused": [
+     "R7-03"
+    ]
+   }
+  }
+ ],
+ "expect": {
+  "refused": [
+   "R7-03"
+  ]
+ }
+}

@@ -1,0 +1,234 @@
+{
+ "key": "p2-10-daily-expenses-two-regions",
+ "file": "p2-10-daily-expenses-two-regions.json",
+ "variant": null,
+ "requested_type": "auto",
+ "report": {
+  "chart": "p2-10-daily-expenses-two-regions",
+  "style": "plain",
+  "variant": null,
+  "type": "dot",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "R6-2",
+    "level": "guided",
+    "text": "type dot: too few known values to see the pattern of change (6 of 31 days known, at most 2 in a row; 06 DP6-2, D-27): a line would invent one; dots show what is known",
+    "guide": []
+   },
+   {
+    "rule": "6.7",
+    "level": "locked",
+    "text": "a dot plot of 2 series, the dots of a category sharing its position, each series in its own colour, every dot of one size (G7.18)",
+    "guide": []
+   },
+   {
+    "rule": "R2-25",
+    "level": "locked",
+    "text": "the values are not far from zero compared with their spread",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "scale 0–800 by 200",
+    "guide": []
+   },
+   {
+    "rule": "R2-02",
+    "level": "locked",
+    "text": "periods in their given order",
+    "guide": []
+   },
+   {
+    "rule": "R2-37",
+    "level": "locked",
+    "text": "time runs left to right",
+    "guide": []
+   },
+   {
+    "rule": "R2-21",
+    "level": "locked",
+    "text": "labels as a set, 0 decimals: 0, 200, 400, 600, $800K",
+    "guide": []
+   },
+   {
+    "rule": "R5-10",
+    "level": "locked",
+    "text": "digits hidden: thousands, stated once on the top label (R2-05, D-3): “$800K expenses per day”",
+    "guide": []
+   },
+   {
+    "rule": "R2-40",
+    "level": "locked",
+    "text": "time axis: row 1 full, every second label, restarting in each group",
+    "guide": []
+   },
+   {
+    "rule": "R2-37",
+    "level": "locked",
+    "text": "time axis: row 2 (“May 2022”) left out, the title gives it (G2.37)",
+    "guide": []
+   },
+   {
+    "rule": "R2-07",
+    "level": "locked",
+    "text": "the unit phrase on the top label: “$800K expenses per day”; the top gridline starts after it",
+    "guide": []
+   },
+   {
+    "rule": "R4-5",
+    "level": "guided",
+    "text": "a legend at the right of the plot, beside the latest values, its entries in the order of each series' last known value: East, West (G5.9, G5.11, G5.14: the dots as keys)",
+    "guide": []
+   },
+   {
+    "rule": "R6-2",
+    "level": "locked",
+    "text": "the 6 known values of East as dots, with no line; the time axis covers the whole period, so the 25 empty days show (G7.18)",
+    "guide": []
+   },
+   {
+    "rule": "R6-2",
+    "level": "locked",
+    "text": "the 5 known values of West as dots, with no line; the time axis covers the whole period, so the 26 empty days show (G7.18)",
+    "guide": []
+   }
+  ],
+  "findings": [],
+  "overrides": [],
+  "expect": {},
+  "expect_met": true,
+  "source": {
+   "book": "p. 172–174 (s. 0161–0163), with a second region of ours",
+   "notes": "06 T1 (synthetic West)",
+   "shows": "two sparse series as dots, no lines: filled dots in two colours on one time axis over the whole month; keyed by a legend at the right, beside the latest values, in the order of each series' last known value (G5.9, G5.11)",
+   "status": "generated"
+  },
+  "summary": {
+   "scale": "0–800 by 200",
+   "labels": [
+    "0",
+    "200",
+    "400",
+    "600",
+    "$800K"
+   ],
+   "top": "$800K expenses per day",
+   "scale_title": null,
+   "orientation": "vertical",
+   "plot": [
+    29.0,
+    21.0,
+    328.78,
+    200.87
+   ],
+   "band": 9.67,
+   "series": [
+    "east",
+    "west"
+   ],
+   "labelling": "legend",
+   "value_labels": false,
+   "table": false,
+   "width": 368.0,
+   "height": 216.92,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job lookup: no insight stated (a descriptive title will do, D-55)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-1",
+    "level": "guided",
+    "text": "a graph, the values to be compared or a pattern seen (G1.11)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 2,
+    "name": "variables",
+    "rule": "RP3-2",
+    "level": "guided",
+    "text": "one plot: time along x and 2 series; a further variable would go to small multiples (data.dims, G1.18)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 3,
+    "name": "location",
+    "rule": "R8-2",
+    "level": "guided",
+    "text": "not a map: where the values are is not the message (facts.location_matters; G1.24, G1.25)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-01",
+    "level": "guided",
+    "text": "not parts of a total (no data.parts, no breakdown message; G1.1)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 6,
+    "name": "values over time",
+    "rule": "R6-13",
+    "level": "guided",
+    "text": "group: data over time. A series of more than two periods, not a breakdown and not tied to places (G1.48)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 6,
+    "name": "values over time",
+    "rule": "R6-2",
+    "level": "guided",
+    "text": "too few known values to see the pattern of change (6 of 31 days known, at most 2 in a row; 06 DP6-2, D-27): a line would invent one; dots show what is known",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type, the series told apart by colour (G1.59)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "dot plots are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R6-18",
+    "level": "guided",
+    "text": "dot plots may be new to a general audience: teach them (build the chart up, show first the familiar chart that fails, or add two or three callouts stating the obvious; G1.5), or state the insight in a sentence and keep the chart as backup (G1.6)",
+    "guide": [],
+    "group": "data over time"
+   }
+  ],
+  "copies": []
+ },
+ "output_sha256": "372127d21ff9f37add32363e8ea00b9717f18de4c271de92a25ba9451ace9b7b"
+}

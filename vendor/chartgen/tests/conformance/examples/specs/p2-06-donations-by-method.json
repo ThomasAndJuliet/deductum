@@ -1,0 +1,101 @@
+{
+  "chartspec": 1,
+  "id": "p2-06-donations-by-method",
+  "job": {
+    "kind": "lookup",
+    "text": "Look up donations by payment method and region"
+  },
+  "title": {
+    "text": "Donations by Payment Method and Region, 2022",
+    "kind": "descriptive"
+  },
+  "data": {
+    "x": {
+      "kind": "nominal",
+      "values": [
+        "Credit Card",
+        "Check",
+        "Cash",
+        "Debit"
+      ]
+    },
+    "measure": {
+      "name": "donations",
+      "kind": "amount",
+      "zero": "meaningful",
+      "min": 0,
+      "unit": {
+        "prefix": "$",
+        "magnitude": 3,
+        "noun": "in donations"
+      }
+    },
+    "series": [
+      {
+        "id": "south",
+        "name": "South",
+        "values": [
+          66,
+          73,
+          85,
+          50
+        ]
+      },
+      {
+        "id": "north",
+        "name": "North",
+        "values": [
+          58,
+          63,
+          60,
+          69
+        ]
+      },
+      {
+        "id": "central",
+        "name": "Central",
+        "values": [
+          34,
+          38,
+          42,
+          49
+        ]
+      },
+      {
+        "id": "west",
+        "name": "West",
+        "values": [
+          27,
+          30,
+          36,
+          38
+        ]
+      },
+      {
+        "id": "east",
+        "name": "East",
+        "values": [
+          21,
+          27,
+          27,
+          30
+        ]
+      },
+      {
+        "id": "intl",
+        "name": "Int'l",
+        "values": [
+          17,
+          17,
+          18,
+          21
+        ]
+      }
+    ]
+  },
+  "source": {
+    "book": "p. 364 (s. 0331)",
+    "notes": "08-12 #17",
+    "shows": "the book's flat 2-D version of a 3-D chart (a 3-D chart cannot be asked for): six series per cluster, the clusters kept about two bar widths apart as the book's are (G7.5s), the legend in the order of the bars; the methods sorted by the first series (D-46)"
+  }
+}

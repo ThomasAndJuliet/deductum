@@ -1,0 +1,204 @@
+{
+ "key": "r1-02-funds-raised-notes",
+ "file": "r1-02-funds-raised-notes.json",
+ "variant": null,
+ "requested_type": "auto",
+ "report": {
+  "chart": "r1-02-funds-raised-notes",
+  "style": "plain",
+  "variant": null,
+  "type": "table",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "R10-11",
+    "level": "guided",
+    "text": "type table: a table alone: its sole use is looking up individual values (facts.message lookup_only; G1.12)",
+    "guide": []
+   },
+   {
+    "rule": "R10-13",
+    "level": "locked",
+    "text": "a table alone, formatted in the book's order: the digits the purpose needs, two thin rules, space between rows and columns, the numbers right-aligned to be compared, nothing bold but the title, the unit once in the title (08-12 DP-4, G7.37–G7.45)",
+    "guide": []
+   },
+   {
+    "rule": "R10-12",
+    "level": "locked",
+    "text": "digits: to the measure's precision, 1, one number of decimals down each column (G7.37, G6.16)",
+    "guide": []
+   },
+   {
+    "rule": "R10-24",
+    "level": "locked",
+    "text": "dates written with day, month and year of fixed width (05-Jan-2021), so that their parts line up down the column (G6.21, D-32 columns (a))",
+    "guide": []
+   },
+   {
+    "rule": "R10-22",
+    "level": "locked",
+    "text": "the totals last under the darker rule, named in the names' column, in regular weight (D-52 (ii)); the printed totals are the data's, never recomputed",
+    "guide": []
+   },
+   {
+    "rule": "R10-14",
+    "level": "locked",
+    "text": "Total: a total column, set apart by a wider gutter (30 pt against 15 pt; G7.39s)",
+    "guide": []
+   },
+   {
+    "rule": "R10-23",
+    "level": "guided",
+    "text": "3 cells that matter on a light grey fill, nothing else changed: Northwest of Pancake Breakfast, South of 10K Run, Central of TV Raffle (G7.44)",
+    "guide": []
+   },
+   {
+    "rule": "R10-25",
+    "level": "locked",
+    "text": "the unit once, in the title; the cells bare numbers (G7.45)",
+    "guide": []
+   },
+   {
+    "rule": "CG-8",
+    "level": "locked",
+    "text": "notes under the chart, below everything else, left-aligned and wrapped to its 440 pt: a on “Event”; b on “Total”, “Total”; c on “5K Walk”, “5K Walk”; d on “2,360,529” (marks in reading order)",
+    "guide": []
+   }
+  ],
+  "findings": [],
+  "overrides": [],
+  "expect": {},
+  "expect_met": true,
+  "source": {
+   "book": "p. 344–349 (s. 0314–0318)",
+   "notes": "p3-40-funds-raised-table, with notes (owner, 1 Oct 2026: footnotes)",
+   "shows": "footnotes in a table: on its names' heading, on two rows named alike (one mark), on one figure (its mark hangs in the gutter, the figures stay aligned), on the totals row and column (one note, one mark)",
+   "status": "generated"
+  },
+  "summary": {
+   "notes": [
+    {
+     "mark": "a",
+     "text": "Events in the order they were held.",
+     "on": [
+      "Event"
+     ]
+    },
+    {
+     "mark": "b",
+     "text": "Totals as reported; some differ by $1 or $2 from the sum of the amounts above them.",
+     "on": [
+      "Total",
+      "Total"
+     ]
+    },
+    {
+     "mark": "c",
+     "text": "Held twice, on Jan. 5 and Jun. 13, 2021.",
+     "on": [
+      "5K Walk",
+      "5K Walk"
+     ]
+    },
+    {
+     "mark": "d",
+     "text": "The largest amount one event raised in one region.",
+     "on": [
+      "2,360,529"
+     ]
+    }
+   ],
+   "orientation": "vertical",
+   "plot": [
+    0.0,
+    31.0,
+    439.92,
+    246.0
+   ],
+   "table": {
+    "rows": [
+     "walk-jan",
+     "telethon",
+     "pancake",
+     "fair",
+     "walk-jun",
+     "run",
+     "raffle",
+     "teddy",
+     "gala",
+     "total"
+    ],
+    "columns": [
+     "Central",
+     "East",
+     "Northwest",
+     "South",
+     "Total"
+    ],
+    "comparable": true,
+    "pitch": 21.5,
+    "width": 439.92,
+    "graphics": "none",
+    "highlighted": [
+     [
+      "pancake",
+      "Northwest"
+     ],
+     [
+      "run",
+      "South"
+     ],
+     [
+      "raffle",
+      "Central"
+     ]
+    ],
+    "values": null
+   },
+   "width": 439.92,
+   "height": 288.61,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job lookup: no insight stated (a descriptive title will do, D-55)",
+    "guide": [],
+    "group": "tables"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-11",
+    "level": "guided",
+    "text": "group: tables. A table alone: its sole use is looking up individual values (facts.message lookup_only; G1.12)",
+    "guide": [],
+    "group": "tables"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type, the series told apart by colour (G1.59)",
+    "guide": [],
+    "group": "tables"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "tables are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "tables"
+   }
+  ],
+  "copies": []
+ },
+ "output_sha256": "9d1166f8074afb70fbfe5a64a3da848f75dfaee986c50709d89fe6746ad46a80"
+}

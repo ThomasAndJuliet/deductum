@@ -1,0 +1,4515 @@
+{
+"source": "original charts/.cache/measure.json (figkit Measurer, typst 0.15.1 (9dfd3a08) CLI, New Computer Modern); [width, ascent, descent] of Typst prose markup",
+"labels": [
+{
+"code": "each dept. spend?",
+"size": 10.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+90.14,
+7.0,
+1.94
+]
+},
+{
+"code": "2,380,684",
+"size": 10.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+46.63,
+6.56,
+1.94
+]
+},
+{
+"code": "Applications",
+"size": 10.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+62.89,
+6.98,
+1.94
+]
+},
+{
+"code": "0",
+"size": 10.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+5.75,
+6.55,
+0.11
+]
+},
+{
+"code": "369,088",
+"size": 10.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+37.69,
+6.55,
+1.94
+]
+},
+{
+"code": "North",
+"size": 10.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+30.35,
+6.94,
+0.06
+]
+},
+{
+"code": "above or below budget",
+"size": 10.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+114.3,
+6.94,
+2.01
+]
+},
+{
+"code": "How much above or below budget was",
+"size": 10.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+193.48,
+6.94,
+2.01
+]
+},
+{
+"code": "above or below",
+"size": 10.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+75.81,
+6.94,
+0.06
+]
+},
+{
+"code": "Central",
+"size": 10.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+37.64,
+6.97,
+0.11
+]
+},
+{
+"code": "budget was",
+"size": 10.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+56.61,
+6.94,
+2.01
+]
+},
+{
+"code": "hold (mins)",
+"size": 10.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+58.19,
+7.5,
+2.49
+]
+},
+{
+"code": "10)",
+"size": 10.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+15.97,
+7.5,
+2.49
+]
+},
+{
+"code": "or below budget",
+"size": 10.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+81.72,
+6.94,
+2.01
+]
+},
+{
+"code": "2,672,351",
+"size": 10.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+46.63,
+6.76,
+1.94
+]
+},
+{
+"code": "How much above or",
+"size": 10.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+100.3,
+6.94,
+0.06
+]
+},
+{
+"code": "Asi…",
+"size": 10.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+24.8,
+6.98,
+0.06
+]
+},
+{
+"code": "Northwest",
+"size": 10.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+52.3,
+6.94,
+0.06
+]
+},
+{
+"code": "4,129",
+"size": 10.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+26.19,
+6.56,
+1.94
+]
+},
+{
+"code": "Board's threshold, 5% over target",
+"size": 10.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+170.83,
+7.5,
+2.01
+]
+},
+{
+"code": "Eur…",
+"size": 10.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+27.07,
+6.8,
+0.06
+]
+},
+{
+"code": "Average",
+"size": 10.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+39.78,
+6.98,
+2.01
+]
+},
+{
+"code": "897",
+"size": 10.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+17.25,
+6.76,
+0.11
+]
+},
+{
+"code": "above or",
+"size": 10.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+43.07,
+6.94,
+0.06
+]
+},
+{
+"code": "dept.?",
+"size": 10.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+31.14,
+7.0,
+1.94
+]
+},
+{
+"code": "H",
+"size": 10.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+9.0,
+6.86,
+0.0
+]
+},
+{
+"code": "dept. stick to its budget?",
+"size": 10.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+126.6,
+7.0,
+2.01
+]
+},
+{
+"code": "Industry average",
+"size": 10.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+84.82,
+6.94,
+2.01
+]
+},
+{
+"code": "above or below budget was each dept.?",
+"size": 10.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+197.09,
+7.0,
+2.01
+]
+},
+{
+"code": "East",
+"size": 10.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+22.16,
+6.8,
+0.06
+]
+},
+{
+"code": "How well did each dept. stick to its budget?",
+"size": 10.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+222.31,
+7.0,
+2.01
+]
+},
+{
+"code": "Ashcombe",
+"size": 10.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+51.72,
+6.98,
+0.06
+]
+},
+{
+"code": "369,089",
+"size": 10.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+37.69,
+6.55,
+1.94
+]
+},
+{
+"code": "How much did",
+"size": 10.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+73.2,
+6.94,
+0.06
+]
+},
+{
+"code": "How well did each dept.",
+"size": 10.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+121.42,
+6.94,
+1.94
+]
+},
+{
+"code": "Avg. caller satisfaction (on",
+"size": 10.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+133.95,
+7.5,
+2.49
+]
+},
+{
+"code": "Clinic C",
+"size": 10.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+41.52,
+6.97,
+0.11
+]
+},
+{
+"code": "Avg. wait time on hold (mins)",
+"size": 10.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+151.82,
+7.5,
+2.49
+]
+},
+{
+"code": "(\\$K)",
+"size": 10.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+23.7,
+7.5,
+2.49
+]
+},
+{
+"code": "work hours",
+"size": 10.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+56.19,
+6.94,
+0.06
+]
+},
+{
+"code": "% change from each stage to the next",
+"size": 10.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+190.36,
+7.5,
+2.01
+]
+},
+{
+"code": "Avg. household income (\\$K)",
+"size": 10.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+142.96,
+7.5,
+2.49
+]
+},
+{
+"code": "Board's ceiling",
+"size": 10.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+74.3,
+6.94,
+2.01
+]
+},
+{
+"code": "income (\\$K)",
+"size": 10.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+62.82,
+7.5,
+2.49
+]
+},
+{
+"code": "Avg. donation (\\$)",
+"size": 10.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+88.69,
+7.5,
+2.49
+]
+},
+{
+"code": "Stock C performed",
+"size": 10.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+80.26,
+7.05,
+2.05
+]
+},
+{
+"code": "No region strayed more than 10% from its own",
+"size": 10.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+204.75,
+7.5,
+2.05
+]
+},
+{
+"code": "issued only – renewals and e-books are not",
+"size": 10.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+185.05,
+6.94,
+2.05
+]
+},
+{
+"code": "longest spill of the year, five months after the",
+"size": 10.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+198.86,
+7.05,
+2.05
+]
+},
+{
+"code": "garden store opened",
+"size": 10.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+85.87,
+6.94,
+2.05
+]
+},
+{
+"code": "more than 10% from its own monthly",
+"size": 10.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+163.32,
+7.5,
+2.05
+]
+},
+{
+"code": "the system in",
+"size": 10.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+58.02,
+6.94,
+2.05
+]
+},
+{
+"code": "– renewals and",
+"size": 10.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+65.04,
+6.94,
+0.11
+]
+},
+{
+"code": "are",
+"size": 10.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+13.42,
+4.42,
+0.11
+]
+},
+{
+"code": "finished",
+"size": 10.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+32.71,
+7.05,
+2.05
+]
+},
+{
+"code": "Card and",
+"size": 10.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+40.51,
+7.05,
+0.22
+]
+},
+{
+"code": "from its own monthly",
+"size": 10.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+93.42,
+7.05,
+2.05
+]
+},
+{
+"code": "year, five months after the tank",
+"size": 10.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+137.5,
+7.05,
+2.05
+]
+},
+{
+"code": "of",
+"size": 10.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+8.18,
+7.05,
+2.05
+]
+},
+{
+"code": "manager started in",
+"size": 10.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+82.55,
+6.94,
+2.05
+]
+},
+{
+"code": "system in March",
+"size": 10.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+72.49,
+6.94,
+2.05
+]
+},
+{
+"code": "renewals and e-books are not",
+"size": 10.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+125.23,
+6.94,
+0.11
+]
+},
+{
+"code": "issued only – renewals",
+"size": 10.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+96.75,
+6.94,
+2.05
+]
+},
+{
+"code": "beat its target by the",
+"size": 10.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+88.56,
+6.94,
+2.05
+]
+},
+{
+"code": "store opened",
+"size": 10.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+53.54,
+6.94,
+1.94
+]
+},
+{
+"code": "had",
+"size": 10.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+15.33,
+6.94,
+0.11
+]
+},
+{
+"code": "soon",
+"size": 10.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+19.42,
+4.42,
+0.11
+]
+},
+{
+"code": "are not",
+"size": 10.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+31.05,
+6.26,
+0.11
+]
+},
+{
+"code": "10% from its own monthly",
+"size": 10.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+115.4,
+7.5,
+2.05
+]
+},
+{
+"code": "The longest spill of the year, five months",
+"size": 10.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+178.8,
+7.05,
+2.05
+]
+},
+{
+"code": "The West had the highest",
+"size": 10.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+110.68,
+6.94,
+2.05
+]
+},
+{
+"code": "more than 10% from its own",
+"size": 10.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+124.98,
+7.5,
+2.05
+]
+},
+{
+"code": "Card and check",
+"size": 10.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+67.09,
+7.05,
+0.22
+]
+},
+{
+"code": "five months after the tank",
+"size": 10.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+112.57,
+7.05,
+2.05
+]
+},
+{
+"code": "lowest price",
+"size": 10.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+50.99,
+6.94,
+1.94
+]
+},
+{
+"code": "this",
+"size": 10.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+15.59,
+6.94,
+0.11
+]
+},
+{
+"code": "in North in January",
+"size": 10.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+88.85,
+6.94,
+2.05
+]
+},
+{
+"code": "Bring back free",
+"size": 10.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+65.58,
+7.05,
+2.05
+]
+},
+{
+"code": "free parking",
+"size": 10.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+50.87,
+7.05,
+2.05
+]
+},
+{
+"code": "A new manager started in North in January",
+"size": 10.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+194.16,
+7.16,
+2.05
+]
+},
+{
+"code": "The wettest month: trips fell at three of",
+"size": 10.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+173.04,
+7.05,
+2.05
+]
+},
+{
+"code": "manager started",
+"size": 10.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+70.28,
+6.94,
+2.05
+]
+},
+{
+"code": "items issued only – renewals and e-books are",
+"size": 10.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+194.26,
+6.94,
+2.05
+]
+},
+{
+"code": "Physical items issued only – renewals and e-books",
+"size": 10.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+216.51,
+6.94,
+2.05
+]
+},
+{
+"code": "competitor garden store opened",
+"size": 10.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+135.07,
+6.94,
+2.05
+]
+},
+{
+"code": "only – renewals and",
+"size": 10.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+86.77,
+6.94,
+2.05
+]
+},
+{
+"code": "only – renewals and e-books are",
+"size": 10.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+138.02,
+6.94,
+2.05
+]
+},
+{
+"code": "more than 10% from its own monthly average",
+"size": 10.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+199.23,
+7.5,
+2.05
+]
+},
+{
+"code": "– renewals and e-books are not included",
+"size": 10.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+173.03,
+6.94,
+0.11
+]
+},
+{
+"code": "region strayed more than 10% from its own",
+"size": 10.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+188.63,
+7.5,
+2.05
+]
+},
+{
+"code": "items issued only – renewals",
+"size": 10.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+123.59,
+6.94,
+2.05
+]
+},
+{
+"code": "–",
+"size": 10.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+5.11,
+2.77,
+0.0
+]
+},
+{
+"code": "Physical items issued only – renewals",
+"size": 10.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+162.84,
+6.94,
+2.05
+]
+},
+{
+"code": "– renewals and e-books",
+"size": 10.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+99.29,
+6.94,
+0.11
+]
+},
+{
+"code": "issued only – renewals and e-books are",
+"size": 10.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+167.42,
+6.94,
+2.05
+]
+},
+{
+"code": "to Ashcombe's",
+"size": 10.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+61.36,
+7.16,
+0.11
+]
+},
+{
+"code": "10% from its",
+"size": 10.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+56.11,
+7.5,
+2.05
+]
+},
+{
+"code": "more than 10%",
+"size": 10.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+66.32,
+7.5,
+0.56
+]
+},
+{
+"code": "issued only – renewals and",
+"size": 10.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+116.17,
+6.94,
+2.05
+]
+},
+{
+"code": "Ashcombe's fleet",
+"size": 10.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+70.82,
+7.16,
+2.05
+]
+},
+{
+"code": "Uzbekistan",
+"size": 10.0,
+"weight": null,
+"slant": null,
+"extent": [
+48.67,
+6.94,
+0.22
+]
+},
+{
+"code": "Paisley",
+"size": 10.0,
+"weight": null,
+"slant": null,
+"extent": [
+30.75,
+6.94,
+2.05
+]
+},
+{
+"code": "will",
+"size": 10.0,
+"weight": null,
+"slant": null,
+"extent": [
+15.56,
+6.94,
+0.11
+]
+},
+{
+"code": "that they could select more than one feature from the list, March 2026",
+"size": 10.0,
+"weight": null,
+"slant": null,
+"extent": [
+309.93,
+7.05,
+2.05
+]
+},
+{
+"code": "42.2",
+"size": 10.0,
+"weight": null,
+"slant": null,
+"extent": [
+17.78,
+6.77,
+0.0
+]
+},
+{
+"code": "1991",
+"size": 10.0,
+"weight": null,
+"slant": null,
+"extent": [
+20.0,
+6.66,
+0.22
+]
+},
+{
+"code": "494.0",
+"size": 10.0,
+"weight": null,
+"slant": null,
+"extent": [
+22.78,
+6.77,
+0.22
+]
+},
+{
+"code": "\\$288K",
+"size": 10.0,
+"weight": null,
+"slant": null,
+"extent": [
+27.78,
+7.51,
+0.55
+]
+},
+{
+"code": "stay",
+"size": 10.0,
+"weight": null,
+"slant": null,
+"extent": [
+17.83,
+6.15,
+2.05
+]
+},
+{
+"code": "on 2025",
+"size": 10.0,
+"weight": null,
+"slant": null,
+"extent": [
+33.89,
+6.66,
+0.22
+]
+},
+{
+"code": "555.0",
+"size": 10.0,
+"weight": null,
+"slant": null,
+"extent": [
+22.78,
+6.66,
+0.22
+]
+},
+{
+"code": "Eth…",
+"size": 10.0,
+"weight": null,
+"slant": null,
+"extent": [
+22.96,
+6.94,
+0.11
+]
+},
+{
+"code": "2022-11",
+"size": 10.0,
+"weight": null,
+"slant": null,
+"extent": [
+33.33,
+6.66,
+0.22
+]
+},
+{
+"code": "−0.4",
+"size": 10.0,
+"weight": null,
+"slant": null,
+"extent": [
+20.56,
+6.77,
+0.22
+]
+},
+{
+"code": "735.0",
+"size": 10.0,
+"weight": null,
+"slant": null,
+"extent": [
+22.78,
+6.76,
+0.22
+]
+},
+{
+"code": "Share of the 640 survey respondents who said they use",
+"size": 10.0,
+"weight": null,
+"slant": null,
+"extent": [
+239.52,
+7.06,
+2.05
+]
+},
+{
+"code": "2021-04",
+"size": 10.0,
+"weight": null,
+"slant": null,
+"extent": [
+33.33,
+6.77,
+0.22
+]
+},
+{
+"code": "counted at the door (thousands)",
+"size": 10.0,
+"weight": null,
+"slant": null,
+"extent": [
+141.82,
+7.6,
+2.6
+]
+},
+{
+"code": "Côt…",
+"size": 10.0,
+"weight": null,
+"slant": null,
+"extent": [
+22.81,
+7.1,
+0.22
+]
+},
+{
+"code": "2.00",
+"size": 10.0,
+"weight": null,
+"slant": null,
+"extent": [
+17.78,
+6.66,
+0.22
+]
+},
+{
+"code": "Mr. & Mrs. Pe…",
+"size": 10.0,
+"weight": null,
+"slant": null,
+"extent": [
+71.12,
+7.16,
+0.21
+]
+},
+{
+"code": "Indones…",
+"size": 10.0,
+"weight": null,
+"slant": null,
+"extent": [
+40.37,
+6.94,
+0.11
+]
+},
+{
+"code": "feature at least once a month in their daily work, having been told that they could select more than one feature from the list, March 2026",
+"size": 10.0,
+"weight": null,
+"slant": null,
+"extent": [
+605.63,
+7.05,
+2.06
+]
+},
+{
+"code": "Cash",
+"size": 10.0,
+"weight": null,
+"slant": null,
+"extent": [
+21.72,
+7.1,
+0.22
+]
+},
+{
+"code": "checkweigher week 39 of 2026",
+"size": 10.0,
+"weight": null,
+"slant": null,
+"extent": [
+129.16,
+7.05,
+2.06
+]
+},
+{
+"code": "Share of the 640 survey respondents who said that they use each",
+"size": 10.0,
+"weight": null,
+"slant": null,
+"extent": [
+283.68,
+7.06,
+2.05
+]
+},
+{
+"code": "265.0",
+"size": 10.0,
+"weight": null,
+"slant": null,
+"extent": [
+22.78,
+6.66,
+0.22
+]
+},
+{
+"code": "59,710",
+"size": 10.0,
+"weight": null,
+"slant": null,
+"extent": [
+27.78,
+6.76,
+1.93
+]
+},
+{
+"code": "Successful transactions (successful transactions",
+"size": 10.0,
+"weight": null,
+"slant": null,
+"extent": [
+205.54,
+7.6,
+2.6
+]
+},
+{
+"code": "91",
+"size": 10.0,
+"weight": null,
+"slant": null,
+"extent": [
+10.0,
+6.66,
+0.22
+]
+},
+{
+"code": "41.9",
+"size": 10.0,
+"weight": null,
+"slant": null,
+"extent": [
+17.78,
+6.77,
+0.22
+]
+},
+{
+"code": "Reliability",
+"size": 10.0,
+"weight": null,
+"slant": null,
+"extent": [
+45.15,
+6.94,
+2.05
+]
+},
+{
+"code": "\\$140K",
+"size": 10.0,
+"weight": null,
+"slant": null,
+"extent": [
+27.78,
+7.51,
+0.55
+]
+},
+{
+"code": "child fare",
+"size": 10.0,
+"weight": null,
+"slant": null,
+"extent": [
+40.59,
+7.05,
+0.11
+]
+},
+{
+"code": "Share of the 640 survey respondents who said that they use each feature at least once a month in their daily work, having been told that they could select more than one",
+"size": 10.0,
+"weight": null,
+"slant": null,
+"extent": [
+744.17,
+7.06,
+2.06
+]
+},
+{
+"code": "Studentships allocated",
+"size": 10.0,
+"weight": null,
+"slant": null,
+"extent": [
+98.46,
+7.06,
+1.94
+]
+},
+{
+"code": "Hg",
+"size": 10.0,
+"weight": null,
+"slant": null,
+"extent": [
+12.5,
+6.83,
+2.06
+]
+},
+{
+"code": "Roman…",
+"size": 10.0,
+"weight": null,
+"slant": null,
+"extent": [
+37.95,
+6.83,
+0.22
+]
+},
+{
+"code": "Balanced",
+"size": 10.0,
+"weight": null,
+"slant": null,
+"extent": [
+39.86,
+6.94,
+0.11
+]
+},
+{
+"code": "(Oct–Dec 2026 forecast), and county rainfall",
+"size": 10.0,
+"weight": null,
+"slant": null,
+"extent": [
+194.7,
+7.6,
+2.6
+]
+},
+{
+"code": "\\$500K",
+"size": 10.0,
+"weight": null,
+"slant": null,
+"extent": [
+27.78,
+7.51,
+0.55
+]
+},
+{
+"code": "1980–89",
+"size": 10.0,
+"weight": null,
+"slant": null,
+"extent": [
+35.0,
+6.66,
+0.22
+]
+},
+{
+"code": "\\+\\$12K",
+"size": 10.0,
+"weight": null,
+"slant": null,
+"extent": [
+30.56,
+7.51,
+0.81
+]
+},
+{
+"code": "80%",
+"size": 10.0,
+"weight": null,
+"slant": null,
+"extent": [
+18.33,
+7.5,
+0.56
+]
+},
+{
+"code": "Donations by Region, % of Each Month's Total, 2022",
+"size": 10.0,
+"weight": null,
+"slant": null,
+"extent": [
+233.87,
+7.5,
+2.06
+]
+},
+{
+"code": "Sales (\\$ million)",
+"size": 10.0,
+"weight": null,
+"slant": null,
+"extent": [
+71.17,
+7.6,
+2.6
+]
+},
+{
+"code": "\\$10,000 invested on Feb. 4",
+"size": 10.0,
+"weight": null,
+"slant": null,
+"extent": [
+115.47,
+7.51,
+1.93
+]
+},
+{
+"code": "St Mary's",
+"size": 10.0,
+"weight": null,
+"slant": null,
+"extent": [
+42.87,
+7.06,
+2.05
+]
+},
+{
+"code": "\\$279K",
+"size": 10.0,
+"weight": null,
+"slant": null,
+"extent": [
+27.78,
+7.51,
+0.55
+]
+},
+{
+"code": "\\+\\$25",
+"size": 10.0,
+"weight": null,
+"slant": null,
+"extent": [
+22.78,
+7.51,
+0.81
+]
+},
+{
+"code": "\\$600",
+"size": 10.0,
+"weight": null,
+"slant": null,
+"extent": [
+20.0,
+7.51,
+0.55
+]
+},
+{
+"code": "\\$135K",
+"size": 10.0,
+"weight": null,
+"slant": null,
+"extent": [
+27.78,
+7.51,
+0.55
+]
+},
+{
+"code": "\\+\\$40K",
+"size": 10.0,
+"weight": null,
+"slant": null,
+"extent": [
+30.56,
+7.51,
+0.81
+]
+},
+{
+"code": "\\$9,000",
+"size": 10.0,
+"weight": null,
+"slant": null,
+"extent": [
+27.78,
+7.51,
+1.93
+]
+},
+{
+"code": "2.40%",
+"size": 10.0,
+"weight": null,
+"slant": null,
+"extent": [
+26.11,
+7.5,
+0.56
+]
+},
+{
+"code": "Mar. 11, 2022",
+"size": 11.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+68.486,
+7.513,
+2.123
+]
+},
+{
+"code": "Electricity Use, Target",
+"size": 12.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+137.304,
+8.328,
+2.412
+]
+},
+{
+"code": "Month, 2026",
+"size": 12.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+76.344,
+8.328,
+2.328
+]
+},
+{
+"code": "Invoicing",
+"size": 12.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+54.672,
+8.232,
+2.412
+]
+},
+{
+"code": "Employees by",
+"size": 12.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+82.74,
+8.328,
+2.4
+]
+},
+{
+"code": "April and October Were Alike in Total,",
+"size": 12.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+239.22,
+8.376,
+2.328
+]
+},
+{
+"code": "Daily Rank by Medals Won, Winter",
+"size": 12.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+219.144,
+8.328,
+2.4
+]
+},
+{
+"code": "Cash Fell \\$85K",
+"size": 12.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+92.016,
+9.0,
+0.672
+]
+},
+{
+"code": "Attendance, Feb–May 2022",
+"size": 12.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+165.024,
+8.376,
+2.4
+]
+},
+{
+"code": "and the Chetley Family Gave Over 40%",
+"size": 12.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+241.392,
+9.0,
+2.4
+]
+},
+{
+"code": "East's Expenses Peaked in the Last Month of Every Quarter",
+"size": 12.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+367.008,
+8.4,
+2.4
+]
+},
+{
+"code": "Central's Operations Spent",
+"size": 12.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+164.676,
+8.364,
+2.328
+]
+},
+{
+"code": "Elstead Park's Furniture & BBQ Sales",
+"size": 12.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+233.532,
+8.46,
+2.328
+]
+},
+{
+"code": "Was Our Top Region",
+"size": 12.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+127.776,
+8.364,
+2.412
+]
+},
+{
+"code": "Budget Was Each Department?",
+"size": 12.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+191.316,
+8.4,
+2.412
+]
+},
+{
+"code": "Top 15 Donors, 2022",
+"size": 12.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+125.22,
+8.232,
+2.328
+]
+},
+{
+"code": "Store Opened",
+"size": 12.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+82.944,
+8.364,
+2.328
+]
+},
+{
+"code": "Visits to Northgate Museums Trust Venues, 2025",
+"size": 12.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+299.424,
+8.328,
+2.412
+]
+},
+{
+"code": "Visits to the",
+"size": 12.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+75.156,
+8.328,
+0.096
+]
+},
+{
+"code": "The East Was",
+"size": 12.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+84.648,
+8.328,
+0.096
+]
+},
+{
+"code": "President Kennedy's Moon Speech",
+"size": 12.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+210.912,
+8.364,
+2.4
+]
+},
+{
+"code": "Expenses by Department,",
+"size": 12.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+156.012,
+8.328,
+2.4
+]
+},
+{
+"code": "Vaccinations Fell Sharply at Clinic B When Its Free Parking",
+"size": 12.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+367.164,
+8.364,
+2.412
+]
+},
+{
+"code": "the Most Dangerous Place to Work",
+"size": 12.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+214.716,
+8.328,
+2.412
+]
+},
+{
+"code": "Breakdown of Net Income, 2022",
+"size": 12.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+194.808,
+8.4,
+2.328
+]
+},
+{
+"code": "Sales Rose Far More Than Customer Satisfaction",
+"size": 12.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+298.86,
+8.4,
+0.132
+]
+},
+{
+"code": "Car or Taxi Is",
+"size": 12.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+85.692,
+8.364,
+0.132
+]
+},
+{
+"code": "or Below Budget Was Each Department?",
+"size": 12.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+249.552,
+8.4,
+2.412
+]
+},
+{
+"code": "Loans by Branch, 2019 and 2025",
+"size": 12.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+196.944,
+8.328,
+2.4
+]
+},
+{
+"code": "Total",
+"size": 12.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+31.248,
+8.328,
+0.072
+]
+},
+{
+"code": "in Central Did Card and Check Donations Both Peak in July",
+"size": 12.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+371.364,
+8.364,
+2.4
+]
+},
+{
+"code": "The Netherlands Led After the",
+"size": 12.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+189.12,
+8.4,
+0.072
+]
+},
+{
+"code": "a Third of Donations to Over Half",
+"size": 12.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+208.008,
+8.4,
+0.132
+]
+},
+{
+"code": "Cash Was Our Lowest Payment",
+"size": 12.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+191.844,
+8.364,
+2.4
+]
+},
+{
+"code": "Customer Satisfaction",
+"size": 12.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+133.284,
+8.4,
+0.132
+]
+},
+{
+"code": "Average Child",
+"size": 12.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+85.296,
+8.376,
+2.412
+]
+},
+{
+"code": "in Less Than in 2021",
+"size": 12.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+126.144,
+8.328,
+0.132
+]
+},
+{
+"code": "Motor-Vehicle Deaths Declined Gently After the",
+"size": 12.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+295.656,
+8.4,
+2.4
+]
+},
+{
+"code": "ATM",
+"size": 12.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+31.98,
+8.376,
+0.0
+]
+},
+{
+"code": "Client D Is the Least Satisfied",
+"size": 12.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+183.024,
+8.4,
+0.132
+]
+},
+{
+"code": "18 %",
+"size": 12.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+29.892,
+9.0,
+0.672
+]
+},
+{
+"code": "West's Collapsed",
+"size": 12.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+102.468,
+8.364,
+2.328
+]
+},
+{
+"code": "of Last Year's",
+"size": 12.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+83.4,
+8.4,
+0.072
+]
+},
+{
+"code": "Business Unit, Mar–Sep 2021",
+"size": 12.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+178.404,
+8.364,
+2.328
+]
+},
+{
+"code": "Central Gave the Most and Int'l the Least by",
+"size": 12.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+276.156,
+8.364,
+2.4
+]
+},
+{
+"code": "Central's Headcount Fell by a Quarter",
+"size": 12.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+232.872,
+8.364,
+2.4
+]
+},
+{
+"code": "Mean Monthly Employee Satisfaction, Apr 2021–Mar",
+"size": 12.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+323.784,
+8.4,
+2.4
+]
+},
+{
+"code": "Central's Operations Spent Less Than West's",
+"size": 12.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+275.16,
+8.364,
+2.328
+]
+},
+{
+"code": "Region's Donations Held Steady All Year",
+"size": 12.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+251.016,
+8.376,
+2.412
+]
+},
+{
+"code": "Remotely, Jan–Jun 2022",
+"size": 12.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+148.212,
+8.328,
+2.4
+]
+},
+{
+"code": "East's Expenses Peaked in the Last Month of",
+"size": 12.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+274.74,
+8.4,
+2.328
+]
+},
+{
+"code": "Three Largest Donors Gave Over \\$900K",
+"size": 12.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+244.596,
+9.0,
+2.412
+]
+},
+{
+"code": "Fund's Venues, 2025",
+"size": 12.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+122.76,
+8.328,
+2.328
+]
+},
+{
+"code": "Jan–Jul 2022",
+"size": 12.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+79.224,
+8.328,
+0.132
+]
+},
+{
+"code": "Donations Fell Late in the Year, the West's",
+"size": 12.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+263.016,
+8.328,
+2.328
+]
+},
+{
+"code": "Price of the XLCD65 TV, Apr–Jun 2022",
+"size": 12.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+247.14,
+8.4,
+2.328
+]
+},
+{
+"code": "new registration system made Clinic C far",
+"size": 13.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+240.422,
+9.165,
+2.665
+]
+},
+{
+"code": "began trialling",
+"size": 13.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+80.587,
+9.022,
+2.665
+]
+},
+{
+"code": "registration system made Clinic C",
+"size": 13.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+193.076,
+9.165,
+2.665
+]
+},
+{
+"code": "the system",
+"size": 13.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+59.475,
+9.022,
+2.665
+]
+},
+{
+"code": "Clinic C far more efficient",
+"size": 13.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+151.047,
+9.165,
+2.665
+]
+},
+{
+"code": "C began trialling",
+"size": 13.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+94.549,
+9.165,
+2.665
+]
+},
+{
+"code": "in March",
+"size": 13.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+51.701,
+9.022,
+0.143
+]
+},
+{
+"code": "registration system",
+"size": 13.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+106.002,
+8.502,
+2.665
+]
+},
+{
+"code": "new registration system made Clinic C far more efficient",
+"size": 13.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+322.829,
+9.165,
+2.665
+]
+},
+{
+"code": "more",
+"size": 13.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+28.08,
+5.746,
+0.143
+]
+},
+{
+"code": "system made Clinic",
+"size": 13.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+110.994,
+9.165,
+2.665
+]
+},
+{
+"code": "March",
+"size": 13.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+35.75,
+9.022,
+0.143
+]
+},
+{
+"code": "Clinic C began trialling the system",
+"size": 13.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+197.236,
+9.165,
+2.665
+]
+},
+{
+"code": "C far more efficient",
+"size": 13.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+112.489,
+9.165,
+2.665
+]
+},
+{
+"code": "trialling the",
+"size": 13.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+66.963,
+9.022,
+2.665
+]
+},
+{
+"code": "The new registration system",
+"size": 13.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+159.159,
+9.022,
+2.665
+]
+},
+{
+"code": "The new registration system made Clinic C far more",
+"size": 13.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+299.741,
+9.165,
+2.665
+]
+},
+{
+"code": "registration",
+"size": 13.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+63.466,
+8.502,
+2.665
+]
+},
+{
+"code": "Clinic C began trialling the",
+"size": 13.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+154.7,
+9.165,
+2.665
+]
+},
+{
+"code": "the",
+"size": 13.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+16.939,
+9.022,
+0.143
+]
+},
+{
+"code": "C began trialling the system in",
+"size": 13.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+174.629,
+9.165,
+2.665
+]
+},
+{
+"code": "the system in",
+"size": 13.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+75.426,
+9.022,
+2.665
+]
+},
+{
+"code": "in",
+"size": 13.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+11.297,
+8.502,
+0.143
+]
+},
+{
+"code": "trialling the system",
+"size": 13.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+109.499,
+9.022,
+2.665
+]
+},
+{
+"code": "trialling",
+"size": 13.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+45.37,
+9.022,
+2.665
+]
+},
+{
+"code": "Clinic C began trialling",
+"size": 13.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+133.107,
+9.165,
+2.665
+]
+},
+{
+"code": "began trialling the system",
+"size": 13.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+144.716,
+9.022,
+2.665
+]
+},
+{
+"code": "The new registration system made Clinic",
+"size": 13.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+232.271,
+9.165,
+2.665
+]
+},
+{
+"code": "made Clinic C far more",
+"size": 13.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+135.928,
+9.165,
+2.665
+]
+},
+{
+"code": "registration system made Clinic C far",
+"size": 13.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+213.85,
+9.165,
+2.665
+]
+},
+{
+"code": "far more",
+"size": 13.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+48.854,
+9.165,
+2.665
+]
+},
+{
+"code": "made Clinic C far",
+"size": 13.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+103.194,
+9.165,
+2.665
+]
+},
+{
+"code": "system",
+"size": 13.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+37.882,
+8.138,
+2.665
+]
+},
+{
+"code": "efficient",
+"size": 13.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+45.019,
+9.165,
+2.665
+]
+},
+{
+"code": "Clinic C began trialling the system in March",
+"size": 13.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+253.591,
+9.165,
+2.665
+]
+},
+{
+"code": "Clinic",
+"size": 13.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+33.904,
+9.165,
+0.286
+]
+},
+{
+"code": "C began trialling the system in March",
+"size": 13.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+215.033,
+9.165,
+2.665
+]
+},
+{
+"code": "began trialling the",
+"size": 13.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+102.18,
+9.022,
+2.665
+]
+},
+{
+"code": "The new registration",
+"size": 13.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+116.623,
+9.022,
+2.665
+]
+},
+{
+"code": "C",
+"size": 13.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+9.308,
+9.165,
+0.286
+]
+},
+{
+"code": "200",
+"size": 13.0,
+"weight": null,
+"slant": null,
+"extent": [
+19.5,
+8.658,
+0.286
+]
+},
+{
+"code": "100",
+"size": 13.0,
+"weight": null,
+"slant": null,
+"extent": [
+19.5,
+8.658,
+0.286
+]
+},
+{
+"code": "400",
+"size": 13.0,
+"weight": null,
+"slant": null,
+"extent": [
+19.5,
+8.801,
+0.286
+]
+},
+{
+"code": "300",
+"size": 13.0,
+"weight": null,
+"slant": null,
+"extent": [
+19.5,
+8.658,
+0.286
+]
+},
+{
+"code": "500",
+"size": 13.0,
+"weight": null,
+"slant": null,
+"extent": [
+19.5,
+8.658,
+0.286
+]
+},
+{
+"code": "0",
+"size": 13.0,
+"weight": null,
+"slant": null,
+"extent": [
+6.5,
+8.658,
+0.286
+]
+},
+{
+"code": "East",
+"size": 7.0,
+"weight": null,
+"slant": null,
+"extent": [
+13.748,
+4.76,
+0.077
+]
+},
+{
+"code": "Of the Smaller Regions, Only Central and South Reached the Target",
+"size": 8.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+278.6,
+5.6,
+1.608
+]
+},
+{
+"code": "4 Is Filling Below the 500 g on the Bag",
+"size": 8.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+158.848,
+5.552,
+1.608
+]
+},
+{
+"code": "Successful Transactions by Region, 2022",
+"size": 8.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+161.928,
+5.6,
+1.608
+]
+},
+{
+"code": "Regions, Only Central and South Reached the Target of 10",
+"size": 8.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+239.16,
+5.6,
+1.608
+]
+},
+{
+"code": "500 g declared",
+"size": 8.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+58.088,
+5.552,
+1.608
+]
+},
+{
+"code": "Of the Smaller Regions, Only Central and",
+"size": 8.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+169.776,
+5.6,
+1.608
+]
+},
+{
+"code": "Successful Transactions per Day, Feb.–Mar. 2022",
+"size": 8.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+197.088,
+5.6,
+1.6
+]
+},
+{
+"code": "Successful Transactions",
+"size": 8.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+94.088,
+5.6,
+0.088
+]
+},
+{
+"code": "Only Central and South Reached the Target of 10",
+"size": 8.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+201.928,
+5.6,
+1.608
+]
+},
+{
+"code": "Line 4 Is",
+"size": 8.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+35.264,
+5.488,
+0.048
+]
+},
+{
+"code": "Donations",
+"size": 8.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+40.712,
+5.488,
+0.048
+]
+},
+{
+"code": "Region, 2022",
+"size": 8.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+52.0,
+5.488,
+1.608
+]
+},
+{
+"code": "Transactions per Day, Feb.–Mar. 2022",
+"size": 8.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+153.672,
+5.552,
+1.6
+]
+},
+{
+"code": "the Target of 10",
+"size": 8.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+64.992,
+5.6,
+1.608
+]
+},
+{
+"code": "2021",
+"size": 8.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+18.4,
+5.24,
+0.088
+]
+},
+{
+"code": "Line",
+"size": 8.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+17.416,
+5.488,
+0.048
+]
+},
+{
+"code": "Filling Below the 500 g on the Bag",
+"size": 8.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+141.0,
+5.552,
+1.608
+]
+},
+{
+"code": "by Business Unit, Mar–Sep 2021",
+"size": 8.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+131.712,
+5.576,
+1.6
+]
+},
+{
+"code": "Successful Transactions per",
+"size": 8.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+110.528,
+5.6,
+1.552
+]
+},
+{
+"code": "Mar–Sep 2021",
+"size": 8.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+57.504,
+5.576,
+1.552
+]
+},
+{
+"code": "Museums Trust Venues, 2025",
+"size": 8.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+118.208,
+5.488,
+1.552
+]
+},
+{
+"code": "Feb.–Mar. 2022",
+"size": 8.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+62.52,
+5.552,
+0.088
+]
+},
+{
+"code": "Of the Smaller Regions, Only Central and South",
+"size": 8.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+196.352,
+5.6,
+1.608
+]
+},
+{
+"code": "of 10",
+"size": 8.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+19.672,
+5.6,
+0.088
+]
+},
+{
+"code": "Target",
+"size": 8.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+26.288,
+5.4,
+1.608
+]
+},
+{
+"code": "Donations by",
+"size": 8.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+53.488,
+5.552,
+1.6
+]
+},
+{
+"code": "Line 4 Is Filling Below the 500 g on",
+"size": 8.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+144.68,
+5.552,
+1.608
+]
+},
+{
+"code": "Reached the Target of 10",
+"size": 8.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+101.92,
+5.6,
+1.608
+]
+},
+{
+"code": "Revenue by Business Unit, Mar–Sep",
+"size": 8.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+147.432,
+5.576,
+1.6
+]
+},
+{
+"code": "Venues, 2025",
+"size": 8.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+52.232,
+5.488,
+1.552
+]
+},
+{
+"code": "Revenue",
+"size": 8.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+34.12,
+5.488,
+0.088
+]
+},
+{
+"code": "Of the Smaller Regions, Only",
+"size": 8.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+118.84,
+5.6,
+1.608
+]
+},
+{
+"code": "Line 4 Is Filling Below",
+"size": 8.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+91.408,
+5.552,
+1.608
+]
+},
+{
+"code": "Revenue by Business Unit,",
+"size": 8.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+108.328,
+5.552,
+1.6
+]
+},
+{
+"code": "Of the Smaller Regions,",
+"size": 8.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+96.344,
+5.6,
+1.608
+]
+},
+{
+"code": "Target of 10",
+"size": 8.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+49.024,
+5.6,
+1.608
+]
+},
+{
+"code": "Successful Transactions by",
+"size": 8.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+106.864,
+5.6,
+1.6
+]
+},
+{
+"code": "Visits",
+"size": 8.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+22.896,
+5.488,
+0.064
+]
+},
+{
+"code": "Visits to",
+"size": 8.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+34.136,
+5.488,
+0.064
+]
+},
+{
+"code": "on the Bag",
+"size": 8.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+44.36,
+5.552,
+1.608
+]
+},
+{
+"code": "Revenue by Business Unit, Mar–Sep 2021",
+"size": 8.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+168.896,
+5.576,
+1.6
+]
+},
+{
+"code": "Business Unit, Mar–Sep 2021",
+"size": 8.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+118.936,
+5.576,
+1.552
+]
+},
+{
+"code": "Unit, Mar–Sep 2021",
+"size": 8.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+81.44,
+5.576,
+1.552
+]
+},
+{
+"code": "per Day, Feb.–Mar. 2022",
+"size": 8.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+99.936,
+5.552,
+1.6
+]
+},
+{
+"code": "Day, Feb.–Mar. 2022",
+"size": 8.0,
+"weight": "bold",
+"slant": null,
+"extent": [
+83.496,
+5.552,
+1.6
+]
+},
+{
+"code": "about",
+"size": 8.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+18.4,
+5.552,
+0.088
+]
+},
+{
+"code": "event",
+"size": 8.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+18.192,
+5.008,
+0.088
+]
+},
+{
+"code": "Price",
+"size": 8.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+18.208,
+5.464,
+0.088
+]
+},
+{
+"code": "only",
+"size": 8.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+14.52,
+5.552,
+1.64
+]
+},
+{
+"code": "2021",
+"size": 8.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+16.352,
+5.328,
+0.176
+]
+},
+{
+"code": "with",
+"size": 8.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+14.512,
+5.552,
+0.088
+]
+},
+{
+"code": "month's",
+"size": 8.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+27.6,
+5.552,
+0.088
+]
+},
+{
+"code": "Amounts",
+"size": 8.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+30.888,
+5.728,
+0.088
+]
+},
+{
+"code": "largest",
+"size": 8.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+22.392,
+5.552,
+1.64
+]
+},
+{
+"code": "North's",
+"size": 8.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+25.88,
+5.552,
+0.088
+]
+},
+{
+"code": "\\$40K",
+"size": 8.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+18.328,
+6.0,
+1.552
+]
+},
+{
+"code": "Each",
+"size": 8.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+17.28,
+5.552,
+0.088
+]
+},
+{
+"code": "regions'",
+"size": 8.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+26.688,
+5.552,
+1.64
+]
+},
+{
+"code": "(TBC)",
+"size": 8.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+23.632,
+6.0,
+2.0
+]
+},
+{
+"code": "Each month's ratings averaged over every survey returned.",
+"size": 8.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+204.696,
+5.552,
+1.64
+]
+},
+{
+"code": "amount",
+"size": 8.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+26.168,
+5.008,
+0.088
+]
+},
+{
+"code": "Gr.",
+"size": 8.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+12.024,
+5.64,
+0.176
+]
+},
+{
+"code": "back-office",
+"size": 8.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+35.68,
+5.64,
+1.64
+]
+},
+{
+"code": "missing)",
+"size": 8.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+29.448,
+6.0,
+2.0
+]
+},
+{
+"code": "when",
+"size": 8.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+17.576,
+5.552,
+0.088
+]
+},
+{
+"code": "d",
+"size": 8.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+4.088,
+5.552,
+0.088
+]
+},
+{
+"code": "of",
+"size": 8.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+6.544,
+5.64,
+1.64
+]
+},
+{
+"code": "since",
+"size": 8.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+17.176,
+5.232,
+0.088
+]
+},
+{
+"code": "Survey",
+"size": 8.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+23.416,
+5.64,
+1.64
+]
+},
+{
+"code": "A long footnote that cannot possibly fit on one line of",
+"size": 8.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+186.888,
+5.728,
+1.64
+]
+},
+{
+"code": "(opened 2021; 38,600 loans in 2025)",
+"size": 8.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+126.76,
+6.0,
+2.0
+]
+},
+{
+"code": "customers",
+"size": 8.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+34.864,
+5.008,
+0.088
+]
+},
+{
+"code": "Germany",
+"size": 8.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+32.264,
+5.64,
+1.64
+]
+},
+{
+"code": "after",
+"size": 8.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+16.256,
+5.64,
+1.64
+]
+},
+{
+"code": "due",
+"size": 8.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+12.064,
+5.552,
+0.088
+]
+},
+{
+"code": "estimates.",
+"size": 8.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+34.76,
+5.232,
+0.088
+]
+},
+{
+"code": "reopened",
+"size": 8.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+29.544,
+5.552,
+1.552
+]
+},
+{
+"code": "some",
+"size": 8.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+17.584,
+3.536,
+0.088
+]
+},
+{
+"code": "POA",
+"size": 8.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+17.296,
+5.728,
+0.176
+]
+},
+{
+"code": "that",
+"size": 8.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+13.488,
+5.552,
+0.088
+]
+},
+{
+"code": "Rates",
+"size": 8.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+19.12,
+5.464,
+0.176
+]
+},
+{
+"code": "not",
+"size": 8.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+11.24,
+5.008,
+0.088
+]
+},
+{
+"code": "Totals as reported; some differ by \\$1 or \\$2 from the sum of the amounts above them.",
+"size": 8.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+297.24,
+6.0,
+1.64
+]
+},
+{
+"code": "Not",
+"size": 8.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+12.688,
+5.464,
+0.088
+]
+},
+{
+"code": "mid-year",
+"size": 8.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+30.576,
+5.552,
+1.64
+]
+},
+{
+"code": "\\$1",
+"size": 8.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+8.088,
+6.0,
+0.448
+]
+},
+{
+"code": "England's",
+"size": 8.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+34.048,
+5.552,
+1.64
+]
+},
+{
+"code": "01\\/08\\/26.",
+"size": 8.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+35.16,
+6.0,
+2.0
+]
+},
+{
+"code": "Pledged; \\$40K had been received by Dec. 31.",
+"size": 8.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+154.024,
+6.0,
+1.64
+]
+},
+{
+"code": "December's",
+"size": 8.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+38.864,
+5.552,
+0.088
+]
+},
+{
+"code": "Estimate: December's invoices had not all arrived.",
+"size": 8.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+175.776,
+5.552,
+0.088
+]
+},
+{
+"code": "not available to commercial users – staff-run only, not offered commercially at present",
+"size": 8.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+302.232,
+5.64,
+1.64
+]
+},
+{
+"code": "\\$2",
+"size": 8.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+8.088,
+6.0,
+0.448
+]
+},
+{
+"code": "n\\/a:",
+"size": 8.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+15.128,
+6.0,
+2.0
+]
+},
+{
+"code": "n\\/a",
+"size": 8.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+12.672,
+6.0,
+2.0
+]
+},
+{
+"code": "\\*",
+"size": 8.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+4.088,
+6.0,
+0.0
+]
+},
+{
+"code": "North's office reopened on Jan. 3, 2022, after a refit.",
+"size": 8.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+185.072,
+5.64,
+1.64
+]
+},
+{
+"code": "–",
+"size": 8.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+4.088,
+2.216,
+0.0
+]
+},
+{
+"code": "Germany includes one corporate gift of \\$2 million.",
+"size": 8.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+177.576,
+6.0,
+1.64
+]
+},
+{
+"code": "https:\\/\\/statistics.example.org\\/population\\/regional-estimates\\/2022\\/mid-year\\/table-4",
+"size": 8.0,
+"weight": null,
+"slant": "italic",
+"extent": [
+290.064,
+6.0,
+2.0
+]
+},
+{
+"code": "West",
+"size": 8.0,
+"weight": null,
+"slant": null,
+"extent": [
+17.376,
+5.464,
+0.176
+]
+},
+{
+"code": "House",
+"size": 8.0,
+"weight": null,
+"slant": null,
+"extent": [
+21.152,
+5.464,
+0.088
+]
+},
+{
+"code": "\\$50K",
+"size": 8.0,
+"weight": null,
+"slant": null,
+"extent": [
+18.224,
+6.008,
+0.44
+]
+},
+{
+"code": "Mean fill weight per bag (g)",
+"size": 8.0,
+"weight": null,
+"slant": null,
+"extent": [
+98.248,
+6.08,
+2.08
+]
+},
+{
+"code": "Jan",
+"size": 8.0,
+"weight": null,
+"slant": null,
+"extent": [
+12.56,
+5.464,
+0.176
+]
+},
+{
+"code": "499",
+"size": 8.0,
+"weight": null,
+"slant": null,
+"extent": [
+12.0,
+5.416,
+0.176
+]
+},
+{
+"code": "Victoria Mill Engine House",
+"size": 8.0,
+"weight": null,
+"slant": null,
+"extent": [
+95.52,
+5.552,
+1.648
+]
+},
+{
+"code": "Bede's Chapel & Undercroft",
+"size": 8.0,
+"weight": null,
+"slant": null,
+"extent": [
+99.24,
+5.728,
+1.552
+]
+},
+{
+"code": "2022-02-28",
+"size": 8.0,
+"weight": null,
+"slant": null,
+"extent": [
+37.328,
+5.328,
+0.176
+]
+},
+{
+"code": "South",
+"size": 8.0,
+"weight": null,
+"slant": null,
+"extent": [
+20.456,
+5.648,
+0.176
+]
+},
+{
+"code": "150",
+"size": 8.0,
+"weight": null,
+"slant": null,
+"extent": [
+12.0,
+5.328,
+0.176
+]
+},
+{
+"code": "5",
+"size": 8.0,
+"weight": null,
+"slant": null,
+"extent": [
+4.0,
+5.328,
+0.176
+]
+},
+{
+"code": "2022-03-04",
+"size": 8.0,
+"weight": null,
+"slant": null,
+"extent": [
+37.328,
+5.416,
+0.176
+]
+},
+{
+"code": "2019",
+"size": 8.0,
+"weight": null,
+"slant": null,
+"extent": [
+16.0,
+5.328,
+0.176
+]
+},
+{
+"code": "2022-03-07",
+"size": 8.0,
+"weight": null,
+"slant": null,
+"extent": [
+37.328,
+5.408,
+0.176
+]
+},
+{
+"code": "Tram Depot",
+"size": 8.0,
+"weight": null,
+"slant": null,
+"extent": [
+43.024,
+5.472,
+1.552
+]
+},
+{
+"code": "Ropewalk Folk",
+"size": 8.0,
+"weight": null,
+"slant": null,
+"extent": [
+51.784,
+5.552,
+1.552
+]
+},
+{
+"code": "137",
+"size": 8.0,
+"weight": null,
+"slant": null,
+"extent": [
+12.0,
+5.408,
+0.176
+]
+},
+{
+"code": "Line 1",
+"size": 8.0,
+"weight": null,
+"slant": null,
+"extent": [
+21.888,
+5.464,
+0.088
+]
+},
+{
+"code": "Visits counted at",
+"size": 8.0,
+"weight": null,
+"slant": null,
+"extent": [
+59.64,
+5.552,
+0.176
+]
+},
+{
+"code": "weight per bag (g)",
+"size": 8.0,
+"weight": null,
+"slant": null,
+"extent": [
+64.688,
+6.08,
+2.08
+]
+},
+{
+"code": "Harbour Maritime",
+"size": 8.0,
+"weight": null,
+"slant": null,
+"extent": [
+64.304,
+5.552,
+0.088
+]
+},
+{
+"code": "Folk Museum",
+"size": 8.0,
+"weight": null,
+"slant": null,
+"extent": [
+47.272,
+5.552,
+0.088
+]
+},
+{
+"code": "Rockies",
+"size": 8.0,
+"weight": null,
+"slant": null,
+"extent": [
+26.592,
+5.552,
+0.176
+]
+},
+{
+"code": "Plains",
+"size": 8.0,
+"weight": null,
+"slant": null,
+"extent": [
+21.496,
+5.552,
+0.088
+]
+},
+{
+"code": "visits counted at the",
+"size": 8.0,
+"weight": null,
+"slant": null,
+"extent": [
+71.64,
+5.552,
+0.088
+]
+},
+{
+"code": "Transactions",
+"size": 8.0,
+"weight": null,
+"slant": null,
+"extent": [
+44.336,
+5.416,
+0.088
+]
+},
+{
+"code": "H",
+"size": 8.0,
+"weight": null,
+"slant": null,
+"extent": [
+6.0,
+5.464,
+0.0
+]
+},
+{
+"code": "mean fill",
+"size": 8.0,
+"weight": null,
+"slant": null,
+"extent": [
+30.224,
+5.64,
+0.088
+]
+},
+{
+"code": "Hartley",
+"size": 8.0,
+"weight": null,
+"slant": null,
+"extent": [
+26.248,
+5.552,
+1.64
+]
+},
+{
+"code": "\\$50",
+"size": 8.0,
+"weight": null,
+"slant": null,
+"extent": [
+12.0,
+6.008,
+0.44
+]
+},
+{
+"code": "\\$280K",
+"size": 8.0,
+"weight": null,
+"slant": null,
+"extent": [
+22.224,
+6.008,
+0.44
+]
+},
+{
+"code": "Ropewalk Folk Museum",
+"size": 8.0,
+"weight": null,
+"slant": null,
+"extent": [
+84.048,
+5.552,
+1.552
+]
+},
+{
+"code": "Weavers' Cottages",
+"size": 8.0,
+"weight": null,
+"slant": null,
+"extent": [
+64.32,
+5.68,
+1.648
+]
+},
+{
+"code": "Dec",
+"size": 8.0,
+"weight": null,
+"slant": null,
+"extent": [
+13.216,
+5.472,
+0.088
+]
+},
+{
+"code": "16.5",
+"size": 8.0,
+"weight": null,
+"slant": null,
+"extent": [
+14.224,
+5.328,
+0.176
+]
+},
+{
+"code": "Engine House",
+"size": 8.0,
+"weight": null,
+"slant": null,
+"extent": [
+47.936,
+5.464,
+1.648
+]
+},
+{
+"code": "visits counted at the door",
+"size": 8.0,
+"weight": null,
+"slant": null,
+"extent": [
+90.112,
+5.552,
+0.088
+]
+},
+{
+"code": "Far West",
+"size": 8.0,
+"weight": null,
+"slant": null,
+"extent": [
+31.736,
+5.464,
+0.176
+]
+},
+{
+"code": "Apr",
+"size": 8.0,
+"weight": null,
+"slant": null,
+"extent": [
+13.584,
+5.728,
+1.552
+]
+},
+{
+"code": "St Bede's",
+"size": 8.0,
+"weight": null,
+"slant": null,
+"extent": [
+32.816,
+5.648,
+0.176
+]
+},
+{
+"code": "Donations (\\$K)",
+"size": 8.0,
+"weight": null,
+"slant": null,
+"extent": [
+54.608,
+6.08,
+2.08
+]
+},
+{
+"code": "Castle Keep &",
+"size": 8.0,
+"weight": null,
+"slant": null,
+"extent": [
+51.144,
+5.728,
+1.552
+]
+},
+{
+"code": "\\$280",
+"size": 8.0,
+"weight": null,
+"slant": null,
+"extent": [
+16.0,
+6.008,
+0.44
+]
+},
+{
+"code": "\\$18.0",
+"size": 8.0,
+"weight": null,
+"slant": null,
+"extent": [
+18.224,
+6.008,
+0.44
+]
+},
+{
+"code": "(\\$K)",
+"size": 8.0,
+"weight": null,
+"slant": null,
+"extent": [
+16.448,
+6.08,
+2.08
+]
+},
+{
+"code": "Castle Keep & Grounds",
+"size": 8.0,
+"weight": null,
+"slant": null,
+"extent": [
+83.72,
+5.728,
+1.552
+]
+},
+{
+"code": "Keep & Grounds",
+"size": 8.0,
+"weight": null,
+"slant": null,
+"extent": [
+59.24,
+5.728,
+1.552
+]
+},
+{
+"code": "St Bede's Chapel &",
+"size": 8.0,
+"weight": null,
+"slant": null,
+"extent": [
+69.04,
+5.728,
+1.552
+]
+},
+{
+"code": "Weavers'",
+"size": 8.0,
+"weight": null,
+"slant": null,
+"extent": [
+30.952,
+5.552,
+0.176
+]
+},
+{
+"code": "St Bede's Chapel & Undercroft",
+"size": 8.0,
+"weight": null,
+"slant": null,
+"extent": [
+109.464,
+5.728,
+1.552
+]
+},
+{
+"code": "Chapel & Undercroft",
+"size": 8.0,
+"weight": null,
+"slant": null,
+"extent": [
+73.984,
+5.728,
+1.552
+]
+}
+]
+}

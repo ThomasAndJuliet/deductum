@@ -1,0 +1,44 @@
+{
+ "key": "p3-71-weekly-sales-totals--iso-weeks",
+ "file": "p3-71-weekly-sales-totals.json",
+ "variant": "iso-weeks",
+ "requested_type": "auto",
+ "report": {
+  "chart": "p3-71-weekly-sales-totals",
+  "style": "plain",
+  "variant": "iso-weeks",
+  "type": null,
+  "status": "invalid",
+  "decisions": [],
+  "findings": [
+   {
+    "rule": "CG-4",
+    "severity": "error",
+    "message": "an ISO week (2022-W24) runs Monday to Sunday, and these weeks start on Sunday (x.week_start): give each week by its first day, 2022-06-19",
+    "path": "data.x.values",
+    "level": "locked",
+    "guide": [],
+    "title": "the spec is well formed"
+   }
+  ],
+  "overrides": [],
+  "expect": {
+   "refused": [
+    "CG-4"
+   ]
+  },
+  "expect_met": true,
+  "source": {
+   "book": "p. 194–195 (s. 0181–0182)",
+   "notes": "06 T7",
+   "shows": "ISO weeks given where the weeks start on Sunday: invalid, an ISO week running Monday to Sunday",
+   "status": "generated"
+  },
+  "summary": {
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [],
+  "copies": []
+ }
+}

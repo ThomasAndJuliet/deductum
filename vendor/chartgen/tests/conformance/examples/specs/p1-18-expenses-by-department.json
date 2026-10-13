@@ -1,0 +1,59 @@
+{
+  "chartspec": 1,
+  "id": "p1-18-expenses-by-department",
+  "job": {
+    "kind": "lookup",
+    "text": "Look up each department's expenses in 2022"
+  },
+  "title": {
+    "text": "Expenses by Department, 2022",
+    "kind": "descriptive"
+  },
+  "data": {
+    "x": {
+      "kind": "nominal",
+      "values": [
+        "Operations",
+        "Marketing",
+        "Finance & Admin",
+        "IT",
+        "R&D"
+      ]
+    },
+    "measure": {
+      "name": "expenses",
+      "kind": "amount",
+      "zero": "meaningful",
+      "min": 0,
+      "unit": {
+        "prefix": "$",
+        "noun": "in expenses"
+      }
+    },
+    "series": [
+      {
+        "id": "expenses",
+        "name": "Expenses",
+        "values": [
+          534942,
+          377123,
+          363122,
+          161994,
+          133800
+        ]
+      }
+    ]
+  },
+  "chart": {
+    "type": "bar",
+    "value_labels": "off"
+  },
+  "reasons": {
+    "chart.value_labels": "the book's chart keeps its scale (p. 158): this example shows the names wrapping under columns, and P2-07 adds its budget markers"
+  },
+  "source": {
+    "book": "p. 158 (s. 0148)",
+    "notes": "05 #8",
+    "shows": "names that wrap to keep the columns: on one line “Marketing” and “Finance & Admin” would be 6.3 pt apart, under 1 em, so every multi-word name wraps, balanced and never just before “&”, giving the book’s “Finance & / Admin”; then all names keep 1 em apart. The book’s budget markers are phase 2, so only the expenses are drawn, as a look-up chart"
+  }
+}

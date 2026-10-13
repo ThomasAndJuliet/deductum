@@ -1,0 +1,183 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p2-22-headcount-black-and-white",
+    "job": {
+      "kind": "lookup",
+      "text": "Look up each region's headcount in the first seven months, on a page likely to be photocopied in black and white"
+    },
+    "title": {
+      "text": "Headcount by Region, Jan–Jul 2019",
+      "kind": "descriptive"
+    },
+    "audience": {
+      "bw_risk": true
+    },
+    "data": {
+      "x": {
+        "kind": "time",
+        "grid": "month",
+        "values": [
+          "2019-01",
+          "2019-02",
+          "2019-03",
+          "2019-04",
+          "2019-05",
+          "2019-06",
+          "2019-07"
+        ]
+      },
+      "measure": {
+        "name": "headcount",
+        "kind": "count",
+        "zero": "meaningful",
+        "min": 0,
+        "persistence": "summary",
+        "unit": {
+          "noun": "employees"
+        }
+      },
+      "series": [
+        {
+          "id": "east",
+          "name": "East",
+          "values": [
+            100,
+            110,
+            109,
+            88,
+            107,
+            96,
+            100
+          ]
+        },
+        {
+          "id": "central",
+          "name": "Central",
+          "values": [
+            90,
+            96,
+            106,
+            82,
+            78,
+            78,
+            90
+          ]
+        },
+        {
+          "id": "north",
+          "name": "North",
+          "values": [
+            60,
+            47,
+            62,
+            53,
+            55,
+            47,
+            62
+          ]
+        },
+        {
+          "id": "west",
+          "name": "West",
+          "values": [
+            40,
+            32,
+            38,
+            42,
+            42,
+            47,
+            45
+          ]
+        },
+        {
+          "id": "south",
+          "name": "South",
+          "values": [
+            30,
+            31,
+            31,
+            29,
+            33,
+            32,
+            30
+          ]
+        },
+        {
+          "id": "intl",
+          "name": "Int'l",
+          "values": [
+            20,
+            18,
+            19,
+            20,
+            18,
+            17,
+            20
+          ]
+        }
+      ]
+    },
+    "source": {
+      "book": "p. 214–216 (s. 0198–0200)",
+      "notes": "06 T11",
+      "shows": "a chart likely to be copied in black and white: each line keeps its colour and gets its own marker symbol at every point, square, triangle, ×, filled circle, + and asterisk in the order of the line ends (G7.14, D-33), the symbols told apart where the colours would not be; never a dash pattern (G7.10)"
+    }
+  },
+  "variants": [
+    {
+      "name": "emphasis",
+      "patch": {
+        "job": {
+          "kind": "make_aware",
+          "text": "Make management aware of Central's drop in headcount this spring"
+        },
+        "insight": {
+          "important": "Central's headcount fell by a quarter from March to May",
+          "targets": [
+            {
+              "series": "central"
+            }
+          ]
+        },
+        "title": {
+          "text": "Central's Headcount Fell by a Quarter from March to May",
+          "kind": "insight",
+          "descriptive": "Headcount by Region, Jan–Jul 2019"
+        },
+        "highlight": [
+          {
+            "targets": [
+              {
+                "series": "central"
+              }
+            ],
+            "method": "auto"
+          }
+        ],
+        "source": {
+          "shows": "the book's emphasised Central in black and white: its line stays twice as thick and keeps its symbol (G7.14)"
+        }
+      },
+      "expect": {
+        "findings": []
+      }
+    },
+    {
+      "name": "legend",
+      "patch": {
+        "chart": {
+          "labelling": "legend"
+        },
+        "source": {
+          "shows": "the same lines keyed by a legend (a guided departure: the labels fit at the line ends): each entry shows its line's symbol"
+        }
+      },
+      "expect": {
+        "findings": [
+          "R4-1"
+        ]
+      }
+    }
+  ]
+}

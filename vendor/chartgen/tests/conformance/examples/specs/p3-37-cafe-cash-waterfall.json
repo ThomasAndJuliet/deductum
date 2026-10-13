@@ -1,0 +1,110 @@
+{
+ "base": {
+  "chartspec": 1,
+  "id": "p3-37-cafe-cash-waterfall",
+  "job": {
+   "kind": "explain",
+   "text": "How did the café's first year take its cash below zero and back?"
+  },
+  "insight": {
+   "important": "The café's cash fell $85K below zero before sales came in; the loan brought it back to where it started"
+  },
+  "title": {
+   "text": "Cash Fell $85K Below Zero Before Sales Came In",
+   "kind": "insight",
+   "descriptive": "Cash Flow of the New Café, First Year"
+  },
+  "data": {
+   "x": {
+    "kind": "nominal",
+    "values": [
+     "Start",
+     "Fit-out",
+     "Ovens",
+     "Sales",
+     "Wages",
+     "Rent",
+     "Loan",
+     "End"
+    ],
+    "roles": {
+     "Start": "total",
+     "End": "total"
+    }
+   },
+   "measure": {
+    "name": "cash",
+    "kind": "amount",
+    "zero": "meaningful",
+    "good": "higher",
+    "unit": {
+     "prefix": "$",
+     "magnitude": 3,
+     "what": "cash"
+    }
+   },
+   "series": [
+    {
+     "id": "cash",
+     "name": "Cash",
+     "values": [
+      40,
+      -95,
+      -30,
+      150,
+      -60,
+      -25,
+      60,
+      40
+     ]
+    }
+   ],
+   "parts": {
+    "meaningful_total": true,
+    "all_parts": true,
+    "overlap": false
+   }
+  },
+  "facts": {
+   "message": "cumulative_subtotals"
+  },
+  "source": {
+   "notes": "07 §5.5; D-43",
+   "shows": "a running total that goes below zero (ours, D-43): the scale holds every running total, its zero line signed and darker than the gridlines (G2.6, G3.7); each step floats from the running total before it, across zero where it must; rises good and falls bad, cash being better higher, in green and red (G4.16, D-18); the opening and closing cash full grey bars from zero (G7.33)"
+  }
+ },
+ "variants": [
+  {
+   "name": "labelled",
+   "patch": {
+    "chart": {
+     "value_labels": "on"
+    },
+    "reasons": {
+     "chart.value_labels": "each step's amount is read off it"
+    },
+    "data": {
+     "measure": {
+      "unit": {
+       "fallback": "cash in and out"
+      }
+     }
+    },
+    "source": {
+     "shows": "the steps labelled, signed, past each bar's far end: above a rise, below a fall, and the totals unsigned (G7.4, G6.16)"
+    }
+   }
+  },
+  {
+   "name": "bw",
+   "patch": {
+    "audience": {
+     "bw_risk": true
+    },
+    "source": {
+     "shows": "the same waterfall for black and white (audience.bw_risk): each fall hatched in two tones of the red, each rise dithered in two tones of the green, the patterns blending to the colours at reading distance and telling them apart in grey and for readers with colour-vision deficiency (D-18); the grey totals untouched"
+    }
+   }
+  }
+ ]
+}

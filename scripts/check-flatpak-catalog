@@ -1,0 +1,53 @@
+#!/usr/bin/env python3
+"""Reject desktop Flatpak builds that would disappear from software stores."""
+import configparser
+import gzip
+from pathlib import Path
+import sys
+import xml.etree.ElementTree as ET
+
+
+def check(build):
+    build = Path(build)
+    metadata = configparser.ConfigParser(interpolation=None)
+    with (build / 'metadata').open() as source:
+        metadata.read_file(source)
+    app_id = metadata['Application']['name']
+    desktop_dirs = [build / 'files/share/applications', build / 'export/share/applications']
+    if not any(list(directory.glob('*.desktop')) for directory in desktop_dirs):
+        return
+    catalog = build / 'files/share/app-info/xmls' / (app_id + '.xml.gz')
+    if not catalog.is_file():
+        raise ValueError(f'{app_id}: missing composed AppStream catalog; run the complete build or appstreamcli compose before publishing')
+    with gzip.open(catalog, 'rb') as source:
+        root = ET.parse(source).getroot()
+    components = [root] if root.tag == 'component' else root.findall('component')
+    component = next((item for item in components if item.findtext('id') == app_id), None)
+    if component is None:
+        raise ValueError(f'{app_id}: composed catalog does not contain this application')
+    if not (component.findtext('name') or '').strip():
+        raise ValueError(f'{app_id}: catalog has no application name')
+    launches = [node.text for node in component.findall('launchable') if node.get('type') == 'desktop-id']
+    if not any(name and Path(name).name == name and any((directory / name).is_file() for directory in desktop_dirs) for name in launches):
+        raise ValueError(f'{app_id}: catalog has no matching desktop launchable')
+    for icon in component.findall('icon'):
+        if icon.get('type') != 'cached':
+            continue
+        name = icon.text or ''
+        width, height = icon.get('width'), icon.get('height')
+        scale = icon.get('scale', '1')
+        if not width or not height or not width.isdigit() or not height.isdigit() or not scale.isdigit() or not name or Path(name).name != name:
+            raise ValueError(f'{app_id}: invalid cached icon reference')
+        size = f'{width}x{height}' + (f'@{scale}' if scale != '1' else '')
+        path = build / 'files/share/app-info/icons/flatpak' / size / name
+        if not path.is_file() or path.stat().st_size == 0:
+            raise ValueError(f'{app_id}: missing cached icon {size}/{name}')
+
+
+if __name__ == '__main__':
+    try:
+        if len(sys.argv) != 2:
+            raise ValueError('Usage: check-flatpak-catalog FINISHED_BUILD_DIR')
+        check(sys.argv[1])
+    except (ValueError, OSError, EOFError, ET.ParseError, configparser.Error, KeyError) as error:
+        raise SystemExit(f'Refusing Flatpak publication: {error}')

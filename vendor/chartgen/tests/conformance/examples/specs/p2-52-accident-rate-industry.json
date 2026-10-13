@@ -1,0 +1,78 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p2-52-accident-rate-industry",
+    "job": {
+      "kind": "make_aware",
+      "text": "Make the safety director aware of the factories above the industry's accident rate"
+    },
+    "insight": {
+      "important": "Factories C and A had more accidents per work hour than the industry average"
+    },
+    "title": {
+      "text": "Factories C and A Are Above the Industry's Accident Rate",
+      "kind": "insight",
+      "descriptive": "Accident Rate by Factory, 2022"
+    },
+    "data": {
+      "x": {
+        "kind": "nominal",
+        "values": [
+          "Factory C",
+          "Factory A",
+          "Factory E",
+          "Factory D",
+          "Factory B"
+        ]
+      },
+      "measure": {
+        "name": "accident rate",
+        "kind": "quantity",
+        "zero": "meaningful",
+        "min": 0,
+        "good": "lower",
+        "dividing_point": {
+          "comparison": "industry"
+        },
+        "unit": {
+          "noun": "accidents per 100K work hours"
+        }
+      },
+      "series": [
+        {
+          "id": "rate",
+          "name": "Accident rate",
+          "values": [
+            4.2,
+            3.9,
+            3.3,
+            2.4,
+            2.3
+          ]
+        }
+      ],
+      "comparisons": [
+        {
+          "id": "industry",
+          "kind": "peer",
+          "label": "Industry average",
+          "values": [
+            3.45
+          ],
+          "reason": "the industry association's figure for 2022"
+        }
+      ]
+    },
+    "source": {
+      "book": "p. 417 (s. 0382)",
+      "notes": "13-15 F17",
+      "shows": "the cheat sheet's chart: the industry average as a dotted line across the plot, labelled at its end (D-21 (c)), and the factories above it bad, those below it good, in red and green (G4.16, D-18)"
+    },
+    "chart": {
+      "value_labels": "off"
+    },
+    "reasons": {
+      "chart.value_labels": "the industry average is read against the scale, as the book's cheat sheet draws it (s. 0382)"
+    }
+  }
+}

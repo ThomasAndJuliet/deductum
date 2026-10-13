@@ -1,0 +1,216 @@
+{
+ "key": "p2-26-atm-withdrawals",
+ "file": "p2-26-atm-withdrawals.json",
+ "variant": null,
+ "requested_type": "auto",
+ "report": {
+  "chart": "p2-26-atm-withdrawals",
+  "style": "plain",
+  "variant": null,
+  "type": "thin_bar",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "R6-12",
+    "level": "guided",
+    "text": "type thin_bar: individual irregular events: thin bars at their instants on a true time axis, never a standard line (G1.54)",
+    "guide": []
+   },
+   {
+    "rule": "R2-24",
+    "level": "locked",
+    "text": "bars start at zero",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "scale 0–600 by 100",
+    "guide": []
+   },
+   {
+    "rule": "R6-11",
+    "level": "locked",
+    "text": "34 events as thin bars, each at its instant, 2.8 pt wide (D-42), rising from zero; nothing drawn between them",
+    "guide": []
+   },
+   {
+    "rule": "R6-11",
+    "level": "locked",
+    "text": "events at the same time stacked with a hairline gap, each its own length (D-42): 6:45 AM, Aug. 14, 2022 (2)",
+    "guide": []
+   },
+   {
+    "rule": "R6-11",
+    "level": "locked",
+    "text": "9 pairs of events closer in time than a bar's width: their bars touch or overlap, as on the book's concert chart (s. 0183)",
+    "guide": []
+   },
+   {
+    "rule": "R6-11",
+    "level": "locked",
+    "text": "a true time axis (G2.42), the window given: 12:00 AM, Aug. 14, 2022 to 12:00 AM, Aug. 15, 2022",
+    "guide": []
+   },
+   {
+    "rule": "R2-07",
+    "level": "locked",
+    "text": "the unit phrase on the top label: “$600 (amount withdrawn)”; the top gridline starts after it",
+    "guide": []
+   },
+   {
+    "rule": "R2-21",
+    "level": "locked",
+    "text": "labels as a set, 0 decimals: 0, 100, 200, 300, 400, 500, $600",
+    "guide": []
+   },
+   {
+    "rule": "R2-40",
+    "level": "locked",
+    "text": "a true time axis (G2.42): row 1 hours, every third, each at its instant",
+    "guide": []
+   },
+   {
+    "rule": "R2-39",
+    "level": "locked",
+    "text": "time axis: row 2 (“Aug. 14, 2022”) left out, the title gives it (G2.37)",
+    "guide": []
+   }
+  ],
+  "findings": [],
+  "overrides": [],
+  "expect": {},
+  "expect_met": true,
+  "source": {
+   "book": "p. 194 (s. 0181)",
+   "notes": "06 §5.3 (synthetic data)",
+   "shows": "events over one day on a true time axis: hours at their instants every third, the day under them, a tick at each hour (D-45); withdrawals at the same minute stacked (D-42). The amounts and times are synthetic, after the book's third thin-bar example",
+   "status": "generated"
+  },
+  "summary": {
+   "scale": "0–600 by 100",
+   "labels": [
+    "0",
+    "100",
+    "200",
+    "300",
+    "400",
+    "500",
+    "$600"
+   ],
+   "top": "$600 (amount withdrawn)",
+   "scale_title": null,
+   "orientation": "vertical",
+   "plot": [
+    29.0,
+    21.05,
+    368.0,
+    224.45
+   ],
+   "time": [
+    "2022-08-14T00:00:00",
+    "2022-08-15T00:00:00"
+   ],
+   "unit": "hour",
+   "k": 3,
+   "width": 368.0,
+   "height": 240.5,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job lookup: no insight stated (a descriptive title will do, D-55)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-1",
+    "level": "guided",
+    "text": "a graph, the values to be compared or a pattern seen (G1.11)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 2,
+    "name": "variables",
+    "rule": "RP3-2",
+    "level": "guided",
+    "text": "one plot: time along x and 1 series; a further variable would go to small multiples (data.dims, G1.18)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 3,
+    "name": "location",
+    "rule": "R8-2",
+    "level": "guided",
+    "text": "not a map: where the values are is not the message (facts.location_matters; G1.24, G1.25)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-01",
+    "level": "guided",
+    "text": "not parts of a total (no data.parts, no breakdown message; G1.1)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 6,
+    "name": "values over time",
+    "rule": "R6-13",
+    "level": "guided",
+    "text": "group: data over time. A series of more than two periods, not a breakdown and not tied to places (G1.48)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 6,
+    "name": "values over time",
+    "rule": "R6-12",
+    "level": "guided",
+    "text": "an irregular series (event): individual irregular events: thin bars at their instants on a true time axis, never a standard line (G1.54)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type (G1.59)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "thin bar charts are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R6-18",
+    "level": "guided",
+    "text": "thin bar charts may be new to a general audience: teach them (build the chart up, show first the familiar chart that fails, or add two or three callouts stating the obvious; G1.5), or state the insight in a sentence and keep the chart as backup (G1.6)",
+    "guide": [],
+    "group": "data over time"
+   }
+  ],
+  "copies": []
+ },
+ "output_sha256": "2ffcc12493fbd2ca8a18c3f54012220e025b5d692894ce4d198262945e734af7"
+}

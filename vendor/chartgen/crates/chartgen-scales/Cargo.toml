@@ -1,0 +1,11 @@
+[package]
+name = "chartgen-scales"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+chartgen-model.workspace = true
+chartgen-statistics = { path = "../chartgen-statistics" }
+rust_decimal.workspace = true
+serde_json.workspace = true

@@ -1,0 +1,13 @@
+[package]
+name = "figkit-render"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+figkit-model = { path = "../figkit-model" }
+figkit-geometry = { path = "../figkit-geometry" }
+figkit-scene = { path = "../figkit-scene" }
+serde.workspace = true
+serde_json.workspace = true
+regex = "1"

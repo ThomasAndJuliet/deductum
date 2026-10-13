@@ -1,0 +1,111 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p2-20-concert-attendance",
+    "job": {
+      "kind": "lookup",
+      "text": "Look up the attendance at each concert of the spring season"
+    },
+    "title": {
+      "text": "Concert Attendance, Feb–May 2022",
+      "kind": "descriptive"
+    },
+    "data": {
+      "x": {
+        "kind": "time",
+        "grid": "none",
+        "values": [
+          "2022-02-01",
+          "2022-05-31"
+        ]
+      },
+      "measure": {
+        "name": "attendance",
+        "kind": "count",
+        "zero": "meaningful",
+        "min": 0,
+        "persistence": "event",
+        "unit": {
+          "noun": "attendees"
+        }
+      },
+      "series": [
+        {
+          "id": "attendance",
+          "name": "Attendance",
+          "points": [
+            [
+              "2022-02-12",
+              1820
+            ],
+            [
+              "2022-02-13",
+              1450
+            ],
+            [
+              "2022-03-12",
+              1960
+            ],
+            [
+              "2022-03-26",
+              1990
+            ],
+            [
+              "2022-03-27",
+              2190
+            ],
+            [
+              "2022-05-15",
+              2050
+            ]
+          ]
+        }
+      ]
+    },
+    "facts": {
+      "message": "individual_values"
+    },
+    "source": {
+      "book": "p. 196 (s. 0183)",
+      "notes": "06 T8",
+      "shows": "individual events whose values matter in themselves: thin bars at their instants over the season (the window, x.values, February to May), so the empty weeks show; concerts on consecutive days stand side by side, touching, as in the book; months on row 1 with a tick at each day (D-45)"
+    }
+  },
+  "variants": [
+    {
+      "name": "totals",
+      "patch": {
+        "facts": {
+          "message": "pattern"
+        },
+        "source": {
+          "shows": "the same concerts when the overall pattern is the message: they must first be totalled per week or month, a change of data the generator asks for rather than makes (R6-10)"
+        }
+      },
+      "expect": {
+        "refused": [
+          "R6-3"
+        ]
+      }
+    },
+    {
+      "name": "line",
+      "patch": {
+        "chart": {
+          "type": "line"
+        },
+        "source": {
+          "shows": "a standard line through the concerts: refused, since it would draw attendance between concerts that never happened (G1.54)"
+        }
+      },
+      "expect": {
+        "refused": [
+          "R6-3"
+        ],
+        "findings": [
+          "R6-12"
+        ]
+      }
+    }
+  ]
+}

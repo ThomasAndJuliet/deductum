@@ -1,0 +1,237 @@
+{
+ "key": "r1-21-electricity-two-marks",
+ "file": "r1-21-electricity-two-marks.json",
+ "variant": null,
+ "requested_type": "auto",
+ "report": {
+  "chart": "r1-21-electricity-two-marks",
+  "style": "plain",
+  "variant": null,
+  "type": "bar",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "type bar: categories compared by value",
+    "guide": []
+   },
+   {
+    "rule": "R15-7",
+    "level": "locked",
+    "text": "the 2025 target of each category drawn as a flat mark across its bar, named once (R11-4, G8.13, G5.5)",
+    "guide": []
+   },
+   {
+    "rule": "R15-7",
+    "level": "locked",
+    "text": "the 5% over target of each category drawn as a flat mark across its bar, named once (R11-4, G8.13, G5.5)",
+    "guide": []
+   },
+   {
+    "rule": "R2-24",
+    "level": "locked",
+    "text": "bars start at zero",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "scale 0–4,000 by 1,000",
+    "guide": []
+   },
+   {
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "nominal categories sorted by value, descending (by series use)",
+    "guide": []
+   },
+   {
+    "rule": "R11-4",
+    "level": "locked",
+    "text": "2025 target, a reference, as a flat marker across each bar of 2025 use, in the strong shade of the bar's hue, on the bars' zero-based scale (G1.60, G7.57)",
+    "guide": []
+   },
+   {
+    "rule": "R11-4",
+    "level": "guided",
+    "text": "5% over target, a second reference, as a dotted mark across each bar in the dark grey, the look of a reference line, so that it stays apart from the first's solid mark (SPEC §6.12.2)",
+    "guide": []
+   },
+   {
+    "rule": "R9-10",
+    "level": "locked",
+    "text": "“Data Centre” and “Chemistry Building” come within 10 pt of each other under vertical bars, with every multi-word name wrapped: horizontal bars, names right-aligned at the left",
+    "guide": []
+   },
+   {
+    "rule": "R2-21",
+    "level": "locked",
+    "text": "labels as a set, 0 decimals, bare numbers: 0, 1,000, 2,000, 3,000, 4,000",
+    "guide": []
+   },
+   {
+    "rule": "R2-07",
+    "level": "locked",
+    "text": "a horizontal scale: bare numbers, and its title centred below with the unit in parentheses: “Electricity used in 2025 (MWh)”",
+    "guide": []
+   },
+   {
+    "rule": "R4-6",
+    "level": "guided",
+    "text": "a legend above the plot, below the title: the names do not fit beside the first bar (G5.7, G5.10, D-7)",
+    "guide": []
+   },
+   {
+    "rule": "R4-4",
+    "level": "locked",
+    "text": "legend entries in series order: 2025 use, 2025 target, 5% over target (G5.8)",
+    "guide": []
+   },
+   {
+    "rule": "R5-26",
+    "level": "locked",
+    "text": "the title wraps onto two lines",
+    "guide": []
+   }
+  ],
+  "findings": [
+   {
+    "rule": "R11-4",
+    "severity": "warn",
+    "message": "the marks of 2025 target and 5% over target lie too near to be told apart on Castle Court Halls, Arts Tower and Students' Union: the scale is too coarse for the distance between them; a deviation from 2025 target (transform) shows it",
+    "path": "data.comparisons",
+    "level": "guided",
+    "guide": [],
+    "title": "a reference per bar as a short flat mark across it, labelled once"
+   }
+  ],
+  "overrides": [],
+  "expect": {
+   "findings": [
+    "R11-4"
+   ]
+  },
+  "expect_met": true,
+  "source": {
+   "notes": "evaluation round 1, B09 (sonnet-G)",
+   "shows": "two references across each bar: the target a solid mark in the dark grey, the threshold a dotted one, named once beside the first bar; at this scale the two lie a few points apart, which the report warns of (R11-4: a deviation shows the distance)",
+   "status": "generated"
+  },
+  "summary": {
+   "scale": "0–4,000 by 1,000",
+   "labels": [
+    "0",
+    "1,000",
+    "2,000",
+    "3,000",
+    "4,000"
+   ],
+   "top": "4,000 MWh (electricity used in 2025)",
+   "scale_title": "Electricity used in 2025 (MWh)",
+   "orientation": "horizontal",
+   "plot": [
+    108.83,
+    52.0,
+    356.61,
+    252.0
+   ],
+   "band": 20.0,
+   "series": [
+    "use"
+   ],
+   "labelling": "legend",
+   "value_labels": false,
+   "table": false,
+   "width": 368.0,
+   "height": 279.81,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job lookup: no insight stated (a descriptive title will do, D-55)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-1",
+    "level": "guided",
+    "text": "a graph, the values to be compared or a pattern seen (G1.11)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 2,
+    "name": "variables",
+    "rule": "RP3-2",
+    "level": "guided",
+    "text": "one plot: categories along x and 1 series; a further variable would go to small multiples (data.dims, G1.18)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 3,
+    "name": "location",
+    "rule": "R8-2",
+    "level": "guided",
+    "text": "not a map: where the values are is not the message (facts.location_matters; G1.24, G1.25)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-01",
+    "level": "guided",
+    "text": "not parts of a total (no data.parts, no breakdown message; G1.1)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 7,
+    "name": "values across categories",
+    "rule": "R9-1",
+    "level": "guided",
+    "text": "group: bar charts. Values compared across categories (G1.9)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 7,
+    "name": "values across categories",
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "one scale from zero: bars, sorted by value when the categories are nominal (02 D1)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type (G1.59)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "bar charts are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "bar charts"
+   }
+  ],
+  "copies": []
+ },
+ "output_sha256": "03fcc544287d1a1c73370d1dc200e390348b8cb9e81443d69fad2ad39c4ece05"
+}

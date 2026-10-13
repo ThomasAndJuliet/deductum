@@ -1,0 +1,56 @@
+{
+  "chartspec": 1,
+  "id": "p2-11-profit-labels",
+  "job": {
+    "kind": "lookup",
+    "text": "Look up each region's profit in 2022"
+  },
+  "title": {
+    "text": "Profit by Region, 2022",
+    "kind": "descriptive"
+  },
+  "data": {
+    "x": {
+      "kind": "nominal",
+      "values": [
+        "East",
+        "South",
+        "North",
+        "West",
+        "Total"
+      ],
+      "roles": {
+        "Total": "total"
+      }
+    },
+    "measure": {
+      "name": "profit",
+      "kind": "amount",
+      "zero": "meaningful",
+      "unit": {
+        "prefix": "$",
+        "magnitude": 3,
+        "noun": "in profit",
+        "fallback": "profit per region"
+      }
+    },
+    "series": [
+      {
+        "id": "profit",
+        "name": "Profit",
+        "values": [
+          34,
+          9,
+          8,
+          -16,
+          35
+        ]
+      }
+    ]
+  },
+  "source": {
+    "book": "p. 165–167 (s. 0154–0156)",
+    "notes": "05 #10",
+    "shows": "the procedure of G2.18 on P1-17's data: five values against seven scale labels, so the values are labelled, a loss below its bar, and the scale goes; the darker zero line stays as the baseline (G3.7), and each label carries the currency and magnitude (G6.16)"
+  }
+}

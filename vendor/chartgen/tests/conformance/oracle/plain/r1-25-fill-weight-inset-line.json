@@ -1,0 +1,263 @@
+{
+ "key": "r1-25-fill-weight-inset-line",
+ "file": "r1-25-fill-weight-inset-line.json",
+ "variant": null,
+ "requested_type": "bar",
+ "report": {
+  "chart": "r1-25-fill-weight-inset-line",
+  "style": "plain",
+  "variant": null,
+  "type": "bar",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "R2-24",
+    "level": "locked",
+    "text": "bars start at zero",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "scale 0–600 by 100",
+    "guide": []
+   },
+   {
+    "rule": "R2-23",
+    "level": "guided",
+    "text": "a narrow-range inset: the values lie in a narrow range far from zero (499.6 to 504.9: the gap from zero is at least their spread) and the small differences among them matter (facts.small_differences_matter); the main scale keeps zero, and the inset shows every mark on a truncated scale, 499–506 by 1 (the largest step below the lowest value, so the lowest bar keeps a stub above the lowest gridline) (G2.7)",
+    "guide": []
+   },
+   {
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "nominal categories in their given order",
+    "guide": []
+   },
+   {
+    "rule": "R15-5",
+    "level": "locked",
+    "text": "highlighting what the insight names",
+    "guide": []
+   },
+   {
+    "rule": "R9-10",
+    "level": "locked",
+    "text": "every name fits under its bar, neighbours at least 10 pt apart: vertical bars",
+    "guide": []
+   },
+   {
+    "rule": "R2-21",
+    "level": "locked",
+    "text": "labels as a set, 0 decimals: 0, 100, 200, 300, 400, 500, 600",
+    "guide": []
+   },
+   {
+    "rule": "R2-07",
+    "level": "locked",
+    "text": "the unit phrase on the top label: “600 g (mean fill weight per bag)”; the top gridline starts after it",
+    "guide": []
+   },
+   {
+    "rule": "R3-7",
+    "level": "locked",
+    "text": "highlighted in the strong shade of their colour: Line 4; the others keep their colour",
+    "guide": []
+   },
+   {
+    "rule": "6.6",
+    "level": "guided",
+    "text": "one category axis for the two panels, the main chart's, at the foot of the stack; the inset does not repeat it: space is short, labelled twice the figure would be 470 pt high, over 331 pt (--inset-share-height × its width) (G2.27, D-56)",
+    "guide": []
+   },
+   {
+    "rule": "R2-23",
+    "level": "guided",
+    "text": "the inset above the main chart, spanning its width, at the same positions (s. 0081, s. 0297)",
+    "guide": []
+   },
+   {
+    "rule": "6.6",
+    "level": "locked",
+    "text": "the inset's form: a frame round the band 400–600 of the main chart, across its width, a larger frame round a complete small chart (499–506 by 1, its unit restated on its top label (“506 g (mean fill weight per bag)”), no category or time labels of its own, the main chart's axis serving both, no title, text at inset size), two links forming a widening cone, beneath the frames (G2.27)",
+    "guide": []
+   },
+   {
+    "rule": "R9-6",
+    "level": "locked",
+    "text": "the inset's bars run 25.4 pt past its lowest gridline (499) and fade to transparent there: they do not start at zero, and nothing below the gridline pretends to be a length (G2.28)",
+    "guide": []
+   },
+   {
+    "rule": "R15-7",
+    "level": "locked",
+    "text": "500 g declared (500) as a dotted line in the dark grey across the plot, labelled at its end in bold (D-21 (c), G8.13, G7.16)",
+    "guide": []
+   },
+   {
+    "rule": "R15-7",
+    "level": "guided",
+    "text": "500 g declared drawn in the inset too, its value within the inset's range (499–506 by 1), named once, in the main chart (G6.2) (6.6, G8.13)",
+    "guide": []
+   }
+  ],
+  "findings": [
+   {
+    "rule": "R2-01",
+    "severity": "info",
+    "message": "chart.sort given departs from the procedure, which gives desc (nominal categories by value, largest first)",
+    "path": "chart.sort",
+    "reason": "the production lines' order on the floor",
+    "level": "guided",
+    "recommended": "desc",
+    "guide": [],
+    "title": "nominal categories sorted by value, largest first"
+   },
+   {
+    "rule": "R2-32",
+    "severity": "info",
+    "message": "6 values against 7 scale labels: labelling the values directly would put fewer numbers on the chart (phase 2)",
+    "level": "locked",
+    "guide": [],
+    "title": "fewer values than scale labels: label the values directly"
+   }
+  ],
+  "overrides": [],
+  "expect": {},
+  "expect_met": true,
+  "source": {
+   "notes": "evaluation round 1, B07 (sonnet-G)",
+   "shows": "a comparison line on a chart with a narrow-range inset: across the main chart, and, its value inside the inset's range, across the inset too (SPEC §6.12.2)",
+   "status": "generated"
+  },
+  "summary": {
+   "scale": "0–600 by 100",
+   "labels": [
+    "0",
+    "100",
+    "200",
+    "300",
+    "400",
+    "500",
+    "600"
+   ],
+   "top": "600 g (mean fill weight per bag)",
+   "scale_title": null,
+   "orientation": "vertical",
+   "plot": [
+    34.75,
+    248.87,
+    357.25,
+    442.37
+   ],
+   "band": 53.75,
+   "inset": {
+    "kind": "narrow_range",
+    "position": "above",
+    "scale": "499–506 by 1",
+    "band": "400–600",
+    "frame": [
+     0.75,
+     31.73,
+     367.25,
+     227.35
+    ],
+    "source": [
+     6.75,
+     242.35,
+     361.25,
+     319.17
+    ]
+   },
+   "width": 368.0,
+   "height": 458.42,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job answer: insight “Line 4 averaged 499.6 g, under the 500 g declared on the bag”",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-1",
+    "level": "guided",
+    "text": "a graph, the values to be compared or a pattern seen (G1.11)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 2,
+    "name": "variables",
+    "rule": "RP3-2",
+    "level": "guided",
+    "text": "one plot: categories along x and 1 series; a further variable would go to small multiples (data.dims, G1.18)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 3,
+    "name": "location",
+    "rule": "R8-2",
+    "level": "guided",
+    "text": "not a map: where the values are is not the message (facts.location_matters; G1.24, G1.25)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-01",
+    "level": "guided",
+    "text": "not parts of a total (no data.parts, no breakdown message; G1.1)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 7,
+    "name": "values across categories",
+    "rule": "R9-1",
+    "level": "guided",
+    "text": "group: bar charts. Values compared across categories (G1.9)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 7,
+    "name": "values across categories",
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "one scale from zero: bars, sorted by value when the categories are nominal (02 D1)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type (G1.59)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "bar charts are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "bar charts"
+   }
+  ],
+  "copies": []
+ },
+ "output_sha256": "7c21d757c34e770b02c1d7b9e1db299a890d23a4582aed964492f5004d410dbf"
+}

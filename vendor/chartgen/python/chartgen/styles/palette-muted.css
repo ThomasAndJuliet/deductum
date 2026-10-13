@@ -1,0 +1,124 @@
+/* Data colours of the plain style: the muted family of the book's colour
+   chapter (owner, 30 Sep 2026; DECISIONS D-2), all M from notes 03-04 §5.1
+   unless noted. Slot order is fixed, so a category keeps its colour however
+   many there are (R3-24): 1–5 the first tier, 6 purple, 7–11 the darker
+   second tier, 12–16 the third. The strong token of a slot (highlighting,
+   R3-7) is the same hue darker: the book's next tier.
+   Owner, 30 Sep 2026: the teal of slot 5 (and its darker tiers) is turned 24°
+   towards blue at the same OKLCH lightness and chroma (#7ca79d → #78a6aa), so
+   that under protanopia it stays 0.07 from the olive (the book's teal: 0.051,
+   under the 0.06 of G4.18); a single line is blue, like single bars and dots. */
+
+:root {
+  --series-1: #95b7d3;   --series-1-strong: #558bb9;
+  --series-2: #dd8045;   --series-2-strong: #ba5c28;
+  --series-3: #a4ab81;   --series-3-strong: #81875b;
+  --series-4: #d8b35b;   --series-4-strong: #b98e2f;
+  --series-5: #78a6aa;   --series-5-strong: #558286;    /* teal turned 24° bluer, O (below) */
+  --series-6: #9a77b7;   --series-6-strong: #7a60a9;    /* s. 0115 */
+  --series-7: #558bb9;   --series-7-strong: #3f6c96;
+  --series-8: #ba5c28;   --series-8-strong: #924a22;
+  --series-9: #81875b;   --series-9-strong: #666c46;
+  --series-10: #b98e2f;  --series-10-strong: #94712a;
+  --series-11: #558286;  --series-11-strong: #46686c;
+  --series-12: #3f6c96;  --series-12-strong: oklch-shift(var(--series-12), -0.12, 0);   /* O */
+  --series-13: #924a22;  --series-13-strong: oklch-shift(var(--series-13), -0.12, 0);
+  --series-14: #666c46;  --series-14-strong: oklch-shift(var(--series-14), -0.12, 0);
+  --series-15: #94712a;  --series-15-strong: oklch-shift(var(--series-15), -0.12, 0);
+  --series-16: #46686c;  --series-16-strong: oklch-shift(var(--series-16), -0.12, 0);
+
+  --single: #95b7d3;              /* one-colour bars and dots (R3-3; 08-12 §5.1) */
+  --single-strong: #558bb9;       /* 03-04 §5.1 */
+  --single-line: #95b7d3;         /* a single line: blue like single bars and dots (owner, 30 Sep 2026) */
+  --single-line-strong: #558bb9;
+
+  /* de-emphasis of bars (dim_others): 40 % towards the page (07 §5.1) */
+  --single-context: mix(var(--single), #ffffff, 0.4);
+  --series-1-context: mix(var(--series-1), #ffffff, 0.4);
+  --series-2-context: mix(var(--series-2), #ffffff, 0.4);
+  --series-3-context: mix(var(--series-3), #ffffff, 0.4);
+  --series-4-context: mix(var(--series-4), #ffffff, 0.4);
+  --series-5-context: mix(var(--series-5), #ffffff, 0.4);
+  --series-6-context: mix(var(--series-6), #ffffff, 0.4);
+
+  /* a group's second part in a pie (phase 3): 20 % towards the page (M 07 §5.1, s. 0240:
+     blue #94B6D2 → #ADC8DD, orange #DD8045 → #E49666) */
+  --series-1-tint: mix(var(--series-1), #ffffff, 0.2);
+  --series-2-tint: mix(var(--series-2), #ffffff, 0.2);
+  --series-3-tint: mix(var(--series-3), #ffffff, 0.2);
+  --series-4-tint: mix(var(--series-4), #ffffff, 0.2);
+  --series-5-tint: mix(var(--series-5), #ffffff, 0.2);
+  --series-6-tint: mix(var(--series-6), #ffffff, 0.2);
+
+  /* reserved colours (R3-16, R3-17; D-15, D-18) */
+  --average: #595959;             /* s. 0201 */
+  --total: #a6a6a6;               /* 07 */
+  --all-others: #968c8b;          /* s. 0120, 0230 */
+  --missing: #a6a6a6;
+  --reference-line: #4472c4;      /* s. 0382 */
+  --good: #6eae44;
+  --bad: #c5392a;
+  /* the colour-blind-safe pair, for a style that chooses it (--good-bad-mode: safe-pair; D-18) */
+  --good-cvd: #79a2c0;
+  --bad-cvd: #d48752;
+  /* captions naming a side, in its colour (G8.14; phase 2): the same hues dark enough for text
+     (4.5 : 1, G6.5); the safe pair's are the ends of its ramp (G4.28) */
+  --good-text: #437a26;           /* O: the good green darkened, 5.2 : 1 */
+  --bad-text: #c5392a;            /* the bad red itself, 5.3 : 1 */
+  --good-cvd-text: #2e5d89;       /* M s. 0124 ramp end, 6.9 : 1 */
+  --bad-cvd-text: #ab4e2d;        /* M s. 0124 ramp end, 5.4 : 1 */
+}
+
+/* Ramps (phase 3; SPEC §5.5, §6.14; G4.7, G4.10–G4.14, G4.16, G4.18, G4.28; R3-8–R3-15; D-18,
+   D-37). Values [S]: the style's, never a chart's. A cell or swatch carries its step's class
+   (seq-k, div-mk, div-0, div-pk; good or bad where the sides are judged) and takes it from here.
+   Sequential: one hue, the muted blue's (h ≈ 243°), nine steps about even in OKLCH lightness
+   (0.93 to 0.45), from a pale blue to dark, through the palette's own blues: step 4 is the
+   single blue, 6 its strong shade, 8 the third tier's blue (M, 03-04 §5.1); the rest O, set in
+   OKLCH between them (the book shades a table and a tile map in this family, s. 0156). The first
+   step is a class of its own in a heatmap (zero, the lowest), so it stands clearly off the page:
+   L 0.93, ΔE 0.073 from white (it was #edf5fb, L 0.97, ΔE 0.036, hard to tell from the page; owner,
+   1 Oct 2026), the second re-spaced between it and the third (L 0.88; was #cfdfec). */
+:root {
+  --seq-1: #dceaf6;  --seq-2: #c6dbeb;  --seq-3: #b2cbe0;  --seq-4: #95b7d3;  --seq-5: #74a1c7;
+  --seq-6: #558bb9;  --seq-7: #497ba8;  --seq-8: #3f6c96;  --seq-9: #33587d;
+  /* Diverging without a good or bad reading: the book's colour-blind-safe ramp (M, s. 0124),
+     blue below the dividing value and orange above, meeting at a light grey neutral (M, s. 0118;
+     R3-14: white or light grey, so that a cell at the dividing value still reads as a cell) */
+  --div-m4: #2e5d89; --div-m3: #79a2c0; --div-m2: #bfe0f3; --div-m1: #ddeef8; --div-0: #f3f3f3;
+  --div-p1: #ffe2c0; --div-p2: #fdc683; --div-p3: #d48752; --div-p4: #ab4e2d;
+  /* Good and bad sides (G4.16, R3-17): green and red, steps 1-4 from the neutral out (M, s. 0117;
+     D-18, owner 1 Oct 2026); where a style chooses the colour-blind-safe pair (--good-bad-mode:
+     safe-pair), blue for good and orange for bad are the ramp above (G4.18) */
+  --good-1: #add89e;  --good-2: #75ba69;  --good-3: #4a9556;  --good-4: #317248;
+  --bad-1: #fbc2bb;   --bad-2: #f48772;   --bad-3: #e5494c;   --bad-4: #be2343;
+  --good-cvd-1: var(--div-m1);  --good-cvd-2: var(--div-m2);  --good-cvd-3: var(--div-m3);  --good-cvd-4: var(--div-m4);
+  --bad-cvd-1: var(--div-p1);   --bad-cvd-2: var(--div-p2);   --bad-cvd-3: var(--div-p3);   --bad-cvd-4: var(--div-p4);
+  /* A cell that carries its value (a heatmap table, a shaded table, R12-6, R10-9): its step set
+     light enough for the text grey to keep 4.5 : 1 on it (G6.5, D-6 (a)), keeping its hue and its
+     chroma up to --cell-chroma: the steps from the page out at these OKLCH lightnesses (a
+     diverging ramp's k-th step from the neutral takes --cell-l-(2k+1)); the darkest, 0.87, is the
+     lightest at which every step of every ramp passes (4.6 : 1 at worst, the red). O; the book's
+     cells are darker, and fail (s. 0329: about 2.5 : 1 on its strongest red). */
+  --cell-l-1: 0.975;  --cell-l-2: 0.962;  --cell-l-3: 0.949;  --cell-l-4: 0.936;  --cell-l-5: 0.923;
+  --cell-l-6: 0.909;  --cell-l-7: 0.896;  --cell-l-8: 0.883;  --cell-l-9: 0.87;
+  --cell-chroma: 0.06;
+  /* Grouped shades (G4.9, R3-11; D-49): a group's hue in three shades, the light tint, the base
+     and the strong (M s. 0115: orange #f6b78e, #f49c60, #dc7f44; purple #9c7fbc, #7a60a9), and
+     its name in the hue dark enough for text (G5.12; 4.5 : 1, G6.5: the third tier, O) */
+  --series-1-shade-light: mix(var(--series-1), #ffffff, 0.4);
+  --series-2-shade-light: mix(var(--series-2), #ffffff, 0.4);
+  --series-3-shade-light: mix(var(--series-3), #ffffff, 0.4);
+  --series-4-shade-light: mix(var(--series-4), #ffffff, 0.4);
+  --series-5-shade-light: mix(var(--series-5), #ffffff, 0.4);
+  --series-6-shade-light: mix(var(--series-6), #ffffff, 0.4);
+  --series-1-text: #3f6c96;  --series-2-text: #924a22;  --series-3-text: #666c46;
+  --series-4-text: #94712a;  --series-5-text: #46686c;  --series-6-text: #7a60a9;
+  /* In-table graphics (R10-9, G7.47): a bar under its cell's number, the single blue paled until
+     the text grey keeps 4.5 : 1 on it (0.38 is the least; M s. 0309 pale blue bars); a sparkline
+     in the strong blue (M ≈ #5b9bd5, s. 0309); a dot in the single blue */
+  --cell-bar: mix(var(--single), #ffffff, 0.4);
+  --sparkline: var(--single-strong);
+  /* Action dots (R12-4, G7.58): the thin bar behind each value, light grey (M #d9d9d9, s. 0327) */
+  --action-bar-fill: #d9d9d9;
+}

@@ -1,0 +1,129 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p1-08-donations-narrow-range",
+    "job": {
+      "kind": "lookup",
+      "text": "Look up each region's donations in 2022, close as they are"
+    },
+    "title": {
+      "text": "Donations by Region, 2022",
+      "kind": "descriptive"
+    },
+    "data": {
+      "x": {
+        "kind": "nominal",
+        "values": [
+          "Far West",
+          "Rockies",
+          "Midwest",
+          "N. England",
+          "Gr. Lakes",
+          "Southeast",
+          "Plains",
+          "Southwest"
+        ]
+      },
+      "measure": {
+        "name": "donations",
+        "kind": "amount",
+        "zero": "meaningful",
+        "min": 0,
+        "unit": {
+          "prefix": "$",
+          "noun": "in donations",
+          "magnitude": 3
+        }
+      },
+      "series": [
+        {
+          "id": "donations",
+          "name": "Donations",
+          "values": [
+            274,
+            272,
+            264,
+            263,
+            257,
+            252,
+            251,
+            232
+          ]
+        }
+      ]
+    },
+    "facts": {
+      "small_differences_matter": true
+    },
+    "chart": {
+      "type": "bar"
+    },
+    "inset": {
+      "kind": "auto",
+      "position": "auto"
+    },
+    "source": {
+      "book": "p. 324–325 (s. 0296–0297)",
+      "notes": "08-12 #2",
+      "shows": "the narrow-range inset beside horizontal bars (the chart turns at the text width, the names not fitting under columns): the main chart from zero, however narrow the range (R2-23, R9-5); the inset on the same rows, 230–280 by 10, its bars fading below the 230 gridline, the names repeated and its scale titled; a frame round the main chart’s 200–300 band across the rows, two links to the inset’s corners (G2.7, G2.27, G2.28)"
+    }
+  },
+  "variants": [
+    {
+      "name": "wide",
+      "patch": {
+        "layout": {
+          "width": 520,
+          "plot_aspect": 0.4
+        },
+        "source": {
+          "shows": "the same at 520 pt, where the names fit under columns, and at the book’s plot proportion (0.4): the inset above the main chart, as the book draws it (s. 0297), the bars at the same positions in both panels, the inset’s fading below 230, the frame round the main chart’s 200–300 band across its width, the links from the inset’s lower corners to the band’s upper corners; shown at print size across the margins"
+        }
+      }
+    },
+    {
+      "name": "truncated",
+      "patch": {
+        "scale": {
+          "min": 210
+        },
+        "source": {
+          "shows": "the book’s bad version, bars on a scale starting at $210,000: refused"
+        }
+      },
+      "expect": {
+        "refused": [
+          "R2-24",
+          "R9-5"
+        ]
+      }
+    },
+    {
+      "name": "truncated-overridden",
+      "patch": {
+        "scale": {
+          "min": 210
+        },
+        "overrides": [
+          {
+            "rule": "R2-24",
+            "reason": "the book’s bad version (s. 0296), rebuilt for comparison"
+          },
+          {
+            "rule": "R9-5",
+            "reason": "the book’s bad version (s. 0296), rebuilt for comparison"
+          }
+        ],
+        "source": {
+          "shows": "the same, drawn through an override: Plains’s bar is under two thirds as long as Far West’s, though its value is 92 % of it"
+        }
+      },
+      "expect": {
+        "refused": [
+          "R2-24",
+          "R9-5"
+        ]
+      }
+    }
+  ]
+}

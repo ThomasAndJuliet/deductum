@@ -1,3 +1,72 @@
+# Deductum
+
+Deductum is the household application for shared Isabelle and Lean proof work.
+It replaces Isabellum and publishes privately to home-apps. Its standalone
+source repository is `ThomasAndJuliet/deductum`; development starts from the
+complete `multi-prover` source history, preserving the vendored COSMIC toolkit.
+Tom and Juliet administer this repository through the household-admins team.
+
+## CI and private releases
+
+Every push and pull request runs `.github/workflows/ci.yml`. The SDK job checks
+all targets and tests the complete Rust workspace with all features, including
+Deductum's headless UI/unit tests, and runs all Python host unit-test modules:
+
+```sh
+cargo --offline --locked check --workspace --all-targets --all-features
+cargo --offline --locked test --workspace --all-targets --all-features
+python3 -m unittest discover -s deductum/host/tests -p "test_*.py"
+```
+
+A separate hosted job installs Lean 4.19.0 and the checksum-pinned official
+Isabelle2025 distribution. It runs the existing real backend integrations:
+
+```sh
+python3 deductum/host/tests/integration_lean.py --skip-dsrv \
+  --core-fixture "$PWD/scripts/ci-fixtures/lean"
+DEDUCTUM_ISABELLE=/path/to/Isabelle2025/bin/isabelle \
+  DEDUCTUM_STATE_DIR=/disposable/state \
+  python3 deductum/host/tests/integration_host.py
+```
+
+The Lean driver runs its generated tiny project and the existing host-core
+assertions run against a self-contained checked-in fixture. CI needs no personal
+research checkout, SSH access, agent login or server credential. Existing opt-in
+live UI, mixed-machine, agent and research-project acceptance harnesses remain
+separate; the unattended suite reports ignored tests rather than claiming those
+live runs occurred. Prover component/state changes affect only the disposable
+hosted runner.
+
+After the SDK tests, CI builds `deductum` in Freedesktop SDK 25.08 and packages
+that exact tested checkout. It validates desktop/AppStream/catalog/icons and
+records its Git SHA, run ID and archive digest. Dependency sources, including
+chartgen revision `50b5b9773dbcbd1e8c9975c9bc3e107f00496bb6`, are vendored in this
+repository; no sibling checkout or private dependency credentials are needed.
+The successful default-branch push preserves its artifact for seven days.
+The release workflow waits for the entire CI workflow, including both prover
+integrations, to succeed before submitting to Neo's trusted reusable publisher.
+Other branches and pull requests do not publish stable.
+
+Neo independently verifies the repository, source, successful CI run and immutable
+artifact before its offline publisher signs the private stable release. GitHub
+holds no signing key. The repository variable `NEO_CI_MINIMUM_RUN_NUMBER` and Neo's
+matching policy must be set before enabling publication. Missed successful releases
+are retried twice daily; signed source provenance is the acceptance criterion.
+
+Local Flatpak builds use `scripts/build-flatpak.sh`. To reproduce the SDK tests,
+run `python3 scripts/prepare-ci-manifest.py` and build the generated
+`packaging/flatpak/dev.twright.Deductum.ci.yml` manifest. Frozen Cargo downloads
+are regenerated from Cargo.lock with `flatpak-cargo-generator.py`.
+
+## Existing sessions
+
+Deductum has its own settings, host bundle and state. Installing or publishing
+it does not delete Isabellum or migrate sessions. The optional explicit
+`migrate-from-isabellum` command requires the Isabellum host to be stopped first;
+never allow two hosts to autosave the same session folder.
+
+The preserved terminal-family documentation follows for shared internals.
+
 # cosmic-term
 COSMIC terminal emulator, built using [alacritty\_terminal](https://docs.rs/alacritty_terminal) that is provided by the [alacritty](https://github.com/alacritty/alacritty) project. `cosmic-term` provides bidirectional rendering and ligatures with a custom renderer based on [cosmic-text](https://github.com/pop-os/cosmic-text).
 

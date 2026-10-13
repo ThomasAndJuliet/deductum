@@ -1,0 +1,139 @@
+{
+ "chartspec": 1,
+ "purpose": "analysis",
+ "id": "config-class-matrix",
+ "title": {
+  "text": "What each configuration detects, class by class"
+ },
+ "data": {
+  "x": {
+   "kind": "nominal",
+   "values": [
+    "C01",
+    "C02",
+    "C03",
+    "C04",
+    "C05",
+    "C06",
+    "C07",
+    "C08",
+    "C09",
+    "C10",
+    "C11",
+    "C12",
+    "C13",
+    "C14",
+    "C15",
+    "C16",
+    "C17",
+    "C18",
+    "C19",
+    "C20"
+   ]
+  },
+  "measure": {
+   "kind": "count"
+  },
+  "states": [
+   {
+    "id": "detected",
+    "name": "Detected"
+   },
+   {
+    "id": "missed",
+    "name": "Not detected"
+   },
+   {
+    "id": "not-observable",
+    "name": "Not observable under projection"
+   },
+   {
+    "id": "unknown",
+    "name": "Unknown"
+   }
+  ],
+  "series": [
+   {
+    "id": "f",
+    "name": "F",
+    "states": [
+     "detected",
+     "detected",
+     "detected",
+     "detected",
+     "detected",
+     "detected",
+     "detected",
+     "detected",
+     "not-observable",
+     "detected",
+     "detected",
+     "detected",
+     "detected",
+     "detected",
+     "not-observable",
+     "detected",
+     "detected",
+     "detected",
+     "detected",
+     "detected"
+    ]
+   },
+   {
+    "id": "v",
+    "name": "V",
+    "states": [
+     "detected",
+     "not-observable",
+     "detected",
+     "detected",
+     "detected",
+     "detected",
+     "detected",
+     "missed",
+     "detected",
+     "detected",
+     "detected",
+     "detected",
+     "missed",
+     "detected",
+     "missed",
+     "detected",
+     "detected",
+     "detected",
+     "detected",
+     "detected"
+    ]
+   },
+   {
+    "id": "u",
+    "name": "U",
+    "states": [
+     "missed",
+     "detected",
+     "not-observable",
+     "detected",
+     "detected",
+     "not-observable",
+     "detected",
+     "not-observable",
+     "detected",
+     "detected",
+     "not-observable",
+     "not-observable",
+     "detected",
+     "detected",
+     "unknown",
+     "not-observable",
+     "not-observable",
+     "detected",
+     "not-observable",
+     "detected"
+    ]
+   }
+  ]
+ },
+ "chart": {
+  "type": "state_matrix"
+ }
+}

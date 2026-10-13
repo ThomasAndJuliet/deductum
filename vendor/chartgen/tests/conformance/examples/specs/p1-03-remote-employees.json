@@ -1,0 +1,80 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p1-03-remote-employees",
+    "job": {
+      "kind": "lookup",
+      "text": "Look up the share of employees working remotely each month"
+    },
+    "title": {
+      "text": "Employees Working Remotely, Jan–Jun 2022",
+      "kind": "descriptive"
+    },
+    "data": {
+      "x": {
+        "kind": "time",
+        "grid": "month",
+        "values": [
+          "2022-01",
+          "2022-02",
+          "2022-03",
+          "2022-04",
+          "2022-05",
+          "2022-06"
+        ]
+      },
+      "measure": {
+        "name": "remote share",
+        "kind": "percent",
+        "zero": "meaningful",
+        "min": 0,
+        "max": 100,
+        "persistence": "summary",
+        "unit": {
+          "noun": "of employees working remotely",
+          "fallback": "% of employees working remotely"
+        }
+      },
+      "series": [
+        {
+          "id": "remote",
+          "name": "Remote",
+          "values": [
+            45,
+            97,
+            92,
+            94,
+            46,
+            84
+          ]
+        }
+      ]
+    },
+    "facts": {
+      "message": "periods"
+    },
+    "source": {
+      "book": "p. 91–92 (s. 0087)",
+      "notes": "02 #15",
+      "shows": "a theoretical maximum caps the scale at 100 %; the phrase would meet February’s bar, so it moves to its own line above the scale; periods as columns"
+    }
+  },
+  "variants": [
+    {
+      "name": "past-limit",
+      "patch": {
+        "scale": {
+          "max": 120
+        },
+        "source": {
+          "shows": "the book’s bad version, a scale to 120 %: refused"
+        }
+      },
+      "expect": {
+        "refused": [
+          "R2-28"
+        ]
+      }
+    }
+  ]
+}

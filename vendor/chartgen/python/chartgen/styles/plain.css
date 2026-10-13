@@ -1,0 +1,6 @@
+/* The plain chart style: the book's plain coloured look, flat on the page,
+   in the muted palette (owner, 30 Sep 2026). A house style is another
+   stylesheet over the same classes. */
+@import "base.css";
+@import "palette-muted.css";
+@import "message.css";

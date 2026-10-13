@@ -1,0 +1,229 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p2-46-highlight-lines",
+    "job": {
+      "kind": "make_aware",
+      "text": "Make the regional managers aware of North's steady rise in ratings"
+    },
+    "insight": {
+      "important": "North's rating rose every month, from the lowest to the second highest",
+      "targets": [
+        {
+          "series": "north"
+        }
+      ]
+    },
+    "title": {
+      "text": "North's Rating Rose Every Month",
+      "kind": "insight",
+      "descriptive": "Average Customer Rating by Region, Jan–May 2022"
+    },
+    "data": {
+      "x": {
+        "kind": "time",
+        "grid": "month",
+        "values": [
+          "2022-01",
+          "2022-02",
+          "2022-03",
+          "2022-04",
+          "2022-05"
+        ]
+      },
+      "measure": {
+        "name": "average customer rating",
+        "kind": "score",
+        "zero": "meaningful",
+        "min": 0,
+        "max": 10,
+        "persistence": "summary",
+        "unit": {
+          "what": "average rating out of 10"
+        }
+      },
+      "series": [
+        {
+          "id": "east",
+          "name": "East",
+          "values": [
+            7.8,
+            9.7,
+            8.4,
+            8.3,
+            9.5
+          ]
+        },
+        {
+          "id": "north",
+          "name": "North",
+          "values": [
+            6.1,
+            6.9,
+            7.3,
+            7.8,
+            9.2
+          ]
+        },
+        {
+          "id": "central",
+          "name": "Central",
+          "values": [
+            8.2,
+            8.0,
+            8.0,
+            7.9,
+            7.7
+          ]
+        },
+        {
+          "id": "west",
+          "name": "West",
+          "values": [
+            7.4,
+            6.4,
+            7.5,
+            7.0,
+            7.6
+          ]
+        }
+      ]
+    },
+    "facts": {
+      "message": "pattern"
+    },
+    "source": {
+      "book": "p. 404 (s. 0370)",
+      "notes": "13-15 F11",
+      "shows": "the catalogue's four lines with North as the target: the default, twice as thick in the strong shade of its hue (D-9); the variants draw the other methods for lines"
+    }
+  },
+  "variants": [
+    {
+      "name": "glow",
+      "patch": {
+        "highlight": [
+          {
+            "targets": [
+              {
+                "series": "north"
+              }
+            ],
+            "method": "glow"
+          }
+        ],
+        "reasons": {
+          "highlight[0].method": "the book's catalogue of methods (s. 0370)"
+        },
+        "source": {
+          "shows": "a flat glow along the line, which keeps its own colour and width"
+        }
+      },
+      "expect": {
+        "findings": [
+          "R15-5"
+        ]
+      }
+    },
+    {
+      "name": "bold-label",
+      "patch": {
+        "highlight": [
+          {
+            "targets": [
+              {
+                "series": "north"
+              }
+            ],
+            "method": "bold_label"
+          }
+        ],
+        "reasons": {
+          "highlight[0].method": "the book's catalogue of methods (s. 0370)"
+        },
+        "source": {
+          "shows": "the line's name in bold, the line itself unchanged (drawn by the line layout)"
+        }
+      },
+      "expect": {
+        "findings": [
+          "R15-5"
+        ]
+      }
+    },
+    {
+      "name": "icon",
+      "patch": {
+        "highlight": [
+          {
+            "targets": [
+              {
+                "series": "north",
+                "x": "2022-01"
+              }
+            ],
+            "method": "icon"
+          }
+        ],
+        "reasons": {
+          "highlight[0].method": "the book's catalogue of methods (s. 0370)"
+        },
+        "source": {
+          "shows": "a small marker pointing at North's first and lowest value, where the rise begins"
+        }
+      },
+      "expect": {
+        "findings": [
+          "R15-5"
+        ]
+      }
+    },
+    {
+      "name": "selective-labels",
+      "patch": {
+        "insight": {
+          "important": "The ratings ranged from 6.1 (North in January) to 9.7 (East in February)",
+          "targets": [
+            {
+              "series": "east",
+              "x": "2022-02"
+            },
+            {
+              "series": "north",
+              "x": "2022-01"
+            }
+          ]
+        },
+        "title": {
+          "text": "Ratings Ranged from 6.1 to 9.7"
+        },
+        "highlight": [
+          {
+            "targets": [
+              {
+                "series": "east",
+                "x": "2022-02"
+              },
+              {
+                "series": "north",
+                "x": "2022-01"
+              }
+            ],
+            "method": "selective_label"
+          }
+        ],
+        "reasons": {
+          "highlight[0].method": "the book's catalogue: the highest and the lowest values labelled (s. 0370)"
+        },
+        "source": {
+          "shows": "selective labels: only the highest and the lowest values labelled, above the peak and below the trough"
+        }
+      },
+      "expect": {
+        "findings": [
+          "R15-5"
+        ]
+      }
+    }
+  ]
+}

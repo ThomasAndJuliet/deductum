@@ -1,0 +1,159 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p1-27-sales-transactions",
+    "job": {
+      "kind": "lookup",
+      "text": "Look up the amount of each sales transaction of the last four weeks"
+    },
+    "title": {
+      "text": "Sales Transactions, Jun 20 to Jul 16, 2022",
+      "kind": "descriptive"
+    },
+    "data": {
+      "x": {
+        "kind": "time",
+        "grid": "none"
+      },
+      "measure": {
+        "name": "transaction amount",
+        "kind": "amount",
+        "zero": "meaningful",
+        "min": 0,
+        "persistence": "event",
+        "unit": {
+          "prefix": "$",
+          "what": "amount of each sale"
+        }
+      },
+      "series": [
+        {
+          "id": "sales",
+          "name": "Sales",
+          "points": [
+            [
+              "2022-06-20",
+              3840
+            ],
+            [
+              "2022-06-22",
+              3500
+            ],
+            [
+              "2022-06-25",
+              3670
+            ],
+            [
+              "2022-06-26",
+              3410
+            ],
+            [
+              "2022-06-28",
+              2750
+            ],
+            [
+              "2022-06-30",
+              3035
+            ],
+            [
+              "2022-07-01",
+              2380
+            ],
+            [
+              "2022-07-03",
+              2380
+            ],
+            [
+              "2022-07-03",
+              2665
+            ],
+            [
+              "2022-07-05",
+              2680
+            ],
+            [
+              "2022-07-05",
+              2785
+            ],
+            [
+              "2022-07-09",
+              2640
+            ],
+            [
+              "2022-07-10",
+              2575
+            ],
+            [
+              "2022-07-11",
+              2145
+            ],
+            [
+              "2022-07-12",
+              2575
+            ],
+            [
+              "2022-07-13",
+              2470
+            ],
+            [
+              "2022-07-15",
+              2180
+            ],
+            [
+              "2022-07-16",
+              1990
+            ]
+          ]
+        }
+      ]
+    },
+    "facts": {
+      "message": "individual_values"
+    },
+    "source": {
+      "book": "p. 194–196 (s. 0181–0183)",
+      "notes": "06 T7",
+      "shows": "individual sales at irregular times: a thin bar at each sale's instant, rising from zero, nothing drawn between them (G7.20); two sales on the same day stacked with a hairline gap, each its own length (D-42), so the scale reaches their total; days on row 1, every second, the months under them"
+    }
+  },
+  "variants": [
+    {
+      "name": "pattern",
+      "patch": {
+        "facts": {
+          "message": "pattern"
+        },
+        "source": {
+          "shows": "the same events when their overall pattern is the message: they must first be totalled per week (the book's $11.0K … $14.0K), a change of data the generator does not make, so it asks for them"
+        }
+      },
+      "expect": {
+        "refused": [
+          "R6-3"
+        ]
+      }
+    },
+    {
+      "name": "line",
+      "patch": {
+        "chart": {
+          "type": "line"
+        },
+        "facts": {
+          "message": "pattern"
+        },
+        "source": {
+          "shows": "the book's bad version, a line through the raw transactions, which seems to fall while the weekly totals rise: refused"
+        }
+      },
+      "expect": {
+        "refused": [
+          "R6-3"
+        ],
+        "findings": [
+          "R6-10"
+        ]
+      }
+    }
+  ]
+}

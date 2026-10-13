@@ -1,0 +1,182 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p2-04-regional-expenses",
+    "job": {
+      "kind": "answer",
+      "text": "Were Central's Operations expenses lower than West's HR expenses?"
+    },
+    "insight": {
+      "important": "Central's Operations expenses ($843K) were lower than West's HR expenses ($879K)",
+      "targets": [
+        {
+          "series": "ops",
+          "x": "Central"
+        },
+        {
+          "series": "hr",
+          "x": "West"
+        }
+      ]
+    },
+    "title": {
+      "text": "Central's Operations Spent Less Than West's HR",
+      "kind": "insight",
+      "descriptive": "Expenses by Region and Department, 2022"
+    },
+    "data": {
+      "x": {
+        "kind": "nominal",
+        "values": [
+          "East",
+          "Central",
+          "West"
+        ]
+      },
+      "measure": {
+        "name": "expenses",
+        "kind": "amount",
+        "zero": "meaningful",
+        "min": 0,
+        "unit": {
+          "prefix": "$",
+          "magnitude": 3,
+          "noun": "in expenses"
+        }
+      },
+      "series": [
+        {
+          "id": "ops",
+          "name": "Operations",
+          "values": [
+            1277,
+            843,
+            824
+          ]
+        },
+        {
+          "id": "hr",
+          "name": "HR",
+          "values": [
+            755,
+            655,
+            879
+          ]
+        },
+        {
+          "id": "fin",
+          "name": "Finance",
+          "values": [
+            566,
+            655,
+            318
+          ]
+        },
+        {
+          "id": "out",
+          "name": "Outreach",
+          "values": [
+            238,
+            249,
+            236
+          ]
+        },
+        {
+          "id": "pr",
+          "name": "PR",
+          "values": [
+            176,
+            154,
+            143
+          ]
+        },
+        {
+          "id": "dev",
+          "name": "Development",
+          "values": [
+            99,
+            88,
+            91
+          ]
+        }
+      ],
+      "parts": {
+        "meaningful_total": true,
+        "all_parts": true,
+        "overlap": false
+      }
+    },
+    "facts": {
+      "message": "compare_parts_across_totals"
+    },
+    "source": {
+      "book": "p. 267–268 (s. 0245–0246)",
+      "notes": "07 #12",
+      "shows": "the parts of three totals compared across them: clustered bars, the only chart that compares them precisely (G1.41); six departments in six colours with the legend above, the clusters two and a half bar widths apart; the two bars the insight names in the strong shade of their own hues"
+    }
+  },
+  "variants": [
+    {
+      "name": "top-3",
+      "patch": {
+        "data": {
+          "series": [
+            {
+              "id": "ops",
+              "name": "Operations",
+              "values": [
+                1277,
+                843,
+                824
+              ]
+            },
+            {
+              "id": "hr",
+              "name": "HR",
+              "values": [
+                755,
+                655,
+                879
+              ]
+            },
+            {
+              "id": "fin",
+              "name": "Finance",
+              "values": [
+                566,
+                655,
+                318
+              ]
+            }
+          ],
+          "parts": {
+            "all_parts": false
+          }
+        },
+        "chart": {
+          "type": "bar"
+        },
+        "source": {
+          "shows": "only the three largest departments: clustered bars may suggest these are all the parts, so the procedure gives merged bars; drawn as clustered bars, acceptable but second best, with the guided finding (G1.42)"
+        }
+      },
+      "expect": {
+        "findings": [
+          "R7-22"
+        ]
+      }
+    },
+    {
+      "name": "compare-totals",
+      "patch": {
+        "facts": {
+          "message": "compare_totals"
+        },
+        "source": {
+          "shows": "the totals compared instead: multiple stacked bars (G1.41; phase 3, as P3-27), each total labelled at its stack's end, the two bars the insight names still in their strong shades"
+        }
+      },
+      "expect": {}
+    }
+  ]
+}

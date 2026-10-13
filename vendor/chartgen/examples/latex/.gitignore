@@ -1,0 +1,8 @@
+# Outputs of build.sh, and the files a compile writes
+*.aux
+*.log
+*.pdf
+*-chartgen*.opt
+*-chartgen*.meas
+*-chartgen*.tex
+visits-by-season.json

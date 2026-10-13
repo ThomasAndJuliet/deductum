@@ -1,0 +1,134 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p2-54-regions-vs-average",
+    "job": {
+      "kind": "make_aware",
+      "text": "Show the fundraising team how each region's monthly donations compare with the average"
+    },
+    "insight": {
+      "important": "East and North stayed above the average every month; South stayed below it throughout"
+    },
+    "title": {
+      "text": "East and North Stayed Above the Average Every Month",
+      "kind": "insight",
+      "descriptive": "Donations by Region, Jan–Aug 2022"
+    },
+    "data": {
+      "x": {
+        "kind": "time",
+        "grid": "month",
+        "values": [
+          "2022-01",
+          "2022-02",
+          "2022-03",
+          "2022-04",
+          "2022-05",
+          "2022-06",
+          "2022-07",
+          "2022-08"
+        ]
+      },
+      "measure": {
+        "name": "donations",
+        "kind": "amount",
+        "zero": "meaningful",
+        "min": 0,
+        "persistence": "summary",
+        "unit": {
+          "prefix": "$",
+          "magnitude": 3,
+          "noun": "in donations"
+        }
+      },
+      "series": [
+        {
+          "id": "east",
+          "name": "East",
+          "values": [
+            273,
+            310,
+            370,
+            336,
+            437,
+            373,
+            357,
+            430
+          ]
+        },
+        {
+          "id": "north",
+          "name": "North",
+          "values": [
+            157,
+            255,
+            294,
+            256,
+            466,
+            235,
+            262,
+            311
+          ]
+        },
+        {
+          "id": "central",
+          "name": "Central",
+          "values": [
+            162,
+            232,
+            234,
+            213,
+            279,
+            111,
+            175,
+            220
+          ]
+        },
+        {
+          "id": "south",
+          "name": "South",
+          "values": [
+            46,
+            87,
+            105,
+            84,
+            77,
+            90,
+            90,
+            112
+          ]
+        },
+        {
+          "id": "west",
+          "name": "West",
+          "values": [
+            42,
+            49,
+            77,
+            87,
+            202,
+            209,
+            66,
+            59
+          ]
+        }
+      ],
+      "comparisons": [
+        {
+          "id": "average",
+          "kind": "average",
+          "label": "Average",
+          "compute": "mean"
+        }
+      ]
+    },
+    "facts": {
+      "message": "pattern"
+    },
+    "source": {
+      "book": "p. 384–386 (s. 0350–0352)",
+      "notes": "13-15 F6",
+      "shows": "the static chart the book puts in place of an animation: every region and the average at once; the average computed from the five regions (the book's drawn average is not their mean, D-54) and drawn solid in the reserved dark grey, its label bold (D-21 (c), R14-3)"
+    }
+  }
+}

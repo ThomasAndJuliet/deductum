@@ -1,0 +1,214 @@
+{
+ "base": {
+  "chartspec": 1,
+  "id": "p3-27-regional-expenses-stacks",
+  "job": {
+   "kind": "answer",
+   "text": "Which region had the highest overall expenses, and which departments were the big spenders within each region?"
+  },
+  "insight": {
+   "important": "East spent the most, and Operations and HR were the big spenders in every region"
+  },
+  "title": {
+   "text": "East Spent the Most; Operations and HR Everywhere the Most",
+   "kind": "insight",
+   "descriptive": "Expenses by Region and Department, 2022"
+  },
+  "data": {
+   "x": {
+    "kind": "nominal",
+    "values": [
+     "East",
+     "Central",
+     "West"
+    ]
+   },
+   "measure": {
+    "name": "expenses",
+    "kind": "amount",
+    "zero": "meaningful",
+    "min": 0,
+    "unit": {
+     "prefix": "$",
+     "magnitude": 3,
+     "noun": "in expenses"
+    }
+   },
+   "series": [
+    {
+     "id": "ops",
+     "name": "Operations",
+     "values": [
+      1277,
+      843,
+      824
+     ]
+    },
+    {
+     "id": "hr",
+     "name": "HR",
+     "values": [
+      755,
+      655,
+      879
+     ]
+    },
+    {
+     "id": "fin",
+     "name": "Finance",
+     "values": [
+      566,
+      655,
+      318
+     ]
+    },
+    {
+     "id": "out",
+     "name": "Outreach",
+     "values": [
+      238,
+      249,
+      236
+     ]
+    },
+    {
+     "id": "pr",
+     "name": "PR",
+     "values": [
+      176,
+      154,
+      143
+     ]
+    },
+    {
+     "id": "dev",
+     "name": "Development",
+     "values": [
+      99,
+      88,
+      91
+     ]
+    }
+   ],
+   "parts": {
+    "meaningful_total": true,
+    "all_parts": true,
+    "overlap": false
+   }
+  },
+  "facts": {
+   "message": "compare_totals"
+  },
+  "source": {
+   "book": "p. 268–269 (s. 0246–0247)",
+   "notes": "07 #12",
+   "shows": "several totals compared, and roughly which parts dominate each: multiple stacked bars (R7-20, G1.41), the regions by their totals, largest first, each total labelled at its stack's end, the departments in one order and colour in every stack (R7-24, G7.31, D-26 (b)), named beside the last stack, packed (D-31 (c); the book's legend at the right is the variant)"
+  }
+ },
+ "variants": [
+  {
+   "name": "legend",
+   "patch": {
+    "chart": {
+     "labelling": "legend"
+    },
+    "reasons": {
+     "chart.labelling": "the book's legend at the right (s. 0247)"
+    },
+    "source": {
+     "shows": "the book's legend column at the right, its entries top to bottom as the parts are stacked (D-31 (a), G5.8)"
+    }
+   }
+  },
+  {
+   "name": "fractions",
+   "patch": {
+    "job": {
+     "text": "What share of each region's expenses went to each department?"
+    },
+    "insight": {
+     "important": "Operations took over a quarter of the expenses in every region"
+    },
+    "title": {
+     "text": "Operations Took Over a Quarter of Expenses Everywhere"
+    },
+    "facts": {
+     "message": "fractions_within_each_total"
+    },
+    "audience": {
+     "pie_averse": true
+    },
+    "source": {
+     "book": "p. 269–271 (s. 0247–0249)",
+     "shows": "the fractions within each total, for an audience averse to pies: 100 % stacks (D-39); the multiple pies of the book are P3-11"
+    }
+   }
+  },
+  {
+   "name": "missing",
+   "patch": {
+    "data": {
+     "series": [
+      {
+       "id": "ops",
+       "name": "Operations",
+       "values": [
+        1277,
+        843,
+        824
+       ]
+      },
+      {
+       "id": "hr",
+       "name": "HR",
+       "values": [
+        755,
+        null,
+        879
+       ]
+      },
+      {
+       "id": "fin",
+       "name": "Finance",
+       "values": [
+        566,
+        655,
+        318
+       ]
+      },
+      {
+       "id": "out",
+       "name": "Outreach",
+       "values": [
+        238,
+        249,
+        236
+       ]
+      },
+      {
+       "id": "pr",
+       "name": "PR",
+       "values": [
+        176,
+        154,
+        143
+       ]
+      },
+      {
+       "id": "dev",
+       "name": "Development",
+       "values": [
+        99,
+        88,
+        91
+       ]
+      }
+     ]
+    },
+    "source": {
+     "shows": "Central's HR not known: Central's stack is not drawn, since where the parts above HR start is not known either, and its note says why (R0-12, R9-7)"
+    }
+   }
+  }
+ ]
+}

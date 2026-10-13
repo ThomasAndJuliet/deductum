@@ -1,0 +1,230 @@
+{
+ "base": {
+  "chartspec": 1,
+  "id": "p3-46-monthly-revenue",
+  "job": {
+   "kind": "lookup",
+   "text": "Look up each region's revenue in each month of 2022"
+  },
+  "title": {
+   "text": "Monthly Revenue (US$) by Region, 2022",
+   "kind": "descriptive"
+  },
+  "data": {
+   "x": {
+    "kind": "nominal",
+    "values": [
+     "East",
+     "West"
+    ]
+   },
+   "measure": {
+    "name": "revenue",
+    "kind": "amount",
+    "zero": "meaningful",
+    "min": 0,
+    "precision": 1,
+    "unit": {
+     "prefix": "$",
+     "what": "revenue"
+    }
+   },
+   "series": [
+    {
+     "id": "jan",
+     "name": "Jan",
+     "values": [
+      53208,
+      47712
+     ]
+    },
+    {
+     "id": "feb",
+     "name": "Feb",
+     "values": [
+      56528,
+      48176
+     ]
+    },
+    {
+     "id": "mar",
+     "name": "Mar",
+     "values": [
+      51614,
+      48156
+     ]
+    },
+    {
+     "id": "apr",
+     "name": "Apr",
+     "values": [
+      54832,
+      47153
+     ]
+    },
+    {
+     "id": "may",
+     "name": "May",
+     "values": [
+      59705,
+      46418
+     ]
+    },
+    {
+     "id": "jun",
+     "name": "Jun",
+     "values": [
+      53759,
+      48412
+     ]
+    },
+    {
+     "id": "jul",
+     "name": "Jul",
+     "values": [
+      58202,
+      48779
+     ]
+    },
+    {
+     "id": "aug",
+     "name": "Aug",
+     "values": [
+      61438,
+      48175
+     ]
+    },
+    {
+     "id": "sep",
+     "name": "Sep",
+     "values": [
+      51306,
+      40041
+     ]
+    },
+    {
+     "id": "oct",
+     "name": "Oct",
+     "values": [
+      64184,
+      48175
+     ]
+    },
+    {
+     "id": "nov",
+     "name": "Nov",
+     "values": [
+      66085,
+      47373
+     ]
+    },
+    {
+     "id": "dec",
+     "name": "Dec",
+     "values": [
+      56742,
+      48246
+     ]
+    }
+   ]
+  },
+  "facts": {
+   "message": "lookup_only"
+  },
+  "table": {
+   "names_title": "Month"
+  },
+  "source": {
+   "book": "p. 329–331 (s. 0299–0301)",
+   "notes": "08-12 #6",
+   "shows": "the book's demonstration: 24 values as a table, for looking them up (turned, months down the page, so that it fits the text width: the book runs them across); variant line, the same data as the graph, in which East's rise and its ups and downs, West's flat line and September's dip show at once (R10-1)"
+  }
+ },
+ "variants": [
+  {
+   "name": "line",
+   "patch": {
+    "job": {
+     "kind": "answer",
+     "text": "How did each region's revenue move through 2022?"
+    },
+    "insight": {
+     "important": "East rose through the year while West stayed flat; both dipped in September"
+    },
+    "title": {
+     "text": "East Rose While West Stayed Flat; Both Dipped in September",
+     "kind": "insight",
+     "descriptive": "Monthly revenue by region, 2022"
+    },
+    "data": {
+     "x": {
+      "kind": "time",
+      "grid": "month",
+      "values": [
+       "2022-01",
+       "2022-02",
+       "2022-03",
+       "2022-04",
+       "2022-05",
+       "2022-06",
+       "2022-07",
+       "2022-08",
+       "2022-09",
+       "2022-10",
+       "2022-11",
+       "2022-12"
+      ]
+     },
+     "measure": {
+      "persistence": "summary"
+     },
+     "series": [
+      {
+       "id": "east",
+       "name": "East",
+       "values": [
+        53208,
+        56528,
+        51614,
+        54832,
+        59705,
+        53759,
+        58202,
+        61438,
+        51306,
+        64184,
+        66085,
+        56742
+       ]
+      },
+      {
+       "id": "west",
+       "name": "West",
+       "values": [
+        47712,
+        48176,
+        48156,
+        47153,
+        46418,
+        48412,
+        48779,
+        48175,
+        40041,
+        48175,
+        47373,
+        48246
+       ]
+      }
+     ]
+    },
+    "facts": {
+     "message": "pattern"
+    },
+    "table": {
+     "names_title": null
+    }
+   },
+   "expect": {}
+  }
+ ]
+}

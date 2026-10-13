@@ -1,0 +1,10 @@
+[package]
+name = "figkit-colour"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+
+[dev-dependencies]
+serde_json.workspace = true

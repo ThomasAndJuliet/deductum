@@ -1,0 +1,161 @@
+{
+ "base": {
+  "chartspec": 1,
+  "id": "p3-60-donations-by-donor-messages",
+  "job": {
+   "kind": "answer",
+   "text": "Did Mrs. Smith give more than Mrs. Jones?"
+  },
+  "insight": {
+   "important": "Mrs. Smith gave $5K more than Mrs. Jones",
+   "targets": [
+    {
+     "category": "Mrs. Smith"
+    }
+   ]
+  },
+  "title": {
+   "text": "Mrs. Smith Gave Slightly More Than Mrs. Jones",
+   "kind": "insight",
+   "descriptive": "Donations by Donor, 2022"
+  },
+  "data": {
+   "x": {
+    "kind": "nominal",
+    "values": [
+     "Mrs. Smith",
+     "Mrs. Jones",
+     "Mr. & Mrs. Perez",
+     "The Chetley Family",
+     "Ms. Flaherty"
+    ]
+   },
+   "measure": {
+    "name": "donations",
+    "kind": "amount",
+    "zero": "meaningful",
+    "min": 0,
+    "unit": {
+     "prefix": "$",
+     "magnitude": 3,
+     "noun": "in donations"
+    }
+   },
+   "series": [
+    {
+     "id": "donations",
+     "name": "Donations",
+     "values": [
+      165,
+      160,
+      135,
+      125,
+      100
+     ]
+    }
+   ],
+   "parts": {
+    "meaningful_total": true,
+    "all_parts": true,
+    "overlap": false
+   }
+  },
+  "facts": {
+   "message": "compare_parts_precisely"
+  },
+  "source": {
+   "book": "p. 236–244 (s. 0217–0225)",
+   "notes": "07 #1",
+   "shows": "one total, three messages, three types (G1.1): the parts compared precisely, so a bar chart, the only one whose parts share a baseline (R7-06, G1.35); the four checks are not needed"
+  }
+ },
+ "variants": [
+  {
+   "name": "fraction",
+   "patch": {
+    "job": {
+     "text": "What fraction of all donations did Mrs. Smith give?"
+    },
+    "insight": {
+     "important": "Mrs. Smith gave almost a quarter of all donations"
+    },
+    "title": {
+     "text": "Mrs. Smith Gave Almost a Quarter of All Donations"
+    },
+    "facts": {
+     "message": "fraction_of_total"
+    },
+    "source": {
+     "shows": "the same parts when the message is a fraction of the total: the four checks pass (a total someone would quote, every part, disjoint, one sign), five parts, so a pie (R7-07, G1.36)"
+    }
+   }
+  },
+  {
+   "name": "subtotal",
+   "patch": {
+    "job": {
+     "text": "Did Mrs. Smith and Mrs. Jones give more than $300K together?"
+    },
+    "insight": {
+     "important": "Mrs. Smith and Mrs. Jones gave over $300K between them",
+     "targets": [
+      {
+       "category": "Mrs. Smith"
+      },
+      {
+       "category": "Mrs. Jones"
+      }
+     ]
+    },
+    "title": {
+     "text": "Mrs. Smith and Mrs. Jones Gave Over $300K Together"
+    },
+    "facts": {
+     "message": "subtotal_amount"
+    },
+    "source": {
+     "shows": "a subtotal of two parts as an amount: a stacked bar, the two at its base (R7-08, G1.37)"
+    }
+   }
+  },
+  {
+   "name": "pie-averse",
+   "patch": {
+    "job": {
+     "text": "What fraction of all donations did Mrs. Smith give?"
+    },
+    "insight": {
+     "important": "Mrs. Smith gave almost a quarter of all donations"
+    },
+    "title": {
+     "text": "Mrs. Smith Gave Almost a Quarter of All Donations"
+    },
+    "facts": {
+     "message": "fraction_of_total"
+    },
+    "audience": {
+     "pie_averse": true
+    },
+    "source": {
+     "shows": "the fraction for an audience known to object to pies: a 100 % stacked bar (G1.40, D-39)"
+    }
+   }
+  },
+  {
+   "name": "no-message",
+   "patch": {
+    "facts": {
+     "message": null
+    },
+    "source": {
+     "shows": "the message not given for parts of a total: the parts compared, in a bar chart that cannot mislead, with an info saying which messages would give a pie or a stacked bar (D-1)"
+    }
+   },
+   "expect": {
+    "findings": [
+     "R7-06"
+    ]
+   }
+  }
+ ]
+}

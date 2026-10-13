@@ -1,0 +1,122 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p2-24-monthly-revenue-incomplete",
+    "job": {
+      "kind": "lookup",
+      "text": "Look up the revenue of each month of the year so far, December's included"
+    },
+    "title": {
+      "text": "Monthly Revenue, 2022",
+      "kind": "descriptive"
+    },
+    "data": {
+      "x": {
+        "kind": "time",
+        "grid": "month",
+        "values": [
+          "2022-01",
+          "2022-02",
+          "2022-03",
+          "2022-04",
+          "2022-05",
+          "2022-06",
+          "2022-07",
+          "2022-08",
+          "2022-09",
+          "2022-10",
+          "2022-11",
+          "2022-12"
+        ]
+      },
+      "as_of": "2022-12-10",
+      "measure": {
+        "name": "revenue",
+        "kind": "amount",
+        "zero": "meaningful",
+        "min": 0,
+        "persistence": "summary",
+        "unit": {
+          "prefix": "€",
+          "magnitude": 6,
+          "what": "total revenue per month"
+        }
+      },
+      "series": [
+        {
+          "id": "revenue",
+          "name": "Revenue",
+          "values": [
+            1.95,
+            2.02,
+            2.2,
+            2.1,
+            1.89,
+            2.17,
+            2.19,
+            2.02,
+            2.15,
+            1.92,
+            1.79,
+            0.78
+          ]
+        }
+      ]
+    },
+    "facts": {
+      "incomplete_value_needed": true
+    },
+    "source": {
+      "book": "p. 107–108 (s. 0101–0102)",
+      "notes": "02 #19",
+      "shows": "December counted only to the 10th, its value needed: the line ends at November, and December's partial value is a dot apart from it with “As of Dec. 10”, so that it cannot look like a collapse (G2.40, 02 D10)"
+    }
+  },
+  "variants": [
+    {
+      "name": "bars",
+      "patch": {
+        "facts": {
+          "message": "periods"
+        },
+        "source": {
+          "shows": "the same months as bars: December's partial value a dotted level mark as wide as a bar, with its note to the right (02 D10)"
+        }
+      },
+      "expect": {
+        "findings": []
+      }
+    },
+    {
+      "name": "left-out",
+      "patch": {
+        "facts": {
+          "incomplete_value_needed": false
+        },
+        "source": {
+          "shows": "the default when December's value is not needed: the partial month is left out, axis and all (G2.40)"
+        }
+      },
+      "expect": {
+        "findings": []
+      }
+    },
+    {
+      "name": "joined",
+      "patch": {
+        "data": {
+          "as_of": null
+        },
+        "facts": {
+          "incomplete_value_needed": false
+        },
+        "source": {
+          "shows": "the book's bad version: without the as-of date the data claim December complete, and the line drops to it like a collapse (s. 0101); only the spec can say the month is partial (G2.40)"
+        }
+      },
+      "expect": {
+        "findings": []
+      }
+    }
+  ]
+}

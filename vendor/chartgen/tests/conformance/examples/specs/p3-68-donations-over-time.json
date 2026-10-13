@@ -1,0 +1,211 @@
+{
+ "base": {
+  "chartspec": 1,
+  "id": "p3-68-donations-over-time",
+  "job": {
+   "kind": "answer",
+   "text": "How did each region's share of donations change over the year?"
+  },
+  "insight": {
+   "important": "West's share collapsed in the last quarter",
+   "targets": [
+    {
+     "series": "west"
+    }
+   ]
+  },
+  "title": {
+   "text": "West's Share of Donations Collapsed in Q4",
+   "kind": "insight",
+   "descriptive": "Share of Monthly Donations by Region, 2022"
+  },
+  "data": {
+   "x": {
+    "kind": "time",
+    "grid": "month",
+    "values": [
+     "2022-01",
+     "2022-02",
+     "2022-03",
+     "2022-04",
+     "2022-05",
+     "2022-06",
+     "2022-07",
+     "2022-08",
+     "2022-09",
+     "2022-10",
+     "2022-11",
+     "2022-12"
+    ]
+   },
+   "measure": {
+    "name": "donations",
+    "kind": "amount",
+    "zero": "meaningful",
+    "min": 0,
+    "persistence": "summary",
+    "unit": {
+     "prefix": "$",
+     "magnitude": 3,
+     "what": "donations"
+    }
+   },
+   "series": [
+    {
+     "id": "east",
+     "name": "East",
+     "values": [
+      14.0,
+      20.0,
+      19.8,
+      14.9,
+      14.0,
+      19.6,
+      24.2,
+      25.6,
+      25.7,
+      23.8,
+      26.3,
+      22.4
+     ]
+    },
+    {
+     "id": "west",
+     "name": "West",
+     "values": [
+      12.0,
+      17.3,
+      18.8,
+      10.5,
+      10.0,
+      13.6,
+      26.5,
+      25.5,
+      27.8,
+      8.0,
+      3.2,
+      4.6
+     ]
+    },
+    {
+     "id": "north",
+     "name": "North",
+     "values": [
+      7.4,
+      8.3,
+      7.0,
+      8.7,
+      6.0,
+      7.1,
+      7.0,
+      6.7,
+      11.2,
+      7.3,
+      9.2,
+      7.9
+     ]
+    },
+    {
+     "id": "south",
+     "name": "South",
+     "values": [
+      10.0,
+      8.8,
+      12.8,
+      5.1,
+      5.3,
+      7.9,
+      9.6,
+      14.6,
+      22.4,
+      1.0,
+      10.3,
+      6.0
+     ]
+    }
+   ],
+   "parts": {
+    "meaningful_total": true,
+    "all_parts": true,
+    "overlap": false
+   }
+  },
+  "facts": {
+   "message": "fraction_of_total",
+   "total_matters": false
+  },
+  "source": {
+   "book": "p. 278–286 (s. 0254–0261)",
+   "notes": "07 #14",
+   "shows": "a total over time, how its fractions change the message and the total not needed: the checks pass for every month (D-25 (a)), so 100 % stacks, as areas for the pattern of change (R7-30, R7-28, G1.44, G1.45)"
+  }
+ },
+ "variants": [
+  {
+   "name": "with-total",
+   "patch": {
+    "facts": {
+     "total_matters": true
+    },
+    "insight": {
+     "important": "Donations peaked in September, then West's collapsed"
+    },
+    "title": {
+     "text": "Donations Peaked in September, Then West's Collapsed",
+     "descriptive": "Monthly Donations by Region, 2022"
+    },
+    "source": {
+     "shows": "the total's change needed too: absolute stacked areas (R7-29, G1.44)"
+    }
+   }
+  },
+  {
+   "name": "periods",
+   "patch": {
+    "facts": {
+     "focus": "periods"
+    },
+    "source": {
+     "shows": "particular months rather than the pattern: 100 % stacked bars (R7-28, G1.45)"
+    }
+   }
+  },
+  {
+   "name": "parts",
+   "patch": {
+    "facts": {
+     "message": "compare_parts_precisely"
+    },
+    "insight": {
+     "important": "West fell from the top region to the bottom in October"
+    },
+    "title": {
+     "text": "West Fell From Top to Bottom in October",
+     "descriptive": "Monthly Donations by Region, 2022"
+    },
+    "source": {
+     "shows": "the parts compared over time, the total not needed: a line per region, by the time tree (R7-26, G1.43)"
+    }
+   }
+  },
+  {
+   "name": "parts-and-total",
+   "patch": {
+    "facts": {
+     "message": "compare_parts_precisely",
+     "total_matters": true
+    },
+    "insight": {
+     "important": "West fell from the top region to the bottom in October"
+    },
+    "title": {
+     "text": "West Fell From Top to Bottom in October",
+     "descriptive": "Monthly Donations by Region, 2022"
+    },
+    "source": {
+     "shows": "the parts compared and the total needed: the lines with the total in its own panel above them (R7-27, G1.43)"
+    }
+   }
+  }
+ ]
+}

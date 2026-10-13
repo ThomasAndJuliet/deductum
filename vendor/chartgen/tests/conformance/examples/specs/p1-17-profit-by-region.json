@@ -1,0 +1,64 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p1-17-profit-by-region",
+    "job": {
+      "kind": "explain",
+      "text": "Show how each region's profit or loss makes up the total"
+    },
+    "title": {
+      "text": "Profit by Region, 2022",
+      "kind": "descriptive"
+    },
+    "data": {
+      "x": {
+        "kind": "nominal",
+        "values": [
+          "East",
+          "South",
+          "North",
+          "West",
+          "Total"
+        ],
+        "roles": {
+          "Total": "total"
+        }
+      },
+      "measure": {
+        "name": "profit",
+        "kind": "amount",
+        "zero": "meaningful",
+        "unit": {
+          "prefix": "$",
+          "noun": "in profit",
+          "magnitude": 3
+        }
+      },
+      "series": [
+        {
+          "id": "profit",
+          "name": "Profit",
+          "values": [
+            34,
+            9,
+            8,
+            -16,
+            35
+          ]
+        }
+      ]
+    },
+    "chart": {
+      "type": "bar",
+      "value_labels": "off"
+    },
+    "reasons": {
+      "chart.value_labels": "the book's thumbnail keeps its scale (p. 167): this example shows negative values below a darker zero line, with room at both ends of the scale"
+    },
+    "source": {
+      "book": "p. 165–167 (s. 0154–0156)",
+      "notes": "05 #10",
+      "shows": "negative values hang below the zero line, which is then darker (R7-12, D-17); room at both ends (R2-30); a true minus sign; the total bar last in its reserved grey (R3-16)"
+    }
+  }
+}

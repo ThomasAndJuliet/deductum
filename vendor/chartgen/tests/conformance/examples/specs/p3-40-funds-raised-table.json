@@ -1,0 +1,260 @@
+{
+ "base": {
+  "chartspec": 1,
+  "id": "p3-40-funds-raised-table",
+  "job": {
+   "kind": "lookup",
+   "text": "Look up the funds each event raised in each region in 2021"
+  },
+  "title": {
+   "text": "Funds Raised (US$) by Event by Region, 2021",
+   "kind": "descriptive"
+  },
+  "data": {
+   "x": {
+    "kind": "nominal",
+    "values": [
+     "Central",
+     "East",
+     "Northwest",
+     "South",
+     "Total"
+    ],
+    "roles": {
+     "Total": "total"
+    }
+   },
+   "measure": {
+    "name": "funds raised",
+    "kind": "amount",
+    "zero": "meaningful",
+    "precision": 1,
+    "unit": {
+     "prefix": "$",
+     "what": "funds raised"
+    }
+   },
+   "series": [
+    {
+     "id": "walk-jan",
+     "name": "5K Walk",
+     "values": [
+      84501,
+      112564,
+      73939,
+      133213,
+      404217
+     ]
+    },
+    {
+     "id": "telethon",
+     "name": "Telethon",
+     "values": [
+      76578,
+      59710,
+      52355,
+      124864,
+      313507
+     ]
+    },
+    {
+     "id": "pancake",
+     "name": "Pancake Breakfast",
+     "values": [
+      87011,
+      95531,
+      2360529,
+      143532,
+      2686603
+     ]
+    },
+    {
+     "id": "fair",
+     "name": "Country Fair",
+     "values": [
+      81661,
+      91057,
+      103358,
+      90896,
+      366972
+     ]
+    },
+    {
+     "id": "walk-jun",
+     "name": "5K Walk",
+     "values": [
+      73330,
+      80571,
+      91027,
+      124161,
+      369089
+     ]
+    },
+    {
+     "id": "run",
+     "name": "10K Run",
+     "values": [
+      113658,
+      51458,
+      63347,
+      2152221,
+      2380684
+     ]
+    },
+    {
+     "id": "raffle",
+     "name": "TV Raffle",
+     "values": [
+      1978422,
+      122915,
+      126824,
+      100278,
+      2328439
+     ]
+    },
+    {
+     "id": "teddy",
+     "name": "Teddy Bear Drive",
+     "values": [
+      94848,
+      81772,
+      136690,
+      144215,
+      457526
+     ]
+    },
+    {
+     "id": "gala",
+     "name": "Black Tie Gala",
+     "values": [
+      82340,
+      85637,
+      84841,
+      116269,
+      369088
+     ]
+    },
+    {
+     "id": "total",
+     "name": "Total",
+     "role": "total",
+     "values": [
+      2672351,
+      781216,
+      3092910,
+      3129649,
+      9676125
+     ]
+    }
+   ]
+  },
+  "facts": {
+   "message": "lookup_only"
+  },
+  "table": {
+   "names_title": "Event",
+   "stub": [
+    {
+     "title": "Date",
+     "kind": "date",
+     "values": [
+      "2021-01-05",
+      "2021-02-09",
+      "2021-03-06",
+      "2021-04-24",
+      "2021-06-13",
+      "2021-07-21",
+      "2021-09-01",
+      "2021-10-23",
+      "2021-12-17",
+      ""
+     ]
+    }
+   ]
+  },
+  "highlight": [
+   {
+    "targets": [
+     {
+      "series": "pancake",
+      "x": "Northwest"
+     },
+     {
+      "series": "run",
+      "x": "South"
+     },
+     {
+      "series": "raffle",
+      "x": "Central"
+     }
+    ]
+   }
+  ],
+  "layout": {
+   "width": 480
+  },
+  "source": {
+   "book": "p. 344–349 (s. 0314–0318)",
+   "notes": "08-12 #8",
+   "shows": "a table alone for looking values up, formatted in the book's order: every digit (whole dollars are required), two thin rules and no grid, the rows set well apart with no stripes, a wider gutter before the Total column, dates of fixed width, the numbers right-aligned and bare, the unit once in the title, nothing bold but the title, the three outliers on a light grey fill; the dates of the book's earlier versions (21 Jul, 1 Sep: its last version has 21 Jun and 1 Oct); at 480 pt, wider than the text"
+  }
+ },
+ "variants": [
+  {
+   "name": "zebra",
+   "patch": {
+    "table": {
+     "stripes": true
+    },
+    "highlight": null,
+    "overrides": [
+     {
+      "rule": "R10-16",
+      "reason": "the book's striped version (s. 0315), rebuilt to compare"
+     }
+    ]
+   },
+   "expect": {
+    "refused": [
+     "R10-16"
+    ]
+   }
+  },
+  {
+   "name": "stripes-refused",
+   "patch": {
+    "table": {
+     "stripes": true
+    }
+   },
+   "expect": {
+    "refused": [
+     "R10-16"
+    ]
+   }
+  },
+  {
+   "name": "bold",
+   "patch": {
+    "table": {
+     "bold": [
+      "header",
+      "totals",
+      "total_column"
+     ]
+    },
+    "overrides": [
+     {
+      "rule": "R10-22",
+      "reason": "the book's version with bold header, totals and Total column (s. 0316)"
+     }
+    ]
+   },
+   "expect": {
+    "refused": [
+     "R10-22"
+    ]
+   }
+  }
+ ]
+}

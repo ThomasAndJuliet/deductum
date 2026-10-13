@@ -1,0 +1,177 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "r1-21-electricity-two-marks",
+    "job": {
+      "kind": "lookup",
+      "text": "Look up each building's 2025 electricity use, its target and the Board's threshold"
+    },
+    "title": {
+      "text": "Electricity Use, Target and Board Threshold by Building, 2025",
+      "kind": "descriptive"
+    },
+    "data": {
+      "x": {
+        "kind": "nominal",
+        "values": [
+          "Library",
+          "Students' Union",
+          "Sports Centre",
+          "Chemistry Building",
+          "Engineering Workshops",
+          "Arts Tower",
+          "Medical Sciences",
+          "Data Centre",
+          "Ridgeway Halls",
+          "Castle Court Halls"
+        ]
+      },
+      "measure": {
+        "name": "electricity use",
+        "kind": "amount",
+        "zero": "meaningful",
+        "min": 0,
+        "unit": {
+          "suffix": " MWh",
+          "what": "electricity used in 2025"
+        }
+      },
+      "series": [
+        {
+          "id": "use",
+          "name": "2025 use",
+          "values": [
+            1284,
+            612,
+            1577,
+            2236,
+            948,
+            701,
+            1905,
+            3412,
+            1118,
+            834
+          ]
+        }
+      ],
+      "comparisons": [
+        {
+          "id": "target",
+          "kind": "target",
+          "label": "2025 target",
+          "values": [
+            1250,
+            640,
+            1420,
+            2180,
+            1010,
+            760,
+            1760,
+            3300,
+            1190,
+            845
+          ]
+        },
+        {
+          "id": "threshold",
+          "kind": "tolerance",
+          "label": "5% over target",
+          "values": [
+            1312.5,
+            672,
+            1491,
+            2289,
+            1060.5,
+            798,
+            1848,
+            3465,
+            1249.5,
+            887.25
+          ]
+        }
+      ]
+    },
+    "facts": {
+      "message": "compare"
+    },
+    "chart": {
+      "type": "auto"
+    },
+    "source": {
+      "notes": "evaluation round 1, B09 (sonnet-G)",
+      "shows": "two references across each bar: the target a solid mark in the dark grey, the threshold a dotted one, named once beside the first bar; at this scale the two lie a few points apart, which the report warns of (R11-4: a deviation shows the distance)"
+    }
+  },
+  "expect": {
+    "findings": [
+      "R11-4"
+    ]
+  },
+  "variants": [
+    {
+      "name": "three-marks",
+      "patch": {
+        "data": {
+          "comparisons": [
+            {
+              "id": "target",
+              "kind": "target",
+              "label": "2025 target",
+              "values": [
+                1250,
+                640,
+                1420,
+                2180,
+                1010,
+                760,
+                1760,
+                3300,
+                1190,
+                845
+              ]
+            },
+            {
+              "id": "threshold",
+              "kind": "tolerance",
+              "label": "5% over target",
+              "values": [
+                1312.5,
+                672,
+                1491,
+                2289,
+                1060.5,
+                798,
+                1848,
+                3465,
+                1249.5,
+                887.25
+              ]
+            },
+            {
+              "id": "budget",
+              "kind": "budget",
+              "label": "Energy budget",
+              "values": [
+                1375,
+                704,
+                1562,
+                2398,
+                1111,
+                836,
+                1936,
+                3630,
+                1309,
+                930
+              ]
+            }
+          ]
+        }
+      },
+      "expect": {
+        "findings": [
+          "R11-4"
+        ]
+      }
+    }
+  ]
+}

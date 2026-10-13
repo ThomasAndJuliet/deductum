@@ -1,0 +1,116 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "r1-25-fill-weight-inset-line",
+    "job": {
+      "kind": "answer",
+      "text": "Is every line filling the 500 g bags to at least 500 g?"
+    },
+    "insight": {
+      "important": "Line 4 averaged 499.6 g, under the 500 g declared on the bag",
+      "targets": [
+        {
+          "category": "Line 4"
+        }
+      ]
+    },
+    "title": {
+      "text": "Line 4 Is Filling Below the 500 g on the Bag",
+      "kind": "insight",
+      "descriptive": "Mean fill weight by line, granola bags, checkweigher week 39 of 2026"
+    },
+    "data": {
+      "x": {
+        "kind": "nominal",
+        "values": [
+          "Line 1",
+          "Line 2",
+          "Line 3",
+          "Line 4",
+          "Line 5",
+          "Line 6"
+        ]
+      },
+      "measure": {
+        "name": "mean fill weight",
+        "kind": "quantity",
+        "zero": "meaningful",
+        "min": 0,
+        "unit": {
+          "suffix": " g",
+          "what": "mean fill weight per bag"
+        }
+      },
+      "series": [
+        {
+          "id": "fill",
+          "name": "Mean fill weight",
+          "values": [
+            502.8,
+            501.1,
+            504.9,
+            499.6,
+            503.3,
+            500.7
+          ]
+        }
+      ],
+      "comparisons": [
+        {
+          "id": "declared",
+          "kind": "target",
+          "label": "500 g declared",
+          "values": [
+            500
+          ]
+        }
+      ]
+    },
+    "facts": {
+      "small_differences_matter": true
+    },
+    "chart": {
+      "type": "bar",
+      "sort": "given"
+    },
+    "reasons": {
+      "chart.sort": "the production lines' order on the floor"
+    },
+    "source": {
+      "notes": "evaluation round 1, B07 (sonnet-G)",
+      "shows": "a comparison line on a chart with a narrow-range inset: across the main chart, and, its value inside the inset's range, across the inset too (SPEC §6.12.2)"
+    }
+  },
+  "variants": [
+    {
+      "name": "two-lines",
+      "patch": {
+        "data": {
+          "comparisons": [
+            {
+              "id": "declared",
+              "kind": "target",
+              "label": "500 g declared",
+              "values": [
+                500
+              ]
+            },
+            {
+              "id": "tne",
+              "kind": "tolerance",
+              "label": "485 g lower limit",
+              "values": [
+                485
+              ],
+              "reason": "the tolerable negative error for a 500 g pack, 15 g"
+            }
+          ]
+        },
+        "source": {
+          "shows": "two lines: the 500 g declared weight in both charts, the 485 g lower limit, outside the inset's range, in the main chart only (a decision says so)"
+        }
+      },
+      "expect": {}
+    }
+  ]
+}

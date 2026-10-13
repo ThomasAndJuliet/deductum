@@ -1,0 +1,102 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p1-06-donations-missing",
+    "job": {
+      "kind": "lookup",
+      "text": "Look up each region's donations in 2022"
+    },
+    "title": {
+      "text": "Donations by Region, 2022",
+      "kind": "descriptive"
+    },
+    "data": {
+      "x": {
+        "kind": "nominal",
+        "values": [
+          "Far West",
+          "Rockies",
+          "Midwest",
+          "N. England",
+          "Gr. Lakes",
+          "Southeast",
+          "Plains",
+          "Southwest"
+        ]
+      },
+      "measure": {
+        "name": "donations",
+        "kind": "amount",
+        "zero": "meaningful",
+        "min": 0,
+        "unit": {
+          "prefix": "$",
+          "noun": "in donations",
+          "magnitude": 3
+        }
+      },
+      "series": [
+        {
+          "id": "donations",
+          "name": "Donations",
+          "values": [
+            273,
+            268,
+            215,
+            195,
+            175,
+            172,
+            144,
+            {
+              "status": "missing"
+            }
+          ]
+        }
+      ]
+    },
+    "chart": {
+      "type": "bar"
+    },
+    "source": {
+      "book": "p. 327 (s. 0298); p. 19 (s. 0020)",
+      "notes": "08-12 #3; 00-01 F4",
+      "shows": "a missing value is no bar and a note saying so, sorted last (R0-12, R9-7, R9-9); at the text width the names cannot keep 1 em apart under columns, even with every multi-word name wrapped (“N. England” and “Gr. Lakes” do not break after an abbreviation), so the chart turns horizontal: bare numbers on the scale and its title below, “Donations ($K)”"
+    }
+  },
+  "variants": [
+    {
+      "name": "wide",
+      "patch": {
+        "layout": {
+          "width": 480
+        },
+        "source": {
+          "shows": "the same chart at 480 pt, the narrowest width (in steps of 8 pt) at which every name keeps 1 em from its neighbours under columns, as the book draws it (p. 327); the currency and magnitude on the top label"
+        }
+      },
+      "expect": {}
+    },
+    {
+      "name": "wide-horizontal",
+      "patch": {
+        "layout": {
+          "width": 480
+        },
+        "chart": {
+          "orientation": "horizontal"
+        },
+        "reasons": {
+          "chart.orientation": "to set beside the columns the rule gives at this width"
+        },
+        "source": {
+          "shows": "the same chart at 480 pt turned horizontal by choice, a guided departure with its reason"
+        }
+      },
+      "expect": {
+        "findings": [
+          "R9-10"
+        ]
+      }
+    }
+  ]
+}

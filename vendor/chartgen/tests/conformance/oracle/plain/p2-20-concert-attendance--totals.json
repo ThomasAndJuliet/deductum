@@ -1,0 +1,125 @@
+{
+ "key": "p2-20-concert-attendance--totals",
+ "file": "p2-20-concert-attendance.json",
+ "variant": "totals",
+ "requested_type": "auto",
+ "report": {
+  "chart": "p2-20-concert-attendance",
+  "style": "plain",
+  "variant": "totals",
+  "type": "aggregate",
+  "status": "refused",
+  "decisions": [
+   {
+    "rule": "R6-10",
+    "level": "guided",
+    "text": "type aggregate: irregular events whose overall pattern is the message: aggregated into regular intervals (weekly totals), then a line (G1.54)",
+    "guide": []
+   }
+  ],
+  "findings": [
+   {
+    "rule": "R6-3",
+    "severity": "error",
+    "message": "a line needs a regular series, one value per interval: these events must first be aggregated into regular intervals, a change of data the generator does not make",
+    "path": "data",
+    "supply": "the events totalled (or averaged) per day, week or month on a regular grid (R6-10)",
+    "level": "locked",
+    "guide": [],
+    "title": "a standard line only for a regular series, one value per interval"
+   }
+  ],
+  "overrides": [],
+  "expect": {
+   "refused": [
+    "R6-3"
+   ]
+  },
+  "expect_met": true,
+  "source": {
+   "book": "p. 196 (s. 0183)",
+   "notes": "06 T8",
+   "shows": "the same concerts when the overall pattern is the message: they must first be totalled per week or month, a change of data the generator asks for rather than makes (R6-10)",
+   "status": "generated"
+  },
+  "summary": {
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job lookup: no insight stated (a descriptive title will do, D-55)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-1",
+    "level": "guided",
+    "text": "a graph, the values to be compared or a pattern seen (G1.11)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 2,
+    "name": "variables",
+    "rule": "RP3-2",
+    "level": "guided",
+    "text": "one plot: time along x and 1 series; a further variable would go to small multiples (data.dims, G1.18)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 3,
+    "name": "location",
+    "rule": "R8-2",
+    "level": "guided",
+    "text": "not a map: where the values are is not the message (facts.location_matters; G1.24, G1.25)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-01",
+    "level": "guided",
+    "text": "not parts of a total (no data.parts, no breakdown message; G1.1)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 6,
+    "name": "values over time",
+    "rule": "R6-13",
+    "level": "guided",
+    "text": "group: data over time. A series of more than two periods, not a breakdown and not tied to places (G1.48)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 6,
+    "name": "values over time",
+    "rule": "R6-10",
+    "level": "guided",
+    "text": "an irregular series (event): irregular events whose overall pattern is the message: aggregated into regular intervals (weekly totals), then a line (G1.54)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type (G1.59)",
+    "guide": [],
+    "group": "data over time"
+   }
+  ],
+  "copies": []
+ }
+}

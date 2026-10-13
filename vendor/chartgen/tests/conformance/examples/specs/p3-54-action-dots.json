@@ -1,0 +1,87 @@
+{
+ "base": {
+  "chartspec": 1,
+  "id": "p3-54-action-dots",
+  "job": {
+   "kind": "make_aware",
+   "text": "Show which plants' output needs action this month"
+  },
+  "insight": {
+   "important": "Charlotte's and Albuquerque's output needs action; Indianapolis and Pittsburgh did well"
+  },
+  "title": {
+   "text": "Charlotte and Albuquerque Need Attention",
+   "kind": "insight",
+   "descriptive": "Units produced by plant, November 2022"
+  },
+  "data": {
+   "x": {
+    "kind": "nominal",
+    "values": [
+     "Indianapolis",
+     "Detroit",
+     "Fresno",
+     "Albuquerque",
+     "Plano",
+     "Savannah",
+     "Charlotte",
+     "Pittsburgh"
+    ]
+   },
+   "measure": {
+    "name": "units produced",
+    "kind": "count",
+    "zero": "meaningful",
+    "min": 0,
+    "unit": {
+     "noun": "units produced"
+    }
+   },
+   "series": [
+    {
+     "id": "units",
+     "name": "Units produced",
+     "values": [
+      4723,
+      4129,
+      3441,
+      3120,
+      2185,
+      1988,
+      1699,
+      897
+     ]
+    }
+   ],
+   "actions": {
+    "Indianapolis": "good_strong",
+    "Albuquerque": "bad",
+    "Charlotte": "bad_strong",
+    "Pittsburgh": "good"
+   }
+  },
+  "facts": {
+   "message": "action_needed"
+  },
+  "source": {
+   "book": "p. 359 (s. 0327)",
+   "notes": "08-12 #14",
+   "shows": "action dots in place of bullet graphs (R12-4): the plants by output, largest first, each with a thin grey bar and its value, and a dot only where action is warranted, its status given with the data (the book leaves the thresholds to the maker); green for good and red for bad (D-18); the month is ours (the book's tile has none)"
+  }
+ },
+ "variants": [
+  {
+   "name": "bullet",
+   "patch": {
+    "chart": {
+     "type": "bullet"
+    }
+   },
+   "expect": {
+    "refused": [
+     "R12-4"
+    ]
+   }
+  }
+ ]
+}

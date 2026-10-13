@@ -1,0 +1,191 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p2-53-stock-performance",
+    "job": {
+      "kind": "answer",
+      "text": "Which of the three stocks performed best over the period?"
+    },
+    "insight": {
+      "important": "Stock C performed best: $10,000 invested in it on Feb. 4 was worth about $12,000 on Feb. 24",
+      "targets": [
+        {
+          "series": "c"
+        }
+      ]
+    },
+    "title": {
+      "text": "Stock C Performed Best over These Three Weeks",
+      "kind": "insight",
+      "descriptive": "Value of $10,000 Invested in Each Stock, Feb. 4–24, 2022"
+    },
+    "data": {
+      "x": {
+        "kind": "time",
+        "grid": "day",
+        "values": [
+          "2022-02-04",
+          "2022-02-05",
+          "2022-02-06",
+          "2022-02-07",
+          "2022-02-08",
+          "2022-02-09",
+          "2022-02-10",
+          "2022-02-11",
+          "2022-02-12",
+          "2022-02-13",
+          "2022-02-14",
+          "2022-02-15",
+          "2022-02-16",
+          "2022-02-17",
+          "2022-02-18",
+          "2022-02-19",
+          "2022-02-20",
+          "2022-02-21",
+          "2022-02-22",
+          "2022-02-23",
+          "2022-02-24"
+        ]
+      },
+      "measure": {
+        "name": "share price",
+        "kind": "amount",
+        "zero": "meaningful",
+        "min": 0,
+        "persistence": "summary",
+        "unit": {
+          "prefix": "$",
+          "what": "share price"
+        }
+      },
+      "series": [
+        {
+          "id": "a",
+          "name": "Stock A",
+          "values": [
+            177,
+            162,
+            158,
+            165,
+            170,
+            158,
+            154,
+            151,
+            143,
+            155,
+            159,
+            141,
+            139,
+            135,
+            112,
+            110,
+            106,
+            100,
+            77,
+            83,
+            87
+          ]
+        },
+        {
+          "id": "b",
+          "name": "Stock B",
+          "values": [
+            67,
+            60,
+            53,
+            58,
+            67,
+            70,
+            74,
+            71,
+            76,
+            72,
+            68,
+            62,
+            66,
+            66,
+            58,
+            66,
+            59,
+            56,
+            65,
+            60,
+            65
+          ]
+        },
+        {
+          "id": "c",
+          "name": "Stock C",
+          "values": [
+            35,
+            33.5,
+            33,
+            34.5,
+            39,
+            39,
+            37,
+            39,
+            41.5,
+            42,
+            41.5,
+            41.5,
+            40,
+            42,
+            42,
+            47,
+            45,
+            38,
+            43,
+            41.5,
+            42
+          ]
+        }
+      ]
+    },
+    "facts": {
+      "message": "pattern"
+    },
+    "transform": {
+      "kind": "index",
+      "base": 10000,
+      "at": "2022-02-04",
+      "unit": {
+        "prefix": "$",
+        "what": "value of $10,000 invested on Feb. 4"
+      }
+    },
+    "comments": [
+      {
+        "text": "Stock C performed best during this period",
+        "anchors": [
+          {
+            "series": "c",
+            "x": "2022-02-24"
+          }
+        ],
+        "answers": [
+          "important"
+        ]
+      }
+    ],
+    "source": {
+      "book": "p. 414–416 (s. 0380–0381)",
+      "notes": "13-15 F16",
+      "shows": "an index: each share price rebased to $10,000 invested on the first day, so that stocks of very different prices compare; the unit says so; the comment points at Stock C (R15-16, G8.18)"
+    }
+  },
+  "variants": [
+    {
+      "name": "raw",
+      "patch": {
+        "transform": null,
+        "title": {
+          "descriptive": "Share Price by Stock, Feb. 4–24, 2022"
+        },
+        "source": {
+          "shows": "the book's raw share prices under the same comment: Stock C, the cheapest, looks flat, and the chart does not show that it performed best (R15-16)"
+        }
+      }
+    }
+  ]
+}

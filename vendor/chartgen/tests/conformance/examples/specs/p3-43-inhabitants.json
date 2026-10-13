@@ -1,0 +1,74 @@
+{
+ "base": {
+  "chartspec": 1,
+  "id": "p3-43-inhabitants",
+  "job": {
+   "kind": "lookup",
+   "text": "Look up each country's number of inhabitants"
+  },
+  "title": {
+   "text": "Inhabitants by Country, 2022",
+   "kind": "descriptive"
+  },
+  "data": {
+   "x": {
+    "kind": "nominal",
+    "values": [
+     "Inhabitants"
+    ]
+   },
+   "measure": {
+    "name": "inhabitants",
+    "kind": "count",
+    "zero": "meaningful",
+    "min": 0,
+    "precision": 1,
+    "unit": {
+     "noun": "inhabitants"
+    }
+   },
+   "series": [
+    {
+     "id": "a",
+     "name": "Country A",
+     "values": [
+      5477210
+     ]
+    },
+    {
+     "id": "b",
+     "name": "Country B",
+     "values": [
+      214185727
+     ]
+    },
+    {
+     "id": "c",
+     "name": "Country C",
+     "values": [
+      71243105
+     ]
+    }
+   ]
+  },
+  "facts": {
+   "message": "lookup_only"
+  },
+  "source": {
+   "book": "p. 153 (s. 0143)",
+   "notes": "05 #3",
+   "shows": "every digit, grouped in threes by the audience's separator (R5-14, R5-15): a comma here, a space under a French locale (variant fr); right-aligned so that the groups line up, the heading aligned like its column; the year is ours"
+  }
+ },
+ "variants": [
+  {
+   "name": "fr",
+   "patch": {
+    "audience": {
+     "locale": "fr-FR"
+    }
+   },
+   "expect": {}
+  }
+ ]
+}

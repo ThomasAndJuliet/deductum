@@ -1,0 +1,13 @@
+[package]
+name = "chartgen-python"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[lib]
+name = "_native"
+crate-type = ["cdylib"]
+
+[dependencies]
+chartgen-protocol = { path = "../chartgen-protocol" }
+pyo3 = { version = "0.29", features = ["extension-module", "abi3-py310"] }

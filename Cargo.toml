@@ -48,7 +48,7 @@ prose-render = { path = "prose/prose-render" }
 # Decoders for the images threads show; iced's own build has none
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "gif"] }
 # Charts in threads, drawn natively; from the shared diagrams repository
-chartgen = { path = "../chartgen-src/crates/chartgen" }
+chartgen = { path = "vendor/chartgen/crates/chartgen" }
 secret-service = { version = "5.1.0", features = [
     "rt-tokio-crypto-rust",
 ], optional = true }
@@ -109,8 +109,8 @@ debug = true
 # libcosmic/ and `git log -- libcosmic`
 # The sudo agent's protocol, and the PAM module that uses it; see AGENTS-PLAN.md
 [workspace]
-members = [".", "sudo/protocol", "sudo/pam", "prose/prose-render"]
-exclude = ["libcosmic", "vendor"]
+members = ["sudo/protocol", "sudo/pam", "prose/prose-render"]
+exclude = ["libcosmic", "vendor/alacritty_terminal", "vendor/vte", "vendor/chartgen"]
 
 [patch."https://github.com/pop-os/libcosmic.git"]
 libcosmic = { path = "libcosmic" }

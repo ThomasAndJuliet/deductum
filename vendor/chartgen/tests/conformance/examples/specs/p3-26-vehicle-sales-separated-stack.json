@@ -1,0 +1,136 @@
+{
+ "base": {
+  "chartspec": 1,
+  "id": "p3-26-vehicle-sales-separated-stack",
+  "job": {
+   "kind": "answer",
+   "text": "What fraction of total sales does each type of vehicle represent?"
+  },
+  "insight": {
+   "important": "Cars, sports cars among them, were well over half of sales"
+  },
+  "title": {
+   "text": "Cars Were Well Over Half of All Sales",
+   "kind": "insight",
+   "descriptive": "Sales by Vehicle Type, 2022"
+  },
+  "audience": {
+   "pie_averse": true
+  },
+  "data": {
+   "x": {
+    "kind": "nominal",
+    "values": [
+     "Sports cars",
+     "Other cars",
+     "Pickup trucks",
+     "Other trucks",
+     "Motorcycles"
+    ],
+    "groups": {
+     "Sports cars": "Cars",
+     "Other cars": "Cars",
+     "Pickup trucks": "Trucks",
+     "Other trucks": "Trucks"
+    }
+   },
+   "measure": {
+    "name": "sales",
+    "kind": "amount",
+    "zero": "meaningful",
+    "min": 0,
+    "unit": {
+     "prefix": "$",
+     "magnitude": 6,
+     "what": "sales"
+    }
+   },
+   "series": [
+    {
+     "id": "sales",
+     "name": "Sales",
+     "values": [
+      36.6,
+      81.8,
+      21.4,
+      40.2,
+      20.0
+     ]
+    }
+   ],
+   "parts": {
+    "meaningful_total": true,
+    "all_parts": true,
+    "overlap": false
+   }
+  },
+  "facts": {
+   "message": "fraction_of_total"
+  },
+  "layout": {
+   "width": 260
+  },
+  "source": {
+   "book": "p. 259–261 (s. 0239–0240)",
+   "notes": "07 #10",
+   "shows": "overlapping categories made disjoint in the data (Other cars = Cars − Sports cars) and stacked by group, the larger group at the base, each group's parts together, its second part in a tint of its first's colour (D-24 (b), G0.14); five values against six scale labels, so the values stand before the names beside the stack and the scale goes (G2.18), the text grey not reading on the colours (G7.4)"
+  }
+ },
+ "variants": [
+  {
+   "name": "overlapping",
+   "patch": {
+    "data": {
+     "x": {
+      "values": [
+       "Cars",
+       "Trucks",
+       "Sports cars",
+       "Pickup trucks",
+       "Motorcycles"
+      ],
+      "groups": null
+     },
+     "series": [
+      {
+       "id": "sales",
+       "name": "Sales",
+       "values": [
+        118.4,
+        61.6,
+        36.6,
+        21.4,
+        20.0
+       ]
+      }
+     ],
+     "parts": {
+      "overlap": true,
+      "overlaps": [
+       [
+        "Sports cars",
+        "Cars"
+       ],
+       [
+        "Pickup trucks",
+        "Trucks"
+       ]
+      ]
+     }
+    },
+    "chart": {
+     "type": "stacked_bar_100"
+    },
+    "source": {
+     "book": "p. 259–260 (s. 0239–0240)",
+     "shows": "the book's stack of overlapping categories, sports cars beside cars as if they were separate: every fraction wrong, refused (R7-05, G0.14 [L])"
+    }
+   },
+   "expect": {
+    "refused": [
+     "R7-05"
+    ]
+   }
+  }
+ ]
+}

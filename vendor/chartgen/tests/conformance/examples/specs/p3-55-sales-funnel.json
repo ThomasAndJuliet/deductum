@@ -1,0 +1,75 @@
+{
+ "base": {
+  "chartspec": 1,
+  "id": "p3-55-sales-funnel",
+  "job": {
+   "kind": "answer",
+   "text": "How many prospects reach each stage of the sales process, and where are most lost?"
+  },
+  "insight": {
+   "important": "Half the prospects who contacted support did not subscribe, the biggest loss between stages"
+  },
+  "title": {
+   "text": "Half of Those Who Contacted Support Did Not Subscribe",
+   "kind": "insight",
+   "descriptive": "Sales funnel, December 2022"
+  },
+  "data": {
+   "x": {
+    "kind": "ordinal",
+    "values": [
+     "Visited website",
+     "Downloaded trial",
+     "Contacted support",
+     "Subscribed",
+     "Renewed"
+    ]
+   },
+   "measure": {
+    "name": "sales prospects",
+    "kind": "count",
+    "zero": "meaningful",
+    "min": 0,
+    "unit": {
+     "noun": "sales prospects in Dec. 2022"
+    }
+   },
+   "series": [
+    {
+     "id": "prospects",
+     "name": "Sales prospects",
+     "values": [
+      9152,
+      6681,
+      5211,
+      2658,
+      2126
+     ]
+    }
+   ]
+  },
+  "facts": {
+   "message": "stage_conversion"
+  },
+  "source": {
+   "book": "p. 360 (s. 0328)",
+   "notes": "08-12 #15",
+   "shows": "the funnel's replacement (R12-5): the prospects at each stage as bars in stage order, and beneath them the % change from each stage to the next, each bar between the two stages it links; the values are the book's funnel labels (its bar version draws the last two stages and the third change differently, D-54)"
+  }
+ },
+ "variants": [
+  {
+   "name": "funnel",
+   "patch": {
+    "chart": {
+     "type": "funnel"
+    }
+   },
+   "expect": {
+    "refused": [
+     "R12-5"
+    ]
+   }
+  }
+ ]
+}

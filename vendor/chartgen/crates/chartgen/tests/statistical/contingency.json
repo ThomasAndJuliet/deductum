@@ -1,0 +1,47 @@
+{
+ "chartspec": 1,
+ "purpose": "analysis",
+ "id": "coverage",
+ "title": {
+  "text": "Cases detected by both configurations, one, or neither"
+ },
+ "data": {
+  "x": {
+   "kind": "nominal",
+   "values": [
+    "detected",
+    "not detected"
+   ],
+   "title": "Unversioned (U)"
+  },
+  "series_name": "Full (F)",
+  "measure": {
+   "kind": "count"
+  },
+  "series": [
+   {
+    "id": "fd",
+    "name": "detected",
+    "counts": [
+     18,
+     11
+    ]
+   },
+   {
+    "id": "fn",
+    "name": "not detected",
+    "counts": [
+     0,
+     1
+    ]
+   }
+  ],
+  "parts": {
+   "all_parts": true,
+   "overlap": false
+  }
+ },
+ "chart": {
+  "type": "contingency"
+ }
+}

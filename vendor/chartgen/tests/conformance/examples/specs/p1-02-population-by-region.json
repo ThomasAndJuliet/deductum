@@ -1,0 +1,78 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p1-02-population-by-region",
+    "job": {
+      "kind": "lookup",
+      "text": "Look up each region's population in 2022"
+    },
+    "title": {
+      "text": "Population by Region, 2022",
+      "kind": "descriptive"
+    },
+    "data": {
+      "x": {
+        "kind": "nominal",
+        "values": [
+          "East",
+          "Central",
+          "Coast",
+          "South",
+          "North"
+        ]
+      },
+      "measure": {
+        "name": "population",
+        "kind": "count",
+        "zero": "meaningful",
+        "min": 0,
+        "unit": {
+          "noun": "inhabitants"
+        }
+      },
+      "series": [
+        {
+          "id": "population",
+          "name": "Population",
+          "values": [
+            21000000,
+            14500000,
+            13300000,
+            6800000,
+            2400000
+          ]
+        }
+      ]
+    },
+    "chart": {
+      "type": "bar",
+      "value_labels": "off"
+    },
+    "reasons": {
+      "chart.value_labels": "the book's figure keeps its scale (p. 61): this example shows the magnitude stated once, on the top label"
+    },
+    "source": {
+      "book": "p. 59–61 (s. 0058–0061)",
+      "notes": "02 #3",
+      "shows": "digits hidden and the magnitude stated once, on the top label, as a word: 25 million inhabitants over bare 20 … 0 (R2-05, R2-06, D-3)"
+    }
+  },
+  "variants": [
+    {
+      "name": "all-zeros",
+      "patch": {
+        "scale": {
+          "magnitude": "none"
+        },
+        "source": {
+          "shows": "the book’s first version: every label written out in full, six trailing zeros each"
+        }
+      },
+      "expect": {
+        "findings": [
+          "R2-05"
+        ]
+      }
+    }
+  ]
+}

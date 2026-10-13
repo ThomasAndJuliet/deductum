@@ -1,0 +1,158 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p2-59-regions-stable",
+    "job": {
+      "kind": "make_aware",
+      "text": "Reassure the board that no region's donations need attention"
+    },
+    "insight": {
+      "important": "Every region's monthly donations held steady all year"
+    },
+    "title": {
+      "text": "Every Region's Donations Held Steady All Year",
+      "kind": "insight",
+      "descriptive": "Monthly Donations by Region, 2022"
+    },
+    "data": {
+      "x": {
+        "kind": "time",
+        "grid": "month",
+        "values": [
+          "2022-01",
+          "2022-02",
+          "2022-03",
+          "2022-04",
+          "2022-05",
+          "2022-06",
+          "2022-07",
+          "2022-08",
+          "2022-09",
+          "2022-10",
+          "2022-11",
+          "2022-12"
+        ]
+      },
+      "measure": {
+        "name": "donations",
+        "kind": "amount",
+        "zero": "meaningful",
+        "min": 0,
+        "persistence": "summary",
+        "unit": {
+          "prefix": "$",
+          "magnitude": 3,
+          "noun": "monthly donations"
+        }
+      },
+      "series": [
+        {
+          "id": "central",
+          "name": "Central",
+          "values": [
+            124,
+            118,
+            127,
+            131,
+            122,
+            129,
+            133,
+            125,
+            119,
+            128,
+            126,
+            130
+          ]
+        },
+        {
+          "id": "west",
+          "name": "West",
+          "values": [
+            82,
+            79,
+            85,
+            88,
+            80,
+            84,
+            89,
+            83,
+            77,
+            86,
+            81,
+            85
+          ]
+        },
+        {
+          "id": "north",
+          "name": "North",
+          "values": [
+            49,
+            46,
+            52,
+            50,
+            47,
+            53,
+            54,
+            48,
+            45,
+            51,
+            50,
+            52
+          ]
+        },
+        {
+          "id": "east",
+          "name": "East",
+          "values": [
+            41,
+            40,
+            43,
+            42,
+            39,
+            44,
+            43,
+            41,
+            40,
+            42,
+            44,
+            41
+          ]
+        },
+        {
+          "id": "intl",
+          "name": "Int'l",
+          "values": [
+            16,
+            15,
+            17,
+            16,
+            15,
+            17,
+            17,
+            15,
+            16,
+            17,
+            16,
+            17
+          ]
+        }
+      ]
+    },
+    "facts": {
+      "message": "pattern"
+    },
+    "comments": [
+      {
+        "text": "No region strayed more than 10% from its own monthly average",
+        "answers": [
+          "why_care"
+        ]
+      }
+    ],
+    "source": {
+      "book": "p. 376 (s. 0342)",
+      "notes": "13-15 F3 (the values read from the small figure and supposed month by month)",
+      "shows": "a “nothing is wrong” insight stated as plainly as a problem would be (R15-3, G8.5), with a remark on the whole chart: a comment without an arrow, in the empty space of the plot (G8.7)"
+    }
+  }
+}

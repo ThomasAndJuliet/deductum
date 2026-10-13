@@ -1,0 +1,126 @@
+{
+ "base": {
+  "chartspec": 1,
+  "id": "p3-34-portfolio-risk-stacks",
+  "job": {
+   "kind": "make_aware",
+   "text": "Show that the aggressive portfolio holds more high-risk assets"
+  },
+  "insight": {
+   "important": "The aggressive portfolio holds more high-risk assets than the other two"
+  },
+  "title": {
+   "text": "Aggressive Portfolio Contains More High-Risk Assets!",
+   "kind": "insight",
+   "descriptive": "Assets by Risk Level, % of Portfolio, Dec. 31, 2022"
+  },
+  "audience": {
+   "pie_averse": true
+  },
+  "data": {
+   "x": {
+    "kind": "nominal",
+    "values": [
+     "Aggressive",
+     "Balanced",
+     "Conservative"
+    ]
+   },
+   "measure": {
+    "name": "share of portfolio",
+    "kind": "percent",
+    "zero": "meaningful",
+    "min": 0,
+    "max": 100,
+    "unit": {
+     "noun": "of portfolio",
+     "scale_title": "% of portfolio, Dec. 31, 2022"
+    }
+   },
+   "series": [
+    {
+     "id": "vh",
+     "name": "Very high risk",
+     "values": [
+      23,
+      12,
+      2
+     ]
+    },
+    {
+     "id": "h",
+     "name": "High risk",
+     "values": [
+      21,
+      7,
+      4
+     ]
+    },
+    {
+     "id": "m",
+     "name": "Moderate risk",
+     "values": [
+      38,
+      17,
+      11
+     ]
+    },
+    {
+     "id": "l",
+     "name": "Low risk",
+     "values": [
+      16,
+      50,
+      55
+     ]
+    },
+    {
+     "id": "vl",
+     "name": "Very low risk",
+     "values": [
+      2,
+      14,
+      28
+     ]
+    }
+   ],
+   "parts": {
+    "meaningful_total": true,
+    "all_parts": true,
+    "overlap": false,
+    "kind": "ordinal"
+   }
+  },
+  "facts": {
+   "message": "fractions_within_each_total"
+  },
+  "chart": {
+   "orientation": "horizontal",
+   "sort": "given"
+  },
+  "reasons": {
+   "chart.orientation": "the book's layout, the legend row above in the stacks' direction (s. 0020)",
+   "chart.sort": "the portfolios from the most risk to the least"
+  },
+  "source": {
+   "book": "p. 19 (s. 0020)",
+   "notes": "00-01 F3",
+   "shows": "the book's good version: ordered parts (risk levels) in steps of one hue, darkest first, not a hue each (G4.7, R3-8), stacked in their own order (R2-02), 100 % stacks lying down with the legend in one row above in the stacks' order (G5.8, G5.10); the book's title connector to Aggressive is not drawn on stacks in this stage"
+  }
+ },
+ "variants": [
+  {
+   "name": "hues",
+   "patch": {
+    "data": {
+     "parts": {
+      "kind": "nominal"
+     }
+    },
+    "source": {
+     "shows": "the risk levels taken as unordered parts: a hue each, stacked largest first (D-26 (b)), the order of risk lost, as in the book's bad version with its Office colours"
+    }
+   }
+  }
+ ]
+}

@@ -1,0 +1,111 @@
+{
+ "base": {
+  "chartspec": 1,
+  "id": "p3-66-donations-fifteen-countries",
+  "job": {
+   "kind": "lookup",
+   "text": "Look up each country's share of European donations"
+  },
+  "title": {
+   "text": "Share of European Donations by Country, 2022",
+   "kind": "descriptive"
+  },
+  "data": {
+   "x": {
+    "kind": "nominal",
+    "values": [
+     "Germany",
+     "France",
+     "Italy",
+     "Sweden",
+     "Norway",
+     "Ireland",
+     "Netherlands",
+     "Spain",
+     "Austria",
+     "Switzerland",
+     "Belgium",
+     "Denmark",
+     "Czechia",
+     "Hungary",
+     "Portugal"
+    ]
+   },
+   "measure": {
+    "name": "share of donations",
+    "kind": "percent",
+    "zero": "meaningful",
+    "min": 0,
+    "unit": {
+     "suffix": "%",
+     "what": "of European donations"
+    }
+   },
+   "series": [
+    {
+     "id": "share",
+     "name": "Share",
+     "values": [
+      23.4,
+      16.8,
+      7.9,
+      7.5,
+      7.3,
+      6.9,
+      6.6,
+      6.5,
+      6.0,
+      2.8,
+      2.3,
+      1.5,
+      1.3,
+      0.8,
+      0.3
+     ]
+    }
+   ],
+   "parts": {
+    "meaningful_total": true,
+    "all_parts": true,
+    "overlap": false
+   }
+  },
+  "facts": {
+   "message": "fraction_of_total"
+  },
+  "source": {
+   "book": "p. 244–251 (s. 0225–0231)",
+   "notes": "07 #3",
+   "shows": "fractions of fifteen parts, more than a pie's 6–7 (D-23 (a)): a treemap (R7-15, G1.39), unless the parts unimportant to the message are lumped into All others first (R7-17, P3-03)"
+  }
+ },
+ "variants": [
+  {
+   "name": "compare",
+   "patch": {
+    "facts": {
+     "message": "compare_parts_precisely"
+    },
+    "source": {
+     "shows": "the same parts compared rather than as fractions: a bar chart (G1.39)"
+    }
+   }
+  },
+  {
+   "name": "pie",
+   "patch": {
+    "chart": {
+     "type": "pie"
+    },
+    "source": {
+     "shows": "a pie of fifteen slices, asked for: drawn, with the guided finding that the procedure gives a treemap"
+    }
+   },
+   "expect": {
+    "findings": [
+     "R7-15"
+    ]
+   }
+  }
+ ]
+}

@@ -1,0 +1,205 @@
+{
+ "key": "p3-17-portfolio-risk-pie",
+ "file": "p3-17-portfolio-risk-pie.json",
+ "variant": null,
+ "requested_type": "auto",
+ "report": {
+  "chart": "p3-17-portfolio-risk-pie",
+  "style": "plain",
+  "variant": null,
+  "type": "pie",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "R7-07",
+    "level": "guided",
+    "text": "type pie: fractions of the total are the message: a pie, which shows ½, ⅓ and ¼ at a glance and announces the whole (G1.36)",
+    "guide": []
+   },
+   {
+    "rule": "R7-35",
+    "level": "guided",
+    "text": "slices in their order, clockwise from 12 o'clock: Very high risk, High risk, Moderate risk, Low risk, Very low risk",
+    "guide": []
+   },
+   {
+    "rule": "R3-8",
+    "level": "guided",
+    "text": "the parts are ordered: steps of one hue, darker for each part from the last to the first, the first at 12 o'clock (G4.7; each slice still its own colour, G7.25)",
+    "guide": []
+   },
+   {
+    "rule": "R7-32",
+    "level": "locked",
+    "text": "each slice its own colour, in steps of one hue in their order: Very high risk seq-9, High risk seq-8, Moderate risk seq-6, Low risk seq-5, Very low risk seq-3",
+    "guide": []
+   },
+   {
+    "rule": "R7-34",
+    "level": "locked",
+    "text": "each slice named outside it, its value under the name, formatted as one set (G7.27, D-51 (ii)): 23%, 21%, 38%, 16%, 2%",
+    "guide": []
+   },
+   {
+    "rule": "R7-37",
+    "level": "locked",
+    "text": "leaders to Low risk, Very low risk (a zero, a slice under 8°, or a label moved from its place; G7.29, D-34)",
+    "guide": []
+   },
+   {
+    "rule": "R7-33",
+    "level": "locked",
+    "text": "no outlines: true gaps 1.0 pt wide between the slices (G7.26s: 0.7 % of the diameter)",
+    "guide": []
+   }
+  ],
+  "findings": [],
+  "overrides": [],
+  "expect": {},
+  "expect_met": true,
+  "source": {
+   "notes": "00-01 F3; 13-15 F10 (the aggressive portfolio's data, s. 0020, 0368); 07 R7-35",
+   "shows": "ours, from the book's data, which it draws as 100 % stacks: one total of ordered parts as a pie, the risk levels in their own order from 12 o'clock rather than largest first (R7-35, G7.28), in steps of one hue, the first the darkest, rather than a hue each (G4.7, R3-8), as the book's good stacks (P3-34); Very low risk, under 8°, pointed to by a leader (G7.29)",
+   "status": "generated"
+  },
+  "summary": {
+   "kind": "pie",
+   "pies": 1,
+   "radius": 73.6,
+   "centres": [
+    [
+     184.0,
+     126.83
+    ]
+   ],
+   "order": [
+    "Very high risk",
+    "High risk",
+    "Moderate risk",
+    "Low risk",
+    "Very low risk"
+   ],
+   "labels": "value",
+   "leaders": [
+    "Low risk",
+    "Very low risk"
+   ],
+   "width": 368.0,
+   "height": 213.14,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job lookup: no insight stated (a descriptive title will do, D-55)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-1",
+    "level": "guided",
+    "text": "a graph, the values to be compared or a pattern seen (G1.11)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 2,
+    "name": "variables",
+    "rule": "RP3-2",
+    "level": "guided",
+    "text": "one plot: categories along x and 1 series; a further variable would go to small multiples (data.dims, G1.18)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 3,
+    "name": "location",
+    "rule": "R8-2",
+    "level": "guided",
+    "text": "not a map: where the values are is not the message (facts.location_matters; G1.24, G1.25)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "RP2-7",
+    "level": "guided",
+    "text": "group: breakdowns of totals. One total of 5 parts (07 §4.1, G1.8)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-02",
+    "level": "locked",
+    "text": "check, meaningful total: passes: the values add up to a total someone would quote (parts.meaningful_total)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-03",
+    "level": "locked",
+    "text": "check, all parts: passes: every part of the total is shown (parts.all_parts)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-05",
+    "level": "locked",
+    "text": "check, overlap: passes: no part contains or overlaps another (parts.overlap)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-04",
+    "level": "locked",
+    "text": "check, signs: passes: the parts are all of one sign",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-07",
+    "level": "guided",
+    "text": "fractions of the total are the message: a pie, which shows ½, ⅓ and ¼ at a glance and announces the whole (G1.36)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type (G1.59)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "pies are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   }
+  ],
+  "copies": []
+ },
+ "output_sha256": "c7ecab499d0bf0fca6e720a0383d5c8f9ab034ecd6fcbee952c41f695d01e76c"
+}

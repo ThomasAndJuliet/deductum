@@ -1,0 +1,54 @@
+{
+ "base": {
+  "chartspec": 1,
+  "id": "p3-44-stock-export",
+  "job": {
+   "kind": "other",
+   "text": "Hand the stock counts to the planners, who import them into their spreadsheet"
+  },
+  "title": {
+   "text": "Units in Stock by Product and Warehouse, 30 June 2022",
+   "kind": "descriptive"
+  },
+  "data": {
+   "x": {
+    "kind": "nominal",
+    "values": ["Leeds", "Bristol", "Glasgow", "Norwich", "Total"],
+    "roles": {"Total": "total"}
+   },
+   "measure": {
+    "name": "units in stock",
+    "kind": "count",
+    "zero": "meaningful",
+    "min": 0,
+    "precision": 1,
+    "unit": {"noun": "units in stock"}
+   },
+   "series": [
+    {"id": "a1043", "name": "Desk lamp", "values": [1204, 877, 342, 515, 2938]},
+    {"id": "a1107", "name": "Floor lamp", "values": [318, 402, 96, 127, 943]},
+    {"id": "b2210", "name": "Office chair", "values": [2470, 1985, 1102, 868, 6425]},
+    {"id": "b2214", "name": "Stool", "values": [655, 0, 214, null, 869]},
+    {"id": "c3001", "name": "Filing cabinet", "values": [97, 143, 58, 61, 359]},
+    {"id": "c3020", "name": "Bookcase", "values": [412, 388, 175, 140, 1115]},
+    {"id": "total", "name": "Total", "role": "total", "values": [5156, 3795, 1987, 1711, 12649]}
+   ]
+  },
+  "facts": {
+   "message": "export_only"
+  },
+  "table": {
+   "names_title": "Product",
+   "stub": [
+    {"title": "SKU", "kind": "text", "values": ["A-1043", "A-1107", "B-2210", "B-2214", "C-3001", "C-3020", ""]}
+   ]
+  },
+  "labels": {
+   "notes": {"missing": "(not counted)"}
+  },
+  "source": {
+   "notes": "08-12 R10-11 (b) (p. 341–343, the rule; the book draws no exported table), DP-3",
+   "shows": "a table alone because its sole use is importing the values into another program (R10-11 (b), the chooser's step 1, facts.message export_only), formatted as any table: a text column of codes left-aligned before the names, every digit, a zero kept as 0 and a count not made as its note, never a zero (R9-7); the totals of the stool's row, of Norwich's column and the grand total add up the counted values only, as the data give them (the printed totals are the data's); synthetic data"
+  }
+ }
+}

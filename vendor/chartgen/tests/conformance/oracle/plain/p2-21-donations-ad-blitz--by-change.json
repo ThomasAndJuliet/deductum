@@ -1,0 +1,256 @@
+{
+ "key": "p2-21-donations-ad-blitz--by-change",
+ "file": "p2-21-donations-ad-blitz.json",
+ "variant": "by-change",
+ "requested_type": "auto",
+ "report": {
+  "chart": "p2-21-donations-ad-blitz",
+  "style": "plain",
+  "variant": "by-change",
+  "type": "arrow",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "R6-15",
+    "level": "guided",
+    "text": "type arrow: two periods: the change between them is the point (06 DP6-3, G1.46): the default is an arrow chart, each category's change in units and in % side by side (G1.47), or a chart of the change itself (the % panel alone, facts.message relative_change; or the change as bars, a previous_period comparison with transform deviation); clustered bars of the two periods only where each period's own values, not the change, are what the request needs: facts.message periods, with the reason, grounded in the request, in reasons[\"facts.message\"]",
+    "guide": []
+   },
+   {
+    "rule": "R2-25",
+    "level": "locked",
+    "text": "the values are not far from zero compared with their spread",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "scale 0–600 by 100",
+    "guide": []
+   },
+   {
+    "rule": "R6-17",
+    "level": "locked",
+    "text": "two panels sharing the rows: the values, before to after; the change in %, from 0 % (G1.47, G7.21)",
+    "guide": []
+   },
+   {
+    "rule": "D-40",
+    "level": "guided",
+    "text": "rows by the change in %, largest first",
+    "guide": []
+   },
+   {
+    "rule": "R3-17",
+    "level": "guided",
+    "text": "arrows in the good colour where the change is good and the bad colour where it is bad (higher is better; G7.22, D-40)",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "the % panel: −20–50 by 10, holding 0 %, where its arrows start",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "the % panel's labels would crowd in its width: −20–60 by 20",
+    "guide": []
+   },
+   {
+    "rule": "R6-15",
+    "level": "locked",
+    "text": "the values in the measure's unit, 0–600 by 100, each arrow from before to after; the scale's title below: “Donations ($K)”",
+    "guide": []
+   },
+   {
+    "rule": "R6-17",
+    "level": "locked",
+    "text": "the change in %, −20–60 by 20, each arrow from 0 %; the scale's title below: “Change in donations”",
+    "guide": []
+   },
+   {
+    "rule": "R6-15",
+    "level": "locked",
+    "text": "an arrow chart (G7.21): a dot at the start, a shaft, a head whose tip sits exactly on the end value; one row per category, its name at the left",
+    "guide": []
+   },
+   {
+    "rule": "R6-15",
+    "level": "guided",
+    "text": "changes shorter than a full head with its start dot, their direction kept readable (--arrow-short-head: fit): the head over the start dot, haloed: West (values); the head shrunk to fit between the start dot and the end: East (values)",
+    "guide": []
+   },
+   {
+    "rule": "R6-15",
+    "level": "locked",
+    "text": "the key “Before blitz” and “After blitz” beside the ends of South's arrow, the longest, too short to hold both words over it (G7.21)",
+    "guide": []
+   },
+   {
+    "rule": "R5-26",
+    "level": "locked",
+    "text": "the title wraps onto two lines",
+    "guide": []
+   },
+   {
+    "rule": "R3-20",
+    "level": "locked",
+    "text": "static output, in colour: one file, red for bad and green for good, plain, for every reader (D-18; owner, 1 Oct 2026); black and white (audience.bw_risk) adds the textures, and a style may choose the colour-blind-safe pair (--good-bad-mode: safe-pair)",
+    "guide": []
+   }
+  ],
+  "findings": [
+   {
+    "rule": "R15-7",
+    "severity": "info",
+    "message": "the values are read as good or bad, with no comparison value or dividing value: a target, budget or average would say how to feel about them (G8.12, G0.19)",
+    "path": "data.comparisons",
+    "level": "guided",
+    "guide": [],
+    "title": "comparison values where the audience lacks context: targets and budgets before averages, previous periods and peers"
+   }
+  ],
+  "overrides": [],
+  "expect": {
+   "findings": []
+  },
+  "expect_met": true,
+  "source": {
+   "book": "p. 200–204 (s. 0186–0190)",
+   "notes": "06 T9",
+   "shows": "the same arrows when the change itself is the message: rows by the change in %, largest first (D-40)",
+   "status": "generated"
+  },
+  "summary": {
+   "scale": "0–600 by 100",
+   "labels": [
+    "0",
+    "100",
+    "200",
+    "300",
+    "400",
+    "500",
+    "600"
+   ],
+   "top": "$600K (donations)",
+   "scale_title": "Donations ($K)",
+   "orientation": "horizontal",
+   "panels": [
+    "absolute",
+    "relative"
+   ],
+   "plot": [
+    38.53,
+    51.07,
+    354.94,
+    151.07
+   ],
+   "rows": [
+    "north",
+    "west",
+    "south",
+    "east",
+    "central"
+   ],
+   "colours": {
+    "north": "good",
+    "west": "good",
+    "south": "good",
+    "east": "good",
+    "central": "bad"
+   },
+   "pct_scale": "−20–60 by 20",
+   "width": 368.0,
+   "height": 178.88,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job answer: insight “North's donations rose most, by 41 %, although South gained the most dollars”",
+    "guide": [],
+    "group": "change between two periods"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-1",
+    "level": "guided",
+    "text": "a graph, the values to be compared or a pattern seen (G1.11)",
+    "guide": [],
+    "group": "change between two periods"
+   },
+   {
+    "step": 2,
+    "name": "variables",
+    "rule": "RP3-2",
+    "level": "guided",
+    "text": "one plot: time along x and 5 series; a further variable would go to small multiples (data.dims, G1.18)",
+    "guide": [],
+    "group": "change between two periods"
+   },
+   {
+    "step": 3,
+    "name": "location",
+    "rule": "R8-2",
+    "level": "guided",
+    "text": "not a map: where the values are is not the message (facts.location_matters; G1.24, G1.25)",
+    "guide": [],
+    "group": "change between two periods"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-01",
+    "level": "guided",
+    "text": "not parts of a total (no data.parts, no breakdown message; G1.1)",
+    "guide": [],
+    "group": "change between two periods"
+   },
+   {
+    "step": 5,
+    "name": "two periods",
+    "rule": "R6-15",
+    "level": "guided",
+    "text": "group: change between two periods. Two periods: the change between them is the point (06 DP6-3, G1.46): the default is an arrow chart, each category's change in units and in % side by side (G1.47), or a chart of the change itself (the % panel alone, facts.message relative_change; or the change as bars, a previous_period comparison with transform deviation); clustered bars of the two periods only where each period's own values, not the change, are what the request needs: facts.message periods, with the reason, grounded in the request, in reasons[\"facts.message\"]",
+    "guide": [],
+    "group": "change between two periods"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type, the series told apart by colour (G1.59)",
+    "guide": [],
+    "group": "change between two periods"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "arrow charts are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "change between two periods"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R6-18",
+    "level": "guided",
+    "text": "arrow charts may be new to a general audience: teach them (build the chart up, show first the familiar chart that fails, or add two or three callouts stating the obvious; G1.5), or state the insight in a sentence and keep the chart as backup (G1.6)",
+    "guide": [],
+    "group": "change between two periods"
+   }
+  ],
+  "copies": []
+ },
+ "output_sha256": "56394b73f923bf6a2658419f7ecc7df3e67c3d91a3e4dfd9bed5ab019ba1ae90"
+}

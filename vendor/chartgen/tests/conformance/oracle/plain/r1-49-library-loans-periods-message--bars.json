@@ -1,0 +1,149 @@
+{
+ "key": "r1-49-library-loans-periods-message--bars",
+ "file": "r1-49-library-loans-periods-message.json",
+ "variant": "bars",
+ "requested_type": "bar",
+ "report": {
+  "chart": "r1-49-library-loans-periods-message",
+  "style": "plain",
+  "variant": "bars",
+  "type": "bar",
+  "status": "refused",
+  "decisions": [],
+  "findings": [
+   {
+    "rule": "R6-15",
+    "severity": "warn",
+    "message": "chart.type bar departs from the procedure, which gives arrow (two periods: the change between them is the point (06 DP6-3, G1.46): the default is an arrow chart, each category's change in units and in % side by side (G1.47), or a chart of the change itself (the % panel alone, facts.message relative_change; or the change as bars, a previous_period comparison with transform deviation); clustered bars of the two periods only where each period's own values, not the change, are what the request needs: facts.message periods, with the reason, grounded in the request, in reasons[\"facts.message\"])",
+    "path": "chart.type",
+    "level": "guided",
+    "recommended": "arrow",
+    "guide": [],
+    "title": "two periods: an arrow chart"
+   },
+   {
+    "rule": "R6-15",
+    "severity": "warn",
+    "message": "two periods (2019, 2025) with facts.message periods but no reason: the change between two periods is the point unless the request says otherwise, so the route stays the arrow chart; the default is an arrow chart, each category's change in units and in % side by side (G1.47), or a chart of the change itself (the % panel alone, facts.message relative_change; or the change as bars, a previous_period comparison with transform deviation); clustered bars of the two periods only where each period's own values, not the change, are what the request needs: facts.message periods, with the reason, grounded in the request, in reasons[\"facts.message\"]",
+    "path": "facts.message",
+    "level": "guided",
+    "recommended": "arrow",
+    "guide": [],
+    "title": "two periods: an arrow chart"
+   },
+   {
+    "rule": "R6-17",
+    "severity": "error",
+    "message": "two periods drawn as bars show the values side by side, with nothing to suggest change and no change in % (the book's most common version, R6-14)",
+    "path": "chart.type",
+    "supply": "type auto (an arrow chart: change in units and change in %)",
+    "level": "locked",
+    "guide": [],
+    "title": "change between two periods: an absolute panel always with a % panel, never clustered bars"
+   }
+  ],
+  "overrides": [],
+  "expect": {
+   "refused": [
+    "R6-17"
+   ],
+   "findings": [
+    "R6-15"
+   ]
+  },
+  "expect_met": true,
+  "source": {
+   "notes": "eval B08 (opus-G)",
+   "shows": "two periods along x with facts.message periods but no reason: the route stays the arrow chart, with a guided warning naming the default (an arrow chart or a chart of the change; R6-15); clustered bars asked for are refused (R6-17)",
+   "status": "generated"
+  },
+  "summary": {
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job make_aware: insight “Central lost the most loans (61,400), but in proportion it fell less (−18 %) than Westbrook and Riverside (about −41 %) and Hartley Green (−25 %); St Mary's and Oakham grew”",
+    "guide": [],
+    "group": "change between two periods"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-1",
+    "level": "guided",
+    "text": "a graph, the values to be compared or a pattern seen (G1.11)",
+    "guide": [],
+    "group": "change between two periods"
+   },
+   {
+    "step": 2,
+    "name": "variables",
+    "rule": "RP3-2",
+    "level": "guided",
+    "text": "one plot: time along x and 8 series; more than 5 lines read well only if they rarely cross, else a stack of small line charts (panels by data.dims, G1.20); a further variable would go to small multiples (data.dims, G1.18)",
+    "guide": [],
+    "group": "change between two periods"
+   },
+   {
+    "step": 3,
+    "name": "location",
+    "rule": "R8-2",
+    "level": "guided",
+    "text": "not a map: where the values are is not the message (facts.location_matters; G1.24, G1.25)",
+    "guide": [],
+    "group": "change between two periods"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-01",
+    "level": "guided",
+    "text": "not parts of a total (no data.parts, no breakdown message; G1.1)",
+    "guide": [],
+    "group": "change between two periods"
+   },
+   {
+    "step": 5,
+    "name": "two periods",
+    "rule": "R6-15",
+    "level": "guided",
+    "text": "group: change between two periods. Two periods: the change between them is the point (06 DP6-3, G1.46): the default is an arrow chart, each category's change in units and in % side by side (G1.47), or a chart of the change itself (the % panel alone, facts.message relative_change; or the change as bars, a previous_period comparison with transform deviation); clustered bars of the two periods only where each period's own values, not the change, are what the request needs: facts.message periods, with the reason, grounded in the request, in reasons[\"facts.message\"]",
+    "guide": [],
+    "group": "change between two periods"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type, the series told apart by colour (G1.59)",
+    "guide": [],
+    "group": "change between two periods"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "arrow charts are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "change between two periods"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R6-18",
+    "level": "guided",
+    "text": "arrow charts may be new to a general audience: teach them (build the chart up, show first the familiar chart that fails, or add two or three callouts stating the obvious; G1.5), or state the insight in a sentence and keep the chart as backup (G1.6)",
+    "guide": [],
+    "group": "change between two periods"
+   }
+  ],
+  "copies": []
+ }
+}

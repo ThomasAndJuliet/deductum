@@ -1,0 +1,241 @@
+{
+ "chartspec": 1,
+ "id": "r1-02-funds-raised-notes",
+ "job": {
+  "kind": "lookup",
+  "text": "Look up the funds each event raised in each region in 2021"
+ },
+ "title": {
+  "text": "Funds Raised (US$) by Event by Region, 2021",
+  "kind": "descriptive"
+ },
+ "data": {
+  "x": {
+   "kind": "nominal",
+   "values": [
+    "Central",
+    "East",
+    "Northwest",
+    "South",
+    "Total"
+   ],
+   "roles": {
+    "Total": "total"
+   }
+  },
+  "measure": {
+   "name": "funds raised",
+   "kind": "amount",
+   "zero": "meaningful",
+   "precision": 1,
+   "unit": {
+    "prefix": "$",
+    "what": "funds raised"
+   }
+  },
+  "series": [
+   {
+    "id": "walk-jan",
+    "name": "5K Walk",
+    "values": [
+     84501,
+     112564,
+     73939,
+     133213,
+     404217
+    ]
+   },
+   {
+    "id": "telethon",
+    "name": "Telethon",
+    "values": [
+     76578,
+     59710,
+     52355,
+     124864,
+     313507
+    ]
+   },
+   {
+    "id": "pancake",
+    "name": "Pancake Breakfast",
+    "values": [
+     87011,
+     95531,
+     2360529,
+     143532,
+     2686603
+    ]
+   },
+   {
+    "id": "fair",
+    "name": "Country Fair",
+    "values": [
+     81661,
+     91057,
+     103358,
+     90896,
+     366972
+    ]
+   },
+   {
+    "id": "walk-jun",
+    "name": "5K Walk",
+    "values": [
+     73330,
+     80571,
+     91027,
+     124161,
+     369089
+    ]
+   },
+   {
+    "id": "run",
+    "name": "10K Run",
+    "values": [
+     113658,
+     51458,
+     63347,
+     2152221,
+     2380684
+    ]
+   },
+   {
+    "id": "raffle",
+    "name": "TV Raffle",
+    "values": [
+     1978422,
+     122915,
+     126824,
+     100278,
+     2328439
+    ]
+   },
+   {
+    "id": "teddy",
+    "name": "Teddy Bear Drive",
+    "values": [
+     94848,
+     81772,
+     136690,
+     144215,
+     457526
+    ]
+   },
+   {
+    "id": "gala",
+    "name": "Black Tie Gala",
+    "values": [
+     82340,
+     85637,
+     84841,
+     116269,
+     369088
+    ]
+   },
+   {
+    "id": "total",
+    "name": "Total",
+    "role": "total",
+    "values": [
+     2672351,
+     781216,
+     3092910,
+     3129649,
+     9676125
+    ]
+   }
+  ]
+ },
+ "facts": {
+  "message": "lookup_only"
+ },
+ "table": {
+  "names_title": "Event",
+  "stub": [
+   {
+    "title": "Date",
+    "kind": "date",
+    "values": [
+     "2021-01-05",
+     "2021-02-09",
+     "2021-03-06",
+     "2021-04-24",
+     "2021-06-13",
+     "2021-07-21",
+     "2021-09-01",
+     "2021-10-23",
+     "2021-12-17",
+     ""
+    ]
+   }
+  ]
+ },
+ "highlight": [
+  {
+   "targets": [
+    {
+     "series": "pancake",
+     "x": "Northwest"
+    },
+    {
+     "series": "run",
+     "x": "South"
+    },
+    {
+     "series": "raffle",
+     "x": "Central"
+    }
+   ]
+  }
+ ],
+ "layout": {
+  "width": 480
+ },
+ "source": {
+  "book": "p. 344–349 (s. 0314–0318)",
+  "notes": "p3-40-funds-raised-table, with notes (owner, 1 Oct 2026: footnotes)",
+  "shows": "footnotes in a table: on its names' heading, on two rows named alike (one mark), on one figure (its mark hangs in the gutter, the figures stay aligned), on the totals row and column (one note, one mark)"
+ },
+ "notes": [
+  {
+   "text": "Events in the order they were held.",
+   "on": [
+    {
+     "element": "names_title"
+    }
+   ]
+  },
+  {
+   "text": "Held twice, on Jan. 5 and Jun. 13, 2021.",
+   "on": [
+    {
+     "series": "walk-jan"
+    },
+    {
+     "series": "walk-jun"
+    }
+   ]
+  },
+  {
+   "text": "The largest amount one event raised in one region.",
+   "on": [
+    {
+     "series": "pancake",
+     "category": "Northwest"
+    }
+   ]
+  },
+  {
+   "text": "Totals as reported; some differ by $1 or $2 from the sum of the amounts above them.",
+   "on": [
+    {
+     "series": "total"
+    },
+    {
+     "category": "Total"
+    }
+   ]
+  }
+ ]
+}

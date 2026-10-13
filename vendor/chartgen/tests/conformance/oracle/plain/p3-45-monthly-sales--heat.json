@@ -1,0 +1,138 @@
+{
+ "key": "p3-45-monthly-sales--heat",
+ "file": "p3-45-monthly-sales.json",
+ "variant": "heat",
+ "requested_type": "auto",
+ "report": {
+  "chart": "p3-45-monthly-sales",
+  "style": "plain",
+  "variant": "heat",
+  "type": "table",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "R10-11",
+    "level": "guided",
+    "text": "type table: a table alone: its sole use is looking up individual values (facts.message lookup_only; G1.12)",
+    "guide": []
+   },
+   {
+    "rule": "R10-13",
+    "level": "locked",
+    "text": "a table alone, formatted in the book's order: the digits the purpose needs, two thin rules, space between rows and columns, the numbers right-aligned to be compared, nothing bold but the title, the unit once in the title (08-12 DP-4, G7.37–G7.45)",
+    "guide": []
+   },
+   {
+    "rule": "R10-12",
+    "level": "locked",
+    "text": "digits: each column at its data's own decimals, one number of decimals down each column (G7.37, G6.16)",
+    "guide": []
+   },
+   {
+    "rule": "R10-9",
+    "level": "guided",
+    "text": "the cells shaded by value, the body, the Total column and the totals row each on its own ramp from its lowest to its highest value, the grand total unshaded (s. 0309); pale, so that the numbers stay legible (G6.5); built into the table for an audience that will not take a graph (G1.16, G7.47)",
+    "guide": []
+   },
+   {
+    "rule": "R10-9",
+    "level": "guided",
+    "text": "the cells muted: a table whose colour only hints at sizes: the steps paled, the numbers in the text grey (G7.47) (owner, 1 Oct 2026)",
+    "guide": []
+   },
+   {
+    "rule": "R3-12",
+    "level": "guided",
+    "text": "the body's cells: a sequential palette; no dividing value the audience sees: one ramp, darker meaning more, never diverging about the middle of the data (G4.10, D-37 (a))",
+    "guide": []
+   },
+   {
+    "rule": "R10-25",
+    "level": "locked",
+    "text": "the unit once, in the title; the cells bare numbers (G7.45)",
+    "guide": []
+   }
+  ],
+  "findings": [],
+  "overrides": [],
+  "expect": {},
+  "expect_met": true,
+  "source": {
+   "book": "p. 167 (s. 0156)",
+   "notes": "05 #10",
+   "shows": "the gallery's table: the unit and its magnitude once, in the title, the cells bare numbers (the book's $553K in every cell, R10-25); the year is ours; variant heat, the book's table with graphical elements, its cells shaded by value, pale enough to read",
+   "status": "generated"
+  },
+  "summary": {
+   "orientation": "vertical",
+   "plot": [
+    0.0,
+    31.0,
+    152.41,
+    79.0
+   ],
+   "table": {
+    "rows": [
+     "joe",
+     "lisa",
+     "kim"
+    ],
+    "columns": [
+     "2022-01",
+     "2022-02",
+     "2022-03"
+    ],
+    "comparable": true,
+    "pitch": 16.0,
+    "width": 152.41,
+    "graphics": "heat",
+    "highlighted": [],
+    "values": null
+   },
+   "width": 307.38,
+   "height": 80.0,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job lookup: no insight stated (a descriptive title will do, D-55)",
+    "guide": [],
+    "group": "tables"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-11",
+    "level": "guided",
+    "text": "group: tables. A table alone: its sole use is looking up individual values (facts.message lookup_only; G1.12)",
+    "guide": [],
+    "group": "tables"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type, the series told apart by colour (G1.59)",
+    "guide": [],
+    "group": "tables"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "tables are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "tables"
+   }
+  ],
+  "copies": []
+ },
+ "output_sha256": "31d7a64d989bf6f1e1bfd73ab944cb77fdea07eef6368acd677a5ae33c7bd931"
+}

@@ -1,0 +1,12 @@
+[package]
+name = "figkit-raster"
+version.workspace = true
+edition.workspace = true
+description = "PNG output for figkit scenes: figkit's SVG rasterised with resvg (experimental)"
+publish = false
+
+[dependencies]
+figkit-model = { path = "../../crates/figkit-model" }
+figkit-scene = { path = "../../crates/figkit-scene" }
+figkit-render = { path = "../../crates/figkit-render" }
+resvg = { version = "0.48.1", default-features = false, features = ["text"] }

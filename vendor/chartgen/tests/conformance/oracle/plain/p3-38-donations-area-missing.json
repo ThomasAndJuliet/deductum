@@ -1,0 +1,293 @@
+{
+ "key": "p3-38-donations-area-missing",
+ "file": "p3-38-donations-area-missing.json",
+ "variant": null,
+ "requested_type": "auto",
+ "report": {
+  "chart": "p3-38-donations-area-missing",
+  "style": "plain",
+  "variant": null,
+  "type": "stacked_area",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "R7-29",
+    "level": "guided",
+    "text": "type stacked_area: fractions or rough subtotals over time, and the total's change matters: absolute stacks, areas, the overall pattern of change being the point (G1.44, G1.45)",
+    "guide": []
+   },
+   {
+    "rule": "R2-24",
+    "level": "locked",
+    "text": "bars start at zero",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "scale 0–100 by 20",
+    "guide": []
+   },
+   {
+    "rule": "R2-02",
+    "level": "locked",
+    "text": "periods in their given order",
+    "guide": []
+   },
+   {
+    "rule": "R7-24",
+    "level": "guided",
+    "text": "stacking order from the base: East, West, South, North (the largest at the base, where it is read precisely; G7.31, D-26 (b))",
+    "guide": []
+   },
+   {
+    "rule": "R7-24",
+    "level": "locked",
+    "text": "each part in one colour and one place in every total: East (slot 1), West (slot 2), South (slot 4), North (slot 3) (G4.22, G7.31)",
+    "guide": []
+   },
+   {
+    "rule": "R2-37",
+    "level": "locked",
+    "text": "time runs left to right",
+    "guide": []
+   },
+   {
+    "rule": "R2-21",
+    "level": "locked",
+    "text": "labels as a set, 0 decimals: 0, 20, 40, 60, 80, $100K",
+    "guide": []
+   },
+   {
+    "rule": "R5-10",
+    "level": "locked",
+    "text": "digits hidden: thousands, stated once on the top label (R2-05, D-3): “$100K in donations”",
+    "guide": []
+   },
+   {
+    "rule": "R9-7",
+    "level": "locked",
+    "text": "empty slots say why: 2022-05 (North missing)",
+    "guide": []
+   },
+   {
+    "rule": "R2-40",
+    "level": "locked",
+    "text": "time axis: row 1 full",
+    "guide": []
+   },
+   {
+    "rule": "R2-37",
+    "level": "locked",
+    "text": "time axis: row 2 (“2022”) left out, the title gives it (G2.37)",
+    "guide": []
+   },
+   {
+    "rule": "R9-7",
+    "level": "guided",
+    "text": "each empty slot's note, wrapped first (owner, 1 Oct 2026): May 2022: step 1, wrapped in its empty slot on the baseline, on 2 lines (the names' break rules, G2.4; step 2 only with nothing beneath the axis's labels)",
+    "guide": []
+   },
+   {
+    "rule": "R2-07",
+    "level": "locked",
+    "text": "the unit phrase on the top label: “$100K in donations”; the top gridline starts after it",
+    "guide": []
+   },
+   {
+    "rule": "R4-1",
+    "level": "guided",
+    "text": "each part named beside the last period, level with the middle of its band, top to bottom as stacked: North, South, West, East (G5.4, D-31 (c))",
+    "guide": []
+   }
+  ],
+  "findings": [],
+  "overrides": [],
+  "expect": {},
+  "expect_met": true,
+  "source": {
+   "book": "p. 282–283 (s. 0258)",
+   "notes": "07 #14; R0-12",
+   "shows": "a look-up chart with a descriptive title (G8.2); North's May not known: the stack is not drawn there, since where the bands above North start is not known either; every band breaks round May, and the note names the part (R0-12, R9-7, G0.16)",
+   "status": "generated"
+  },
+  "summary": {
+   "scale": "0–100 by 20",
+   "labels": [
+    "0",
+    "20",
+    "40",
+    "60",
+    "80",
+    "$100K"
+   ],
+   "top": "$100K in donations",
+   "scale_title": null,
+   "orientation": "vertical",
+   "plot": [
+    29.0,
+    21.0,
+    337.13,
+    205.88
+   ],
+   "band": 25.68,
+   "series": [
+    "east",
+    "west",
+    "south",
+    "north"
+   ],
+   "labelling": "direct",
+   "value_labels": false,
+   "table": false,
+   "bar": 14.28,
+   "stack": "area",
+   "parts": [
+    "east",
+    "west",
+    "south",
+    "north"
+   ],
+   "percent": false,
+   "totals": [
+    "2022-01",
+    "2022-02",
+    "2022-03",
+    "2022-04",
+    "2022-05",
+    "2022-06",
+    "2022-07",
+    "2022-08",
+    "2022-09",
+    "2022-10",
+    "2022-11",
+    "2022-12"
+   ],
+   "width": 368.0,
+   "height": 223.77,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job lookup: no insight stated (a descriptive title will do, D-55)",
+    "guide": [],
+    "group": "breakdowns of totals changing over time"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-1",
+    "level": "guided",
+    "text": "a graph, the values to be compared or a pattern seen (G1.11)",
+    "guide": [],
+    "group": "breakdowns of totals changing over time"
+   },
+   {
+    "step": 2,
+    "name": "variables",
+    "rule": "RP3-2",
+    "level": "guided",
+    "text": "one plot: time along x and 4 series; a further variable would go to small multiples (data.dims, G1.18)",
+    "guide": [],
+    "group": "breakdowns of totals changing over time"
+   },
+   {
+    "step": 3,
+    "name": "location",
+    "rule": "R8-2",
+    "level": "guided",
+    "text": "not a map: where the values are is not the message (facts.location_matters; G1.24, G1.25)",
+    "guide": [],
+    "group": "breakdowns of totals changing over time"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "RP2-8",
+    "level": "guided",
+    "text": "group: breakdowns of totals changing over time. A total of 4 parts over 12 periods (07 §4.3, R6-13, G1.8)",
+    "guide": [],
+    "group": "breakdowns of totals changing over time"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-02",
+    "level": "locked",
+    "text": "check, meaningful total: passes: the values add up to a total someone would quote (parts.meaningful_total)",
+    "guide": [],
+    "group": "breakdowns of totals changing over time"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-03",
+    "level": "locked",
+    "text": "check, all parts: passes: every part of the total is shown (parts.all_parts)",
+    "guide": [],
+    "group": "breakdowns of totals changing over time"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-05",
+    "level": "locked",
+    "text": "check, overlap: passes: no part contains or overlaps another (parts.overlap)",
+    "guide": [],
+    "group": "breakdowns of totals changing over time"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-04",
+    "level": "locked",
+    "text": "check, signs: passes: the parts are all of one sign",
+    "guide": [],
+    "group": "breakdowns of totals changing over time"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-29",
+    "level": "guided",
+    "text": "fractions or rough subtotals over time, and the total's change matters: absolute stacks, areas, the overall pattern of change being the point (G1.44, G1.45)",
+    "guide": [],
+    "group": "breakdowns of totals changing over time"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type, the series told apart by colour (G1.59)",
+    "guide": [],
+    "group": "breakdowns of totals changing over time"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "stacked area charts are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "breakdowns of totals changing over time"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R6-18",
+    "level": "guided",
+    "text": "stacked area charts may be new to a general audience: teach them (build the chart up, show first the familiar chart that fails, or add two or three callouts stating the obvious; G1.5), or state the insight in a sentence and keep the chart as backup (G1.6)",
+    "guide": [],
+    "group": "breakdowns of totals changing over time"
+   }
+  ],
+  "copies": []
+ },
+ "output_sha256": "79851b22a5dda86535121ce23d75be998cf2c73290170aed3445f6d29de60346"
+}

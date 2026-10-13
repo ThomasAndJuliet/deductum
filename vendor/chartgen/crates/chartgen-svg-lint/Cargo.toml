@@ -1,0 +1,16 @@
+[package]
+name = "chartgen-svg-lint"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+chartgen-model.workspace = true
+roxmltree = "0.20"
+
+chartgen-colour-space = { path = "../chartgen-colour-space" }
+regex = "1"
+serde = { workspace = true }
+
+[dev-dependencies]
+serde_json.workspace = true

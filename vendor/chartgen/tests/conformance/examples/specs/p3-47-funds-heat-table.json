@@ -1,0 +1,152 @@
+{
+ "base": {
+  "chartspec": 1,
+  "id": "p3-47-funds-heat-table",
+  "job": {
+   "kind": "lookup",
+   "text": "Look up what each event raised in each region"
+  },
+  "title": {
+   "text": "Funds Raised (US$) by Event by Region, 2021",
+   "kind": "descriptive"
+  },
+  "data": {
+   "x": {
+    "kind": "nominal",
+    "values": [
+     "South",
+     "West",
+     "East",
+     "Central",
+     "Total"
+    ],
+    "roles": {
+     "Total": "total"
+    }
+   },
+   "measure": {
+    "name": "funds raised",
+    "kind": "amount",
+    "zero": "meaningful",
+    "precision": 1,
+    "unit": {
+     "prefix": "$",
+     "what": "funds raised"
+    }
+   },
+   "series": [
+    {
+     "id": "e0",
+     "name": "5K Walk",
+     "values": [
+      133213,
+      85240,
+      112564,
+      84501,
+      415519
+     ]
+    },
+    {
+     "id": "e1",
+     "name": "Telethon",
+     "values": [
+      124864,
+      76939,
+      59710,
+      76578,
+      338091
+     ]
+    },
+    {
+     "id": "e2",
+     "name": "Pancake Breakfast",
+     "values": [
+      143532,
+      108022,
+      95531,
+      87011,
+      434096
+     ]
+    },
+    {
+     "id": "e3",
+     "name": "Country Fair",
+     "values": [
+      90896,
+      137051,
+      91057,
+      81661,
+      400665
+     ]
+    },
+    {
+     "id": "e4",
+     "name": "5K Walk",
+     "values": [
+      124161,
+      140023,
+      80571,
+      73330,
+      418085
+     ]
+    },
+    {
+     "id": "e5",
+     "name": "Black Tie Gala",
+     "values": [
+      116269,
+      70750,
+      85637,
+      82340,
+      354997
+     ]
+    },
+    {
+     "id": "total",
+     "name": "Total",
+     "role": "total",
+     "values": [
+      732935,
+      618025,
+      525071,
+      485421,
+      2361453
+     ]
+    }
+   ]
+  },
+  "facts": {
+   "message": "lookup_only"
+  },
+  "table": {
+   "names_title": "Event",
+   "stub": [
+    {
+     "title": "Date",
+     "kind": "date",
+     "values": [
+      "2021-01-05",
+      "2021-02-09",
+      "2021-03-06",
+      "2021-04-24",
+      "2021-06-13",
+      "2021-12-17",
+      ""
+     ]
+    }
+   ],
+   "graphics": "heat"
+  },
+  "layout": {
+   "width": 440
+  },
+  "reasons": {
+   "table.graphics": "the audience refuses graphs: the sizes shaded in the table (G1.16, G7.47)"
+  },
+  "source": {
+   "book": "p. 339 (s. 0309)",
+   "notes": "08-12 #9 (a)",
+   "shows": "graphics built into a table for an audience that refuses graphs (R10-9): the cells shaded by value, the body, the Total column and the totals row each on its own ramp, the grand total unshaded, the shades pale enough for the text grey (the book's greens are darker and fail 4.5 : 1); the 5K Walk total 415,519 is one more than its row, as printed; at 440 pt"
+  }
+ }
+}

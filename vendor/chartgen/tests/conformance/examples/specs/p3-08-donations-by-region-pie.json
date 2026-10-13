@@ -1,0 +1,25 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p3-08-donations-by-region-pie",
+    "job": {"kind": "lookup", "text": "Look up what fraction of the year's donations each region gave"},
+    "title": {"text": "Donations by Region, 2022", "kind": "descriptive"},
+    "data": {
+      "x": {"kind": "nominal", "values": ["West", "Int'l", "North", "East", "South", "Central"]},
+      "measure": {"name": "donations", "kind": "amount", "zero": "meaningful", "min": 0,
+                  "unit": {"prefix": "$", "magnitude": 3, "noun": "in donations"}},
+      "series": [{"id": "donations", "name": "Donations", "values": [428, 445, 142, 0, 299, 288]}],
+      "parts": {"meaningful_total": true, "all_parts": true, "overlap": false}
+    },
+    "facts": {"message": "fraction_of_total"},
+    "chart": {"type": "pie"},
+    "source": {"book": "p. 287–292 (s. 0262–0266)", "notes": "07 #15",
+               "shows": "the book's formatting sequence ended: a colour per slice, true gaps instead of borders, the labels outside, largest first clockwise from 12 o'clock, and East's $0K kept and pointed to by a leader at 12 o'clock"}
+  },
+  "variants": [
+    {"name": "unsorted",
+     "patch": {"chart": {"sort": "given"},
+               "source": {"shows": "the slices in the data's order (the nasty pie's, s. 0262), a guided departure from largest first"}},
+     "expect": {"findings": ["R2-01"]}}
+  ]
+}

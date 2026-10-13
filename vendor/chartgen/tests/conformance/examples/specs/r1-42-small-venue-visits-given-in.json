@@ -1,0 +1,86 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "r1-42-small-venue-visits-given-in",
+    "job": {
+      "kind": "lookup",
+      "text": "Look up the 2025 visits of each venue in the Small Venues Fund"
+    },
+    "title": {
+      "text": "Visits to the Small Venues Fund's Venues, 2025",
+      "kind": "descriptive"
+    },
+    "data": {
+      "x": {
+        "kind": "nominal",
+        "values": [
+          "Harbour Maritime Museum",
+          "Castle Keep & Grounds",
+          "Hartley Museum of Textiles",
+          "Victoria Mill Engine House",
+          "Ropewalk Folk Museum",
+          "St Bede's Chapel & Undercroft",
+          "Lowfield Tram Depot",
+          "Weavers' Cottages",
+          "Old Grammar School Gallery"
+        ]
+      },
+      "measure": {
+        "name": "visits",
+        "kind": "count",
+        "zero": "meaningful",
+        "min": 0,
+        "unit": {
+          "noun": "door-count visits",
+          "given_in": "thousands"
+        }
+      },
+      "series": [
+        {
+          "id": "visits",
+          "name": "Visits",
+          "values": [
+            142.3,
+            96.8,
+            88.5,
+            61.2,
+            47.9,
+            33.7,
+            29.8,
+            18.3,
+            12.1
+          ]
+        }
+      ]
+    },
+    "facts": {
+      "message": "compare"
+    },
+    "chart": {
+      "type": "auto"
+    },
+    "source": {
+      "notes": "eval B06 (the trust's figures, in thousands)",
+      "shows": "values written in thousands in the source (142.3 for 142,300), said by unit.given_in: the scale reads “150K door-count visits”; the variant also writes “thousand” in the unit's words, the magnitude stated twice (R5-11)"
+    }
+  },
+  "variants": [
+    {
+      "name": "word-too",
+      "patch": {
+        "data": {
+          "measure": {
+            "unit": {
+              "noun": "thousand door-count visits"
+            }
+          }
+        }
+      },
+      "expect": {
+        "findings": [
+          "R5-11"
+        ]
+      }
+    }
+  ]
+}

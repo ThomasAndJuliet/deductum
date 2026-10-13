@@ -1,0 +1,206 @@
+{
+ "base": {
+  "chartspec": 1,
+  "id": "p3-50-car-models-heatmap",
+  "job": {
+   "kind": "answer",
+   "text": "Which car model is best, and where is each strong or weak?"
+  },
+  "insight": {
+   "important": "Elora and Varga score best overall; Exodus is weakest, on value and comfort above all"
+  },
+  "title": {
+   "text": "Elora and Varga Score Best; Exodus Trails on Value and Comfort",
+   "kind": "insight",
+   "descriptive": "Car model comparison, reviewers' scores on 5"
+  },
+  "data": {
+   "x": {
+    "kind": "nominal",
+    "values": [
+     "Exodus",
+     "T-300",
+     "Varga",
+     "Elora"
+    ]
+   },
+   "measure": {
+    "name": "score",
+    "kind": "score",
+    "zero": "arbitrary",
+    "min": 1,
+    "max": 5,
+    "good": "higher",
+    "dividing_point": 3,
+    "unit": {
+     "what": "reviewers' score on 5"
+    }
+   },
+   "series": [
+    {
+     "id": "value",
+     "name": "Value",
+     "values": [
+      2.4,
+      2.9,
+      3.6,
+      4.5
+     ]
+    },
+    {
+     "id": "safety",
+     "name": "Safety",
+     "values": [
+      3.7,
+      3.4,
+      4.7,
+      3.6
+     ]
+    },
+    {
+     "id": "performance",
+     "name": "Performance",
+     "values": [
+      3.2,
+      2.9,
+      3.3,
+      3.3
+     ]
+    },
+    {
+     "id": "comfort",
+     "name": "Comfort",
+     "values": [
+      2.2,
+      3.3,
+      3.4,
+      4.0
+     ]
+    },
+    {
+     "id": "reliability",
+     "name": "Reliability",
+     "values": [
+      2.9,
+      2.5,
+      2.6,
+      2.8
+     ]
+    },
+    {
+     "id": "overall",
+     "name": "Overall Avg.",
+     "role": "average",
+     "values": [
+      2.9,
+      3.0,
+      3.5,
+      3.6
+     ]
+    }
+   ]
+  },
+  "source": {
+   "book": "p. 361 (s. 0329)",
+   "notes": "08-12 #16",
+   "shows": "the radar chart's replacement, asked for by name (P3-73 reaches it from the facts): a heatmap table, the models as columns and the attributes as rows, each score printed in its cell and the cells coloured on a diverging ramp about 3, the rating's midpoint that the audience reads as neutral (D-37 (c)), the Overall Avg. row a little apart; the cells strong (owner, 1 Oct 2026), each score black or white, whichever reads better on its cell, green for good and red for bad (D-18), each cell's value saying its side as well; variant rainbow, a categorical palette on the scores (refused under R3-9, drawn through an override): the lint finds nine hues (R3-21), hues where shades of one would do (R3-4) and the text unreadable on the darker ones (R5-8); variant sorted, the models ranked by their overall average, best first (a guided departure from the given order, with its reason)"
+  },
+  "facts": {
+   "message": "profiles"
+  },
+  "chart": {
+   "type": "heatmap"
+  }
+ },
+ "variants": [
+  {
+   "name": "radar",
+   "patch": {
+    "chart": {
+     "type": "radar"
+    }
+   },
+   "expect": {
+    "refused": [
+     "R12-6"
+    ]
+   }
+  },
+  {
+   "name": "no-dividing-value",
+   "patch": {
+    "data": {
+     "measure": {
+      "dividing_point": null,
+      "good": null
+     }
+    }
+   },
+   "expect": {}
+  },
+  {
+   "name": "sorted",
+   "patch": {
+    "chart": {
+     "sort": "desc",
+     "sort_by": "overall"
+    },
+    "reasons": {
+     "chart.sort": "ranked by the overall average, best first, the order answers which model is best"
+    }
+   },
+   "expect": {}
+  },
+  {
+   "name": "muted",
+   "patch": {
+    "chart": {
+     "cells": "muted"
+    },
+    "reasons": {
+     "chart.cells": "read as a table of scores with colour hinting at strengths, as the book's own (s. 0329)"
+    },
+    "source": {
+     "shows": "the same heatmap table muted (chart.cells muted, a guided departure with its reason): the steps paled so that the scores read in the text grey, for a table whose colour only hints"
+    }
+   },
+   "expect": {
+    "findings": [
+     "R12-6"
+    ]
+   }
+  },
+  {
+   "name": "rainbow",
+   "patch": {
+    "chart": {
+     "encoding": "categorical"
+    },
+    "overrides": [
+     {
+      "rule": "R3-9",
+      "reason": "the rejected version: a categorical palette on ordered values (s. 0112)"
+     },
+     {
+      "rule": "R3-21",
+      "reason": "the rejected version: a hue for each step of the scores, nine hues in one table, rebuilt to show why"
+     },
+     {
+      "rule": "R3-4",
+      "reason": "the rejected version: each attribute's cells in hues that mean no category, rebuilt to show why"
+     }
+    ]
+   },
+   "expect": {
+    "refused": [
+     "R3-9",
+     "R3-21",
+     "R3-4"
+    ],
+    "findings": [
+     "R5-8"
+    ]
+   }
+  }
+ ]
+}

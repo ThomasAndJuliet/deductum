@@ -1,0 +1,136 @@
+{
+ "key": "r1-46-library-loans-two-period-series",
+ "file": "r1-46-library-loans-two-period-series.json",
+ "variant": null,
+ "requested_type": "bar",
+ "report": {
+  "chart": "r1-46-library-loans-two-period-series",
+  "style": "plain",
+  "variant": null,
+  "type": "bar",
+  "status": "refused",
+  "decisions": [],
+  "findings": [
+   {
+    "rule": "R6-15",
+    "severity": "warn",
+    "message": "chart.type bar departs from the procedure, which gives arrow (the two series are two periods (2019, 2025) of each category: the change between them is the point (06 DP6-3, G1.46): the default is an arrow chart, each category's change in units and in % side by side (G1.47), or a chart of the change itself (the % panel alone, facts.message relative_change; or the change as bars, a previous_period comparison with transform deviation); clustered bars of the two periods only where each period's own values, not the change, are what the request needs: facts.message periods, with the reason, grounded in the request, in reasons[\"facts.message\"])",
+    "path": "chart.type",
+    "level": "guided",
+    "recommended": "arrow",
+    "guide": [],
+    "title": "two periods: an arrow chart"
+   },
+   {
+    "rule": "R6-17",
+    "severity": "error",
+    "message": "the two series are two periods (2019, 2025): drawn side by side they show each category's two values with nothing to suggest change and no change in % (the book's most common mistake, R6-14; G1.46, G1.47)",
+    "path": "data.series",
+    "supply": "for the change, the default: x the two periods (kind time, values [2019, 2025] on their grid) with a series per category, type auto (an arrow chart, the change in units and in %); or the change alone as bars (data.comparisons, kind previous_period, the 2019 values, with transform deviation, relative for %); or, where each period's own values are what the request needs, facts.message periods with the reason in reasons[\"facts.message\"]",
+    "level": "locked",
+    "guide": [],
+    "title": "change between two periods: an absolute panel always with a % panel, never clustered bars"
+   }
+  ],
+  "overrides": [],
+  "expect": {
+   "refused": [
+    "R6-17"
+   ]
+  },
+  "expect_met": true,
+  "source": {
+   "notes": "eval B08 (sonnet-G)",
+   "shows": "two series that are two periods (2019, 2025) across the branches: clustered columns, the trap, refused (R6-17), saying how to give the data for an arrow chart; drawn as clustered bars only with facts.message periods and a reason grounded in the request, shown in the report (R6-15)",
+   "status": "generated"
+  },
+  "summary": {
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job lookup: no insight stated (a descriptive title will do, D-55)",
+    "guide": [],
+    "group": "change between two periods"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-1",
+    "level": "guided",
+    "text": "a graph, the values to be compared or a pattern seen (G1.11)",
+    "guide": [],
+    "group": "change between two periods"
+   },
+   {
+    "step": 2,
+    "name": "variables",
+    "rule": "RP3-2",
+    "level": "guided",
+    "text": "one plot: categories along x and 2 series; a further variable would go to small multiples (data.dims, G1.18)",
+    "guide": [],
+    "group": "change between two periods"
+   },
+   {
+    "step": 3,
+    "name": "location",
+    "rule": "R8-2",
+    "level": "guided",
+    "text": "not a map: where the values are is not the message (facts.location_matters; G1.24, G1.25)",
+    "guide": [],
+    "group": "change between two periods"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-01",
+    "level": "guided",
+    "text": "not parts of a total (no data.parts, no breakdown message; G1.1)",
+    "guide": [],
+    "group": "change between two periods"
+   },
+   {
+    "step": 5,
+    "name": "two periods",
+    "rule": "R6-15",
+    "level": "guided",
+    "text": "group: change between two periods. The two series are two periods (2019, 2025) of each category: the change between them is the point (06 DP6-3, G1.46): the default is an arrow chart, each category's change in units and in % side by side (G1.47), or a chart of the change itself (the % panel alone, facts.message relative_change; or the change as bars, a previous_period comparison with transform deviation); clustered bars of the two periods only where each period's own values, not the change, are what the request needs: facts.message periods, with the reason, grounded in the request, in reasons[\"facts.message\"]",
+    "guide": [],
+    "group": "change between two periods"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type, the series told apart by colour (G1.59)",
+    "guide": [],
+    "group": "change between two periods"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "arrow charts are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "change between two periods"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R6-18",
+    "level": "guided",
+    "text": "arrow charts may be new to a general audience: teach them (build the chart up, show first the familiar chart that fails, or add two or three callouts stating the obvious; G1.5), or state the insight in a sentence and keep the chart as backup (G1.6)",
+    "guide": [],
+    "group": "change between two periods"
+   }
+  ],
+  "copies": []
+ }
+}

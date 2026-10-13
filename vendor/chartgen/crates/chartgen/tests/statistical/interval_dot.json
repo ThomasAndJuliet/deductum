@@ -1,0 +1,53 @@
+{
+ "chartspec": 1,
+ "purpose": "analysis",
+ "id": "detection-rate",
+ "title": {
+  "text": "Detection rate by configuration"
+ },
+ "data": {
+  "x": {
+   "kind": "nominal",
+   "values": [
+    "Full (F)",
+    "Within execution (V)",
+    "Unversioned (U)"
+   ]
+  },
+  "measure": {
+   "name": "detection rate",
+   "kind": "percent",
+   "unit": {
+    "suffix": "%",
+    "noun": "of fault cases detected"
+   },
+   "zero": "meaningful",
+   "min": 0,
+   "max": 100
+  },
+  "series": [
+   {
+    "id": "rate",
+    "name": "Detected",
+    "successes": [
+     29,
+     26,
+     18
+    ],
+    "trials": [
+     30,
+     30,
+     30
+    ]
+   }
+  ]
+ },
+ "chart": {
+  "type": "interval_dot",
+  "interval": {
+   "kind": "confidence",
+   "level": 0.95,
+   "method": "wilson"
+  }
+ }
+}

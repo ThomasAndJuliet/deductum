@@ -1,0 +1,182 @@
+{
+ "key": "r1-40-feature-usage-descriptive-wraps",
+ "file": "r1-40-feature-usage-descriptive-wraps.json",
+ "variant": null,
+ "requested_type": "bar",
+ "report": {
+  "chart": "r1-40-feature-usage-descriptive-wraps",
+  "style": "plain",
+  "variant": null,
+  "type": "bar",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "R2-24",
+    "level": "locked",
+    "text": "bars start at zero",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "scale 0–100 by 20",
+    "guide": []
+   },
+   {
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "nominal categories sorted by value, descending",
+    "guide": []
+   },
+   {
+    "rule": "R9-10",
+    "level": "locked",
+    "text": "“Invoicing” and “Expense tracking” come within 10 pt of each other under vertical bars, with every multi-word name wrapped: horizontal bars, names right-aligned at the left",
+    "guide": []
+   },
+   {
+    "rule": "R2-21",
+    "level": "locked",
+    "text": "labels as a set, 0 decimals, each with its “%” (owner, 1 Oct 2026): 0%, 20%, 40%, 60%, 80%, 100%",
+    "guide": []
+   },
+   {
+    "rule": "R2-07",
+    "level": "locked",
+    "text": "a horizontal scale of percentages: “%” on every label, and its title centred below, without “(%)” (owner, 1 Oct 2026): “Respondents using the feature”",
+    "guide": []
+   },
+   {
+    "rule": "R5-26",
+    "level": "locked",
+    "text": "the descriptive line wraps onto two lines",
+    "guide": []
+   },
+   {
+    "rule": "R3-7",
+    "level": "locked",
+    "text": "highlighted in the strong shade of their colour: Invoicing; the others keep their colour",
+    "guide": []
+   }
+  ],
+  "findings": [],
+  "overrides": [],
+  "expect": {},
+  "expect_met": true,
+  "source": {
+   "notes": "eval B05 (sonnet-G)",
+   "shows": "an overlong descriptive line wrapped onto two lines like the title (G6.7, G6.9), never left running off the canvas; one that two lines cannot hold, or Typst markup, which is not wrapped, is an error (CG-1)",
+   "status": "generated"
+  },
+  "summary": {
+   "scale": "0–100 by 20",
+   "labels": [
+    "0%",
+    "20%",
+    "40%",
+    "60%",
+    "80%",
+    "100%"
+   ],
+   "top": "100% (respondents using the feature)",
+   "scale_title": "Respondents using the feature",
+   "orientation": "horizontal",
+   "plot": [
+    90.62,
+    48.5,
+    356.33,
+    208.5
+   ],
+   "band": 20.0,
+   "width": 368.0,
+   "height": 235.77,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job make_aware: insight “Invoicing is used by four in five respondents, well ahead of every other feature”",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-1",
+    "level": "guided",
+    "text": "a graph, the values to be compared or a pattern seen (G1.11)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 2,
+    "name": "variables",
+    "rule": "RP3-2",
+    "level": "guided",
+    "text": "one plot: categories along x and 1 series; a further variable would go to small multiples (data.dims, G1.18)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 3,
+    "name": "location",
+    "rule": "R8-2",
+    "level": "guided",
+    "text": "not a map: where the values are is not the message (facts.location_matters; G1.24, G1.25)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-01",
+    "level": "guided",
+    "text": "not parts of a total (no data.parts, no breakdown message; G1.1)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 7,
+    "name": "values across categories",
+    "rule": "R9-1",
+    "level": "guided",
+    "text": "group: bar charts. Values compared across categories (G1.9)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 7,
+    "name": "values across categories",
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "one scale from zero: bars, sorted by value when the categories are nominal (02 D1)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type (G1.59)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "bar charts are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "bar charts"
+   }
+  ],
+  "copies": []
+ },
+ "output_sha256": "452d6835f812e62b73103999acb2a581387830f0cddcc173e76882bcf04a7579"
+}

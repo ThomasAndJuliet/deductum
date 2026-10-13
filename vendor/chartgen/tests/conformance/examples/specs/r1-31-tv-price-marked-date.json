@@ -1,0 +1,144 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "r1-31-tv-price-marked-date",
+    "job": {
+      "kind": "lookup",
+      "text": "Look up the TV's price on any day from April to June"
+    },
+    "title": {
+      "text": "Price of the XLCD65 TV, Apr–Jun 2022",
+      "kind": "descriptive"
+    },
+    "data": {
+      "x": {
+        "kind": "time",
+        "grid": "none",
+        "events": [
+          {
+            "at": "2022-06-08",
+            "label": "Successor model announced"
+          }
+        ]
+      },
+      "as_of": "2022-06-30",
+      "measure": {
+        "name": "price",
+        "kind": "amount",
+        "zero": "meaningful",
+        "min": 0,
+        "persistence": "state",
+        "unit": {
+          "prefix": "$",
+          "what": "price of the TV"
+        }
+      },
+      "series": [
+        {
+          "id": "price",
+          "name": "Price",
+          "points": [
+            [
+              "2022-04-01",
+              400
+            ],
+            [
+              "2022-04-27",
+              350
+            ],
+            [
+              "2022-04-30",
+              375
+            ],
+            [
+              "2022-05-02",
+              350
+            ],
+            [
+              "2022-05-03",
+              275
+            ],
+            [
+              "2022-05-05",
+              360
+            ],
+            [
+              "2022-05-06",
+              325
+            ],
+            [
+              "2022-05-23",
+              300
+            ],
+            [
+              "2022-05-26",
+              380
+            ],
+            [
+              "2022-06-08",
+              350
+            ],
+            [
+              "2022-06-18",
+              330
+            ],
+            [
+              "2022-06-25",
+              300
+            ],
+            [
+              "2022-06-30",
+              250
+            ]
+          ]
+        }
+      ]
+    },
+    "source": {
+      "notes": "evaluation round 1 (a date marked on a true time axis); p1-26",
+      "shows": "a step chart with a date marked on its axis and a comment pointing at a change of price (SPEC §6.13.12, §6.12.6)"
+    },
+    "facts": {
+      "distance_to_zero_irrelevant": true
+    },
+    "comments": [
+      {
+        "text": "The lowest price of the quarter",
+        "anchors": [
+          {
+            "series": "price",
+            "x": "2022-06-30"
+          }
+        ],
+        "answers": [
+          "explain"
+        ]
+      }
+    ]
+  },
+  "variants": [
+    {
+      "name": "outside-axis",
+      "patch": {
+        "data": {
+          "x": {
+            "events": [
+              {
+                "at": "2022-07-15",
+                "label": "Successor model on sale"
+              }
+            ]
+          }
+        },
+        "source": {
+          "shows": "a marked date after the as-of date: not drawn, a warning says why (6.13)"
+        }
+      },
+      "expect": {
+        "findings": [
+          "6.13"
+        ]
+      }
+    }
+  ]
+}

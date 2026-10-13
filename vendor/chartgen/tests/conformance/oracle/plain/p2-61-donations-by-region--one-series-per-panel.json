@@ -1,0 +1,276 @@
+{
+ "key": "p2-61-donations-by-region--one-series-per-panel",
+ "file": "p2-61-donations-by-region.json",
+ "variant": "one-series-per-panel",
+ "requested_type": "auto",
+ "report": {
+  "chart": "p2-61-donations-by-region",
+  "style": "plain",
+  "variant": "one-series-per-panel",
+  "type": "multiples of line",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "R3-3",
+    "level": "locked",
+    "text": "one colour for every mark: every variable is on the rows or columns (G7.50)",
+    "guide": []
+   },
+   {
+    "rule": "R6-4",
+    "level": "guided",
+    "text": "type line: a regular series whose pattern of change is the point (06 DP6-1, G1.51)",
+    "guide": []
+   },
+   {
+    "rule": "R6-37",
+    "level": "locked",
+    "text": "one shared scale: one scale for every panel, so that sizes compare across panels (G7.48)",
+    "guide": []
+   },
+   {
+    "rule": "R2-25",
+    "level": "locked",
+    "text": "the values are not far from zero compared with their spread",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "scale 0–60 by 20 (at most 5 intervals in a panel about 57 pt high)",
+    "guide": []
+   },
+   {
+    "rule": "R5-26",
+    "level": "locked",
+    "text": "the title wraps onto two lines",
+    "guide": []
+   },
+   {
+    "rule": "R15-5",
+    "level": "locked",
+    "text": "highlighting what the insight names",
+    "guide": []
+   },
+   {
+    "rule": "R6-27",
+    "level": "locked",
+    "text": "no point markers: no value is isolated and no straight run hides one",
+    "guide": []
+   },
+   {
+    "rule": "R6-29",
+    "level": "locked",
+    "text": "highlighted, twice as thick, in the strong shade of its hue, its label bold: Credit card, Central; the others keep their colours and widths",
+    "guide": []
+   },
+   {
+    "rule": "6.4",
+    "level": "guided",
+    "text": "the unit's description on its own line above the scale (inline it would meet the line of Credit card, Central): “in donations”; “$60K” stays on the top label",
+    "guide": []
+   },
+   {
+    "rule": "R2-21",
+    "level": "locked",
+    "text": "labels as a set, 0 decimals: 0, 20, 40, $60K",
+    "guide": []
+   },
+   {
+    "rule": "R5-10",
+    "level": "locked",
+    "text": "digits hidden: thousands, stated once on the top label (R2-05, D-3): “$60K in donations”",
+    "guide": []
+   },
+   {
+    "rule": "R6-29",
+    "level": "locked",
+    "text": "highlighted, twice as thick, in the strong shade of its hue, its label bold: Check, Central; the others keep their colours and widths",
+    "guide": []
+   },
+   {
+    "rule": "R2-40",
+    "level": "locked",
+    "text": "time axis: row 1 full, every sixth label, restarting in each group",
+    "guide": []
+   },
+   {
+    "rule": "R2-39",
+    "level": "locked",
+    "text": "time axis: row 2 (“2022”) left out, the title gives it (G2.37)",
+    "guide": []
+   },
+   {
+    "rule": "6.10",
+    "level": "locked",
+    "text": "3 × 5 panels of equal size, abutting, divided by light separators, no box round a panel (G7.51); each 57 pt wide and 57 pt high",
+    "guide": []
+   },
+   {
+    "rule": "RP3-8",
+    "level": "locked",
+    "text": "scale labels left of the first column, the unit phrase once on the first row's top label and the other rows' top labels keeping the number's currency and magnitude; time labels only under the bottom row; column headers above the top row; row headers at the left, horizontal (G7.49)",
+    "guide": []
+   }
+  ],
+  "findings": [
+   {
+    "rule": "RP3-3",
+    "severity": "info",
+    "message": "panels.arrangement rows by payment method, columns by region departs from the procedure, which gives columns by region, series in each panel by payment method (the insight compares method directly (facts.compare): drawn as series in each panel (RP3-4, G1.19); the panels facet on region)",
+    "path": "panels.arrangement",
+    "reason": "the runner-up, rendered for review (D-38 (i))",
+    "level": "guided",
+    "recommended": "columns by region, series in each panel by payment method",
+    "guide": [],
+    "title": "the arrangement of small multiples chosen for the insight, from the range of candidates"
+   }
+  ],
+  "overrides": [],
+  "expect": {
+   "findings": [
+    "RP3-3"
+   ]
+  },
+  "expect_met": true,
+  "source": {
+   "book": "p. 373 (s. 0339); p. 375 (s. 0341)",
+   "notes": "13-15 F2 (a)",
+   "shows": "the runner-up the report names, rendered for review (D-38 (i)): one series per panel, where Central's two lines sit in different rows and their shared July peak is harder to see (s. 0338)",
+   "status": "generated"
+  },
+  "summary": {
+   "arrangement": "rows by payment method, columns by region",
+   "kind": "multiples",
+   "rows": 3,
+   "columns": 5,
+   "panels": 15,
+   "scale_mode": "shared",
+   "scale": "0–60 by 20",
+   "labels": [
+    "0",
+    "20",
+    "40",
+    "$60K"
+   ],
+   "top": "$60K in donations",
+   "orientation": "vertical",
+   "scales": {
+    "Credit card, Central": "0–60 by 20",
+    "Credit card, West": "0–60 by 20",
+    "Credit card, North": "0–60 by 20",
+    "Credit card, East": "0–60 by 20",
+    "Credit card, Int'l": "0–60 by 20",
+    "Check, Central": "0–60 by 20",
+    "Check, West": "0–60 by 20",
+    "Check, North": "0–60 by 20",
+    "Check, East": "0–60 by 20",
+    "Check, Int'l": "0–60 by 20",
+    "Cash, Central": "0–60 by 20",
+    "Cash, West": "0–60 by 20",
+    "Cash, North": "0–60 by 20",
+    "Cash, East": "0–60 by 20",
+    "Cash, Int'l": "0–60 by 20"
+   },
+   "plots": {
+    "Credit card, Central": [
+     84.06,
+     77.53,
+     140.85,
+     134.32
+    ],
+    "Credit card, West": [
+     140.85,
+     77.53,
+     197.64,
+     134.32
+    ],
+    "Credit card, North": [
+     197.64,
+     77.53,
+     254.42,
+     134.32
+    ],
+    "Credit card, East": [
+     254.42,
+     77.53,
+     311.21,
+     134.32
+    ],
+    "Credit card, Int'l": [
+     311.21,
+     77.53,
+     368.0,
+     134.32
+    ],
+    "Check, Central": [
+     84.06,
+     150.05,
+     140.85,
+     206.84
+    ],
+    "Check, West": [
+     140.85,
+     150.05,
+     197.64,
+     206.84
+    ],
+    "Check, North": [
+     197.64,
+     150.05,
+     254.42,
+     206.84
+    ],
+    "Check, East": [
+     254.42,
+     150.05,
+     311.21,
+     206.84
+    ],
+    "Check, Int'l": [
+     311.21,
+     150.05,
+     368.0,
+     206.84
+    ],
+    "Cash, Central": [
+     84.06,
+     222.57,
+     140.85,
+     279.36
+    ],
+    "Cash, West": [
+     140.85,
+     222.57,
+     197.64,
+     279.36
+    ],
+    "Cash, North": [
+     197.64,
+     222.57,
+     254.42,
+     279.36
+    ],
+    "Cash, East": [
+     254.42,
+     222.57,
+     311.21,
+     279.36
+    ],
+    "Cash, Int'l": [
+     311.21,
+     222.57,
+     368.0,
+     279.36
+    ]
+   },
+   "width": 368.0,
+   "height": 295.41,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [],
+  "copies": []
+ },
+ "output_sha256": "c7448b8df8a6cf44c863593a2158996e067f32d0bc608b79e4049860762252c6"
+}

@@ -1,0 +1,154 @@
+{
+ "base": {
+  "chartspec": 1,
+  "id": "p3-38-donations-area-missing",
+  "job": {
+   "kind": "lookup",
+   "text": "Donations by region each month of 2022, for reference"
+  },
+  "title": {
+   "text": "Donations by Region, 2022",
+   "kind": "descriptive"
+  },
+  "data": {
+   "x": {
+    "kind": "time",
+    "grid": "month",
+    "values": [
+     "2022-01",
+     "2022-02",
+     "2022-03",
+     "2022-04",
+     "2022-05",
+     "2022-06",
+     "2022-07",
+     "2022-08",
+     "2022-09",
+     "2022-10",
+     "2022-11",
+     "2022-12"
+    ]
+   },
+   "measure": {
+    "name": "donations",
+    "kind": "amount",
+    "zero": "meaningful",
+    "min": 0,
+    "persistence": "summary",
+    "unit": {
+     "prefix": "$",
+     "magnitude": 3,
+     "noun": "in donations"
+    }
+   },
+   "series": [
+    {
+     "id": "east",
+     "name": "East",
+     "values": [
+      14.0,
+      20.0,
+      19.8,
+      14.9,
+      14.0,
+      19.6,
+      24.2,
+      25.6,
+      25.7,
+      23.8,
+      26.3,
+      22.4
+     ],
+     "slot": 1
+    },
+    {
+     "id": "west",
+     "name": "West",
+     "values": [
+      12.0,
+      17.3,
+      18.8,
+      10.5,
+      10.0,
+      13.6,
+      26.5,
+      25.5,
+      27.8,
+      8.0,
+      3.2,
+      4.6
+     ],
+     "slot": 2
+    },
+    {
+     "id": "north",
+     "name": "North",
+     "values": [
+      7.4,
+      8.3,
+      7.0,
+      8.7,
+      {
+       "status": "missing"
+      },
+      7.1,
+      7.0,
+      6.7,
+      11.2,
+      7.3,
+      9.2,
+      7.9
+     ],
+     "slot": 3
+    },
+    {
+     "id": "south",
+     "name": "South",
+     "values": [
+      10.0,
+      8.8,
+      12.8,
+      5.1,
+      5.3,
+      7.9,
+      9.6,
+      14.6,
+      22.4,
+      1.0,
+      10.3,
+      6.0
+     ],
+     "slot": 4
+    }
+   ],
+   "parts": {
+    "meaningful_total": true,
+    "all_parts": true,
+    "overlap": false
+   }
+  },
+  "facts": {
+   "message": "fraction_of_total",
+   "total_matters": true,
+   "focus": "pattern"
+  },
+  "source": {
+   "book": "p. 282–283 (s. 0258)",
+   "notes": "07 #14; R0-12",
+   "shows": "a look-up chart with a descriptive title (G8.2); North's May not known: the stack is not drawn there, since where the bands above North start is not known either; every band breaks round May, and the note names the part (R0-12, R9-7, G0.16)"
+  }
+ },
+ "variants": [
+  {
+   "name": "bars",
+   "patch": {
+    "facts": {
+     "focus": "periods"
+    },
+    "source": {
+     "shows": "the same as stacked bars: May's stack not drawn, its note above its slot (R0-12, R9-7)"
+    }
+   }
+  }
+ ]
+}

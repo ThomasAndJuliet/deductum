@@ -629,6 +629,7 @@ async def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dsrv", default=os.path.join(SCRATCH, "DSRVLean"))
     ap.add_argument("--skip-dsrv", action="store_true")
+    ap.add_argument("--core-fixture", help="self-contained Lake project for the existing host-core assertions")
     ap.add_argument("--skip-tiny", action="store_true")
     ap.add_argument("--skip-core", action="store_true")
     ap.add_argument("--only-core", action="store_true", help="only the host-core session on the DSRVLean copy")
@@ -638,7 +639,9 @@ async def main():
         await run_tiny()
     if not args.skip_dsrv and not args.only_core:
         await run_dsrv(args.dsrv)
-    if not args.skip_core and not args.skip_dsrv:
+    if not args.skip_core and args.core_fixture:
+        run_core(args.core_fixture)
+    elif not args.skip_core and not args.skip_dsrv:
         run_core(args.dsrv)
     print("\n%s" % ("ALL PASSED" if FAILURES == 0 else "%d FAILED" % FAILURES))
     return FAILURES

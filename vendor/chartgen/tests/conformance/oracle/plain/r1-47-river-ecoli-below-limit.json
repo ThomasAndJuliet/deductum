@@ -1,0 +1,239 @@
+{
+ "key": "r1-47-river-ecoli-below-limit",
+ "file": "r1-47-river-ecoli-below-limit.json",
+ "variant": null,
+ "requested_type": "auto",
+ "report": {
+  "chart": "r1-47-river-ecoli-below-limit",
+  "style": "plain",
+  "variant": null,
+  "type": "heatmap",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "R6-36",
+    "level": "guided",
+    "text": "type heatmap: 32 series, more than a stack of small charts holds (about 20–30): a heatmap, a row per series (G1.20, G7.35; D-28)",
+    "guide": []
+   },
+   {
+    "rule": "R6-36",
+    "level": "guided",
+    "text": "no values in the cells; the values do not fit their cells: the colour alone, read against the key (G5.13)",
+    "guide": []
+   },
+   {
+    "rule": "R12-6",
+    "level": "guided",
+    "text": "the cells strong: a heatmap, whose colour is the message: the steps at full strength (owner, 1 Oct 2026)",
+    "guide": []
+   },
+   {
+    "rule": "R3-12",
+    "level": "guided",
+    "text": "the cells: a sequential palette; no dividing value the audience sees: one ramp, darker meaning more, never diverging about the middle of the data (G4.10, D-37 (a))",
+    "guide": []
+   },
+   {
+    "rule": "G4.33",
+    "level": "guided",
+    "text": "the cells: the values are skewed (one of seven equal steps would hold 96 % of them), the pattern among the many is the message (facts.ramp_focus), and these amounts span 862 times from the 5th percentile of the positive values to the 95th, at least 100 (owner, 1 Oct 2026): logarithmic 1–2–5 steps, each a readable ratio, zero a step of its own",
+    "guide": []
+   },
+   {
+    "rule": "R4-9",
+    "level": "locked",
+    "text": "a key: a bar of the 6 classes, “E. coli count (cfu/100 mL)” above it, <1, 1, 10, 100, 1,000, 10,000 under it, and a separate entry for the 8 values not known, above the grid at its right (G5.13, s. 0204)",
+    "guide": []
+   },
+   {
+    "rule": "G4.34",
+    "level": "locked",
+    "text": "the lightest step #dceaf6: OKLab ΔE 0.073 from the page and 0.206 from the missing grey; the breaks in the key rounded and formatted as a set",
+    "guide": []
+   },
+   {
+    "rule": "R3-9",
+    "level": "locked",
+    "text": "the cells coloured in classes, sequential, logarithmic steps: <1 | 1–10 | 10–100 | 100–1,000 | 1,000–10,000 | 10,000 or more, darker meaning further from the lowest (G4.14)",
+    "guide": []
+   },
+   {
+    "rule": "R0-12",
+    "level": "locked",
+    "text": "censored values, 12 below the limit (<1): a step of their own beyond the ramp's end, its own entry in the key; apart from the 8 values not known (grey), never drawn as not known or as zero (--censored-cells: step)",
+    "guide": []
+   },
+   {
+    "rule": "R6-23",
+    "level": "locked",
+    "text": "8 values not known in grey cells, never the colour of zero (G7.35)",
+    "guide": []
+   },
+   {
+    "rule": "R2-40",
+    "level": "locked",
+    "text": "time axis: row 1 narrow",
+    "guide": []
+   },
+   {
+    "rule": "R2-37",
+    "level": "locked",
+    "text": "time axis: row 2 (“2025”) left out, the title gives it (G2.37)",
+    "guide": []
+   }
+  ],
+  "findings": [],
+  "overrides": [],
+  "expect": {},
+  "expect_met": true,
+  "source": {
+   "notes": "eval B10 (sonnet-G)",
+   "shows": "twelve results below the detection limit (<1) as a state of their own: a step of the ramp below its lowest class, “<1” in the key, apart from the eight samples not taken or lost (grey); the treatment is the style's (--censored-cells), the owner's to choose (examples/review/r1-below-limit)",
+   "status": "generated"
+  },
+  "summary": {
+   "orientation": "vertical",
+   "plot": [
+    172.47,
+    58.32,
+    368.0,
+    434.32
+   ],
+   "heatmap": {
+    "rows": [
+     "w01",
+     "w02",
+     "w03",
+     "w04",
+     "w05",
+     "w06",
+     "w07",
+     "w08",
+     "w09",
+     "w10",
+     "w11",
+     "w12",
+     "w13",
+     "w14",
+     "w15",
+     "w16",
+     "w17",
+     "w18",
+     "w19",
+     "w20",
+     "l01",
+     "l02",
+     "l03",
+     "l04",
+     "l05",
+     "l06",
+     "b01",
+     "b02",
+     "b03",
+     "b04",
+     "b05",
+     "b06"
+    ],
+    "columns": [
+     "2025-01",
+     "2025-02",
+     "2025-03",
+     "2025-04",
+     "2025-05",
+     "2025-06",
+     "2025-07",
+     "2025-08",
+     "2025-09",
+     "2025-10",
+     "2025-11",
+     "2025-12"
+    ],
+    "labelled": false,
+    "ramp": "sequential",
+    "cells": "strong",
+    "classing": "log",
+    "breaks": [
+     "10",
+     "100",
+     "1000",
+     "10000"
+    ],
+    "domain": [
+     "0",
+     null
+    ],
+    "dividing": null,
+    "key": [
+     "E. coli count (cfu/100 mL)",
+     "<1",
+     "1",
+     "10",
+     "100",
+     "1,000",
+     "10,000",
+     "Missing"
+    ],
+    "pitch": 11.75,
+    "values": null,
+    "censored": {
+     "count": 12,
+     "treatment": "step"
+    }
+   },
+   "width": 368.0,
+   "height": 450.37,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-02",
+    "level": "open",
+    "text": "purpose analysis: the maker's own exploration, refusals turned into warnings (G0.1)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-1",
+    "level": "guided",
+    "text": "a graph, the values to be compared or a pattern seen (G1.11)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 2,
+    "name": "variables",
+    "rule": "R6-36",
+    "level": "guided",
+    "text": "group: data over time. 32 series, more than a stack of small charts holds (about 20–30): a heatmap, a row per series (G1.20, G7.35; D-28)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type, the series told apart by colour (G1.59)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "heatmaps are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "data over time"
+   }
+  ],
+  "copies": []
+ },
+ "output_sha256": "2fd087ec6f8806edf731e528069104e0ee0742c26a3af68d8d0fba7e15488874"
+}

@@ -1,0 +1,259 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p2-40-clinic-efficiency",
+    "job": {
+      "kind": "persuade",
+      "text": "Persuade management to roll the new patient registration system out to every clinic"
+    },
+    "insight": {
+      "important": "The new registration system made Clinic C far more efficient",
+      "why_care": "The same gain is there for every clinic",
+      "explain": "Clinic C began trialling the system in March",
+      "action": "Roll the system out to every clinic",
+      "targets": [
+        {
+          "series": "c"
+        }
+      ],
+      "explain_anchor": {
+        "series": "c",
+        "x": "2022-03"
+      }
+    },
+    "title": {
+      "text": "Roll Out the New Registration System to Every Clinic",
+      "kind": "insight",
+      "descriptive": "Vaccinations per Nurse per Hour by Clinic, Jan–Jun 2022"
+    },
+    "data": {
+      "x": {
+        "kind": "time",
+        "grid": "month",
+        "values": [
+          "2022-01",
+          "2022-02",
+          "2022-03",
+          "2022-04",
+          "2022-05",
+          "2022-06"
+        ]
+      },
+      "measure": {
+        "name": "vaccinations per nurse per hour",
+        "kind": "quantity",
+        "zero": "meaningful",
+        "min": 0,
+        "persistence": "summary",
+        "unit": {
+          "noun": "vaccinations per nurse per hour"
+        }
+      },
+      "series": [
+        {
+          "id": "c",
+          "name": "Clinic C",
+          "values": [
+            4.5,
+            3.9,
+            4.0,
+            5.6,
+            6.0,
+            6.1
+          ]
+        },
+        {
+          "id": "d",
+          "name": "Clinic D",
+          "values": [
+            4.1,
+            4.3,
+            4.7,
+            4.3,
+            4.5,
+            4.1
+          ]
+        },
+        {
+          "id": "a",
+          "name": "Clinic A",
+          "values": [
+            3.75,
+            3.6,
+            3.7,
+            3.7,
+            4.0,
+            3.4
+          ]
+        },
+        {
+          "id": "b",
+          "name": "Clinic B",
+          "values": [
+            3.5,
+            2.9,
+            3.0,
+            3.1,
+            3.55,
+            3.1
+          ]
+        }
+      ]
+    },
+    "facts": {
+      "message": "pattern"
+    },
+    "highlight": [
+      {
+        "targets": [
+          {
+            "series": "c"
+          }
+        ],
+        "method": "auto"
+      },
+      {
+        "targets": [
+          {
+            "series": "c",
+            "x": [
+              "2022-03",
+              "2022-06"
+            ]
+          }
+        ],
+        "method": "glow",
+        "emphasis": "strong"
+      }
+    ],
+    "comments": [
+      {
+        "text": "The new registration system made Clinic C far more efficient",
+        "anchors": [
+          {
+            "series": "c",
+            "x": [
+              "2022-03",
+              "2022-06"
+            ]
+          }
+        ],
+        "answers": [
+          "important",
+          "why_care"
+        ]
+      },
+      {
+        "text": "Clinic C began trialling the system in March",
+        "anchors": [
+          {
+            "series": "c",
+            "x": "2022-03"
+          }
+        ],
+        "answers": [
+          "explain"
+        ]
+      }
+    ],
+    "source": {
+      "book": "p. 400 (s. 0366); p. 389–391 (s. 0355–0357); p. 417 (s. 0382)",
+      "notes": "13-15 F7",
+      "shows": "the recommended action as the title; Clinic C twice as thick with a flat glow on the stretch the insight is about, asked for with a strong emphasis: with four line colours in use the glow takes a pale tint of C's own hue rather than the complement (the book's light orange), which could be read as another clinic; a comment beside it saying what matters, and one at March saying what explains it, each with a thin arrow (R15-1, R15-2, G8.4, G8.7)"
+    }
+  },
+  "variants": [
+    {
+      "name": "interpretation-free",
+      "patch": {
+        "title": {
+          "text": "Vaccinations per Nurse per Hour by Clinic, Jan–Jun 2022",
+          "kind": "descriptive",
+          "descriptive": null
+        },
+        "highlight": null,
+        "comments": null,
+        "source": {
+          "shows": "the book’s “interpretation-free” version: a title that only names the data, nothing highlighted, no callout; the job is to persuade, so it is refused (G8.2, D-55)"
+        }
+      },
+      "expect": {
+        "refused": [
+          "R0-10"
+        ]
+      }
+    },
+    {
+      "name": "lookup",
+      "patch": {
+        "job": {
+          "kind": "lookup",
+          "text": "Look up each clinic's vaccinations per nurse per hour"
+        },
+        "insight": null,
+        "title": {
+          "text": "Vaccinations per Nurse per Hour by Clinic, Jan–Jun 2022",
+          "kind": "descriptive",
+          "descriptive": null
+        },
+        "highlight": null,
+        "comments": null,
+        "source": {
+          "shows": "the same chart made for looking values up: a descriptive title, nothing highlighted, no callout (D-55)"
+        }
+      }
+    },
+    {
+      "name": "callout-only",
+      "patch": {
+        "title": {
+          "text": "Vaccinations per Nurse per Hour by Clinic, Jan–Jun 2022",
+          "kind": "descriptive",
+          "descriptive": null
+        },
+        "source": {
+          "shows": "a descriptive title, the insight stated by the callout instead (G8.2: in the title, in callouts or in both)"
+        }
+      }
+    },
+    {
+      "name": "margin",
+      "patch": {
+        "comments": [
+          {
+            "text": "The new registration system made Clinic C far more efficient",
+            "anchors": [
+              {
+                "series": "c",
+                "x": [
+                  "2022-03",
+                  "2022-06"
+                ]
+              }
+            ],
+            "answers": [
+              "important",
+              "why_care"
+            ],
+            "placement": "right"
+          },
+          {
+            "text": "Clinic C began trialling the system in March",
+            "anchors": [
+              {
+                "series": "c",
+                "x": "2022-03"
+              }
+            ],
+            "answers": [
+              "explain"
+            ]
+          }
+        ],
+        "source": {
+          "shows": "the book's own placement: the comment on what matters in a column at the right, beside the line ends (s. 0366); the chart is laid out again narrower to leave it"
+        }
+      }
+    }
+  ]
+}

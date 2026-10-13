@@ -1,0 +1,219 @@
+{
+ "key": "p2-05-sales-by-product-line",
+ "file": "p2-05-sales-by-product-line.json",
+ "variant": null,
+ "requested_type": "auto",
+ "report": {
+  "chart": "p2-05-sales-by-product-line",
+  "style": "plain",
+  "variant": null,
+  "type": "bar",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "type bar: categories compared by value",
+    "guide": []
+   },
+   {
+    "rule": "R9-11",
+    "level": "guided",
+    "text": "clustered bars: 2 series of one measure across categories (G1.56, R9-12)",
+    "guide": []
+   },
+   {
+    "rule": "R2-24",
+    "level": "locked",
+    "text": "bars start at zero",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "scale 0–3,000 by 500",
+    "guide": []
+   },
+   {
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "nominal categories sorted by value, descending (by series dom)",
+    "guide": []
+   },
+   {
+    "rule": "R9-12",
+    "level": "locked",
+    "text": "2 series side by side in each cluster, the bars touching, in the same order in every cluster: Domestic (slot 1), International (slot 2) (G7.5, G4.22)",
+    "guide": []
+   },
+   {
+    "rule": "R9-10",
+    "level": "locked",
+    "text": "“Guitars” and “Drums” come within 10 pt of each other under vertical bars, with every multi-word name wrapped: horizontal bars, names right-aligned at the left",
+    "guide": []
+   },
+   {
+    "rule": "R2-21",
+    "level": "locked",
+    "text": "labels as a set, 1 decimals, bare numbers: 0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0",
+    "guide": []
+   },
+   {
+    "rule": "R5-10",
+    "level": "locked",
+    "text": "digits hidden: millions, stated in the scale's title (R2-05, D-3): “Sales ($ million)”",
+    "guide": []
+   },
+   {
+    "rule": "R2-07",
+    "level": "locked",
+    "text": "a horizontal scale: bare numbers, and its title centred below with the unit in parentheses: “Sales ($ million)”",
+    "guide": []
+   },
+   {
+    "rule": "R4-1",
+    "level": "guided",
+    "text": "the colours of a cluster run top to bottom: each series named beside its bar of the last cluster, in the order of the bars (G5.1, D-31 (c))",
+    "guide": []
+   }
+  ],
+  "findings": [],
+  "overrides": [],
+  "expect": {},
+  "expect_met": true,
+  "source": {
+   "book": "p. 136 (s. 0126)",
+   "notes": "03-04 #12",
+   "shows": "the book's data the other way round: the ten product lines as the categories and the two markets as the series, so two colours instead of ten; the names do not fit under columns, so the clusters turn, and their colours, running top to bottom, are named beside the bars of the last cluster (D-31 (c))",
+   "status": "generated"
+  },
+  "summary": {
+   "scale": "0–3,000 by 500",
+   "labels": [
+    "0.0",
+    "0.5",
+    "1.0",
+    "1.5",
+    "2.0",
+    "2.5",
+    "3.0"
+   ],
+   "top": "$3.0 million in sales",
+   "scale_title": "Sales ($ million)",
+   "orientation": "horizontal",
+   "plot": [
+    83.91,
+    21.03,
+    361.61,
+    354.63
+   ],
+   "band": 33.36,
+   "series": [
+    "dom",
+    "intl"
+   ],
+   "labelling": "direct",
+   "value_labels": false,
+   "table": false,
+   "bar": 11.12,
+   "width": 368.0,
+   "height": 382.44,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job lookup: no insight stated (a descriptive title will do, D-55)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-1",
+    "level": "guided",
+    "text": "a graph, the values to be compared or a pattern seen (G1.11)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 2,
+    "name": "variables",
+    "rule": "RP3-2",
+    "level": "guided",
+    "text": "one plot: categories along x and 2 series; a further variable would go to small multiples (data.dims, G1.18)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 3,
+    "name": "location",
+    "rule": "R8-2",
+    "level": "guided",
+    "text": "not a map: where the values are is not the message (facts.location_matters; G1.24, G1.25)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-01",
+    "level": "guided",
+    "text": "not parts of a total (no data.parts, no breakdown message; G1.1)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 7,
+    "name": "values across categories",
+    "rule": "R9-1",
+    "level": "guided",
+    "text": "group: bar charts. Values compared across categories (G1.9)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 7,
+    "name": "values across categories",
+    "rule": "R9-11",
+    "level": "guided",
+    "text": "2 series of one measure: clustered bars (G1.56); several measures would be a merged chart (data.measures), never a dual axis",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 7,
+    "name": "values across categories",
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "bars from zero (02 D1)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type, the series told apart by colour (G1.59)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "bar charts are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "bar charts"
+   }
+  ],
+  "copies": []
+ },
+ "output_sha256": "2d2978699ef36c0275b3204f1b0526bd95341a8c7e4fe18f484af430f0b6b909"
+}

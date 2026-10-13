@@ -1,0 +1,89 @@
+{
+ "key": "p3-40-funds-raised-table--stripes-refused",
+ "file": "p3-40-funds-raised-table.json",
+ "variant": "stripes-refused",
+ "requested_type": "auto",
+ "report": {
+  "chart": "p3-40-funds-raised-table",
+  "style": "plain",
+  "variant": "stripes-refused",
+  "type": "table",
+  "status": "refused",
+  "decisions": [
+   {
+    "rule": "R10-11",
+    "level": "guided",
+    "text": "type table: a table alone: its sole use is looking up individual values (facts.message lookup_only; G1.12)",
+    "guide": []
+   }
+  ],
+  "findings": [
+   {
+    "rule": "R10-16",
+    "severity": "error",
+    "message": "zebra stripes add clutter, and a shaded row looks highlighted; rows set well apart are scanned without them",
+    "path": "table.stripes",
+    "supply": "no stripes",
+    "level": "locked",
+    "guide": [],
+    "title": "no zebra stripes"
+   }
+  ],
+  "overrides": [],
+  "expect": {
+   "refused": [
+    "R10-16"
+   ]
+  },
+  "expect_met": true,
+  "source": {
+   "book": "p. 344–349 (s. 0314–0318)",
+   "notes": "08-12 #8",
+   "shows": "a table alone for looking values up, formatted in the book's order: every digit (whole dollars are required), two thin rules and no grid, the rows set well apart with no stripes, a wider gutter before the Total column, dates of fixed width, the numbers right-aligned and bare, the unit once in the title, nothing bold but the title, the three outliers on a light grey fill; the dates of the book's earlier versions (21 Jul, 1 Sep: its last version has 21 Jun and 1 Oct); at 480 pt, wider than the text",
+   "status": "generated"
+  },
+  "summary": {
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job lookup: no insight stated (a descriptive title will do, D-55)",
+    "guide": [],
+    "group": "tables"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-11",
+    "level": "guided",
+    "text": "group: tables. A table alone: its sole use is looking up individual values (facts.message lookup_only; G1.12)",
+    "guide": [],
+    "group": "tables"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type, the series told apart by colour (G1.59)",
+    "guide": [],
+    "group": "tables"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "tables are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "tables"
+   }
+  ],
+  "copies": []
+ }
+}

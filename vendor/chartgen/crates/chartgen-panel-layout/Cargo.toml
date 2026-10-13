@@ -1,0 +1,12 @@
+[package]
+name = "chartgen-panel-layout"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+chartgen-model.workspace = true
+chartgen-layout = { path = "../chartgen-layout" }
+chartgen-panels = { path = "../chartgen-panels" }
+serde_json.workspace = true
+

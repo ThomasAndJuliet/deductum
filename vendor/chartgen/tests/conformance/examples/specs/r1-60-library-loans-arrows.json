@@ -1,0 +1,133 @@
+{
+ "chartspec": 1,
+ "id": "r1-60-library-loans-arrows",
+ "job": {
+  "kind": "make_aware",
+  "text": "Give councillors, ahead of the budget round, a fair picture of how loans changed at every branch between 2019 and 2025, so that the claim 'Central is the problem' can be weighed"
+ },
+ "insight": {
+  "important": "Central lost the most loans (61,400), but in proportion it fell less (−18 %) than Westbrook and Riverside (about −41 %) and Hartley Green (−25 %); St Mary's and Oakham grew",
+  "targets": [
+   {
+    "series": "central"
+   },
+   {
+    "series": "westbrook"
+   },
+   {
+    "series": "riverside"
+   }
+  ]
+ },
+ "title": {
+  "text": "Central Lost the Most Loans, but Westbrook and Riverside Lost Over 40 %, More Than Twice Central's 18 %",
+  "kind": "insight",
+  "descriptive": "Physical loans by branch (no renewals or e-books), 2019 and 2025"
+ },
+ "data": {
+  "x": {
+   "kind": "time",
+   "grid": "year",
+   "values": [
+    "2019",
+    "2025"
+   ]
+  },
+  "measure": {
+   "name": "loans",
+   "kind": "count",
+   "zero": "meaningful",
+   "min": 0,
+   "persistence": "summary",
+   "good": "higher",
+   "unit": {
+    "noun": "physical items issued",
+    "scale_title": "Loans (thousands of physical items issued)"
+   }
+  },
+  "series": [
+   {
+    "id": "central",
+    "name": "Central",
+    "values": [
+     341200.0,
+     279800.0
+    ]
+   },
+   {
+    "id": "northfield",
+    "name": "Northfield",
+    "values": [
+     118600.0,
+     104300.0
+    ]
+   },
+   {
+    "id": "hartley-green",
+    "name": "Hartley Green",
+    "values": [
+     96400.0,
+     71900.0
+    ]
+   },
+   {
+    "id": "st-marys",
+    "name": "St Mary's",
+    "values": [
+     64800.0,
+     69700.0
+    ]
+   },
+   {
+    "id": "riverside",
+    "name": "Riverside",
+    "values": [
+     52300.0,
+     30900.0
+    ]
+   },
+   {
+    "id": "oakham",
+    "name": "Oakham",
+    "values": [
+     41700.0,
+     44800.0
+    ]
+   },
+   {
+    "id": "westbrook",
+    "name": "Westbrook",
+    "values": [
+     22100.0,
+     12900.0
+    ]
+   },
+   {
+    "id": "lowther-park",
+    "name": "Lowther Park",
+    "values": [
+     {
+      "status": "missing",
+      "note": "opened Sept. 2021"
+     },
+     38600.0
+    ]
+   }
+  ]
+ },
+ "facts": {
+  "message": "change"
+ },
+ "chart": {
+  "type": "auto"
+ },
+ "labels": {
+  "notes": {
+   "missing": "(opened 2021)"
+  }
+ },
+ "source": {
+  "shows": "short changes in an arrow chart (eval round 1, B08): St Mary's and Oakham rose by under 3 pt of the scale, less than a head and its start dot; their heads must still say which way they changed (--arrow-short-head, review r1-arrows)",
+  "status": "generated"
+ }
+}

@@ -1,0 +1,27 @@
+name: Publish private Flatpak
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  schedule:
+    - cron: '17 */12 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: write
+  id-token: write
+jobs:
+  publish:
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    uses: ThomasAndJuliet/neo-infrastructure/.github/workflows/publish-flatpak.yml@main
+    with:
+      app_id: dev.twright.Deductum
+      minimum_run_number: ${{ vars.NEO_CI_MINIMUM_RUN_NUMBER || '1' }}
+      artifact_name: home-apps-x86_64
+      run_id: ${{ github.event_name == 'workflow_run' && format('{0}', github.event.workflow_run.id) || '' }}

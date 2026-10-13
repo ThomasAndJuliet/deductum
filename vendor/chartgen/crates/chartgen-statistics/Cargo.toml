@@ -1,0 +1,9 @@
+[package]
+name = "chartgen-statistics"
+version.workspace = true
+edition.workspace = true
+description = "Descriptive statistics and the input models of chartgen's statistical chart types: no geometry, no I/O"
+publish = false
+
+[dependencies]
+serde_json = { workspace = true }

@@ -1,0 +1,181 @@
+{
+ "base": {
+  "chartspec": 1,
+  "id": "p2-67-regional-expenses",
+  "job": {
+   "kind": "answer",
+   "text": "How did the three most expensive departments compare within each region?"
+  },
+  "insight": {
+   "important": "HR outspent Operations only in the West",
+   "targets": [
+    {
+     "category": "HR",
+     "panel": "West"
+    }
+   ]
+  },
+  "title": {
+   "text": "HR Outspent Operations Only in the West",
+   "kind": "insight",
+   "descriptive": "Expenses of the Three Most Expensive Departments by Region, 2022"
+  },
+  "data": {
+   "x": {
+    "kind": "nominal",
+    "values": [
+     "Operations",
+     "HR",
+     "Finance"
+    ]
+   },
+   "measure": {
+    "name": "expenses",
+    "kind": "amount",
+    "zero": "meaningful",
+    "min": 0,
+    "unit": {
+     "prefix": "$",
+     "what": "expenses",
+     "magnitude": 3
+    }
+   },
+   "dims": [
+    {
+     "id": "region",
+     "name": "region",
+     "values": [
+      "East",
+      "Central",
+      "West"
+     ]
+    }
+   ],
+   "series": [
+    {
+     "id": "east",
+     "name": "East",
+     "keys": {
+      "region": "East"
+     },
+     "values": [
+      1277,
+      755,
+      566
+     ]
+    },
+    {
+     "id": "central",
+     "name": "Central",
+     "keys": {
+      "region": "Central"
+     },
+     "values": [
+      843,
+      655,
+      655
+     ]
+    },
+    {
+     "id": "west",
+     "name": "West",
+     "keys": {
+      "region": "West"
+     },
+     "values": [
+      824,
+      879,
+      318
+     ]
+    }
+   ]
+  },
+  "source": {
+   "book": "p. 271 (s. 0249, chart D)",
+   "notes": "07 #12 (top-3 variant)",
+   "shows": "the book's merged bars for several totals of which only some parts are shown: one panel per region, the departments once at the left, one shared scale repeated under each panel and titled once; not a stacked bar or pie, which would suggest all parts are shown (G1.42); the names do not fit under columns in panels this narrow, so the bars run horizontally; West's HR bar in the strong shade (a highlight named by panel and category)"
+  }
+ },
+ "variants": [
+  {
+   "name": "all-departments",
+   "patch": {
+    "job": {
+     "kind": "lookup",
+     "text": "Look up each department's expenses in each region"
+    },
+    "insight": null,
+    "title": {
+     "text": "Expenses by Department and Region, 2022",
+     "kind": "descriptive",
+     "descriptive": null
+    },
+    "data": {
+     "x": {
+      "kind": "nominal",
+      "values": [
+       "Operations",
+       "HR",
+       "Finance",
+       "Outreach",
+       "PR",
+       "Development"
+      ]
+     },
+     "series": [
+      {
+       "id": "east",
+       "name": "East",
+       "keys": {
+        "region": "East"
+       },
+       "values": [
+        1277,
+        755,
+        566,
+        238,
+        176,
+        99
+       ]
+      },
+      {
+       "id": "central",
+       "name": "Central",
+       "keys": {
+        "region": "Central"
+       },
+       "values": [
+        843,
+        655,
+        655,
+        249,
+        154,
+        88
+       ]
+      },
+      {
+       "id": "west",
+       "name": "West",
+       "keys": {
+        "region": "West"
+       },
+       "values": [
+        824,
+        879,
+        318,
+        236,
+        143,
+        91
+       ]
+      }
+     ]
+    },
+    "source": {
+     "book": "p. 270 (s. 0248)",
+     "notes": "07 #12",
+     "shows": "every department, a look-up chart: the same merged form, one panel per region on one scale"
+    }
+   }
+  }
+ ]
+}

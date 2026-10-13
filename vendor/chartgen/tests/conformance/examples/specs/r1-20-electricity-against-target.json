@@ -1,0 +1,237 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "r1-20-electricity-against-target",
+    "job": {
+      "kind": "make_aware",
+      "text": "Show the estates committee which buildings used more electricity in 2025 than their reduction targets, and which went past the Board's 5 % threshold"
+    },
+    "insight": {
+      "important": "Sports Centre (+11 %) and Medical Sciences (+8 %) were more than 5 % over their 2025 targets; three more buildings were over by less",
+      "targets": [
+        {
+          "category": "Sports Centre"
+        },
+        {
+          "category": "Medical Sciences"
+        }
+      ]
+    },
+    "title": {
+      "text": "Sports Centre and Medical Sciences Went More Than 5% Over Their Electricity Targets",
+      "kind": "insight",
+      "descriptive": "Electricity use against target by building, 2025"
+    },
+    "data": {
+      "x": {
+        "kind": "nominal",
+        "values": [
+          "Library",
+          "Students' Union",
+          "Sports Centre",
+          "Chemistry Building",
+          "Engineering Workshops",
+          "Arts Tower",
+          "Medical Sciences",
+          "Data Centre",
+          "Ridgeway Halls",
+          "Castle Court Halls"
+        ]
+      },
+      "measure": {
+        "name": "electricity use",
+        "kind": "amount",
+        "zero": "meaningful",
+        "min": 0,
+        "good": "lower",
+        "unit": {
+          "suffix": " MWh",
+          "what": "electricity used in 2025"
+        }
+      },
+      "series": [
+        {
+          "id": "use",
+          "name": "Electricity used",
+          "values": [
+            1284,
+            612,
+            1577,
+            2236,
+            948,
+            701,
+            1905,
+            3412,
+            1118,
+            834
+          ]
+        }
+      ],
+      "comparisons": [
+        {
+          "id": "target",
+          "kind": "target",
+          "label": "2025 target",
+          "values": [
+            1250,
+            640,
+            1420,
+            2180,
+            1010,
+            760,
+            1760,
+            3300,
+            1190,
+            845
+          ],
+          "reason": "the estates office's 2025 reduction targets"
+        },
+        {
+          "id": "threshold",
+          "kind": "tolerance",
+          "label": "Board's threshold, 5% over target",
+          "values": [
+            1312.5,
+            672,
+            1491,
+            2289,
+            1060.5,
+            798,
+            1848,
+            3465,
+            1249.5,
+            887.25
+          ],
+          "reason": "the Board's line between a small overrun and a large one"
+        }
+      ]
+    },
+    "transform": {
+      "kind": "deviation",
+      "comparison": "target",
+      "relative": true
+    },
+    "facts": {
+      "message": "compare"
+    },
+    "chart": {
+      "type": "auto"
+    },
+    "source": {
+      "notes": "evaluation round 1, B09 (opus-G attempt 1)",
+      "shows": "two references on one chart: under a deviation from each building's target, the Board's threshold, given as 5 % over each target, is taken as a deviation too, +5 % for every building, and drawn as one line across the plot, labelled above it (SPEC §6.12.1, §6.12.2)"
+    }
+  },
+  "variants": [
+    {
+      "name": "targets-in-kwh",
+      "patch": {
+        "data": {
+          "comparisons": [
+            {
+              "id": "target",
+              "kind": "target",
+              "label": "2025 target",
+              "values": [
+                1250000,
+                640000,
+                1420000,
+                2180000,
+                1010000,
+                760000,
+                1760000,
+                3300000,
+                1190000,
+                845000
+              ],
+              "unit": {
+                "suffix": " kWh"
+              },
+              "factor": 0.001,
+              "reason": "the estates office's targets, given in kWh"
+            },
+            {
+              "id": "threshold",
+              "kind": "tolerance",
+              "label": "Board's threshold, 5% over target",
+              "values": [
+                1312500,
+                672000,
+                1491000,
+                2289000,
+                1060500,
+                798000,
+                1848000,
+                3465000,
+                1249500,
+                887250
+              ],
+              "unit": {
+                "suffix": " kWh"
+              },
+              "factor": 0.001,
+              "reason": "the Board's threshold, from the targets in kWh"
+            }
+          ]
+        }
+      },
+      "expect": {}
+    },
+    {
+      "name": "kwh-without-factor",
+      "patch": {
+        "data": {
+          "comparisons": [
+            {
+              "id": "target",
+              "kind": "target",
+              "label": "2025 target",
+              "values": [
+                1250000,
+                640000,
+                1420000,
+                2180000,
+                1010000,
+                760000,
+                1760000,
+                3300000,
+                1190000,
+                845000
+              ],
+              "unit": {
+                "suffix": " kWh"
+              },
+              "reason": "the estates office's targets, given in kWh"
+            },
+            {
+              "id": "threshold",
+              "kind": "tolerance",
+              "label": "Board's threshold, 5% over target",
+              "values": [
+                1312500,
+                672000,
+                1491000,
+                2289000,
+                1060500,
+                798000,
+                1848000,
+                3465000,
+                1249500,
+                887250
+              ],
+              "unit": {
+                "suffix": " kWh"
+              },
+              "reason": "the Board's threshold, from the targets in kWh"
+            }
+          ]
+        }
+      },
+      "expect": {
+        "refused": [
+          "R2-13"
+        ]
+      }
+    }
+  ]
+}

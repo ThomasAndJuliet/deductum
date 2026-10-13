@@ -1,0 +1,86 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p1-19-transactions-per-day",
+    "job": {
+      "kind": "lookup",
+      "text": "Look up the successful transactions on the days they were counted, close as they are"
+    },
+    "title": {
+      "text": "Successful Transactions per Day, Feb.–Mar. 2022",
+      "kind": "descriptive"
+    },
+    "data": {
+      "x": {
+        "kind": "time",
+        "grid": "day",
+        "values": [
+          "2022-02-23",
+          "2022-02-24",
+          "2022-02-25",
+          "2022-02-26",
+          "2022-02-27",
+          "2022-02-28",
+          "2022-03-01",
+          "2022-03-02",
+          "2022-03-03",
+          "2022-03-04",
+          "2022-03-05",
+          "2022-03-06",
+          "2022-03-07",
+          "2022-03-08",
+          "2022-03-09"
+        ]
+      },
+      "measure": {
+        "name": "successful transactions",
+        "kind": "count",
+        "zero": "meaningful",
+        "min": 0,
+        "persistence": "summary",
+        "unit": {
+          "noun": "successful transactions per day"
+        }
+      },
+      "series": [
+        {
+          "id": "transactions",
+          "name": "Successful transactions",
+          "values": [
+            137.8,
+            null,
+            null,
+            null,
+            140.9,
+            138.4,
+            null,
+            null,
+            137.8,
+            null,
+            138.1,
+            null,
+            null,
+            141.4,
+            null
+          ]
+        }
+      ]
+    },
+    "facts": {
+      "small_differences_matter": true
+    },
+    "chart": {
+      "type": "auto"
+    },
+    "inset": {
+      "kind": "narrow_range",
+      "position": "below",
+      "compact_main": true
+    },
+    "source": {
+      "book": "p. 85 (s. 0082)",
+      "notes": "02 #14",
+      "shows": "a sparse series over two months as a dot plot (6 of 15 days known, R6-2), row 2 of the time axis naming both months with a divider between them; the main scale keeps zero because the values are counts and nothing declares the distance to zero irrelevant (R2-22, D-10 (a)): 0–150 by 50, where the book draws 0–160 by 20 (a known deviation of the step procedure, 02 D5); compact, with the narrow-range inset below it as in the book, as high as the main chart, 137–142 by 1 where the book starts a step lower at 136, the dots at the same slots, not faded; the compact layout shares one time axis, the main chart’s, between the panels (the book gives no year; 2022 is ours)"
+    }
+  }
+}

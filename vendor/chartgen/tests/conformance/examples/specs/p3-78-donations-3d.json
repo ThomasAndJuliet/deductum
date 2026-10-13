@@ -1,0 +1,111 @@
+{
+ "base": {
+  "chartspec": 1,
+  "id": "p3-78-donations-3d",
+  "job": {
+   "kind": "lookup",
+   "text": "Look up each region's donations by payment method"
+  },
+  "title": {
+   "text": "Donations by Region and Payment Method, 2022",
+   "kind": "descriptive"
+  },
+  "data": {
+   "x": {
+    "kind": "nominal",
+    "values": [
+     "South",
+     "North",
+     "Central",
+     "West",
+     "East",
+     "Int'l"
+    ]
+   },
+   "measure": {
+    "name": "donations",
+    "kind": "amount",
+    "zero": "meaningful",
+    "min": 0,
+    "unit": {
+     "prefix": "$",
+     "magnitude": 3,
+     "noun": "in donations"
+    }
+   },
+   "series": [
+    {
+     "id": "card",
+     "name": "Credit card",
+     "values": [
+      66,
+      58,
+      34,
+      27,
+      21,
+      17
+     ]
+    },
+    {
+     "id": "check",
+     "name": "Check",
+     "values": [
+      73,
+      63,
+      38,
+      30,
+      27,
+      17
+     ]
+    },
+    {
+     "id": "cash",
+     "name": "Cash",
+     "values": [
+      85,
+      60,
+      42,
+      36,
+      27,
+      18
+     ]
+    },
+    {
+     "id": "debit",
+     "name": "Debit",
+     "values": [
+      50,
+      69,
+      49,
+      38,
+      30,
+      21
+     ]
+    }
+   ]
+  },
+  "source": {
+   "book": "p. 363–364 (s. 0330–0331)",
+   "notes": "08-12 #17",
+   "shows": "a third variable as the series of clustered bars, flat (R12-8), where the book's 3-D chart put it on a z-axis"
+  }
+ },
+ "variants": [
+  {
+   "name": "3d",
+   "patch": {
+    "chart": {
+     "type": "3d"
+    },
+    "source": {
+     "shows": "the 3-D chart asked for: refused, perspective distorting the values and the front bars hiding the back ones (R12-7, R12-8, G1.61 [L])"
+    }
+   },
+   "expect": {
+    "refused": [
+     "R12-7"
+    ]
+   }
+  }
+ ]
+}

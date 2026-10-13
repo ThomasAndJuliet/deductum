@@ -1,0 +1,167 @@
+{
+ "base": {
+  "chartspec": 1,
+  "id": "p3-52-satisfaction-heatmap",
+  "job": {
+   "kind": "make_aware",
+   "text": "Show which stores fall short of the rating customers count as satisfied, and where"
+  },
+  "insight": {
+   "important": "Wells and Ripon fell short of a satisfied 7 in every department; checkout was the weakest almost everywhere"
+  },
+  "title": {
+   "text": "Wells and Ripon Fall Short of a Satisfied 7 Everywhere",
+   "kind": "insight",
+   "descriptive": "Customer satisfaction (on 10) by store and department, 2022 (synthetic data)"
+  },
+  "data": {
+   "x": {
+    "kind": "nominal",
+    "values": [
+     "Leeds",
+     "York",
+     "Bath",
+     "Derby",
+     "Hull",
+     "Ely",
+     "Wells",
+     "Ripon"
+    ]
+   },
+   "measure": {
+    "name": "customer satisfaction",
+    "kind": "score",
+    "zero": "arbitrary",
+    "min": 1,
+    "max": 10,
+    "good": "higher",
+    "dividing_point": 7,
+    "unit": {
+     "what": "on 10"
+    }
+   },
+   "series": [
+    {
+     "id": "grocery",
+     "name": "Grocery",
+     "values": [
+      8.4,
+      8.3,
+      7.7,
+      7.3,
+      6.7,
+      6.5,
+      6.3,
+      5.4
+     ]
+    },
+    {
+     "id": "bakery",
+     "name": "Bakery",
+     "values": [
+      9.1,
+      8.5,
+      8.2,
+      7.8,
+      6.8,
+      7.2,
+      6.5,
+      5.7
+     ]
+    },
+    {
+     "id": "deli",
+     "name": "Deli",
+     "values": [
+      7.5,
+      7.1,
+      7.0,
+      6.8,
+      6.6,
+      6.1,
+      5.7,
+      4.6
+     ]
+    },
+    {
+     "id": "produce",
+     "name": "Produce",
+     "values": [
+      8.5,
+      8.1,
+      7.5,
+      7.8,
+      7.1,
+      6.9,
+      5.7,
+      5.0
+     ]
+    },
+    {
+     "id": "pharmacy",
+     "name": "Pharmacy",
+     "values": [
+      8.6,
+      8.3,
+      8.2,
+      7.7,
+      7.1,
+      6.5,
+      6.0,
+      5.9
+     ]
+    },
+    {
+     "id": "checkout",
+     "name": "Checkout",
+     "values": [
+      7.2,
+      7.1,
+      6.8,
+      5.9,
+      5.9,
+      5.9,
+      4.3,
+      4.1
+     ]
+    }
+   ]
+  },
+  "facts": {
+   "message": "profiles"
+  },
+  "chart": {
+   "value_labels": "off"
+  },
+  "reasons": {
+   "chart.value_labels": "where each store stands against 7 is the message, read from the colours against their key; the scores themselves are not"
+  },
+  "source": {
+   "book": "p. 126–128 (s. 0118)",
+   "notes": "03-04 #9",
+   "shows": "a diverging ramp whose dividing value is the audience's, 7 on a 10-point rating, not the middle of the scale (R3-13, G4.11): two ramps meeting at a light grey at 7, intensity growing with the distance from it, symmetric about 7 and cut at the scale's maximum, so that the key's tick at 7 stands right of its middle (R3-14, R4-9); the values left out so that the key is read (a guided departure, with its reason); red below 7 and green above (D-18); synthetic ratings (the book shows only keys)"
+  }
+ },
+ "variants": [
+  {
+   "name": "no-dividing-value",
+   "patch": {
+    "data": {
+     "measure": {
+      "dividing_point": null,
+      "good": null
+     }
+    }
+   },
+   "expect": {}
+  },
+  {
+   "name": "values",
+   "patch": {
+    "chart": null,
+    "reasons": null
+   },
+   "expect": {}
+  }
+ ]
+}

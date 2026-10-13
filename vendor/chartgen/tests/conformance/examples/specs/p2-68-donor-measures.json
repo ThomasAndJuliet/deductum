@@ -1,0 +1,118 @@
+{
+ "base": {
+  "chartspec": 1,
+  "id": "p2-68-donor-measures",
+  "job": {
+   "kind": "lookup",
+   "text": "Look up each region's average donation, donor satisfaction and household income"
+  },
+  "title": {
+   "text": "Average Donation, Donor Satisfaction and Household Income by Region",
+   "kind": "descriptive"
+  },
+  "data": {
+   "x": {
+    "kind": "nominal",
+    "values": [
+     "West",
+     "Central",
+     "East"
+    ]
+   },
+   "measures": [
+    {
+     "id": "donation",
+     "name": "avg. donation",
+     "kind": "amount",
+     "zero": "meaningful",
+     "min": 0,
+     "unit": {
+      "prefix": "$",
+      "what": "avg. donation"
+     }
+    },
+    {
+     "id": "satisfaction",
+     "name": "donor satisfaction",
+     "kind": "score",
+     "zero": "meaningful",
+     "min": 0,
+     "max": 10,
+     "unit": {
+      "noun": "on 10"
+     }
+    },
+    {
+     "id": "income",
+     "name": "avg. household income",
+     "kind": "amount",
+     "zero": "meaningful",
+     "min": 0,
+     "unit": {
+      "prefix": "$",
+      "magnitude": 3,
+      "what": "avg. household income"
+     }
+    }
+   ],
+   "series": [
+    {
+     "id": "donation",
+     "measure": "donation",
+     "values": [
+      98,
+      73,
+      9
+     ]
+    },
+    {
+     "id": "satisfaction",
+     "measure": "satisfaction",
+     "values": [
+      7.2,
+      7.9,
+      1.8
+     ]
+    },
+    {
+     "id": "income",
+     "measure": "income",
+     "values": [
+      58,
+      43,
+      82
+     ]
+    }
+   ]
+  },
+  "source": {
+   "book": "p. 274 (s. 0251, chart D); p. 334 (s. 0304)",
+   "notes": "07 #13; 08-12 #5",
+   "shows": "three measures of three regions: never stacked, clustered or in pies on one scale (G2.30), but merged bars, one panel and one scale from zero each, the rows in the order of the first measure (G7.6); the data follow 07 #13, since 08-12 #5 reads the second and third panels' values the other way round (D-54)"
+  }
+ },
+ "variants": [
+  {
+   "name": "one-scale",
+   "patch": {
+    "panels": {
+     "arrangement": {
+      "within": [
+       "measure"
+      ]
+     },
+     "scale": "shared"
+    },
+    "source": {
+     "book": "p. 274 (s. 0251, charts A–C)",
+     "shows": "the book's clustered bars of the three measures on one scale, refused (G2.30)"
+    }
+   },
+   "expect": {
+    "refused": [
+     "R2-13"
+    ]
+   }
+  }
+ ]
+}

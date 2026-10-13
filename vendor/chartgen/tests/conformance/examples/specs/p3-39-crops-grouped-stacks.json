@@ -1,0 +1,195 @@
+{
+ "base": {
+  "chartspec": 1,
+  "id": "p3-39-crops-grouped-stacks",
+  "job": {
+   "kind": "lookup",
+   "text": "Each crop's production by country and continent, 2021, for reference"
+  },
+  "title": {
+   "text": "Crop Production by Country, 2021",
+   "kind": "descriptive"
+  },
+  "data": {
+   "x": {
+    "kind": "nominal",
+    "values": [
+     "Crop A",
+     "Crop B",
+     "Crop C",
+     "Crop D"
+    ]
+   },
+   "measure": {
+    "name": "crop production",
+    "kind": "amount",
+    "zero": "meaningful",
+    "min": 0,
+    "unit": {
+     "magnitude": 3,
+     "noun": "metric tons"
+    }
+   },
+   "series": [
+    {
+     "id": "india",
+     "name": "India",
+     "values": [
+      51,
+      37,
+      65,
+      34
+     ],
+     "slot": 6
+    },
+    {
+     "id": "thailand",
+     "name": "Thailand",
+     "values": [
+      119,
+      8,
+      15,
+      41
+     ]
+    },
+    {
+     "id": "egypt",
+     "name": "Egypt",
+     "values": [
+      40,
+      76,
+      28,
+      33
+     ],
+     "slot": 2
+    },
+    {
+     "id": "morocco",
+     "name": "Morocco",
+     "values": [
+      48,
+      84,
+      34,
+      14
+     ]
+    },
+    {
+     "id": "south-africa",
+     "name": "South Africa",
+     "values": [
+      62,
+      93,
+      32,
+      44
+     ]
+    }
+   ],
+   "parts": {
+    "meaningful_total": true,
+    "all_parts": true,
+    "overlap": false,
+    "groups": {
+     "india": "Asia",
+     "thailand": "Asia",
+     "egypt": "Africa",
+     "morocco": "Africa",
+     "south-africa": "Africa"
+    }
+   }
+  },
+  "facts": {
+   "message": "compare_totals"
+  },
+  "chart": {
+   "orientation": "horizontal"
+  },
+  "reasons": {
+   "chart.orientation": "the book's figure: each crop a row, its stack reading left to right as the grouped legend does"
+  },
+  "source": {
+   "book": "p. 123–124 (s. 0115)",
+   "notes": "03-04 #7",
+   "shows": "parts of several totals in groups that matter to the message: each continent a hue, its countries shades of it, the darkest in the middle so that they read as members, not amounts (G4.9, R3-11, D-49); a grouped legend above, each continent's countries side by side over a rule in its hue and its name (G5.12, R4-8); the continents stacked together, the larger at the base (G7.31); the book's purple and orange kept by fixed slots"
+  }
+ },
+ "variants": [
+  {
+   "name": "fixed",
+   "patch": {
+    "data": {
+     "parts": {
+      "order": "fixed"
+     }
+    },
+    "source": {
+     "shows": "the countries' order fixed by the data (data.parts.order: fixed; owner, 1 Oct 2026): India, Thailand, Egypt, Morocco, South Africa, Asia at the base as in the book's figure (s. 0115), the groups kept together"
+    }
+   }
+  },
+  {
+   "name": "hues",
+   "patch": {
+    "data": {
+     "parts": {
+      "groups": null
+     },
+     "series": [
+      {
+       "id": "india",
+       "name": "India",
+       "values": [
+        51,
+        37,
+        65,
+        34
+       ]
+      },
+      {
+       "id": "thailand",
+       "name": "Thailand",
+       "values": [
+        119,
+        8,
+        15,
+        41
+       ]
+      },
+      {
+       "id": "egypt",
+       "name": "Egypt",
+       "values": [
+        40,
+        76,
+        28,
+        33
+       ]
+      },
+      {
+       "id": "morocco",
+       "name": "Morocco",
+       "values": [
+        48,
+        84,
+        34,
+        14
+       ]
+      },
+      {
+       "id": "south-africa",
+       "name": "South Africa",
+       "values": [
+        62,
+        93,
+        32,
+        44
+       ]
+      }
+     ]
+    },
+    "source": {
+     "shows": "the book's first version: a hue each, in the palette's order by size, the continents not to be seen in the colours or the legend (s. 0115, left)"
+    }
+   }
+  }
+ ]
+}

@@ -1,0 +1,77 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p1-05-weirdness-of-town-names",
+    "job": {
+      "kind": "lookup",
+      "text": "Look up how weird each town name was rated"
+    },
+    "title": {
+      "text": "Weirdness of Real U.K. Town Names",
+      "kind": "descriptive"
+    },
+    "data": {
+      "x": {
+        "kind": "nominal",
+        "values": [
+          "Upton Snodsbury, Worcester",
+          "Lickfold, Petworth",
+          "Great Snoring, Fakenham",
+          "Bishop's Itchington, Southam",
+          "Over Poever, Knutsford",
+          "Uploders, Bridport"
+        ]
+      },
+      "measure": {
+        "name": "weirdness score",
+        "kind": "score",
+        "zero": "meaningful",
+        "min": 0,
+        "max": 10,
+        "unit": {
+          "noun": "on 10"
+        }
+      },
+      "series": [
+        {
+          "id": "weirdness",
+          "name": "Weirdness",
+          "values": [
+            8.8,
+            8.8,
+            8.0,
+            7.2,
+            6.3,
+            6.0
+          ]
+        }
+      ]
+    },
+    "chart": {
+      "type": "bar"
+    },
+    "source": {
+      "book": "p. 56 (s. 0055)",
+      "notes": "02 #2",
+      "shows": "names too long for vertical bars: the chart turns horizontal, names right-aligned at the left, never rotated (R2-04, R9-10); the scale capped at its maximum of 10; a horizontal scale has bare numbers and its title below, the unit in parentheses"
+    }
+  },
+  "variants": [
+    {
+      "name": "vertical",
+      "patch": {
+        "chart": {
+          "orientation": "vertical"
+        },
+        "source": {
+          "shows": "the book’s bad version, vertical bars whose names would have to be rotated: refused"
+        }
+      },
+      "expect": {
+        "refused": [
+          "R2-08"
+        ]
+      }
+    }
+  ]
+}

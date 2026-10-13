@@ -1,0 +1,130 @@
+{
+ "base": {
+  "chartspec": 1,
+  "id": "p3-73-car-models-radar",
+  "job": {
+   "kind": "answer",
+   "text": "Which car model is best, and where is each strong or weak?"
+  },
+  "insight": {
+   "important": "Elora and Varga score best overall; Exodus is weakest, on value and comfort above all"
+  },
+  "title": {
+   "text": "Elora and Varga Score Best; Exodus Trails on Value and Comfort",
+   "kind": "insight",
+   "descriptive": "Car model comparison, reviewers' scores on 5"
+  },
+  "data": {
+   "x": {
+    "kind": "nominal",
+    "values": [
+     "Exodus",
+     "T-300",
+     "Varga",
+     "Elora"
+    ]
+   },
+   "measure": {
+    "name": "score",
+    "kind": "score",
+    "zero": "arbitrary",
+    "min": 1,
+    "max": 5,
+    "good": "higher",
+    "dividing_point": 3,
+    "unit": {
+     "what": "reviewers' score on 5"
+    }
+   },
+   "series": [
+    {
+     "id": "value",
+     "name": "Value",
+     "values": [
+      2.4,
+      2.9,
+      3.6,
+      4.5
+     ]
+    },
+    {
+     "id": "safety",
+     "name": "Safety",
+     "values": [
+      3.7,
+      3.4,
+      4.7,
+      3.6
+     ]
+    },
+    {
+     "id": "performance",
+     "name": "Performance",
+     "values": [
+      3.2,
+      2.9,
+      3.3,
+      3.3
+     ]
+    },
+    {
+     "id": "comfort",
+     "name": "Comfort",
+     "values": [
+      2.2,
+      3.3,
+      3.4,
+      4.0
+     ]
+    },
+    {
+     "id": "reliability",
+     "name": "Reliability",
+     "values": [
+      2.9,
+      2.5,
+      2.6,
+      2.8
+     ]
+    },
+    {
+     "id": "overall",
+     "name": "Overall Avg.",
+     "role": "average",
+     "values": [
+      2.9,
+      3.0,
+      3.5,
+      3.6
+     ]
+    }
+   ]
+  },
+  "facts": {
+   "message": "profiles"
+  },
+  "source": {
+   "book": "p. 360–363 (s. 0328–0330)",
+   "notes": "08-12 #16",
+   "shows": "items compared across attributes, a radar's data, said by the message (profiles): the heatmap table the avoid-list gives in its place (R12-6, G7.36), from the facts rather than asked for (P3-50 asks for it)"
+  }
+ },
+ "variants": [
+  {
+   "name": "radar",
+   "patch": {
+    "chart": {
+     "type": "radar"
+    },
+    "source": {
+     "shows": "the radar asked for: refused, with the heatmap table as its replacement (R12-6, G1.61 [L])"
+    }
+   },
+   "expect": {
+    "refused": [
+     "R12-6"
+    ]
+   }
+  }
+ ]
+}

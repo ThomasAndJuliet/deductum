@@ -1,0 +1,402 @@
+{
+ "key": "p2-01-donations-table--labels-on-every-bar",
+ "file": "p2-01-donations-table.json",
+ "variant": "labels-on-every-bar",
+ "requested_type": "auto",
+ "report": {
+  "chart": "p2-01-donations-table",
+  "style": "plain",
+  "variant": "labels-on-every-bar",
+  "type": "bar",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "type bar: categories compared by value",
+    "guide": []
+   },
+   {
+    "rule": "R9-11",
+    "level": "guided",
+    "text": "clustered bars: 3 series of one measure across categories (G1.56, R9-12)",
+    "guide": []
+   },
+   {
+    "rule": "R2-24",
+    "level": "locked",
+    "text": "bars start at zero",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "scale 0–6,000 by 1,000",
+    "guide": []
+   },
+   {
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "nominal categories sorted by value, descending (by series cash)",
+    "guide": []
+   },
+   {
+    "rule": "R9-12",
+    "level": "locked",
+    "text": "3 series side by side in each cluster, the bars touching, in the same order in every cluster: Cash (slot 1), Credit card (slot 2), Cheque (slot 3) (G7.5, G4.22)",
+    "guide": []
+   },
+   {
+    "rule": "R9-10",
+    "level": "locked",
+    "text": "every name fits under its bar, neighbours at least 10 pt apart: vertical bars",
+    "guide": []
+   },
+   {
+    "rule": "R2-32",
+    "level": "guided",
+    "text": "18 values against 7 scale labels: whichever puts fewer numbers on the chart (G2.18): the values labelled directly, the value scale and its gridlines removed, the zero line kept as the baseline",
+    "guide": []
+   },
+   {
+    "rule": "R5-17",
+    "level": "locked",
+    "text": "value labels as a set, one magnitude and one number of decimals, the prefix and suffix on each: $5,374, $4,225, $3,950, $1,741, $1,456, $791, $5,136, $4,374, $3,608, $1,835, $1,615, $737, $3,821, $2,988, $2,530, $1,395, $1,094, $524 (G6.16, G7.4)",
+    "guide": []
+   },
+   {
+    "rule": "R2-32",
+    "level": "locked",
+    "text": "every label just outside its bar's end: neither the text grey nor white reads on the bar's colour at 4.5 : 1 (G7.4, G6.5)",
+    "guide": []
+   },
+   {
+    "rule": "R2-07",
+    "level": "locked",
+    "text": "the unit's description on its own line above the plot: “monthly donation”; the labels carry its prefix, suffix and magnitude",
+    "guide": []
+   },
+   {
+    "rule": "R4-6",
+    "level": "guided",
+    "text": "a legend above the plot, below the title, centred over the plot: labels beside the bars of a cluster would each need a leader (G5.7, G5.10, D-7)",
+    "guide": []
+   },
+   {
+    "rule": "R4-4",
+    "level": "locked",
+    "text": "legend entries in the order of the bars in each cluster, left to right: Cash, Credit card, Cheque (G5.8, G5.14: square keys)",
+    "guide": []
+   }
+  ],
+  "findings": [
+   {
+    "rule": "R2-32",
+    "severity": "warn",
+    "message": "chart.value_labels on departs from the procedure, which gives off (18 values against 7 scale labels: whichever puts fewer numbers on the chart (G2.18))",
+    "path": "chart.value_labels",
+    "level": "guided",
+    "recommended": "off",
+    "guide": [],
+    "title": "fewer values than scale labels: label the values directly"
+   },
+   {
+    "rule": "CG-1",
+    "severity": "overridden",
+    "message": "value labels up to 27.8 pt wide over bars 14.6 pt apart would meet: text is never overlapped",
+    "path": "chart.value_labels",
+    "supply": "value_labels auto (the scale stays) or off",
+    "reason": "the book's version (p. 92), rebuilt for comparison",
+    "level": "locked",
+    "guide": [],
+    "title": "text boxes do not overlap each other or the marks"
+   },
+   {
+    "rule": "CG-1",
+    "severity": "error",
+    "message": "“$5,374” (value-label) overlaps “$5,136” (value-label)",
+    "level": "locked",
+    "guide": [],
+    "title": "text boxes do not overlap each other or the marks"
+   },
+   {
+    "rule": "CG-1",
+    "severity": "error",
+    "message": "“$4,225” (value-label) overlaps “$4,374” (value-label)",
+    "level": "locked",
+    "guide": [],
+    "title": "text boxes do not overlap each other or the marks"
+   },
+   {
+    "rule": "CG-1",
+    "severity": "error",
+    "message": "“$1,741” (value-label) overlaps “$1,835” (value-label)",
+    "level": "locked",
+    "guide": [],
+    "title": "text boxes do not overlap each other or the marks"
+   },
+   {
+    "rule": "CG-1",
+    "severity": "error",
+    "message": "“$1,456” (value-label) overlaps “$1,615” (value-label)",
+    "level": "locked",
+    "guide": [],
+    "title": "text boxes do not overlap each other or the marks"
+   },
+   {
+    "rule": "CG-1",
+    "severity": "error",
+    "message": "“$791” (value-label) overlaps “$737” (value-label)",
+    "level": "locked",
+    "guide": [],
+    "title": "text boxes do not overlap each other or the marks"
+   },
+   {
+    "rule": "CG-1",
+    "severity": "error",
+    "message": "“$737” (value-label) overlaps “$524” (value-label)",
+    "level": "locked",
+    "guide": [],
+    "title": "text boxes do not overlap each other or the marks"
+   },
+   {
+    "rule": "CG-1",
+    "severity": "error",
+    "message": "“$5,136” (value-label) lies over the bar of East",
+    "level": "locked",
+    "guide": [],
+    "title": "text boxes do not overlap each other or the marks"
+   },
+   {
+    "rule": "CG-1",
+    "severity": "error",
+    "message": "“$3,821” (value-label) lies over the bar of East",
+    "level": "locked",
+    "guide": [],
+    "title": "text boxes do not overlap each other or the marks"
+   },
+   {
+    "rule": "CG-1",
+    "severity": "error",
+    "message": "“$4,225” (value-label) lies over the bar of North",
+    "level": "locked",
+    "guide": [],
+    "title": "text boxes do not overlap each other or the marks"
+   },
+   {
+    "rule": "CG-1",
+    "severity": "error",
+    "message": "“$2,988” (value-label) lies over the bar of North",
+    "level": "locked",
+    "guide": [],
+    "title": "text boxes do not overlap each other or the marks"
+   },
+   {
+    "rule": "CG-1",
+    "severity": "error",
+    "message": "“$3,608” (value-label) lies over the bar of West",
+    "level": "locked",
+    "guide": [],
+    "title": "text boxes do not overlap each other or the marks"
+   },
+   {
+    "rule": "CG-1",
+    "severity": "error",
+    "message": "“$2,530” (value-label) lies over the bar of West",
+    "level": "locked",
+    "guide": [],
+    "title": "text boxes do not overlap each other or the marks"
+   },
+   {
+    "rule": "CG-1",
+    "severity": "error",
+    "message": "“$1,741” (value-label) lies over the bar of Central",
+    "level": "locked",
+    "guide": [],
+    "title": "text boxes do not overlap each other or the marks"
+   },
+   {
+    "rule": "CG-1",
+    "severity": "error",
+    "message": "“$1,395” (value-label) lies over the bar of Central",
+    "level": "locked",
+    "guide": [],
+    "title": "text boxes do not overlap each other or the marks"
+   },
+   {
+    "rule": "CG-1",
+    "severity": "error",
+    "message": "“$1,456” (value-label) lies over the bar of South",
+    "level": "locked",
+    "guide": [],
+    "title": "text boxes do not overlap each other or the marks"
+   },
+   {
+    "rule": "CG-1",
+    "severity": "error",
+    "message": "“$1,094” (value-label) lies over the bar of South",
+    "level": "locked",
+    "guide": [],
+    "title": "text boxes do not overlap each other or the marks"
+   },
+   {
+    "rule": "CG-1",
+    "severity": "error",
+    "message": "“$524” (value-label) lies over the bar of Northwest",
+    "level": "locked",
+    "guide": [],
+    "title": "text boxes do not overlap each other or the marks"
+   }
+  ],
+  "overrides": [
+   {
+    "rule": "CG-1",
+    "reason": "the book's version (p. 92), rebuilt for comparison"
+   }
+  ],
+  "expect": {
+   "refused": [
+    "CG-1"
+   ],
+   "findings": [
+    "R2-32"
+   ]
+  },
+  "expect_met": true,
+  "source": {
+   "book": "p. 92 (s. 0088)",
+   "notes": "08-12 #7; 02 #16",
+   "shows": "the book's “can I just label all the values?”: eighteen labels over narrow touching bars meet one another, and the scale they replace had seven numbers; refused (text is never overlapped) and drawn here through an override, with each collision reported (CG-1) and the guided finding (G2.18)",
+   "status": "generated"
+  },
+  "summary": {
+   "scale": "0–6,000 by 1,000",
+   "labels": [
+    "0",
+    "1,000",
+    "2,000",
+    "3,000",
+    "4,000",
+    "5,000",
+    "$6,000"
+   ],
+   "top": "$6,000 (monthly donation)",
+   "scale_title": null,
+   "orientation": "vertical",
+   "plot": [
+    0.0,
+    49.5,
+    368.0,
+    270.3
+   ],
+   "band": 61.33,
+   "series": [
+    "cash",
+    "card",
+    "cheque"
+   ],
+   "labelling": "legend",
+   "value_labels": true,
+   "table": false,
+   "bar": 14.6,
+   "width": 368.0,
+   "height": 286.35,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job lookup: no insight stated (a descriptive title will do, D-55)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-1",
+    "level": "guided",
+    "text": "a graph, the values to be compared or a pattern seen (G1.11)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 2,
+    "name": "variables",
+    "rule": "RP3-2",
+    "level": "guided",
+    "text": "one plot: categories along x and 3 series; a further variable would go to small multiples (data.dims, G1.18)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 3,
+    "name": "location",
+    "rule": "R8-2",
+    "level": "guided",
+    "text": "not a map: where the values are is not the message (facts.location_matters; G1.24, G1.25)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-01",
+    "level": "guided",
+    "text": "not parts of a total (no data.parts, no breakdown message; G1.1)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 7,
+    "name": "values across categories",
+    "rule": "R9-1",
+    "level": "guided",
+    "text": "group: bar charts. Values compared across categories (G1.9)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 7,
+    "name": "values across categories",
+    "rule": "R9-11",
+    "level": "guided",
+    "text": "3 series of one measure: clustered bars (G1.56); several measures would be a merged chart (data.measures), never a dual axis",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 7,
+    "name": "values across categories",
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "bars from zero (02 D1)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type, the series told apart by colour (G1.59)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "bar charts are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "bar charts"
+   }
+  ],
+  "copies": []
+ },
+ "output_sha256": "17a0cb18175cb580b8ad082d4f1dab77284899f548b577645ae0d443e1eb2080"
+}

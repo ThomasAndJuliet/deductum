@@ -1,0 +1,57 @@
+{
+ "chartspec": 1,
+ "purpose": "analysis",
+ "id": "ablation-contrast",
+ "title": {
+  "text": "Unversioned monitoring detects fewer fault classes"
+ },
+ "data": {
+  "x": {
+   "kind": "nominal",
+   "values": [
+    "Candidate correspondence",
+    "Equal-valued writes",
+    "Retained model",
+    "Historical read"
+   ]
+  },
+  "measure": {
+   "name": "detection rate",
+   "kind": "percent",
+   "unit": {
+    "suffix": "%",
+    "noun": "of fault cases detected"
+   },
+   "zero": "meaningful",
+   "good": "higher",
+   "min": 0,
+   "max": 100
+  },
+  "series": [
+   {
+    "id": "f",
+    "name": "Full (F)",
+    "values": [
+     97,
+     93,
+     90,
+     87
+    ]
+   },
+   {
+    "id": "u",
+    "name": "Unversioned (U)",
+    "values": [
+     60,
+     10,
+     83,
+     40
+    ]
+   }
+  ]
+ },
+ "chart": {
+  "type": "dumbbell",
+  "view": "pair"
+ }
+}

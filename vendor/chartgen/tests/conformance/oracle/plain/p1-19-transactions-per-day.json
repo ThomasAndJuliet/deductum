@@ -1,0 +1,256 @@
+{
+ "key": "p1-19-transactions-per-day",
+ "file": "p1-19-transactions-per-day.json",
+ "variant": null,
+ "requested_type": "auto",
+ "report": {
+  "chart": "p1-19-transactions-per-day",
+  "style": "plain",
+  "variant": null,
+  "type": "dot",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "R6-2",
+    "level": "guided",
+    "text": "type dot: too few known values to see the pattern of change (6 of 15 days known, at most 2 in a row; 06 DP6-2, D-27): a line would invent one; dots show what is known",
+    "guide": []
+   },
+   {
+    "rule": "R2-22",
+    "level": "locked",
+    "text": "zero included (a narrow range far from zero wants an inset)",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "scale 0–150 by 50",
+    "guide": []
+   },
+   {
+    "rule": "R2-23",
+    "level": "guided",
+    "text": "a narrow-range inset: the values lie in a narrow range far from zero (137.8 to 141.4: the gap from zero is at least their spread) and the small differences among them matter (facts.small_differences_matter); the main scale keeps zero, and the inset shows every mark on a truncated scale, 137–142 by 1 (G2.7); the book starts one step lower (136–142 for 137.8–141.4, s. 0082), a known deviation",
+    "guide": []
+   },
+   {
+    "rule": "R2-02",
+    "level": "locked",
+    "text": "periods in their given order",
+    "guide": []
+   },
+   {
+    "rule": "R2-37",
+    "level": "locked",
+    "text": "time runs left to right",
+    "guide": []
+   },
+   {
+    "rule": "R2-21",
+    "level": "locked",
+    "text": "labels as a set, 0 decimals: 0, 50, 100, 150",
+    "guide": []
+   },
+   {
+    "rule": "R2-40",
+    "level": "locked",
+    "text": "time axis: row 1 full",
+    "guide": []
+   },
+   {
+    "rule": "6.4",
+    "level": "guided",
+    "text": "the unit's description on its own line above the scale (inline it would meet the dot of 2022-02-23): “successful transactions per day”; “150” stays on the top label",
+    "guide": []
+   },
+   {
+    "rule": "R6-2",
+    "level": "locked",
+    "text": "the 6 known values as dots, with no line; the time axis covers the whole period, so the 9 empty days show (G7.18)",
+    "guide": []
+   },
+   {
+    "rule": "R2-23",
+    "level": "guided",
+    "text": "the inset's plot 97 pt high, as high as the main chart's (--inset-max-height; 155 pt at --inset-height-ratio)",
+    "guide": []
+   },
+   {
+    "rule": "R2-23",
+    "level": "guided",
+    "text": "the main chart compact, its plot half as high (inset.compact_main, s. 0081)",
+    "guide": []
+   },
+   {
+    "rule": "6.6",
+    "level": "guided",
+    "text": "one time axis for the two panels, the main chart's, between the two panels; the inset does not repeat it: space is short, the main chart is compact (inset.compact_main, the book's compact layout, s. 0081) (G2.27, D-56)",
+    "guide": []
+   },
+   {
+    "rule": "R2-23",
+    "level": "guided",
+    "text": "the inset below the main chart, spanning its width, at the same positions (s. 0082)",
+    "guide": []
+   },
+   {
+    "rule": "6.6",
+    "level": "locked",
+    "text": "the inset's form: a frame round the band 100–150 of the main chart, across its width, a larger frame round a complete small chart (137–142 by 1, bare numbers (the unit is the main scale's, beside it), no category or time labels of its own, the main chart's axis serving both, no title, text at inset size), two links forming a widening cone, beneath the frames (G2.27)",
+    "guide": []
+   },
+   {
+    "rule": "R9-6",
+    "level": "locked",
+    "text": "the inset's dots are not faded; every value lies within its range (a line or dot outside it would be clipped at its edge) (G2.28)",
+    "guide": []
+   }
+  ],
+  "findings": [],
+  "overrides": [],
+  "expect": {},
+  "expect_met": true,
+  "source": {
+   "book": "p. 85 (s. 0082)",
+   "notes": "02 #14",
+   "shows": "a sparse series over two months as a dot plot (6 of 15 days known, R6-2), row 2 of the time axis naming both months with a divider between them; the main scale keeps zero because the values are counts and nothing declares the distance to zero irrelevant (R2-22, D-10 (a)): 0–150 by 50, where the book draws 0–160 by 20 (a known deviation of the step procedure, 02 D5); compact, with the narrow-range inset below it as in the book, as high as the main chart, 137–142 by 1 where the book starts a step lower at 136, the dots at the same slots, not faded; the compact layout shares one time axis, the main chart’s, between the panels (the book gives no year; 2022 is ours)",
+   "status": "generated"
+  },
+  "summary": {
+   "scale": "0–150 by 50",
+   "labels": [
+    "0",
+    "50",
+    "100",
+    "150"
+   ],
+   "top": "150 successful transactions per day",
+   "scale_title": null,
+   "orientation": "vertical",
+   "plot": [
+    34.75,
+    35.02,
+    357.25,
+    131.77
+   ],
+   "band": 21.5,
+   "inset": {
+    "kind": "narrow_range",
+    "position": "below",
+    "scale": "137–142 by 1",
+    "band": "100–150",
+    "frame": [
+     0.75,
+     182.82,
+     367.25,
+     297.16
+    ],
+    "source": [
+     6.75,
+     16.55,
+     361.25,
+     73.07
+    ]
+   },
+   "width": 368.0,
+   "height": 298.91,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job lookup: no insight stated (a descriptive title will do, D-55)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-1",
+    "level": "guided",
+    "text": "a graph, the values to be compared or a pattern seen (G1.11)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 2,
+    "name": "variables",
+    "rule": "RP3-2",
+    "level": "guided",
+    "text": "one plot: time along x and 1 series; a further variable would go to small multiples (data.dims, G1.18)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 3,
+    "name": "location",
+    "rule": "R8-2",
+    "level": "guided",
+    "text": "not a map: where the values are is not the message (facts.location_matters; G1.24, G1.25)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-01",
+    "level": "guided",
+    "text": "not parts of a total (no data.parts, no breakdown message; G1.1)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 6,
+    "name": "values over time",
+    "rule": "R6-13",
+    "level": "guided",
+    "text": "group: data over time. A series of more than two periods, not a breakdown and not tied to places (G1.48)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 6,
+    "name": "values over time",
+    "rule": "R6-2",
+    "level": "guided",
+    "text": "too few known values to see the pattern of change (6 of 15 days known, at most 2 in a row; 06 DP6-2, D-27): a line would invent one; dots show what is known",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type (G1.59)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "dot plots are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R6-18",
+    "level": "guided",
+    "text": "dot plots may be new to a general audience: teach them (build the chart up, show first the familiar chart that fails, or add two or three callouts stating the obvious; G1.5), or state the insight in a sentence and keep the chart as backup (G1.6)",
+    "guide": [],
+    "group": "data over time"
+   }
+  ],
+  "copies": []
+ },
+ "output_sha256": "a702ce85cd9fac56a25a68310d0c0d58834b113c90b9d234ffb58b77f180a6a0"
+}

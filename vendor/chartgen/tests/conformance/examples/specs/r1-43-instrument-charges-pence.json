@@ -1,0 +1,164 @@
+{
+  "chartspec": 1,
+  "id": "r1-43-instrument-charges-pence",
+  "purpose": "communication",
+  "job": {
+    "kind": "lookup",
+    "text": "Look up the charge for an instrument or service, by user category"
+  },
+  "title": {
+    "text": "Instrument and Service Charges (£, ex VAT), from 1 August 2026",
+    "kind": "descriptive"
+  },
+  "data": {
+    "x": {
+      "kind": "nominal",
+      "values": [
+        "Internal",
+        "External academic",
+        "Commercial"
+      ]
+    },
+    "measure": {
+      "name": "charge",
+      "kind": "amount",
+      "zero": "meaningful",
+      "min": 0,
+      "unit": {
+        "prefix": "£",
+        "what": "charge, ex VAT"
+      }
+    },
+    "series": [
+      {
+        "id": "confocal",
+        "name": "Confocal microscope",
+        "values": [
+          28,
+          45,
+          110
+        ]
+      },
+      {
+        "id": "lightsheet",
+        "name": "Light-sheet microscope",
+        "values": [
+          35,
+          56,
+          140
+        ]
+      },
+      {
+        "id": "sted",
+        "name": "Super-resolution microscope (STED)",
+        "values": [
+          42,
+          67.5,
+          165
+        ]
+      },
+      {
+        "id": "tem",
+        "name": "Transmission electron microscope",
+        "values": [
+          58,
+          93,
+          {
+            "status": "unknown",
+            "note": "price on application"
+          }
+        ]
+      },
+      {
+        "id": "flow",
+        "name": "Flow cytometer (analyser)",
+        "values": [
+          18,
+          29,
+          75
+        ]
+      },
+      {
+        "id": "sorter",
+        "name": "Cell sorter (with operator)",
+        "values": [
+          65,
+          104,
+          {
+            "status": "missing",
+            "note": "not available to commercial users – staff-run only, not offered commercially at present"
+          }
+        ]
+      },
+      {
+        "id": "maldi",
+        "name": "MALDI-TOF mass spectrometry",
+        "values": [
+          12,
+          19.2,
+          48
+        ]
+      },
+      {
+        "id": "orbitrap",
+        "name": "Orbitrap LC-MS (proteomics)",
+        "values": [
+          85,
+          136,
+          {
+            "status": "unknown",
+            "note": "price on application"
+          }
+        ]
+      },
+      {
+        "id": "training",
+        "name": "Induction & safety training",
+        "values": [
+          60,
+          96,
+          150
+        ]
+      }
+    ]
+  },
+  "facts": {
+    "message": "lookup_only"
+  },
+  "chart": {
+    "type": "table"
+  },
+  "table": {
+    "names_title": "Instrument / service",
+    "stub": [
+      {
+        "title": "Charged",
+        "kind": "text",
+        "values": [
+          "per hour",
+          "per hour",
+          "per hour",
+          "per hour",
+          "per hour",
+          "per hour",
+          "per sample",
+          "per sample",
+          "per person"
+        ]
+      }
+    ]
+  },
+  "labels": {
+    "notes": {
+      "unknown": "POA",
+      "missing": "n/a"
+    }
+  },
+  "layout": {
+    "width": 460
+  },
+  "source": {
+    "notes": "eval B12 (sonnet-G)",
+    "shows": "money that needs pence is written to two decimals down its column (45.00, 67.50, 19.20), never one (45.0, 67.5); whole pounds stay whole (G6.16, G6.10)"
+  }
+}

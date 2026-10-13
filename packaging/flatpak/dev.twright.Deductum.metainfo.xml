@@ -25,7 +25,7 @@
   <developer id="dev.twright">
     <name>Thomas Wright</name>
   </developer>
-  <url type="homepage">https://github.com/pop-os/cosmic-term</url>
+  <url type="homepage">https://github.com/ThomasAndJuliet/deductum</url>
   <launchable type="desktop-id">dev.twright.Deductum.desktop</launchable>
   <categories>
     <category>Development</category>

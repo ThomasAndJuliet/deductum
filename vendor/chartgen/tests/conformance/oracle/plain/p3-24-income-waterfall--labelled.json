@@ -1,0 +1,266 @@
+{
+ "key": "p3-24-income-waterfall--labelled",
+ "file": "p3-24-income-waterfall.json",
+ "variant": "labelled",
+ "requested_type": "auto",
+ "report": {
+  "chart": "p3-24-income-waterfall",
+  "style": "plain",
+  "variant": "labelled",
+  "type": "waterfall",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "R7-11",
+    "level": "guided",
+    "text": "type waterfall: the parts mix positive and negative values and running subtotals are the message: a waterfall, each bar starting where the last ended (G1.38)",
+    "guide": []
+   },
+   {
+    "rule": "R2-24",
+    "level": "locked",
+    "text": "bars start at zero",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "scale 0–8 by 2",
+    "guide": []
+   },
+   {
+    "rule": "R7-11",
+    "level": "guided",
+    "text": "the steps in the process's own order, as given; a waterfall is never sorted (D-43)",
+    "guide": []
+   },
+   {
+    "rule": "R7-11",
+    "level": "locked",
+    "text": "each step a bar from the running total before it to the one after it: rises Product sales, Consulting income, falls Cost of goods, Admin expenses, the rises in slot 1 and the falls in slot 2 (G7.33: green and red only for a good/bad reading); Net income full bars from zero in the reserved grey (G4.15), each equal to the running total there (G7.33)",
+    "guide": []
+   },
+   {
+    "rule": "R2-32",
+    "level": "guided",
+    "text": "5 values against 5 scale labels: whichever puts fewer numbers on the chart (G2.18): the values labelled directly, the value scale and its gridlines removed, the zero line kept as the baseline",
+    "guide": []
+   },
+   {
+    "rule": "R5-17",
+    "level": "locked",
+    "text": "value labels as a set, one magnitude and one number of decimals, the prefix and suffix on each: +$3.7 million, +$3.6 million, −$2.2 million, −$0.6 million, $4.5 million (G6.16, G7.4)",
+    "guide": []
+   },
+   {
+    "rule": "R5-26",
+    "level": "locked",
+    "text": "wrapped onto two lines: Product sales, Consulting income, Cost of goods, Admin expenses, Net income",
+    "guide": []
+   },
+   {
+    "rule": "R2-32",
+    "level": "locked",
+    "text": "each value just past its bar's far end, the steps signed and the totals not: +$3.7 million, +$3.6 million, −$2.2 million, −$0.6 million, $4.5 million (G7.4, G6.16)",
+    "guide": []
+   },
+   {
+    "rule": "R2-07",
+    "level": "locked",
+    "text": "the unit's description on its own line above the plot: “income, costs and net income”; the labels carry its prefix, suffix and magnitude",
+    "guide": []
+   },
+   {
+    "rule": "R7-11",
+    "level": "locked",
+    "text": "a hairline connector at each running total, from one bar to the next (s. 0237)",
+    "guide": []
+   }
+  ],
+  "findings": [
+   {
+    "rule": "CG-3",
+    "severity": "info",
+    "message": "direct value labels are phase 2",
+    "path": "chart.value_labels",
+    "level": "open",
+    "guide": [],
+    "title": "requested but not drawn in this stage of the generator"
+   },
+   {
+    "rule": "R2-32",
+    "severity": "info",
+    "message": "chart.value_labels on departs from the procedure, which gives off (5 values against 5 scale labels: whichever puts fewer numbers on the chart (G2.18))",
+    "path": "chart.value_labels",
+    "reason": "the running figures are read off the steps",
+    "level": "guided",
+    "recommended": "off",
+    "guide": [],
+    "title": "fewer values than scale labels: label the values directly"
+   }
+  ],
+  "overrides": [],
+  "expect": {},
+  "expect_met": true,
+  "source": {
+   "book": "p. 257–258 (s. 0237)",
+   "notes": "07 #9",
+   "shows": "the steps labelled with their signed values and the total unsigned, each past its bar's far end (G7.4, G6.16); asked for, since five values against five scale labels keep the scale",
+   "status": "generated"
+  },
+  "summary": {
+   "scale": "0–8 by 2",
+   "labels": [
+    "0",
+    "2",
+    "4",
+    "6",
+    "$8"
+   ],
+   "top": "$8 million (net income)",
+   "scale_title": null,
+   "orientation": "vertical",
+   "plot": [
+    0.0,
+    33.57,
+    368.0,
+    254.37
+   ],
+   "band": 73.6,
+   "series": [
+    "income"
+   ],
+   "labelling": "none",
+   "value_labels": true,
+   "table": false,
+   "stack": "waterfall",
+   "parts": [
+    "income"
+   ],
+   "percent": false,
+   "totals": [
+    "Product sales",
+    "Consulting income",
+    "Cost of goods",
+    "Admin expenses",
+    "Net income"
+   ],
+   "width": 368.0,
+   "height": 284.76,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job explain: no insight stated (a descriptive title will do, D-55)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-1",
+    "level": "guided",
+    "text": "a graph, the values to be compared or a pattern seen (G1.11)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 2,
+    "name": "variables",
+    "rule": "RP3-2",
+    "level": "guided",
+    "text": "one plot: categories along x and 1 series; a further variable would go to small multiples (data.dims, G1.18)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 3,
+    "name": "location",
+    "rule": "R8-2",
+    "level": "guided",
+    "text": "not a map: where the values are is not the message (facts.location_matters; G1.24, G1.25)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "RP2-7",
+    "level": "guided",
+    "text": "group: breakdowns of totals. One total of 4 parts (07 §4.1, G1.8)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-02",
+    "level": "locked",
+    "text": "check, meaningful total: passes: the values add up to a total someone would quote (parts.meaningful_total)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-03",
+    "level": "locked",
+    "text": "check, all parts: passes: every part of the total is shown (parts.all_parts)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-05",
+    "level": "locked",
+    "text": "check, overlap: passes: no part contains or overlaps another (parts.overlap)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-04",
+    "level": "locked",
+    "text": "check, signs: fails: the parts mix positive and negative values: areas cannot be negative, and a mixed stack shows neither the net total nor comparable parts (G0.15)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-11",
+    "level": "guided",
+    "text": "the parts mix positive and negative values and running subtotals are the message: a waterfall, each bar starting where the last ended (G1.38)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type (G1.59)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "waterfall charts are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   }
+  ],
+  "copies": []
+ },
+ "output_sha256": "bd3d82c33123183dfa967865ab3ba37d4b3acbd20a0a5f4156296c31a4fd3a2c"
+}

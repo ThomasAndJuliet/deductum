@@ -1,0 +1,139 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p3-01-donations-by-donor-pie",
+    "job": {
+      "kind": "answer",
+      "text": "What fraction of all donations did Mrs. Smith give?"
+    },
+    "insight": {
+      "important": "Mrs. Smith contributed almost a quarter of all donations",
+      "targets": [
+        {
+          "category": "Mrs. Smith"
+        }
+      ]
+    },
+    "title": {
+      "text": "Mrs. Smith Contributed Almost a Quarter of All Donations",
+      "kind": "insight",
+      "descriptive": "Donations by Donor, 2022"
+    },
+    "data": {
+      "x": {
+        "kind": "nominal",
+        "values": [
+          "Mrs. Smith",
+          "Mrs. Jones",
+          "Mr. & Mrs. Perez",
+          "The Chetley Family",
+          "Ms. Flaherty"
+        ]
+      },
+      "measure": {
+        "name": "donations",
+        "kind": "amount",
+        "zero": "meaningful",
+        "min": 0,
+        "unit": {
+          "prefix": "$",
+          "magnitude": 3,
+          "noun": "in donations"
+        }
+      },
+      "series": [
+        {
+          "id": "donations",
+          "name": "Donations",
+          "values": [
+            165,
+            160,
+            135,
+            125,
+            100
+          ]
+        }
+      ],
+      "parts": {
+        "meaningful_total": true,
+        "all_parts": true,
+        "overlap": false
+      }
+    },
+    "facts": {
+      "message": "fraction_of_total"
+    },
+    "chart": {
+      "type": "pie"
+    },
+    "source": {
+      "book": "p. 238–241 (s. 0219–0222)",
+      "notes": "07 #1",
+      "shows": "the fraction of the total that one part is: a pie, which shows familiar fractions such as a quarter at a glance (G1.36); every slice its own colour in slice order, largest first from 12 o'clock, the names outside with each value under them, two-line names where they are long (G7.25–G7.28); the slice the insight names in the strong shade of its colour (G8.9)"
+    }
+  },
+  "variants": [
+    {
+      "name": "percent",
+      "patch": {
+        "labels": {
+          "parts": "percent"
+        },
+        "source": {
+          "shows": "the book's labels with percentages (s. 0222): the percentages of the total under the names, formatted as one set (whole per cents, the fewest decimals that keep the values apart); a supplement to the slices, not what carries the message (R7-10, G8.20)"
+        }
+      },
+      "expect": {}
+    },
+    {
+      "name": "legend",
+      "patch": {
+        "chart": {
+          "labelling": "legend"
+        },
+        "source": {
+          "shows": "a legend instead of labels beside the slices: refused, the reader's eye would shuttle between the keys and the slices (R7-34, G7.27)"
+        }
+      },
+      "expect": {
+        "refused": [
+          "R7-34"
+        ]
+      }
+    },
+    {
+      "name": "legend-overridden",
+      "patch": {
+        "chart": {
+          "labelling": "legend"
+        },
+        "overrides": [
+          {
+            "rule": "R7-34",
+            "reason": "the legend version, rebuilt for comparison"
+          }
+        ],
+        "source": {
+          "shows": "the legend drawn through an override: a row of keys above the pie, in slice order, and nothing beside the slices"
+        }
+      },
+      "expect": {
+        "refused": [
+          "R7-34"
+        ]
+      }
+    },
+    {
+      "name": "treemap",
+      "patch": {
+        "chart": {
+          "type": "treemap"
+        },
+        "source": {
+          "shows": "the same five parts as a treemap: drawn, with the guided finding that parts few enough for a pie belong in one, since a pie shows their fractions better (G1.36, G1.39; R7-15 when the chooser has not already said so)"
+        }
+      },
+      "expect": {}
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p2-43-cash-lowest",
+    "job": {"kind": "answer", "text": "Which payment method brought in the least in donations?"},
+    "insight": {"important": "Cash brought in the least"},
+    "title": {"text": "Cash Was Our Lowest Payment Method", "kind": "insight",
+              "descriptive": "Donations by Payment Method, 2022", "link": {"category": "Cash"}},
+    "data": {
+      "x": {"kind": "nominal", "values": ["Credit card", "Check", "Cash"]},
+      "measure": {"name": "donations", "kind": "amount", "zero": "meaningful", "min": 0,
+                  "unit": {"prefix": "$", "noun": "in donations", "magnitude": 3}},
+      "series": [{"id": "donations", "name": "Donations", "values": [1560, 1400, 870]}]
+    },
+    "source": {"book": "p. 376 (s. 0342)", "notes": "13-15 F3",
+               "shows": "the title connector to the bar the insight names (G8.8); the data broken down by one variable only (RP3-1)"}
+  },
+  "variants": [
+    {"name": "horizontal",
+     "patch": {"chart": {"orientation": "horizontal"},
+               "reasons": {"chart.orientation": "the book's figure, horizontal bars"},
+               "source": {"shows": "the same with horizontal bars, as the book draws it: the connector runs from the title to the end of the bottom bar"}}}
+  ]
+}

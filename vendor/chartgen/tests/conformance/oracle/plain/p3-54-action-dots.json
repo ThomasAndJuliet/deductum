@@ -1,0 +1,165 @@
+{
+ "key": "p3-54-action-dots",
+ "file": "p3-54-action-dots.json",
+ "variant": null,
+ "requested_type": "auto",
+ "report": {
+  "chart": "p3-54-action-dots",
+  "style": "plain",
+  "variant": null,
+  "type": "action_dots",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "R12-4",
+    "level": "guided",
+    "text": "type action_dots: which items need action is the message: action dots, a sorted list with thin bars and a coloured dot only where action is needed, its status given with the data (G7.58, D-1)",
+    "guide": []
+   },
+   {
+    "rule": "R12-4",
+    "level": "locked",
+    "text": "rows sorted by value, largest first, those not known last (G7.58)",
+    "guide": []
+   },
+   {
+    "rule": "R12-4",
+    "level": "locked",
+    "text": "action dots: each name right-aligned, a thin light-grey bar in proportion to its value from zero, the value, and a dot only where action is warranted: Indianapolis strong green, Albuquerque light red, Charlotte strong red, Pittsburgh light green; the statuses supplied with the data (G7.58, D-1)",
+    "guide": []
+   },
+   {
+    "rule": "R3-20",
+    "level": "locked",
+    "text": "static output, in colour: one file, red for bad and green for good, plain, for every reader (D-18; owner, 1 Oct 2026); black and white (audience.bw_risk) adds the textures, and a style may choose the colour-blind-safe pair (--good-bad-mode: safe-pair)",
+    "guide": []
+   }
+  ],
+  "findings": [],
+  "overrides": [],
+  "expect": {},
+  "expect_met": true,
+  "source": {
+   "book": "p. 359 (s. 0327)",
+   "notes": "08-12 #14",
+   "shows": "action dots in place of bullet graphs (R12-4): the plants by output, largest first, each with a thin grey bar and its value, and a dot only where action is warranted, its status given with the data (the book leaves the thresholds to the maker); green for good and red for bad (D-18); the month is ours (the book's tile has none)",
+   "status": "generated"
+  },
+  "summary": {
+   "orientation": "horizontal",
+   "plot": [
+    61.88,
+    29.38,
+    141.88,
+    189.38
+   ],
+   "actions": {
+    "order": [
+     "Indianapolis",
+     "Detroit",
+     "Fresno",
+     "Albuquerque",
+     "Plano",
+     "Savannah",
+     "Charlotte",
+     "Pittsburgh"
+    ],
+    "dots": {
+     "Indianapolis": "good_strong",
+     "Albuquerque": "bad",
+     "Charlotte": "bad_strong",
+     "Pittsburgh": "good"
+    }
+   },
+   "width": 265.33,
+   "height": 190.38,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job make_aware: insight “Charlotte's and Albuquerque's output needs action; Indianapolis and Pittsburgh did well”",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-1",
+    "level": "guided",
+    "text": "a graph, the values to be compared or a pattern seen (G1.11)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 2,
+    "name": "variables",
+    "rule": "RP3-2",
+    "level": "guided",
+    "text": "one plot: categories along x and 1 series; a further variable would go to small multiples (data.dims, G1.18)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 3,
+    "name": "location",
+    "rule": "R8-2",
+    "level": "guided",
+    "text": "not a map: where the values are is not the message (facts.location_matters; G1.24, G1.25)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-01",
+    "level": "guided",
+    "text": "not parts of a total (no data.parts, no breakdown message; G1.1)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 7,
+    "name": "values across categories",
+    "rule": "R9-1",
+    "level": "guided",
+    "text": "group: bar charts. Values compared across categories (G1.9)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 7,
+    "name": "values across categories",
+    "rule": "R12-4",
+    "level": "guided",
+    "text": "which items need action is the message: action dots, a sorted list with thin bars and a coloured dot only where action is needed, its status given with the data (G7.58, D-1)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type (G1.59)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "action dots are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "bar charts"
+   }
+  ],
+  "copies": []
+ },
+ "output_sha256": "9cffa9b3941a633b6e923abb9b500fff8e59e00cbc30741d7fb4458c234a0413"
+}

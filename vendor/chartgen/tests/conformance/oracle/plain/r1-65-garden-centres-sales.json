@@ -1,0 +1,200 @@
+{
+ "key": "r1-65-garden-centres-sales",
+ "file": "r1-65-garden-centres-sales.json",
+ "variant": null,
+ "requested_type": "auto",
+ "report": {
+  "chart": "r1-65-garden-centres-sales",
+  "style": "plain",
+  "variant": null,
+  "type": "multiples of line",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "R3-24",
+    "level": "locked",
+    "text": "colours fixed by name, the same in every chart of the set (colours.slots, the registry ../registry.json): Elstead Park slot 2, Brackley Hill slot 1, Corwen Road slot 3, Dunmore slot 4 (G4.22)",
+    "guide": []
+   },
+   {
+    "rule": "R6-28",
+    "level": "locked",
+    "text": "each series its own colour, the same in every panel, fixed, the same in every chart of the set (R3-24, G4.22): Brackley Hill slot 1, Corwen Road slot 3, Dunmore slot 4, Elstead Park slot 2 (G4.27, G7.50)",
+    "guide": []
+   },
+   {
+    "rule": "R6-4",
+    "level": "guided",
+    "text": "type line: a regular series whose pattern of change is the point (06 DP6-1, G1.51)",
+    "guide": []
+   },
+   {
+    "rule": "R6-37",
+    "level": "locked",
+    "text": "one shared scale: one scale for every panel, so that sizes compare across panels (G7.48)",
+    "guide": []
+   },
+   {
+    "rule": "R2-25",
+    "level": "locked",
+    "text": "the values are not far from zero compared with their spread",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "scale 0–250,000 by 50,000",
+    "guide": []
+   },
+   {
+    "rule": "6.13",
+    "level": "open",
+    "text": "dates marked on the time axis: a thin line at the date in every panel, its label once (G7.49): “New store opens” in 3 panels, labelled once, in Furniture & BBQs",
+    "guide": []
+   },
+   {
+    "rule": "R6-32",
+    "level": "locked",
+    "text": "each line labelled at its end, in the text grey, packed in order: Elstead Park moved 0.82 line heights, Brackley Hill moved 1.47 line heights, Corwen Road moved 0.90 line heights; with a leader: Brackley Hill",
+    "guide": []
+   },
+   {
+    "rule": "R6-27",
+    "level": "locked",
+    "text": "no point markers: no value is isolated and no straight run hides one",
+    "guide": []
+   },
+   {
+    "rule": "R6-29",
+    "level": "locked",
+    "text": "highlighted, twice as thick, in the strong shade of its hue, its label bold: Elstead Park; the others keep their colours and widths",
+    "guide": []
+   },
+   {
+    "rule": "R2-07",
+    "level": "locked",
+    "text": "the unit phrase on the top label: “£250K sales in the month”; the top gridline starts after it",
+    "guide": []
+   },
+   {
+    "rule": "R2-21",
+    "level": "locked",
+    "text": "labels as a set, 0 decimals: 0, 50, 100, 150, 200, £250K",
+    "guide": []
+   },
+   {
+    "rule": "R5-10",
+    "level": "locked",
+    "text": "digits hidden: thousands, stated once on the top label (R2-05, D-3): “£250K sales in the month”",
+    "guide": []
+   },
+   {
+    "rule": "6.13",
+    "level": "open",
+    "text": "dates marked on the time axis, each a thin dark-grey line across the plot under the marks, its label the chart's own note beside it: Mar. 1, 2026, “New store opens”, labelled right of its top",
+    "guide": []
+   },
+   {
+    "rule": "R2-40",
+    "level": "locked",
+    "text": "time axis: row 1 narrow",
+    "guide": []
+   },
+   {
+    "rule": "R2-39",
+    "level": "locked",
+    "text": "time axis on two levels: row 2 2025, 2026, dividers between the groups",
+    "guide": []
+   },
+   {
+    "rule": "6.10",
+    "level": "locked",
+    "text": "3 × 1 panels of equal size, abutting, divided by light separators, no box round a panel (G7.51); each 327 pt wide and 98 pt high",
+    "guide": []
+   },
+   {
+    "rule": "RP3-8",
+    "level": "locked",
+    "text": "scale labels left of the first column, the unit phrase once on the first row's top label and the other rows' top labels keeping the number's currency and magnitude; time labels only under the bottom row; row headers at the left, horizontal (G7.49)",
+    "guide": []
+   },
+   {
+    "rule": "RP3-9",
+    "level": "locked",
+    "text": "each series labelled once, at its line's end right of the last panel (G5.15, D-38 (iii))",
+    "guide": []
+   }
+  ],
+  "findings": [
+   {
+    "rule": "RP3-3",
+    "severity": "info",
+    "message": "panels.arrangement rows by Category, series in each panel by Centre departs from the procedure, which gives columns by Category, series in each panel by Centre (the insight compares store directly (facts.compare): drawn as series in each panel (RP3-4, G1.19); the panels facet on category)",
+    "path": "panels.arrangement",
+    "reason": "21 months in three panels side by side put each panel's last month label against the next panel's first (CG-1, CG-6); stacked, the panels share one time axis at the foot",
+    "level": "guided",
+    "recommended": "columns by Category, series in each panel by Centre",
+    "guide": [],
+    "title": "the arrangement of small multiples chosen for the insight, from the range of candidates"
+   }
+  ],
+  "overrides": [],
+  "expect": {},
+  "expect_met": true,
+  "source": {
+   "shows": "the other chart of the set (eval round 1, B11, chart 1): the same registry, so each centre keeps its colour although the line ends stand in another order; the opening marked in every stacked panel, labelled once",
+   "status": "generated"
+  },
+  "summary": {
+   "arrangement": "rows by Category, series in each panel by Centre",
+   "kind": "multiples",
+   "rows": 3,
+   "columns": 1,
+   "panels": 3,
+   "scale_mode": "shared",
+   "scale": "0–250,000 by 50,000",
+   "labels": [
+    "0",
+    "50",
+    "100",
+    "150",
+    "200",
+    "£250K"
+   ],
+   "top": "£250K sales in the month",
+   "orientation": "vertical",
+   "scales": {
+    "Furniture & BBQs": "0–250,000 by 50,000",
+    "Plants & seeds": "0–250,000 by 50,000",
+    "Café": "0–250,000 by 50,000"
+   },
+   "plots": {
+    "Furniture & BBQs": [
+     123.15,
+     36.13,
+     449.89,
+     134.15
+    ],
+    "Plants & seeds": [
+     123.15,
+     149.2,
+     449.89,
+     247.22
+    ],
+    "Café": [
+     123.15,
+     262.27,
+     449.89,
+     360.3
+    ]
+   },
+   "width": 520.0,
+   "height": 397.35,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [],
+  "copies": []
+ },
+ "output_sha256": "f8fe93fb2583bf1fa85f11c26cf27ae9800473b8e9217c481a3841ba078b2f91"
+}

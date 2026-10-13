@@ -1,0 +1,182 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p2-01-donations-table",
+    "job": {
+      "kind": "lookup",
+      "text": "Look up each region's monthly donations by payment method, to the dollar, for the financial report"
+    },
+    "title": {
+      "text": "Donations by Region and Payment Method, 2022",
+      "kind": "descriptive"
+    },
+    "data": {
+      "x": {
+        "kind": "nominal",
+        "values": [
+          "East",
+          "North",
+          "West",
+          "Central",
+          "South",
+          "Northwest"
+        ]
+      },
+      "measure": {
+        "name": "donations",
+        "kind": "amount",
+        "zero": "meaningful",
+        "min": 0,
+        "unit": {
+          "prefix": "$",
+          "what": "monthly donation"
+        }
+      },
+      "series": [
+        {
+          "id": "cash",
+          "name": "Cash",
+          "values": [
+            5374,
+            4225,
+            3950,
+            1741,
+            1456,
+            791
+          ]
+        },
+        {
+          "id": "card",
+          "name": "Credit card",
+          "values": [
+            5136,
+            4374,
+            3608,
+            1835,
+            1615,
+            737
+          ]
+        },
+        {
+          "id": "cheque",
+          "name": "Cheque",
+          "values": [
+            3821,
+            2988,
+            2530,
+            1395,
+            1094,
+            524
+          ]
+        }
+      ]
+    },
+    "facts": {
+      "exact_values_needed": true
+    },
+    "source": {
+      "book": "p. 337 (s. 0307); p. 93 (s. 0089)",
+      "notes": "08-12 #7; 02 #16",
+      "shows": "clustered bars of three series, the bars of a cluster touching and the clusters apart (G7.5); exact values needed, so a table under the graph, one column under each cluster, the series as its rows in the order of the bars, no rules, the numbers bare (G1.14, G7.46); each row keyed by its name then a square of its colour, the squares on the gridlines' left end, so the table is the key and no legend is drawn (owner, 1 Oct 2026)"
+    }
+  },
+  "variants": [
+    {
+      "name": "legend",
+      "patch": {
+        "table": {
+          "legend": "keep"
+        },
+        "source": {
+          "shows": "the legend kept above the plot as well (table.legend keep), as the book draws it"
+        }
+      },
+      "expect": {}
+    },
+    {
+      "name": "no-table",
+      "patch": {
+        "facts": {
+          "exact_values_needed": false
+        },
+        "source": {
+          "shows": "the same chart where exact values are not needed: the clustered bars and their legend above the plot, in the order of the bars (G5.8, G5.10)"
+        }
+      },
+      "expect": {}
+    },
+    {
+      "name": "labels-on-every-bar",
+      "patch": {
+        "facts": {
+          "exact_values_needed": false
+        },
+        "chart": {
+          "value_labels": "on"
+        },
+        "overrides": [
+          {
+            "rule": "CG-1",
+            "reason": "the book's version (p. 92), rebuilt for comparison"
+          }
+        ],
+        "source": {
+          "book": "p. 92 (s. 0088)",
+          "shows": "the book's “can I just label all the values?”: eighteen labels over narrow touching bars meet one another, and the scale they replace had seven numbers; refused (text is never overlapped) and drawn here through an override, with each collision reported (CG-1) and the guided finding (G2.18)"
+        }
+      },
+      "expect": {
+        "refused": [
+          "CG-1"
+        ],
+        "findings": [
+          "R2-32"
+        ]
+      }
+    },
+    {
+      "name": "horizontal",
+      "patch": {
+        "chart": {
+          "orientation": "horizontal"
+        },
+        "facts": {
+          "exact_values_needed": false
+        },
+        "reasons": {
+          "chart.orientation": "to show the clusters turned: their colours run top to bottom"
+        },
+        "source": {
+          "shows": "the clusters turned: their colours run top to bottom, so the series are named beside the bars of the last cluster, in their order (D-31 (c))"
+        }
+      },
+      "expect": {
+        "findings": [
+          "R9-10"
+        ]
+      }
+    },
+    {
+      "name": "horizontal-table",
+      "patch": {
+        "chart": {
+          "orientation": "horizontal"
+        },
+        "layout": {
+          "width": 480
+        },
+        "reasons": {
+          "chart.orientation": "to show the table beside turned clusters"
+        },
+        "source": {
+          "shows": "turned, at 480 pt, with exact values needed: the table beside the bars, one column per series, right-aligned under its heading, each row level with its region (G7.41, G7.46, D-52)"
+        }
+      },
+      "expect": {
+        "findings": [
+          "R9-10"
+        ]
+      }
+    }
+  ]
+}

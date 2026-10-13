@@ -1,0 +1,121 @@
+{
+ "base": {
+  "chartspec": 1,
+  "id": "p3-75-sales-funnel",
+  "job": {
+   "kind": "answer",
+   "text": "Where does the sales funnel lose the most prospects?"
+  },
+  "insight": {
+   "important": "Half the prospects who contacted support never subscribed"
+  },
+  "title": {
+   "text": "Half of Those Who Contacted Support Never Subscribed",
+   "kind": "insight",
+   "descriptive": "Sales Funnel, Dec. 2022"
+  },
+  "data": {
+   "x": {
+    "kind": "ordinal",
+    "values": [
+     "Visited website",
+     "Downloaded trial",
+     "Contacted support",
+     "Subscribed",
+     "Renewed"
+    ]
+   },
+   "measure": {
+    "name": "prospects",
+    "kind": "count",
+    "zero": "meaningful",
+    "min": 0,
+    "unit": {
+     "noun": "prospects"
+    }
+   },
+   "series": [
+    {
+     "id": "prospects",
+     "name": "Prospects",
+     "values": [
+      9152,
+      6681,
+      5211,
+      2658,
+      2126
+     ]
+    }
+   ]
+  },
+  "facts": {
+   "message": "stage_conversion"
+  },
+  "source": {
+   "book": "p. 360 (s. 0328)",
+   "notes": "08-12 #15",
+   "shows": "counts through ordered stages, the losses between them the message (stage_conversion): the stage counts as bars and the % change from each stage to the next beneath them (R12-5, G7.59)"
+  }
+ },
+ "variants": [
+  {
+   "name": "funnel",
+   "patch": {
+    "chart": {
+     "type": "funnel"
+    },
+    "source": {
+     "shows": "a funnel chart asked for: refused, its layers readable only through their labels (R12-5, G1.61 [L])"
+    }
+   },
+   "expect": {
+    "refused": [
+     "R12-5"
+    ]
+   }
+  },
+  {
+   "name": "pattern-data-savvy",
+   "patch": {
+    "facts": {
+     "message": "pattern"
+    },
+    "job": {
+     "text": "What shape does the fall-off through the funnel take?"
+    },
+    "insight": {
+     "important": "Prospects fall away at every stage, most steeply between contacting support and subscribing"
+    },
+    "title": {
+     "text": "Prospects Fall Away at Every Stage, Most Steeply After Support"
+    },
+    "audience": {
+     "data_savvy": true
+    },
+    "source": {
+     "shows": "the stages' pattern the message, for a data-savvy audience: a line across the ordered stages, the bar-chart tree's first question (08-12 DP-2; R6-41, G1.58)"
+    }
+   }
+  },
+  {
+   "name": "pattern",
+   "patch": {
+    "facts": {
+     "message": "pattern"
+    },
+    "job": {
+     "text": "What shape does the fall-off through the funnel take?"
+    },
+    "insight": {
+     "important": "Prospects fall away at every stage, most steeply between contacting support and subscribing"
+    },
+    "title": {
+     "text": "Prospects Fall Away at Every Stage, Most Steeply After Support"
+    },
+    "source": {
+     "shows": "the same message for a general audience, who read any line as change over time: bars, in the stages' order (R6-41, G1.58)"
+    }
+   }
+  }
+ ]
+}

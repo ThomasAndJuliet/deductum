@@ -1,0 +1,101 @@
+{
+ "key": "p3-77-donations-map",
+ "file": "p3-77-donations-map.json",
+ "variant": null,
+ "requested_type": "auto",
+ "report": {
+  "chart": "p3-77-donations-map",
+  "style": "plain",
+  "variant": null,
+  "type": "map",
+  "status": "unsupported",
+  "decisions": [
+   {
+    "rule": "R8-2",
+    "level": "guided",
+    "text": "type map: where the values are (the regions' sizes, neighbours, clusters) matters more than reading and comparing them: a map, coloured dots, bubbles or bars on regions (a choropleth only for regions of similar size, G1.27–G1.33, D-36), beside a bar chart when the values must be read too (G1.25)",
+    "guide": []
+   }
+  ],
+  "findings": [
+   {
+    "rule": "CG-3",
+    "severity": "info",
+    "message": "maps are phase 4 (08-12 DP-1, G1.25); the path says why",
+    "level": "open",
+    "guide": [],
+    "title": "requested but not drawn in this stage of the generator"
+   }
+  ],
+  "overrides": [],
+  "expect": {},
+  "expect_met": true,
+  "source": {
+   "book": "p. 300–304 (s. 0274–0276)",
+   "notes": "08-12 #1",
+   "shows": "where the values are matters more than reading them (facts.location_matters): a map (08-12 DP-1, G1.25), coloured dots, bubbles or bars on regions; maps are phase 4",
+   "status": "generated"
+  },
+  "summary": {
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job make_aware: insight “Donations cluster in the Midwest”",
+    "guide": [],
+    "group": "maps"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-1",
+    "level": "guided",
+    "text": "a graph, the values to be compared or a pattern seen (G1.11)",
+    "guide": [],
+    "group": "maps"
+   },
+   {
+    "step": 2,
+    "name": "variables",
+    "rule": "RP3-2",
+    "level": "guided",
+    "text": "one plot: categories along x and 1 series; a further variable would go to small multiples (data.dims, G1.18)",
+    "guide": [],
+    "group": "maps"
+   },
+   {
+    "step": 3,
+    "name": "location",
+    "rule": "R8-2",
+    "level": "guided",
+    "text": "group: maps. Where the values are (the regions' sizes, neighbours, clusters) matters more than reading and comparing them: a map, coloured dots, bubbles or bars on regions (a choropleth only for regions of similar size, G1.27–G1.33, D-36), beside a bar chart when the values must be read too (G1.25)",
+    "guide": [],
+    "group": "maps"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type (G1.59)",
+    "guide": [],
+    "group": "maps"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "maps are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "maps"
+   }
+  ],
+  "copies": []
+ }
+}

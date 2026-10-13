@@ -1,0 +1,134 @@
+{
+ "base": {
+  "chartspec": 1,
+  "id": "p3-69-ad-blitz-rank",
+  "job": {
+   "kind": "answer",
+   "text": "Did any region overtake another after the ad blitz?"
+  },
+  "insight": {
+   "important": "South overtook Central after the ad blitz",
+   "targets": [
+    {
+     "series": "south"
+    },
+    {
+     "series": "central"
+    }
+   ]
+  },
+  "title": {
+   "text": "South Overtook Central After the Ad Blitz",
+   "kind": "insight",
+   "descriptive": "Donations by Region Before and After the Ad Blitz, Q1 and Q2 2022"
+  },
+  "data": {
+   "x": {
+    "kind": "time",
+    "grid": "quarter",
+    "values": [
+     "2022-Q1",
+     "2022-Q2"
+    ],
+    "names": {
+     "2022-Q1": "Before blitz",
+     "2022-Q2": "After blitz"
+    }
+   },
+   "measure": {
+    "name": "donations",
+    "kind": "amount",
+    "zero": "meaningful",
+    "min": 0,
+    "persistence": "summary",
+    "unit": {
+     "prefix": "$",
+     "magnitude": 3,
+     "what": "donations"
+    }
+   },
+   "series": [
+    {
+     "id": "east",
+     "name": "East",
+     "values": [
+      482,
+      517
+     ]
+    },
+    {
+     "id": "central",
+     "name": "Central",
+     "values": [
+      372,
+      318
+     ]
+    },
+    {
+     "id": "south",
+     "name": "South",
+     "values": [
+      356,
+      455
+     ]
+    },
+    {
+     "id": "north",
+     "name": "North",
+     "values": [
+      123,
+      174
+     ]
+    },
+    {
+     "id": "west",
+     "name": "West",
+     "values": [
+      88,
+      113
+     ]
+    }
+   ]
+  },
+  "facts": {
+   "message": "rank"
+  },
+  "source": {
+   "book": "p. 201–203 (s. 0187–0189)",
+   "notes": "06 T9",
+   "shows": "a change of rank between two periods, the book's rare case for a slope chart (R6-16, G1.46): a line chart with two points in time, each region labelled at the right (G7.23), the crossing showing South overtaking Central"
+  }
+ },
+ "variants": [
+  {
+   "name": "change",
+   "patch": {
+    "facts": {
+     "message": "change"
+    },
+    "chart": {
+     "type": "slope"
+    },
+    "insight": {
+     "important": "North's donations rose most, by 41 %",
+     "targets": [
+      {
+       "series": "north"
+      }
+     ]
+    },
+    "title": {
+     "text": "North's Donations Rose Most After the Ad Blitz"
+    },
+    "source": {
+     "shows": "a slope chart asked for when the change is the message: refused, steepness showing only the absolute change (R6-16, G1.61 [L]); the arrow chart with its % panel instead (P2-21)"
+    }
+   },
+   "expect": {
+    "refused": [
+     "R6-16"
+    ]
+   }
+  }
+ ]
+}

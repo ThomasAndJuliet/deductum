@@ -1,0 +1,70 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p1-23-employee-satisfaction",
+    "job": {
+      "kind": "lookup",
+      "text": "Look up the mean satisfaction rating of each month"
+    },
+    "title": {
+      "text": "Mean Monthly Employee Satisfaction, Apr 2021–Mar 2022",
+      "kind": "descriptive"
+    },
+    "data": {
+      "x": {
+        "kind": "time",
+        "grid": "month",
+        "values": [
+          "2021-04",
+          "2021-05",
+          "2021-06",
+          "2021-07",
+          "2021-08",
+          "2021-09",
+          "2021-10",
+          "2021-11",
+          "2021-12",
+          "2022-01",
+          "2022-02",
+          "2022-03"
+        ]
+      },
+      "measure": {
+        "name": "mean satisfaction rating",
+        "kind": "score",
+        "zero": "arbitrary",
+        "min": 0,
+        "max": 10,
+        "persistence": "summary",
+        "unit": {
+          "noun": "on 10"
+        }
+      },
+      "series": [
+        {
+          "id": "rating",
+          "name": "Rating",
+          "values": [
+            7.2,
+            7.0,
+            6.8,
+            7.1,
+            7.3,
+            7.5,
+            7.3,
+            7.4,
+            7.7,
+            7.2,
+            7.5,
+            7.4
+          ]
+        }
+      ]
+    },
+    "source": {
+      "book": "p. 175 (s. 0164)",
+      "notes": "06 T2 (a)",
+      "shows": "a rating's zero is an anchor, not “none of it”, so a line may leave it out: the scale is truncated to the data (G2.8, G2.10); twelve months across two years, the years on row 2 with a divider at the new year"
+    }
+  }
+}

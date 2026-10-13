@@ -1,0 +1,3687 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "chartspec-1.json",
+  "title": "chartgen chart spec, version 1",
+  "type": "object",
+  "properties": {
+    "chartspec": {
+      "enum": [
+        1
+      ],
+      "description": "schema version"
+    },
+    "id": {
+      "type": "string",
+      "description": "file stem, [a-z0-9-]+"
+    },
+    "purpose": {
+      "enum": [
+        "communication",
+        "analysis"
+      ],
+      "description": "R0-02",
+      "default": "communication"
+    },
+    "job": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Job",
+          "description": "required for communication (R0-07)"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "insight": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Insight",
+          "description": "recommended (R0-10, RP5-1)"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "title": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Title",
+          "description": "required for communication"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "audience": {
+      "$ref": "#/$defs/Audience"
+    },
+    "data": {
+      "$ref": "#/$defs/Data"
+    },
+    "facts": {
+      "$ref": "#/$defs/Facts"
+    },
+    "chart": {
+      "$ref": "#/$defs/ChartOpts"
+    },
+    "scale": {
+      "$ref": "#/$defs/ScaleOpts"
+    },
+    "inset": {
+      "$ref": "#/$defs/InsetOpts"
+    },
+    "panels": {
+      "$ref": "#/$defs/PanelOpts",
+      "description": "small multiples and merged charts (SPEC §6.10; phase 2)"
+    },
+    "table": {
+      "$ref": "#/$defs/TableOpts",
+      "description": "a table with the graph: its rows' keys (SPEC §6.7.13; phase 2)"
+    },
+    "highlight": {
+      "anyOf": [
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Highlight"
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "comments": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Comment"
+      }
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Note"
+      },
+      "description": "notes under the chart (SPEC §6.19): footnotes, each with the places its mark is set (on), and plain notes; not labels.notes, the words written for values not known. A value's own note is a footnote too"
+    },
+    "transform": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Transform",
+          "description": "a derived measure: deviation, ratio or index (phase 2, transform.py)"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "labels": {
+      "$ref": "#/$defs/LabelOpts"
+    },
+    "layout": {
+      "$ref": "#/$defs/LayoutOpts"
+    },
+    "colours": {
+      "$ref": "#/$defs/Colours",
+      "description": "palette slots fixed by name, the same in every chart of a set (R3-24, G4.22): a map, or the document's registry file"
+    },
+    "overrides": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Override"
+      },
+      "description": "R0-04: lets a refusal of a locked rule through, reported"
+    },
+    "reasons": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "why a guided option departs from the procedure, keyed by its path (\"chart.orientation\", \"highlight[0].dim_others\")"
+    },
+    "source": {
+      "$ref": "#/$defs/Source"
+    }
+  },
+  "required": [
+    "chartspec",
+    "id",
+    "data"
+  ],
+  "additionalProperties": false,
+  "description": "Spec(*, chartspec: Literal[1], id: str, purpose: Literal['communication', 'analysis'] = 'communication', job: chartgen.spec.Job = None, insight: chartgen.spec.Insight = None, title: chartgen.spec.Title = None, audience: chartgen.spec.Audience = <factory>, data: chartgen.spec.Data, facts: chartgen.spec.Facts = <factory>, chart: chartgen.spec.ChartOpts = <factory>, scale: chartgen.spec.ScaleOpts = <factory>, inset: chartgen.spec.InsetOpts = <factory>, panels: chartgen.spec.PanelOpts = <factory>, table: chartgen.spec.TableOpts = <factory>, highlight: list[chartgen.spec.Highlight] = None, comments: list[chartgen.spec.Comment] = <factory>, notes: list[chartgen.spec.Note] = <factory>, transform: chartgen.spec.Transform = None, labels: chartgen.spec.LabelOpts = <factory>, layout: chartgen.spec.LayoutOpts = <factory>, colours: chartgen.spec.Colours = <factory>, overrides: list[chartgen.spec.Override] = <factory>, reasons: dict[str, str] = <factory>, source: chartgen.spec.Source = <factory>)",
+  "$defs": {
+    "Job": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "enum": [
+            "answer",
+            "make_aware",
+            "persuade",
+            "lookup",
+            "explain",
+            "other"
+          ],
+          "description": "R0-07"
+        },
+        "text": {
+          "type": "string",
+          "description": "the question answered, the problem, the action …"
+        }
+      },
+      "required": [
+        "kind",
+        "text"
+      ],
+      "additionalProperties": false,
+      "description": "Job(*, kind: Literal['answer', 'make_aware', 'persuade', 'lookup', 'explain', 'other'], text: str)"
+    },
+    "Insight": {
+      "type": "object",
+      "properties": {
+        "important": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "the specific thing the audience should notice (R0-10)"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "why_care": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "explain": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "action": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "targets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Ref"
+          },
+          "description": "the elements the insight names (highlighted by default)"
+        },
+        "explain_anchor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Ref"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [],
+      "additionalProperties": false,
+      "description": "Insight(*, important: str = None, why_care: str = None, explain: str = None, action: str = None, targets: list[chartgen.spec.Ref] = <factory>, explain_anchor: chartgen.spec.Ref = None)"
+    },
+    "Ref": {
+      "type": "object",
+      "properties": {
+        "series": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "a series id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "category": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "a category name (x value)"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "x": {
+          "anyOf": [
+            {
+              "description": "an x value, or [from, to] for a segment of a line"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "panel": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "a panel of small multiples (phase 2)"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [],
+      "additionalProperties": false,
+      "description": "An element reference (SPEC §2.8)."
+    },
+    "Title": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "typst": {
+                  "type": "string"
+                },
+                "alternative": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "typst"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "tex": {
+                  "type": "string"
+                },
+                "alternative": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "tex"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "latex": {
+                  "type": "string"
+                },
+                "alternative": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "latex"
+              ],
+              "additionalProperties": false
+            }
+          ],
+          "description": "the title (the generator never writes prose; R2-12, R5-27)"
+        },
+        "kind": {
+          "enum": [
+            "insight",
+            "question",
+            "descriptive"
+          ],
+          "description": "13-15 §5.2",
+          "default": "descriptive"
+        },
+        "descriptive": {
+          "anyOf": [
+            {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "typst": {
+                      "type": "string"
+                    },
+                    "alternative": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "typst"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "tex": {
+                      "type": "string"
+                    },
+                    "alternative": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "tex"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "latex": {
+                      "type": "string"
+                    },
+                    "alternative": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "latex"
+                  ],
+                  "additionalProperties": false
+                }
+              ],
+              "description": "the descriptive line under an insight or question title: what, by what, period with year (D-5 (a)); set in the label style"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "link": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Ref",
+              "description": "a title connector (phase 2)"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "additionalProperties": false,
+      "description": "Title(*, text: chartgen.spec.Text, kind: Literal['insight', 'question', 'descriptive'] = 'descriptive', descriptive: chartgen.spec.Text = None, link: chartgen.spec.Ref = None)"
+    },
+    "Audience": {
+      "type": "object",
+      "properties": {
+        "data_savvy": {
+          "type": "boolean",
+          "description": "R0-03, R6-41",
+          "default": false
+        },
+        "knows_scale": {
+          "type": "boolean",
+          "description": "02 D2 Q7 (not used under D-10 (a))",
+          "default": false
+        },
+        "cvd": {
+          "enum": [
+            "assume",
+            "no"
+          ],
+          "description": "R3-19",
+          "default": "assume"
+        },
+        "bw_risk": {
+          "type": "boolean",
+          "description": "R6-30",
+          "default": false
+        },
+        "pie_averse": {
+          "type": "boolean",
+          "description": "R7-40",
+          "default": false
+        },
+        "locale": {
+          "type": "string",
+          "description": "separators (R5-15)",
+          "default": "en-GB"
+        },
+        "date_format": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "R5-19"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "abbreviations": {
+          "anyOf": [
+            {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              },
+              "description": "the audience's own, {\"thousand\": \"K\", \"million\": \"M\"} (R5-13)"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [],
+      "additionalProperties": false,
+      "description": "Audience(*, data_savvy: bool = False, knows_scale: bool = False, cvd: Literal['assume', 'no'] = 'assume', bw_risk: bool = False, pie_averse: bool = False, locale: str = 'en-GB', date_format: str = None, abbreviations: dict[str, str] = None)"
+    },
+    "Data": {
+      "type": "object",
+      "properties": {
+        "x": {
+          "$ref": "#/$defs/XDim"
+        },
+        "measure": {
+          "$ref": "#/$defs/Measure"
+        },
+        "series": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Series"
+          }
+        },
+        "as_of": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "a date: periods ending after it are incomplete (R2-42)"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "parts": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Parts",
+              "description": "required by part-to-whole types"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "comparisons": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Comparison"
+          },
+          "description": "phase 2"
+        },
+        "dims": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Dim"
+          },
+          "description": "small multiples: the breakdown variables besides x, each series keyed by its values (series.keys; SPEC §6.10)"
+        },
+        "measures": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Measure"
+          },
+          "description": "a merged chart: several measures, each with its id, its series naming it (series.measure); one scale each (R2-13, R2-16)"
+        },
+        "actions": {
+          "type": "object",
+          "additionalProperties": {
+            "enum": [
+              "good_strong",
+              "good",
+              "bad",
+              "bad_strong",
+              "none"
+            ]
+          },
+          "description": "action dots (phase 3; R12-4, G7.58): the action each category's value warrants, supplied with the data since the thresholds are the maker's (D-1): good_strong and good a strong and a light green dot, bad and bad_strong a light and a strong red one, none (or absent) no dot"
+        },
+        "x_measure": {
+          "$ref": "#/$defs/Measure",
+          "description": "scatter: the measure on the x axis (data.measure is the y axis)"
+        },
+        "states": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "additionalProperties": false
+          },
+          "description": "state_matrix: the declared cell states, in legend order (XS-MX-01)"
+        },
+        "difference_intervals": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "lo": {
+                "type": "number"
+              },
+              "hi": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "lo",
+              "hi"
+            ],
+            "additionalProperties": false
+          },
+          "description": "dumbbell, view difference: a supplied interval per category"
+        },
+        "series_name": {
+          "type": "string",
+          "description": "contingency: what the series (rows) are called"
+        }
+      },
+      "required": [
+        "x",
+        "series"
+      ],
+      "additionalProperties": false,
+      "description": "Data(*, x: chartgen.spec.XDim, measure: chartgen.spec.Measure = <factory>, series: list[chartgen.spec.Series], as_of: str = None, parts: chartgen.spec.Parts = None, comparisons: list[chartgen.spec.Comparison] = <factory>, dims: list[chartgen.spec.Dim] = <factory>, measures: list[chartgen.spec.Measure] = <factory>, actions: dict[str, typing.Literal['good_strong', 'good', 'bad', 'bad_strong', 'none']] = <factory>)"
+    },
+    "XDim": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "enum": [
+            "nominal",
+            "ordinal",
+            "time"
+          ],
+          "description": "required: the order of categories cannot be inferred (R2-01, R2-02)"
+        },
+        "values": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "categories, or period strings on the grid"
+        },
+        "grid": {
+          "anyOf": [
+            {
+              "enum": [
+                "year",
+                "quarter",
+                "month",
+                "week",
+                "day",
+                "hour",
+                "bin",
+                "none"
+              ],
+              "description": "required for time: regular intervals (R6-3), or none; bin (phase 3): ranges of years, \"1960–1969\" (or 1960-1969), contiguous, re-aggregated to equal lengths or refused (R2-43)"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "week_start": {
+          "enum": [
+            "auto",
+            "monday",
+            "sunday"
+          ],
+          "description": "a week grid's first day (phase 3): auto is Sunday for a Sunday-first locale (audience.locale en-US, en-CA, ja-JP …, the book's weeks), else Monday (ISO 8601); a week is written as its first day, \"2022-06-19\", or as an ISO week, \"2022-W25\", only when weeks start on Monday",
+          "default": "auto"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "typst": {
+                      "type": "string"
+                    },
+                    "alternative": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "typst"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "tex": {
+                      "type": "string"
+                    },
+                    "alternative": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "tex"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "latex": {
+                      "type": "string"
+                    },
+                    "alternative": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "latex"
+                  ],
+                  "additionalProperties": false
+                }
+              ],
+              "description": "categorical axis title; none when the names say what they are (R2-03)"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "roles": {
+          "type": "object",
+          "additionalProperties": {
+            "enum": [
+              "all_others",
+              "total",
+              "average",
+              "missing"
+            ]
+          },
+          "description": "R3-16; 02 D1: the special categories, each in its reserved grey; missing for a category that stands for answers or items not known (\"No answer\", \"Not known\"): the missing grey, placed last after all_others (G0.18, G2.1, G4.15)"
+        },
+        "levels": {
+          "description": "time axis rows (6.3)",
+          "default": "auto"
+        },
+        "names": {
+          "type": "object",
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "typst": {
+                    "type": "string"
+                  },
+                  "alternative": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "typst"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "tex": {
+                    "type": "string"
+                  },
+                  "alternative": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "tex"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "latex": {
+                    "type": "string"
+                  },
+                  "alternative": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "latex"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "description": "the words for a value that is a code, where the chart names it (phase 2): an arrow chart's key, {\"2022-Q1\": \"Before blitz\"}"
+        },
+        "groups": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "the group each category belongs to (phase 3): a treemap's top level, coloured by group and labelled (R7-16); a pie's slices of a group together, its first part in the group's colour and the next in a tint of it (07 #10, separated overlaps)"
+        },
+        "order": {
+          "enum": [
+            "auto",
+            "fixed"
+          ],
+          "description": "phase 3 (owner, 1 Oct 2026): fixed when the categories' given order must be kept (a table shared by several charts ordered differently): bars, stacks and the table under them stand in the order given rather than sorted by value (a guided decision); auto lets the chart sort nominal categories (R2-01)",
+          "default": "auto"
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Event"
+          },
+          "description": "time: dates marked on the axis, each with its label (the tank finished, a competitor's opening; SPEC §6.13.12)"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "additionalProperties": false,
+      "description": "XDim(*, kind: Literal['nominal', 'ordinal', 'time'], values: list[str] = <factory>, grid: Literal['year', 'quarter', 'month', 'week', 'day', 'hour', 'bin', 'none'] = None, week_start: Literal['auto', 'monday', 'sunday'] = 'auto', title: chartgen.spec.Text = None, roles: dict[str, typing.Literal['all_others', 'total', 'average', 'missing']] = <factory>, levels: Any = 'auto', names: dict[str, chartgen.spec.Text] = <factory>, groups: dict[str, str] = <factory>, order: Literal['auto', 'fixed'] = 'auto', events: list[chartgen.spec.Event] = <factory>)"
+    },
+    "Event": {
+      "type": "object",
+      "properties": {
+        "at": {
+          "type": "string",
+          "description": "its date (\"2025-06-15\") or instant (\"2025-06-15T09:30\"); a date alone is the start of its day, or its middle where the events of the data are dated to the day (thin bars)"
+        },
+        "label": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "typst": {
+                  "type": "string"
+                },
+                "alternative": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "typst"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "tex": {
+                  "type": "string"
+                },
+                "alternative": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "tex"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "latex": {
+                  "type": "string"
+                },
+                "alternative": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "latex"
+              ],
+              "additionalProperties": false
+            }
+          ],
+          "description": "the words beside it, \"Storage tank finished\" (the generator never writes prose)"
+        }
+      },
+      "required": [
+        "at",
+        "label"
+      ],
+      "additionalProperties": false,
+      "description": "A date marked on a time axis (SPEC §6.13.12): something that happened outside the data, which the message refers to (a storage tank finished, a competitor opened), drawn as a thin line across the plot at its date with its label."
+    },
+    "Measure": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "what is measured, for reports and legends"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "kind": {
+          "enum": [
+            "count",
+            "amount",
+            "percent",
+            "score",
+            "quantity",
+            "change",
+            "index",
+            "rank"
+          ],
+          "description": "percent values in percent units (45 for 45 %)",
+          "default": "count"
+        },
+        "unit": {
+          "$ref": "#/$defs/Unit"
+        },
+        "zero": {
+          "anyOf": [
+            {
+              "enum": [
+                "meaningful",
+                "arbitrary"
+              ],
+              "description": "02 D2 Q2: is zero 'none of it' (a ratio scale)"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "min": {
+          "anyOf": [
+            {
+              "type": "number",
+              "description": "theoretical minimum (R2-26, R2-28)"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "max": {
+          "anyOf": [
+            {
+              "type": "number",
+              "description": "theoretical maximum (R2-28)"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "persistence": {
+          "anyOf": [
+            {
+              "enum": [
+                "summary",
+                "state",
+                "event"
+              ],
+              "description": "time only (R6-8–R6-12)"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "cumulative": {
+          "type": "boolean",
+          "description": "the unit phrase must say so (R2-11)",
+          "default": false
+        },
+        "additive": {
+          "anyOf": [
+            {
+              "type": "boolean",
+              "description": "time (phase 3): the values are totals over their periods (deaths per decade, sales per week), so adjacent periods' values add up to the longer period's; unequal bins are re-aggregated by adding only when this is true (R2-43, G2.41)"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "good": {
+          "anyOf": [
+            {
+              "enum": [
+                "higher",
+                "lower"
+              ],
+              "description": "good direction (R3-17, R15-11)"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "dividing_point": {
+          "anyOf": [
+            {
+              "description": "diverging midpoint, a number or {comparison: id} (R3-13)"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "precision": {
+          "anyOf": [
+            {
+              "type": "number",
+              "description": "the finest difference the message needs (R5-9)"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "in data.measures: the id its series name in series.measure (a merged chart, R2-16)"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "heading": {
+          "anyOf": [
+            {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "typst": {
+                      "type": "string"
+                    },
+                    "alternative": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "typst"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "tex": {
+                      "type": "string"
+                    },
+                    "alternative": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "tex"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "latex": {
+                      "type": "string"
+                    },
+                    "alternative": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "latex"
+                  ],
+                  "additionalProperties": false
+                }
+              ],
+              "description": "a merged chart's panel heading: a short name of the measure, or the question the panel answers (G2.32, G7.6, RP5-6); default the measure's name"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [],
+      "additionalProperties": false,
+      "description": "Measure(*, name: str = None, kind: Literal['count', 'amount', 'percent', 'score', 'quantity', 'change', 'index', 'rank'] = 'count', unit: chartgen.spec.Unit = <factory>, zero: Literal['meaningful', 'arbitrary'] = None, min: chartgen.spec.Num = None, max: chartgen.spec.Num = None, persistence: Literal['summary', 'state', 'event'] = None, cumulative: bool = False, additive: bool = None, good: Literal['higher', 'lower'] = None, dividing_point: Any = None, precision: chartgen.spec.Num = None, id: str = None, heading: chartgen.spec.Text = None)"
+    },
+    "Unit": {
+      "type": "object",
+      "properties": {
+        "prefix": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "before the number: \"$\""
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "suffix": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "after the number: \"%\", \"°C\", \" lbs.\" (a leading space is part of it)"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "noun": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "runs on after the number: \"successful transactions per month\""
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "what": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "a description, always in parentheses after the number: \"weight of product\" gives \"0.25 lbs. (weight of product)\" (D-20)"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "given_in": {
+          "anyOf": [
+            {
+              "enum": [
+                "thousands",
+                "millions",
+                "billions",
+                "trillions"
+              ],
+              "description": "only when the numbers in the data are already written in thousands, millions … (a source headed \"£000\" or \"$ million\"): \"thousands\" means that 1840 in the data stands for 1,840,000. Never a request to scale the labels: the generator hides digits by itself (G6.11), and scale.magnitude overrides that. Values given in thousands that still reach five integer digits are reported (R5-11), as a likely misreading"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "magnitude": {
+          "type": "integer",
+          "description": "the older spelling of given_in, as a power of ten: 3 for thousands, 6 for millions, 9 for billions (the numbers in the data are already in that unit); prefer given_in",
+          "default": 0
+        },
+        "fallback": {
+          "anyOf": [
+            {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "typst": {
+                      "type": "string"
+                    },
+                    "alternative": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "typst"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "tex": {
+                      "type": "string"
+                    },
+                    "alternative": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "tex"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "latex": {
+                      "type": "string"
+                    },
+                    "alternative": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "latex"
+                  ],
+                  "additionalProperties": false
+                }
+              ],
+              "description": "the unit line's text when the phrase cannot sit inline (6.4)"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "scale_title": {
+          "anyOf": [
+            {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "typst": {
+                      "type": "string"
+                    },
+                    "alternative": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "typst"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "tex": {
+                      "type": "string"
+                    },
+                    "alternative": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "tex"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "latex": {
+                      "type": "string"
+                    },
+                    "alternative": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "latex"
+                  ],
+                  "additionalProperties": false
+                }
+              ],
+              "description": "the title under a horizontal scale, in place of the one derived from what or measure.name and the unit (\"Donations ($K)\")"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [],
+      "additionalProperties": false,
+      "description": "Unit(*, prefix: str = None, suffix: str = None, noun: str = None, what: str = None, given_in: Literal['thousands', 'millions', 'billions', 'trillions'] = None, magnitude: int = 0, fallback: chartgen.spec.Text = None, scale_title: chartgen.spec.Text = None)"
+    },
+    "Series": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "referenced by highlight, comments, targets"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "typst": {
+                      "type": "string"
+                    },
+                    "alternative": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "typst"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "tex": {
+                      "type": "string"
+                    },
+                    "alternative": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "tex"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "latex": {
+                      "type": "string"
+                    },
+                    "alternative": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "latex"
+                  ],
+                  "additionalProperties": false
+                }
+              ],
+              "description": "end label or legend text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "values": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "oneOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "status": {
+                        "enum": [
+                          "missing",
+                          "unknown",
+                          "pending",
+                          "tbd",
+                          "error"
+                        ]
+                      },
+                      "note": {
+                        "type": "string",
+                        "description": "why it is not known, a footnote on the words written for it (SPEC §6.19)"
+                      }
+                    },
+                    "required": [
+                      "status"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "value": {
+                        "type": "number"
+                      },
+                      "certainty": {
+                        "enum": [
+                          "actual",
+                          "estimate",
+                          "projection",
+                          "target"
+                        ]
+                      },
+                      "complete": {
+                        "type": "boolean"
+                      },
+                      "note": {
+                        "type": "string",
+                        "description": "a footnote on this value (SPEC §6.19): its mark on the value's text, the note under the chart"
+                      }
+                    },
+                    "required": [
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "below": {
+                        "type": "number",
+                        "description": "a censored value: below this detection limit (\"<1\"), not missing; drawn by heatmaps and tables (SPEC §2.4)"
+                      },
+                      "note": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "below"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "above": {
+                        "type": "number",
+                        "description": "a censored value: above this limit of the test's range (\">2420\")"
+                      },
+                      "note": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "above"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "string",
+                    "pattern": "^\\s*[<>]\\s*-?\\d+(\\.\\d+)?\\s*$",
+                    "description": "a censored value as a laboratory writes it: \"<1\", \">2420\""
+                  }
+                ]
+              },
+              "description": "aligned with x.values"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "points": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": {}
+              },
+              "description": "[[time, value]] when x.grid is none"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "role": {
+          "enum": [
+            "regular",
+            "average",
+            "total",
+            "all_others",
+            "reference",
+            "target",
+            "missing"
+          ],
+          "description": "special roles take the reserved greys (R3-16, G4.15); missing: a series that stands for answers or items not known (\"No answer\" as a part of a stack), in the missing grey, last",
+          "default": "regular"
+        },
+        "certainty": {
+          "enum": [
+            "actual",
+            "estimate",
+            "projection",
+            "target"
+          ],
+          "default": "actual"
+        },
+        "slot": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "description": "fixed palette slot (R3-24)"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "keys": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "small multiples: the series' value of each of data.dims ({\"method\": \"Cash\", \"region\": \"West\"}; SPEC §6.10)"
+        },
+        "measure": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "a merged chart: the id of its measure in data.measures (R2-16)"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "samples": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
+          "description": "box, strip, ecdf, interval: the measurements, one array per category"
+        },
+        "summaries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "n": {
+                "type": "integer"
+              },
+              "q1": {
+                "type": "number"
+              },
+              "median": {
+                "type": "number"
+              },
+              "q3": {
+                "type": "number"
+              },
+              "lower_whisker": {
+                "type": "number"
+              },
+              "upper_whisker": {
+                "type": "number"
+              },
+              "mean": {
+                "type": "number"
+              },
+              "outliers": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "none"
+                    ]
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "number"
+                    }
+                  }
+                ]
+              }
+            },
+            "required": [],
+            "additionalProperties": false
+          },
+          "description": "box: declared summaries instead of samples (XS-BOX-08..10)"
+        },
+        "successes": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "description": "interval: successes per category, with `trials` (Wilson interval)"
+        },
+        "trials": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "description": "interval: trials per category"
+        },
+        "intervals": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "lo": {
+                "type": "number"
+              },
+              "hi": {
+                "type": "number"
+              },
+              "n": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "lo",
+              "hi"
+            ],
+            "additionalProperties": false
+          },
+          "description": "interval: a supplied interval per category, with `values`"
+        },
+        "xy": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
+          "description": "scatter: [x, y] pairs"
+        },
+        "states": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "state_matrix: the declared state id of each column"
+        },
+        "counts": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "description": "contingency: the count in each column"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false,
+      "description": "Series(*, id: str, name: chartgen.spec.Text = None, values: list[chartgen.spec.Value] = None, points: list[list[typing.Any]] = None, role: Literal['regular', 'average', 'total', 'all_others', 'reference', 'target', 'missing'] = 'regular', certainty: Literal['actual', 'estimate', 'projection', 'target'] = 'actual', slot: int = None, keys: dict[str, str] = <factory>, measure: str = None)"
+    },
+    "Parts": {
+      "type": "object",
+      "properties": {
+        "meaningful_total": {
+          "anyOf": [
+            {
+              "type": "boolean",
+              "description": "R7-02"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "all_parts": {
+          "anyOf": [
+            {
+              "type": "boolean",
+              "description": "R7-03"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "overlaps": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "description": "[[part, parent]] (R7-05)"
+        },
+        "overlap": {
+          "anyOf": [
+            {
+              "type": "boolean",
+              "description": "phase 3: whether any part contains or overlaps another (R7-05, G0.14); true also when overlaps lists a pair; neither given: refused before a pie, stacked chart, treemap or waterfall, like meaningful_total and all_parts (D-1; owner, 1 Oct 2026)"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "total": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "kind": {
+          "enum": [
+            "nominal",
+            "ordinal"
+          ],
+          "description": "phase 3: the parts' own order, when they are series (several totals, over time): ordinal parts (risk levels) are stacked in their order, the first at the base (R2-02); nominal parts are stacked by the message, then by size (G7.31, D-26)",
+          "default": "nominal"
+        },
+        "groups": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "phase 3: the group each part belongs to, when the parts are series (several totals, over time; {series id: group}): a group's parts stack together in shades of the group's hue, the darkest in the middle, named by a grouped legend (G4.9, G5.12, D-49; 03-04 #7)"
+        },
+        "order": {
+          "enum": [
+            "auto",
+            "fixed"
+          ],
+          "description": "phase 3 (owner, 1 Oct 2026): fixed when the data's given order must be kept (a table shared by several charts ordered differently): the parts, as series or as the categories of one total, and the totals they make keep the order given in every stack and band, the first at the base, whatever their size or the message; auto lets the chart order them (largest first, the parts the message names at the base, D-26)",
+          "default": "auto"
+        }
+      },
+      "required": [],
+      "additionalProperties": false,
+      "description": "Parts(*, meaningful_total: bool = None, all_parts: bool = None, overlaps: list[list[str]] = <factory>, overlap: bool = None, total: chartgen.spec.Num = None, kind: Literal['nominal', 'ordinal'] = 'nominal', groups: dict[str, str] = <factory>, order: Literal['auto', 'fixed'] = 'auto')"
+    },
+    "Comparison": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "target",
+            "budget",
+            "tolerance",
+            "forecast",
+            "average",
+            "previous_period",
+            "peer"
+          ]
+        },
+        "values": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "enum": [
+                      "missing",
+                      "unknown",
+                      "pending",
+                      "tbd",
+                      "error"
+                    ]
+                  },
+                  "note": {
+                    "type": "string",
+                    "description": "why it is not known, a footnote on the words written for it (SPEC §6.19)"
+                  }
+                },
+                "required": [
+                  "status"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "value": {
+                    "type": "number"
+                  },
+                  "certainty": {
+                    "enum": [
+                      "actual",
+                      "estimate",
+                      "projection",
+                      "target"
+                    ]
+                  },
+                  "complete": {
+                    "type": "boolean"
+                  },
+                  "note": {
+                    "type": "string",
+                    "description": "a footnote on this value (SPEC §6.19): its mark on the value's text, the note under the chart"
+                  }
+                },
+                "required": [
+                  "value"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "below": {
+                    "type": "number",
+                    "description": "a censored value: below this detection limit (\"<1\"), not missing; drawn by heatmaps and tables (SPEC §2.4)"
+                  },
+                  "note": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "below"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "above": {
+                    "type": "number",
+                    "description": "a censored value: above this limit of the test's range (\">2420\")"
+                  },
+                  "note": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "above"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "string",
+                "pattern": "^\\s*[<>]\\s*-?\\d+(\\.\\d+)?\\s*$",
+                "description": "a censored value as a laboratory writes it: \"<1\", \">2420\""
+              }
+            ]
+          },
+          "description": "one value, or one per x value; empty with compute"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "typst": {
+                      "type": "string"
+                    },
+                    "alternative": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "typst"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "tex": {
+                      "type": "string"
+                    },
+                    "alternative": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "tex"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "latex": {
+                      "type": "string"
+                    },
+                    "alternative": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "latex"
+                  ],
+                  "additionalProperties": false
+                }
+              ],
+              "description": "its label (\"Target\", \"Industry average\"); default the kind's name"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "valid": {
+          "type": "boolean",
+          "description": "false for a doubtful comparator (another industry, years-old figures): it is not drawn (R15-9)",
+          "default": true
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "where it comes from, or why it is doubtful (reported)"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "compute": {
+          "anyOf": [
+            {
+              "enum": [
+                "mean"
+              ],
+              "description": "an average of the plotted data, computed (the values left empty)"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "series": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "the series it compares (default: the first)"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "render": {
+          "enum": [
+            "auto",
+            "mark",
+            "line",
+            "series",
+            "none"
+          ],
+          "description": "guided (G8.13, G7.57, D-21): auto makes one value per category a reference series, which the bar layout draws as flat marks across the bars (R11-4), and a line chart's a reference series; one value is a line across the plot (the message layer); none keeps it for a transform or the good/bad division only",
+          "default": "auto"
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Unit",
+              "description": "the unit its values are given in, when it is not the measure's (targets in kWh against use in MWh): a unit of another prefix or suffix is refused unless factor converts it (R2-13); one of another magnitude only is converted (£K against £M); none: the measure's own"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "factor": {
+          "anyOf": [
+            {
+              "type": "number",
+              "description": "the number each value is multiplied by to give the measure's unit (0.001 from kWh to MWh), with unit; reported"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "kind"
+      ],
+      "additionalProperties": false,
+      "description": "A comparison value (R15-7–R15-9, G0.19, G8.12; phase 2, SPEC §6.13): one value (a reference line), or one per category or period, aligned with x.values (target marks on bars, a reference series on a line chart)."
+    },
+    "Dim": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "named in series.keys and panels.arrangement; not \"measure\" (reserved)"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "typst": {
+                      "type": "string"
+                    },
+                    "alternative": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "typst"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "tex": {
+                      "type": "string"
+                    },
+                    "alternative": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "tex"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "latex": {
+                      "type": "string"
+                    },
+                    "alternative": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "latex"
+                  ],
+                  "additionalProperties": false
+                }
+              ],
+              "description": "what the variable is (\"Payment method\"), for reports"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "kind": {
+          "enum": [
+            "nominal",
+            "ordinal"
+          ],
+          "description": "ordinal values keep their order (R2-02)",
+          "default": "nominal"
+        },
+        "values": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "its values, in their order: the order of rows, columns or series"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false,
+      "description": "A breakdown variable besides x (small multiples, SPEC §6.10): its values become the panels' rows or columns, or the series inside each panel."
+    },
+    "Facts": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "time: pattern (default), periods, rank, individual_values; categories: compare …; phase 3 (the full chooser, SPEC §3.2): parts of a total (07 §4.0) compare_parts_precisely, fraction_of_total, subtotal_amount, subtotal_fraction, cumulative_subtotals, compare_totals, compare_parts_across_totals, fractions_within_each_total; a table alone lookup_only, export_only, not_comparable (R10-11); action_needed (action dots, R12-4); stage_conversion (the funnel's replacement, R12-5); profiles, items compared across attributes (a radar's data: a heatmap table, R12-6)"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "small_differences_matter": {
+          "type": "boolean",
+          "description": "narrow-range inset (R2-23, R9-6)",
+          "default": false
+        },
+        "small_values_matter": {
+          "type": "boolean",
+          "description": "outlier inset (R2-20)",
+          "default": false
+        },
+        "distance_to_zero_irrelevant": {
+          "type": "boolean",
+          "description": "truncation allowed for non-length marks (R2-24)",
+          "default": false
+        },
+        "exact_values_needed": {
+          "type": "boolean",
+          "description": "table with the graph (phase 2)",
+          "default": false
+        },
+        "location_matters": {
+          "type": "boolean",
+          "description": "where the values are (regions' sizes, neighbours, clusters) matters more to the message than reading and comparing them: a map (R8-2, R8-3; maps are phase 4)",
+          "default": false
+        },
+        "ramp_focus": {
+          "anyOf": [
+            {
+              "enum": [
+                "extremes",
+                "pattern"
+              ],
+              "description": "a heatmap of skewed values (phase 3; G4.29, G4.30, G4.33): whether its few extreme values are the message (a linear cut) or the pattern among the many (logarithmic steps over two orders of magnitude, else natural breaks); asked only when the values are skewed; default pattern, with an info"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "total_matters": {
+          "anyOf": [
+            {
+              "type": "boolean",
+              "description": "a total over time (phase 3, 07 §4.3): the total's change must be visible (a total panel, absolute stacks); default false, with an info"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "focus": {
+          "anyOf": [
+            {
+              "enum": [
+                "pattern",
+                "periods"
+              ],
+              "description": "a total over time (phase 3): the overall pattern of change (areas) or particular periods (bars; R7-28); default periods when message is periods, else pattern"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "incomplete_value_needed": {
+          "type": "boolean",
+          "description": "the value of an incomplete first or last period must be shown: drawn apart with an “As of …” note; otherwise it is left out (R2-42, G2.40, 02 D10; phase 2)",
+          "default": false
+        },
+        "compare": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "small multiples: the dims whose values the insight compares directly, drawn as series in one panel (RP3-4, G1.19)"
+        },
+        "compare_shapes": {
+          "type": "boolean",
+          "description": "small multiples: the message compares the shapes of series of very different sizes, not their sizes: a scale per panel (R6-37, G7.48)",
+          "default": false
+        }
+      },
+      "required": [],
+      "additionalProperties": false,
+      "description": "Facts(*, message: str = None, small_differences_matter: bool = False, small_values_matter: bool = False, distance_to_zero_irrelevant: bool = False, exact_values_needed: bool = False, location_matters: bool = False, ramp_focus: Literal['extremes', 'pattern'] = None, total_matters: bool = None, focus: Literal['pattern', 'periods'] = None, incomplete_value_needed: bool = False, compare: list[str] = <factory>, compare_shapes: bool = False)"
+    },
+    "ChartOpts": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "enum": [
+            "auto",
+            "bar",
+            "line",
+            "dot",
+            "step",
+            "thin_bar",
+            "arrow",
+            "bumps",
+            "pie",
+            "donut",
+            "treemap",
+            "wrapped_bar",
+            "stacked_bar",
+            "stacked_bar_100",
+            "waterfall",
+            "stacked_area",
+            "stacked_area_100",
+            "line_total",
+            "slope",
+            "dual_axis",
+            "radar",
+            "funnel",
+            "word_cloud",
+            "packed_bubbles",
+            "bullet",
+            "choropleth",
+            "3d",
+            "smoothed_line",
+            "table",
+            "heatmap",
+            "action_dots",
+            "funnel_bars",
+            "box",
+            "strip",
+            "ecdf",
+            "scatter",
+            "dumbbell",
+            "interval_dot",
+            "interval_bar",
+            "state_matrix",
+            "contingency"
+          ],
+          "description": "later types in §7; step, thin_bar, arrow and bumps: phase 2 (time); pie (several series: one pie per total), treemap, wrapped_bar: phase 3, a single total's breakdown (layout/pie.py, treemap.py, wrapped.py); donut only through an override of R7-39; statistical types (docs/chartgen/STATS.md): box, strip, ecdf (samples per category), scatter (xy pairs), dumbbell (two paired series), interval_dot and interval_bar (an estimate with a declared interval), state_matrix (a declared state in every cell), contingency (counts of an exhaustive partition)",
+          "default": "auto"
+        },
+        "orientation": {
+          "enum": [
+            "auto",
+            "vertical",
+            "horizontal"
+          ],
+          "default": "auto"
+        },
+        "sort": {
+          "enum": [
+            "auto",
+            "desc",
+            "asc",
+            "given"
+          ],
+          "description": "02 D1",
+          "default": "auto"
+        },
+        "sort_by": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "a series id (default: the series the insight names, else the first; D-46)"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "labelling": {
+          "enum": [
+            "auto",
+            "direct",
+            "legend"
+          ],
+          "default": "auto"
+        },
+        "value_labels": {
+          "enum": [
+            "auto",
+            "on",
+            "off"
+          ],
+          "description": "R2-32 (phase 2)",
+          "default": "auto"
+        },
+        "gridlines": {
+          "type": "boolean",
+          "description": "R1-06: off only with an override",
+          "default": true
+        },
+        "change_panels": {
+          "enum": [
+            "auto",
+            "both",
+            "absolute",
+            "relative"
+          ],
+          "description": "an arrow chart's panels (R6-17, G1.47; phase 2): both, change in units and change in %; relative alone when facts.message is relative_change; absolute alone only through an override",
+          "default": "auto"
+        },
+        "encoding": {
+          "enum": [
+            "auto",
+            "sequential",
+            "diverging",
+            "categorical"
+          ],
+          "description": "guided (phase 3; G4.5, G4.10, G4.11, D-37; notes 03-04 §5.6 `encoding`): the kind of ramp by which colour encodes a quantity (a heatmap, a shaded table), never its colours, which are the style's: auto is sequential, or diverging when data.measure.dividing_point gives the value the audience sees as dividing; diverging without one is refused (R3-13), categorical for a quantity too (R3-9, G4.14 [L]), except through an override",
+          "default": "auto"
+        },
+        "classing": {
+          "enum": [
+            "auto",
+            "linear",
+            "natural",
+            "quantile",
+            "custom",
+            "log"
+          ],
+          "description": "guided (phase 3; G4.29–G4.33, SPEC §6.14): where a heatmap's colour steps are cut: auto is linear (equal steps on rounded values, G4.29) for fairly even values, and for skewed values (one of seven equal steps would hold more than half of them) linear when facts.ramp_focus is extremes; when it is pattern (the default, with an info), log (1–2–5 steps, zero its own, G4.33) for amounts on a ratio scale spanning at least two orders of magnitude (the 95th percentile of the positive values at least 100 times the 5th; owner, 1 Oct 2026), else natural (Jenks's breaks, rounded, G4.30); quantile (equal counts, G4.31) and custom (chart.breaks, G4.32) only as departures with a reason",
+          "default": "auto"
+        },
+        "breaks": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "description": "custom breaks (G4.32, with a reason): the values between a heatmap's steps; for a diverging ramp, their distances from the dividing value"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "cells": {
+          "enum": [
+            "auto",
+            "strong",
+            "muted"
+          ],
+          "description": "guided (phase 3; owner, 1 Oct 2026): a coloured cell's strength where it carries its value: strong (the step itself, the value black or white, whichever reads better: a heatmap, whose colour is the message) or muted (the step paled, the value in the text grey: a table with colour hinting at sizes); auto is strong for a heatmap and muted for a shaded table (table.graphics heat)",
+          "default": "auto"
+        },
+        "whiskers": {
+          "anyOf": [
+            {
+              "enum": [
+                "tukey",
+                "min_max"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "rule": {
+                  "enum": [
+                    "tukey",
+                    "min_max",
+                    "percentile"
+                  ]
+                },
+                "k": {
+                  "type": "number"
+                },
+                "lower": {
+                  "type": "number"
+                },
+                "upper": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "rule"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "box: where the whiskers end (XS-BOX-01); default Tukey 1.5 times the IQR, stated in the chart's note"
+        },
+        "quantiles": {
+          "anyOf": [
+            {
+              "enum": [
+                "linear",
+                "weibull",
+                "lower",
+                "higher",
+                "nearest",
+                "midpoint"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "box: the quantile method (XS-BOX-02); default linear (R type 7, as pandas, NumPy, Altair)"
+        },
+        "show_points": {
+          "enum": [
+            "outliers",
+            "all",
+            "none"
+          ],
+          "description": "box: which measurements are drawn as points over the box (default outliers; every point when n is 8 or fewer)"
+        },
+        "mean": {
+          "enum": [
+            "off",
+            "marker"
+          ],
+          "description": "box: a diamond at the mean",
+          "default": "off"
+        },
+        "notch": {
+          "type": "boolean",
+          "description": "box: refused (XS-BOX-06), a notch implies a confidence-interval comparison the chart does not compute"
+        },
+        "n": {
+          "enum": [
+            "show",
+            "hide"
+          ],
+          "description": "box: the sample size is always shown; hide is refused (XS-BOX-02)"
+        },
+        "interval": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "confidence",
+                    "bound",
+                    "range",
+                    "quantile_band"
+                  ]
+                },
+                "level": {
+                  "type": "number"
+                },
+                "method": {
+                  "type": "string"
+                },
+                "statistic": {
+                  "enum": [
+                    "mean",
+                    "median"
+                  ]
+                },
+                "resamples": {
+                  "type": "integer"
+                },
+                "seed": {
+                  "type": "integer"
+                },
+                "basis": {
+                  "type": "string"
+                },
+                "quantiles": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  }
+                }
+              },
+              "required": [
+                "kind"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "interval_dot, interval_bar, dumbbell difference: what the whiskers are (XS-IV-01..06): a confidence interval states its level and method, a bound or range what it bounds"
+        },
+        "view": {
+          "enum": [
+            "pair",
+            "difference"
+          ],
+          "description": "dumbbell: both conditions joined (pair), or their difference from zero",
+          "default": "pair"
+        },
+        "difference": {
+          "enum": [
+            "second_minus_first",
+            "first_minus_second"
+          ],
+          "description": "dumbbell: the direction of the difference",
+          "default": "second_minus_first"
+        },
+        "reference_quantiles": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "description": "ecdf: quantiles marked by dotted lines, such as 0.5 and 0.95"
+        },
+        "fit": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "scatter: linear (ordinary least squares) or none; any other fit is refused (XS-SC-02)"
+        },
+        "size": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "scatter: refused (XS-SC-01), marker size is not an accurate encoding"
+        },
+        "size_by": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "scatter: refused (XS-SC-01)"
+        }
+      },
+      "required": [],
+      "additionalProperties": false,
+      "description": "ChartOpts(*, type: Literal['auto', 'bar', 'line', 'dot', 'step', 'thin_bar', 'arrow', 'bumps', 'pie', 'donut', 'treemap', 'wrapped_bar', 'stacked_bar', 'stacked_bar_100', 'waterfall', 'stacked_area', 'stacked_area_100', 'line_total', 'slope', 'dual_axis', 'radar', 'funnel', 'word_cloud', 'packed_bubbles', 'bullet', 'choropleth', '3d', 'smoothed_line', 'table', 'heatmap', 'action_dots', 'funnel_bars'] = 'auto', orientation: Literal['auto', 'vertical', 'horizontal'] = 'auto', sort: Literal['auto', 'desc', 'asc', 'given'] = 'auto', sort_by: str = None, labelling: Literal['auto', 'direct', 'legend'] = 'auto', value_labels: Literal['auto', 'on', 'off'] = 'auto', gridlines: bool = True, change_panels: Literal['auto', 'both', 'absolute', 'relative'] = 'auto', encoding: Literal['auto', 'sequential', 'diverging', 'categorical'] = 'auto', classing: Literal['auto', 'linear', 'natural', 'quantile', 'custom', 'log'] = 'auto', breaks: list[chartgen.spec.Num] = None, cells: Literal['auto', 'strong', 'muted'] = 'auto')"
+    },
+    "ScaleOpts": {
+      "type": "object",
+      "properties": {
+        "zero": {
+          "enum": [
+            "auto",
+            "include",
+            "truncate"
+          ],
+          "default": "auto"
+        },
+        "min": {
+          "anyOf": [
+            {
+              "type": "number",
+              "description": "pins the lower limit (refused for bars unless 0)"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "max": {
+          "anyOf": [
+            {
+              "type": "number",
+              "description": "pins the upper limit (refused past a theoretical maximum)"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "step": {
+          "anyOf": [
+            {
+              "type": "number",
+              "description": "pins the step"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "description": "step mantissas (R2-09)"
+        },
+        "allow_2_5": {
+          "type": "boolean",
+          "default": false
+        },
+        "target_intervals": {
+          "type": "integer",
+          "default": 5
+        },
+        "precision_value": {
+          "anyOf": [
+            {
+              "type": "number",
+              "description": "a value that must be a gridline (R2-33)"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "breathing": {
+          "type": "number",
+          "description": "0.10–0.20 (R2-27, D-16)",
+          "default": 0.15
+        },
+        "magnitude": {
+          "description": "auto | none | 3 | 6 | 9",
+          "default": "auto"
+        },
+        "magnitude_style": {
+          "enum": [
+            "auto",
+            "word_on_top",
+            "suffix"
+          ],
+          "description": "word_on_top (the default, D-3 (a)) or suffix; the top value in full is never produced (D-3 (c))",
+          "default": "auto"
+        },
+        "unit_position": {
+          "enum": [
+            "auto",
+            "inline",
+            "above",
+            "below"
+          ],
+          "description": "6.4",
+          "default": "auto"
+        }
+      },
+      "required": [],
+      "additionalProperties": false,
+      "description": "ScaleOpts(*, zero: Literal['auto', 'include', 'truncate'] = 'auto', min: chartgen.spec.Num = None, max: chartgen.spec.Num = None, step: chartgen.spec.Num = None, steps: list[chartgen.spec.Num] = <factory>, allow_2_5: bool = False, target_intervals: int = 5, precision_value: chartgen.spec.Num = None, breathing: chartgen.spec.Num = Decimal('0.15'), magnitude: Any = 'auto', magnitude_style: Literal['auto', 'word_on_top', 'suffix'] = 'auto', unit_position: Literal['auto', 'inline', 'above', 'below'] = 'auto')"
+    },
+    "InsetOpts": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "enum": [
+            "none",
+            "auto",
+            "outlier",
+            "narrow_range"
+          ],
+          "description": "guided (G2.7, G2.26, D-11): auto adds one when facts.small_values_matter or facts.small_differences_matter asks and the data call for it; none, or a kind the procedure would not give, is a guided finding",
+          "default": "auto"
+        },
+        "members": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "an outlier inset's categories (default: all but the outliers)"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "position": {
+          "enum": [
+            "auto",
+            "inside",
+            "above",
+            "below",
+            "right"
+          ],
+          "description": "guided (G2.29): an outlier inset over categories inside the plot; a narrow range above a vertical chart (below on request), beside horizontal bars",
+          "default": "auto"
+        },
+        "share_axis": {
+          "enum": [
+            "auto",
+            true,
+            false
+          ],
+          "description": "guided (G2.27, D-56): an inset aligned above or below its main chart drops the labels it would repeat when space is short (the figure, labelled twice, over --inset-share-height × its width); true or false against that is a guided finding",
+          "default": "auto"
+        },
+        "compact_main": {
+          "type": "boolean",
+          "description": "the main chart's plot half as high under an inset above it (s. 0081)",
+          "default": false
+        }
+      },
+      "required": [],
+      "additionalProperties": false,
+      "description": "InsetOpts(*, kind: Literal['none', 'auto', 'outlier', 'narrow_range'] = 'auto', members: list[str] = None, position: Literal['auto', 'inside', 'above', 'below', 'right'] = 'auto', share_axis: Literal['auto', True, False] = 'auto', compact_main: bool = False)"
+    },
+    "PanelOpts": {
+      "type": "object",
+      "properties": {
+        "arrangement": {
+          "anyOf": [
+            {
+              "enum": [
+                "auto"
+              ]
+            },
+            {
+              "$ref": "#/$defs/Arrangement"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "guided (13-15 DP-1, G1.18, G1.19; D-38): auto puts the dims facts.compare names inside the panels and facets on the others; a merged chart's measures are its panels",
+          "default": "auto"
+        },
+        "scale": {
+          "enum": [
+            "auto",
+            "shared",
+            "per_row",
+            "independent"
+          ],
+          "description": "guided (G7.48, R6-37, D-38): shared unless facts.compare_shapes; a merged chart's measures always have their own",
+          "default": "auto"
+        },
+        "series_labels": {
+          "enum": [
+            "auto",
+            "after_last",
+            "first_panel",
+            "legend"
+          ],
+          "description": "guided (G5.15, RP3-9, D-38): each series labelled once, right of the last panel",
+          "default": "auto"
+        }
+      },
+      "required": [],
+      "additionalProperties": false,
+      "description": "Small multiples and merged charts (SPEC §6.10; phase 2). Every option is guided."
+    },
+    "Arrangement": {
+      "type": "object",
+      "properties": {
+        "rows": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "the dim whose values are the rows of panels, or none"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "columns": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "the dim whose values are the columns of panels, or none"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "within": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "the dims drawn as series inside each panel (RP3-4)"
+        }
+      },
+      "required": [],
+      "additionalProperties": false,
+      "description": "Which variable goes where in small multiples (SPEC §6.10): a dim id (or \"measure\", in a merged chart) for the rows and for the columns of panels, and those drawn as series inside each panel."
+    },
+    "TableOpts": {
+      "type": "object",
+      "properties": {
+        "row_key": {
+          "enum": [
+            "auto",
+            "none",
+            "swatch",
+            "swatch_beside",
+            "swatch_after",
+            "text",
+            "pill",
+            "halo"
+          ],
+          "description": "guided (owner, 1 Oct 2026): auto keys the rows under several series by swatch_after, else none; none: plain row names (the book, s. 0307); swatch: a key square in its own column at the table's left; swatch_beside: the square just left of each name; swatch_after: each right-aligned name, then its square, the squares in one column on the plot's left edge; text: each name in its series' strong shade; pill: each name on a pale tint of its series; halo: a pale tint round the letters",
+          "default": "auto"
+        },
+        "legend": {
+          "enum": [
+            "auto",
+            "keep",
+            "drop"
+          ],
+          "description": "guided (owner, 1 Oct 2026): auto drops the legend above the plot when the table's rows are keyed (they are then the key); keep includes it",
+          "default": "auto"
+        },
+        "names_title": {
+          "anyOf": [
+            {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "typst": {
+                      "type": "string"
+                    },
+                    "alternative": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "typst"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "tex": {
+                      "type": "string"
+                    },
+                    "alternative": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "tex"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "latex": {
+                      "type": "string"
+                    },
+                    "alternative": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "latex"
+                  ],
+                  "additionalProperties": false
+                }
+              ],
+              "description": "a table alone: the heading over the series' names (\"Event\", \"Salesperson\"); none: no heading there"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "stub": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StubColumn"
+          },
+          "description": "a table alone: text or date columns before the names, each with one entry per series in their order (R10-19, R10-24)"
+        },
+        "graphics": {
+          "enum": [
+            "none",
+            "heat",
+            "bars",
+            "dots",
+            "trend"
+          ],
+          "description": "a table alone, guided (R10-9, G1.16, G7.47): graphics built into a table whose audience refuses graphs: heat, the cells shaded by value, the body, the Total column and the totals row each on its own ramp; bars, a bar under each number from the cell's left edge; dots, a dot beside each number; bars and dots on one scale per column (graphics_columns); trend, a sparkline of each row's values in a Trend column before the Total",
+          "default": "none"
+        },
+        "graphics_columns": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "the columns (x values) whose cells carry bars or dots; default: every column, a Total column too (s. 0309), never the totals row"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "stripes": {
+          "type": "boolean",
+          "description": "zebra stripes (R10-16, G7.40 [L]): never; true only through an override, to rebuild the book's rejected version",
+          "default": false
+        },
+        "bold": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "header",
+              "totals",
+              "total_column"
+            ]
+          },
+          "description": "bold rows or columns (R10-22, G7.43 [L]): never; only through an override, to rebuild the book's rejected version"
+        }
+      },
+      "required": [],
+      "additionalProperties": false,
+      "description": "A table with the graph (SPEC §6.7.13; phase 2, series): how its rows name the series' colours, and whether the legend stays. Guided defaults by the owner's decision of 1 Oct 2026: each row keyed by its name then its square, and no legend."
+    },
+    "StubColumn": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "anyOf": [
+            {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "typst": {
+                      "type": "string"
+                    },
+                    "alternative": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "typst"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "tex": {
+                      "type": "string"
+                    },
+                    "alternative": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "tex"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "latex": {
+                      "type": "string"
+                    },
+                    "alternative": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "latex"
+                  ],
+                  "additionalProperties": false
+                }
+              ],
+              "description": "its heading, none for none"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "kind": {
+          "enum": [
+            "text",
+            "date"
+          ],
+          "description": "date: ISO dates (2021-01-05), written 05-Jan-2021",
+          "default": "text"
+        },
+        "values": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "one per series, in their order; a totals row's entry may be \"\""
+        }
+      },
+      "required": [],
+      "additionalProperties": false,
+      "description": "A column of text or dates before a table's numbers (phase 3; SPEC §6.16): left-aligned (R10-19); dates written with every part of fixed width, 05-Jan-2021 (R10-24, R5-22)."
+    },
+    "Highlight": {
+      "type": "object",
+      "properties": {
+        "targets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Ref"
+          }
+        },
+        "method": {
+          "enum": [
+            "auto",
+            "strong",
+            "thickness",
+            "bold_label",
+            "border",
+            "grey_others",
+            "glow",
+            "background",
+            "icon",
+            "selective_label",
+            "explode"
+          ],
+          "description": "guided (G8.9, D-9): auto is the strong shade for bars and dots, thickness for lines; border, glow, background, icon and selective_label (value labels on the targets only) are drawn by the message layer (annotate.py, phase 2); a line's segment is {series, x: [from, to]}",
+          "default": "auto"
+        },
+        "dim_others": {
+          "type": "boolean",
+          "description": "bars only: the others paled (07 §5.1)",
+          "default": false
+        },
+        "emphasis": {
+          "enum": [
+            "normal",
+            "strong"
+          ],
+          "description": "open: how strong the emphasis must be; a glow takes the complementary hue for a strong one unless a contrast would confuse (phase 2)",
+          "default": "normal"
+        },
+        "glow": {
+          "enum": [
+            "auto",
+            "own",
+            "complementary"
+          ],
+          "description": "guided (a glow's hue, phase 2): own, a pale tint of the target's own colour; complementary, its hue turned 180° in OKLCH at the same lightness; auto: own for normal emphasis, complementary for strong unless the chart uses more than 3 regular colours, keys its colours in a legend, or has a colour within 30° of the complement",
+          "default": "auto"
+        }
+      },
+      "required": [],
+      "additionalProperties": false,
+      "description": "Highlight(*, targets: list[chartgen.spec.Ref] = <factory>, method: Literal['auto', 'strong', 'thickness', 'bold_label', 'border', 'grey_others', 'glow', 'background', 'icon', 'selective_label', 'explode'] = 'auto', dim_others: bool = False, emphasis: Literal['normal', 'strong'] = 'normal', glow: Literal['auto', 'own', 'complementary'] = 'auto')"
+    },
+    "Comment": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "typst": {
+                  "type": "string"
+                },
+                "alternative": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "typst"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "tex": {
+                  "type": "string"
+                },
+                "alternative": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "tex"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "latex": {
+                  "type": "string"
+                },
+                "alternative": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "latex"
+              ],
+              "additionalProperties": false
+            }
+          ],
+          "description": "the words (the generator never writes prose)"
+        },
+        "anchors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Ref"
+          },
+          "description": "the elements it points at, one arrow each; none for a chart-wide remark"
+        },
+        "placement": {
+          "enum": [
+            "auto",
+            "inside",
+            "right",
+            "below"
+          ],
+          "description": "auto: the empty space nearest its anchors, inside the plot or beside it, else a column at the right; inside, right and below force the region",
+          "default": "auto"
+        },
+        "answers": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "important",
+              "why_care",
+              "explain",
+              "action"
+            ]
+          },
+          "description": "which of the four questions it answers (R15-1): a comment answering important states the insight, as an insight title does (G8.2, D-55)"
+        },
+        "arrow": {
+          "type": "boolean",
+          "description": "an arrow to each anchor",
+          "default": true
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "additionalProperties": false,
+      "description": "The maker's own remark about the data (a callout, R5-5, R15-1, G6.3, G8.7; phase 2, SPEC §6.12): set apart from the labelling, placed in empty space, with a thin arrow to each anchor."
+    },
+    "Note": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "typst": {
+                  "type": "string"
+                },
+                "alternative": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "typst"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "tex": {
+                  "type": "string"
+                },
+                "alternative": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "tex"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "latex": {
+                  "type": "string"
+                },
+                "alternative": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "latex"
+              ],
+              "additionalProperties": false
+            }
+          ],
+          "description": "the note's words, a sentence or two (\"POA: price on application.\"); the generator never writes prose, nor the mark, which it numbers"
+        },
+        "on": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/NoteRef"
+          },
+          "description": "where its mark is set, one or more places sharing one mark; none: a plain note"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "additionalProperties": false,
+      "description": "A note under the chart (SPEC §6.19): a footnote, referred to by a mark on what it explains, or a plain note with no mark (a general remark, the data's source). Set in the note style, below everything else, wrapped to the chart's width; footnotes first, in the order of their marks."
+    },
+    "NoteRef": {
+      "type": "object",
+      "properties": {
+        "element": {
+          "anyOf": [
+            {
+              "enum": [
+                "title",
+                "descriptive",
+                "unit",
+                "x_title",
+                "names_title"
+              ],
+              "description": "the title, the descriptive line, the unit phrase (wherever the scale writes it), the categorical axis title, a table's heading over the names"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "category": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "a category's name where the chart writes it (a label, a table's column heading, a slice's or tile's name); with series, that one value"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "series": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "a series' name where the chart writes it (an end label, a legend entry, a table's row name); with category, that one value: its value label, its table cell, the note in its empty slot"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "status": {
+          "anyOf": [
+            {
+              "enum": [
+                "missing",
+                "unknown",
+                "pending",
+                "tbd",
+                "error",
+                "zero"
+              ],
+              "description": "every value of that status, on the words written for it (labels.notes: an empty slot's note, a table cell's \"POA\"); with series or category, only that row's or column's"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "comment": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "description": "a comment, by its place in comments (0 the first)"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "stub": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "description": "a table's stub column, by its place in table.stub: its heading; with series, that row's entry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [],
+      "additionalProperties": false,
+      "description": "Where a note's mark is set (SPEC §6.19): one of the spec's own texts, a category's or a series' name, one value, every value of a status, a comment, or a table's stub column. The mark follows the text as drawn (the last line of a wrapped one); a name or an element written more than once is marked where it is first read."
+    },
+    "Transform": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "enum": [
+            "deviation",
+            "ratio",
+            "index"
+          ],
+          "description": "deviation: each value minus its comparison value (R15-14); ratio: each value per its exposure (R15-15); index: each series rebased at a common start (R15-16, R2-17; base 0: % change)"
+        },
+        "comparison": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "deviation: the id of the comparison value in data.comparisons"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "relative": {
+          "type": "boolean",
+          "description": "deviation: in % of the comparison value, not in the measure's unit",
+          "default": false
+        },
+        "exposure": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Exposure",
+              "description": "ratio: what each value is divided by"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "per": {
+          "type": "number",
+          "description": "ratio: per how many of the exposure (100000: per 100K work hours)",
+          "default": 1
+        },
+        "base": {
+          "type": "number",
+          "description": "index: the common value at the start (10000: the value of $10,000 invested; 100; 0: % change since the start)",
+          "default": 100
+        },
+        "at": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "index: the x value of the common start (default the first)"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "the derived measure's name (default derived)"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Unit",
+              "description": "the derived unit phrase in place of the one derived (\"above target\", \"(value of $10,000 invested on Feb. 4)\")"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "additionalProperties": false,
+      "description": "A derived measure, computed before the chart is chosen and laid out (R15-13–R15-17, R2-17, G8.15–G8.18; phase 2, transform.py): the unit phrase says what it is."
+    },
+    "Exposure": {
+      "type": "object",
+      "properties": {
+        "values": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "enum": [
+                      "missing",
+                      "unknown",
+                      "pending",
+                      "tbd",
+                      "error"
+                    ]
+                  },
+                  "note": {
+                    "type": "string",
+                    "description": "why it is not known, a footnote on the words written for it (SPEC §6.19)"
+                  }
+                },
+                "required": [
+                  "status"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "value": {
+                    "type": "number"
+                  },
+                  "certainty": {
+                    "enum": [
+                      "actual",
+                      "estimate",
+                      "projection",
+                      "target"
+                    ]
+                  },
+                  "complete": {
+                    "type": "boolean"
+                  },
+                  "note": {
+                    "type": "string",
+                    "description": "a footnote on this value (SPEC §6.19): its mark on the value's text, the note under the chart"
+                  }
+                },
+                "required": [
+                  "value"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "below": {
+                    "type": "number",
+                    "description": "a censored value: below this detection limit (\"<1\"), not missing; drawn by heatmaps and tables (SPEC §2.4)"
+                  },
+                  "note": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "below"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "above": {
+                    "type": "number",
+                    "description": "a censored value: above this limit of the test's range (\">2420\")"
+                  },
+                  "note": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "above"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "string",
+                "pattern": "^\\s*[<>]\\s*-?\\d+(\\.\\d+)?\\s*$",
+                "description": "a censored value as a laboratory writes it: \"<1\", \">2420\""
+              }
+            ]
+          },
+          "description": "one per x value"
+        },
+        "noun": {
+          "type": "string",
+          "description": "what the values count, plural (\"work hours\", \"residents\")"
+        }
+      },
+      "required": [
+        "values",
+        "noun"
+      ],
+      "additionalProperties": false,
+      "description": "What a ratio divides by (R15-15): the size of each category or period."
+    },
+    "LabelOpts": {
+      "type": "object",
+      "properties": {
+        "notes": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "parts": {
+          "enum": [
+            "auto",
+            "value",
+            "percent",
+            "name"
+          ],
+          "description": "open (phase 3): what labels a pie's slice (or a treemap's tile, where both fit) under its name, its value or its percentage of the total, formatted as a set (G7.27, D-51); name: the name alone; auto: the value on a pie, the name alone in a treemap's tile and on a pie of several totals",
+          "default": "auto"
+        }
+      },
+      "required": [],
+      "additionalProperties": false,
+      "description": "LabelOpts(*, notes: dict[str, str] = <factory>, parts: Literal['auto', 'value', 'percent', 'name'] = 'auto')"
+    },
+    "LayoutOpts": {
+      "type": "object",
+      "properties": {
+        "width": {
+          "type": "number",
+          "description": "the figure width in points, 120–600 (the paper's text width is 368)",
+          "default": 368
+        },
+        "plot_aspect": {
+          "anyOf": [
+            {
+              "type": "number",
+              "description": "plot height / plot width, 0.3–1.2; none: the style's"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "height": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [],
+      "additionalProperties": false,
+      "description": "Open choices for the particular chart, within limits (SPEC §1.4)."
+    },
+    "Colours": {
+      "type": "object",
+      "properties": {
+        "slots": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "description": "a name and its palette slot (1–16): a series by its name (in small multiples, by its values of the dims drawn inside the panels, \"Elstead Park\"), a pie's part by its category; a name the chart does not show is passed over, so that one map serves every chart of a document; a series' own slot comes first"
+        },
+        "registry": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "the document's colour registry: a JSON file holding such a map ({\"Elstead Park\": 2, …}), its path relative to the spec's file; the spec's own slots come first"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [],
+      "additionalProperties": false,
+      "description": "Which palette slot a series or a part takes, fixed by name across a set of charts (R3-24, G4.22; SPEC §2.10): the slot only, never a colour, which is the style's."
+    },
+    "Override": {
+      "type": "object",
+      "properties": {
+        "rule": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "rule",
+        "reason"
+      ],
+      "additionalProperties": false,
+      "description": "Override(*, rule: str, reason: str)"
+    },
+    "Source": {
+      "type": "object",
+      "properties": {
+        "book": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "the book's page: \"p. 49 (s. 0049)\""
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "\"00-01 F1\""
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "shows": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "what the example demonstrates"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "status": {
+          "enum": [
+            "undrawn",
+            "generated",
+            "compared"
+          ],
+          "default": "generated"
+        }
+      },
+      "required": [],
+      "additionalProperties": false,
+      "description": "Source(*, book: str = None, notes: str = None, shows: str = None, status: Literal['undrawn', 'generated', 'compared'] = 'generated')"
+    }
+  }
+}

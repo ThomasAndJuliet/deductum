@@ -1,0 +1,158 @@
+{
+ "base": {
+  "chartspec": 1,
+  "id": "p3-21-countries-all-others-stack",
+  "job": {
+   "kind": "answer",
+   "text": "What share of donations came from each of the largest countries?"
+  },
+  "insight": {
+   "important": "Germany and France gave two-fifths of all donations"
+  },
+  "title": {
+   "text": "Germany and France Gave Two-Fifths of All Donations",
+   "kind": "insight",
+   "descriptive": "Donations by Country, % of Total, 2022"
+  },
+  "audience": {
+   "pie_averse": true
+  },
+  "data": {
+   "x": {
+    "kind": "nominal",
+    "values": [
+     "Germany",
+     "France",
+     "Italy",
+     "Sweden",
+     "Norway",
+     "All others"
+    ],
+    "roles": {
+     "All others": "all_others"
+    }
+   },
+   "measure": {
+    "name": "share of donations",
+    "kind": "percent",
+    "zero": "meaningful",
+    "min": 0,
+    "max": 100,
+    "unit": {
+     "noun": "of donations",
+     "fallback": "Share of all donations",
+     "scale_title": "Share of all donations"
+    }
+   },
+   "series": [
+    {
+     "id": "share",
+     "name": "Donations",
+     "values": [
+      23.4,
+      16.8,
+      7.9,
+      7.5,
+      7.3,
+      37.1
+     ]
+    }
+   ],
+   "parts": {
+    "meaningful_total": true,
+    "all_parts": true,
+    "overlap": false
+   }
+  },
+  "facts": {
+   "message": "fraction_of_total"
+  },
+  "layout": {
+   "width": 260
+  },
+  "source": {
+   "book": "p. 249–250 (s. 0229–0230)",
+   "notes": "07 #3",
+   "shows": "fifteen countries brought under the part limit: the five largest named, the ten others lumped into All others, at the top of the stack whatever its size, in its warm grey (R7-17, G4.15, G7.31); a 100 % stack, the audience being averse to pies (G1.40, D-39; the pie is P3-03)"
+  }
+ },
+ "variants": [
+  {
+   "name": "fifteen-parts",
+   "patch": {
+    "data": {
+     "x": {
+      "values": [
+       "Germany",
+       "France",
+       "Italy",
+       "Sweden",
+       "Norway",
+       "Ireland",
+       "Netherlands",
+       "Spain",
+       "Austria",
+       "Switzerland",
+       "Belgium",
+       "Denmark",
+       "Czechia",
+       "Hungary",
+       "Portugal"
+      ],
+      "roles": null
+     },
+     "series": [
+      {
+       "id": "share",
+       "name": "Donations",
+       "values": [
+        23.4,
+        16.8,
+        7.9,
+        7.5,
+        7.3,
+        6.9,
+        6.6,
+        6.5,
+        6.0,
+        2.8,
+        2.3,
+        1.5,
+        1.3,
+        0.8,
+        0.3
+       ]
+      }
+     ]
+    },
+    "chart": {
+     "type": "stacked_bar_100"
+    },
+    "reasons": {
+     "chart.type": "the book's stack of fifteen parts, rebuilt to show its clutter (s. 0225)"
+    },
+    "overrides": [
+     {
+      "rule": "R3-21",
+      "reason": "the book's stack of fifteen parts, a colour each (s. 0225)"
+     }
+    ],
+    "layout": {
+     "width": 368
+    },
+    "source": {
+     "book": "p. 244 (s. 0225)",
+     "shows": "the book's stack of all fifteen parts: more than six or seven parts clutter it (R7-13, G1.39, D-23), and fifteen colours cannot be told apart (R3-21, G4.19): drawn through an override, with the procedure's treemap named"
+    }
+   },
+   "expect": {
+    "findings": [
+     "R7-13"
+    ],
+    "refused": [
+     "R3-21"
+    ]
+   }
+  }
+ ]
+}

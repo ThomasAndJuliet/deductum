@@ -1,0 +1,19 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p3-14-headcount-balanced",
+    "job": {"kind": "lookup", "text": "Look up each region's headcount and its share of the whole"},
+    "title": {"text": "Headcount by Region, March 2022", "kind": "descriptive"},
+    "data": {
+      "x": {"kind": "nominal", "values": ["East", "Central", "North", "West", "South"]},
+      "measure": {"name": "headcount", "kind": "count", "zero": "meaningful", "min": 0,
+                  "unit": {"noun": "employees"}},
+      "series": [{"id": "headcount", "name": "Headcount", "values": [177, 138, 132, 54, 36]}],
+      "parts": {"meaningful_total": true, "all_parts": true, "overlap": false}
+    },
+    "facts": {"message": "fraction_of_total"},
+    "chart": {"type": "pie"},
+    "source": {"book": "p. 120 (s. 0110)", "notes": "03-04 #4",
+               "shows": "the balanced muted palette on a pie: five colours of like lightness, none darker to claim more than its share (R3-6, G4.6); the unbalanced palette is a style's matter, which a spec cannot set"}
+  }
+}

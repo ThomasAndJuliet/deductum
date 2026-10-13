@@ -1,0 +1,173 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p1-10-transactions-per-month",
+    "job": {
+      "kind": "lookup",
+      "text": "Look up the successful transactions of each month of 2022"
+    },
+    "title": {
+      "text": "Transactions per Month, 2022",
+      "kind": "descriptive"
+    },
+    "data": {
+      "x": {
+        "kind": "time",
+        "grid": "month",
+        "values": [
+          "2022-01",
+          "2022-02",
+          "2022-03",
+          "2022-04",
+          "2022-05",
+          "2022-06",
+          "2022-07",
+          "2022-08",
+          "2022-09",
+          "2022-10",
+          "2022-11",
+          "2022-12"
+        ]
+      },
+      "measure": {
+        "name": "transactions",
+        "kind": "count",
+        "zero": "meaningful",
+        "min": 0,
+        "persistence": "summary",
+        "unit": {
+          "noun": "successful transactions per month"
+        }
+      },
+      "series": [
+        {
+          "id": "tx",
+          "name": "Transactions",
+          "values": [
+            669,
+            620,
+            669,
+            609,
+            589,
+            651,
+            789,
+            843,
+            971,
+            null,
+            931,
+            949
+          ]
+        }
+      ]
+    },
+    "source": {
+      "book": "p. 205–211 (s. 0191–0195)",
+      "notes": "06 T10",
+      "shows": "October unknown: the line stops at September and resumes at November, a gap and no markers (no value is isolated); the unknown value is never joined across or drawn at zero, which chartgen cannot express"
+    }
+  },
+  "variants": [
+    {
+      "name": "isolated",
+      "patch": {
+        "data": {
+          "series": [
+            {
+              "id": "tx",
+              "name": "Transactions",
+              "values": [
+                669,
+                620,
+                669,
+                609,
+                589,
+                651,
+                789,
+                null,
+                971,
+                null,
+                931,
+                949
+              ]
+            }
+          ]
+        },
+        "source": {
+          "shows": "August and October unknown: September is isolated between two gaps, so every value of the line gets a point marker (the book's good version, s. 0195)"
+        }
+      },
+      "expect": {
+        "findings": []
+      }
+    },
+    {
+      "name": "sparse-line",
+      "patch": {
+        "chart": {
+          "type": "line"
+        },
+        "data": {
+          "series": [
+            {
+              "id": "tx",
+              "name": "Transactions",
+              "values": [
+                669,
+                null,
+                669,
+                null,
+                null,
+                651,
+                null,
+                null,
+                971,
+                null,
+                null,
+                949
+              ]
+            }
+          ]
+        },
+        "source": {
+          "shows": "five months of twelve known, never three in a row, drawn as a line on request: refused, a line would invent the pattern between them (the chooser gives a dot plot)"
+        }
+      },
+      "expect": {
+        "refused": [
+          "R6-2"
+        ]
+      }
+    },
+    {
+      "name": "sparse",
+      "patch": {
+        "data": {
+          "series": [
+            {
+              "id": "tx",
+              "name": "Transactions",
+              "values": [
+                669,
+                null,
+                669,
+                null,
+                null,
+                651,
+                null,
+                null,
+                971,
+                null,
+                null,
+                949
+              ]
+            }
+          ]
+        },
+        "source": {
+          "shows": "the same five months with the type left to the chooser: a dot plot over the whole year, so the empty months show (06 DP6-2, D-27)"
+        }
+      },
+      "expect": {}
+    }
+  ]
+}

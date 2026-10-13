@@ -1,0 +1,220 @@
+{
+ "key": "p2-56-comparator-validity--previous-only",
+ "file": "p2-56-comparator-validity.json",
+ "variant": "previous-only",
+ "requested_type": "auto",
+ "report": {
+  "chart": "p2-56-comparator-validity",
+  "style": "plain",
+  "variant": "previous-only",
+  "type": "bar",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "type bar: categories compared by value",
+    "guide": []
+   },
+   {
+    "rule": "R15-7",
+    "level": "locked",
+    "text": "the 2021 of each category drawn as a flat mark across its bar, named once (R11-4, G8.13, G5.5)",
+    "guide": []
+   },
+   {
+    "rule": "R2-24",
+    "level": "locked",
+    "text": "bars start at zero",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "scale 0–5 by 1",
+    "guide": []
+   },
+   {
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "nominal categories sorted by value, descending (by series actual)",
+    "guide": []
+   },
+   {
+    "rule": "R11-4",
+    "level": "locked",
+    "text": "2021, a reference, as a flat marker across each bar of Actual, in the strong shade of the bar's hue, on the bars' zero-based scale (G1.60, G7.57)",
+    "guide": []
+   },
+   {
+    "rule": "R9-10",
+    "level": "locked",
+    "text": "every name fits under its bar, neighbours at least 10 pt apart: vertical bars",
+    "guide": []
+   },
+   {
+    "rule": "R2-21",
+    "level": "locked",
+    "text": "labels as a set, 0 decimals: 0, 1, 2, 3, 4, $5",
+    "guide": []
+   },
+   {
+    "rule": "R5-10",
+    "level": "locked",
+    "text": "digits hidden: millions, stated once on the top label (R2-05, D-3): “$5 million in donations”",
+    "guide": []
+   },
+   {
+    "rule": "R2-07",
+    "level": "locked",
+    "text": "the unit phrase on the top label: “$5 million in donations”; the top gridline starts after it",
+    "guide": []
+   },
+   {
+    "rule": "R11-4",
+    "level": "guided",
+    "text": "Actual and 2021 named once, beside the last bar, the first having no room, with thin grey leaders (G5.5, D-7)",
+    "guide": []
+   }
+  ],
+  "findings": [
+   {
+    "rule": "R15-7",
+    "severity": "info",
+    "message": "the comparison value is a previous period (last-year): it has significant limitations; the same period a year earlier avoids seasonal effects (D-48)",
+    "path": "data.comparisons[0]",
+    "level": "guided",
+    "guide": [],
+    "title": "comparison values where the audience lacks context: targets and budgets before averages, previous periods and peers"
+   }
+  ],
+  "overrides": [],
+  "expect": {
+   "findings": [
+    "R15-7"
+   ]
+  },
+  "expect_met": true,
+  "source": {
+   "notes": "13-15 R15-7–R15-9; F12's data (the 2021 values and the sector figure supposed, not the book's)",
+   "shows": "last year's values, the only comparator there is: drawn as marks, with the report's flag that previous periods have limitations (D-48)",
+   "status": "generated"
+  },
+  "summary": {
+   "scale": "0–5 by 1",
+   "labels": [
+    "0",
+    "1",
+    "2",
+    "3",
+    "4",
+    "$5"
+   ],
+   "top": "$5 million in donations",
+   "scale_title": null,
+   "orientation": "vertical",
+   "plot": [
+    19.0,
+    36.03,
+    324.11,
+    219.1
+   ],
+   "band": 61.02,
+   "series": [
+    "actual"
+   ],
+   "labelling": "direct",
+   "value_labels": false,
+   "table": false,
+   "width": 368.0,
+   "height": 235.15,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job make_aware: insight “Every region but North brought in more than in 2021”",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-1",
+    "level": "guided",
+    "text": "a graph, the values to be compared or a pattern seen (G1.11)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 2,
+    "name": "variables",
+    "rule": "RP3-2",
+    "level": "guided",
+    "text": "one plot: categories along x and 1 series; a further variable would go to small multiples (data.dims, G1.18)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 3,
+    "name": "location",
+    "rule": "R8-2",
+    "level": "guided",
+    "text": "not a map: where the values are is not the message (facts.location_matters; G1.24, G1.25)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-01",
+    "level": "guided",
+    "text": "not parts of a total (no data.parts, no breakdown message; G1.1)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 7,
+    "name": "values across categories",
+    "rule": "R9-1",
+    "level": "guided",
+    "text": "group: bar charts. Values compared across categories (G1.9)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 7,
+    "name": "values across categories",
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "one scale from zero: bars, sorted by value when the categories are nominal (02 D1)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type (G1.59)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "bar charts are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "bar charts"
+   }
+  ],
+  "copies": []
+ },
+ "output_sha256": "ae5cf18b7b10d3a6ff4acd80d991103a9b0581d385b3ee809b19c1e9c51abcf8"
+}

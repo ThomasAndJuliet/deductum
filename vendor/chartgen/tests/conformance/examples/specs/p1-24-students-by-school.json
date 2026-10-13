@@ -1,0 +1,97 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p1-24-students-by-school",
+    "job": {
+      "kind": "lookup",
+      "text": "Look up each school's number of students with learning disabilities by year"
+    },
+    "title": {
+      "text": "Students with Learning Disabilities by School, 2012–2021",
+      "kind": "descriptive"
+    },
+    "data": {
+      "x": {
+        "kind": "time",
+        "grid": "year",
+        "values": [
+          "2012",
+          "2013",
+          "2014",
+          "2015",
+          "2016",
+          "2017",
+          "2018",
+          "2019",
+          "2020",
+          "2021"
+        ]
+      },
+      "measure": {
+        "name": "students",
+        "kind": "count",
+        "zero": "meaningful",
+        "min": 0,
+        "persistence": "summary",
+        "unit": {
+          "noun": "students"
+        }
+      },
+      "series": [
+        {
+          "id": "school-3",
+          "name": "School 3",
+          "values": [
+            54,
+            35,
+            67,
+            81,
+            65,
+            44,
+            68,
+            65,
+            61,
+            68
+          ]
+        },
+        {
+          "id": "school-2",
+          "name": "School 2",
+          "values": [
+            18,
+            12,
+            14,
+            17,
+            32,
+            35,
+            48,
+            57,
+            49,
+            53
+          ]
+        },
+        {
+          "id": "school-1",
+          "name": "School 1",
+          "values": [
+            23,
+            28,
+            17,
+            24,
+            35,
+            25,
+            38,
+            25,
+            41,
+            31
+          ]
+        }
+      ]
+    },
+    "source": {
+      "book": "p. 175 (s. 0164)",
+      "notes": "06 T2 (b)",
+      "shows": "a year axis: one row, no coarser unit to put under it; three lines named at their ends"
+    }
+  }
+}

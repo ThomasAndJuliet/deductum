@@ -1,0 +1,158 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p2-08-expenses-budget-monthly",
+    "job": {
+      "kind": "lookup",
+      "text": "Look up each month's expenses against its budget"
+    },
+    "title": {
+      "text": "Expenses and Budget by Month, 2022",
+      "kind": "descriptive"
+    },
+    "data": {
+      "x": {
+        "kind": "time",
+        "grid": "month",
+        "values": [
+          "2022-01",
+          "2022-02",
+          "2022-03",
+          "2022-04",
+          "2022-05",
+          "2022-06",
+          "2022-07",
+          "2022-08",
+          "2022-09",
+          "2022-10",
+          "2022-11",
+          "2022-12"
+        ]
+      },
+      "measure": {
+        "name": "expenses",
+        "kind": "amount",
+        "zero": "meaningful",
+        "min": 0,
+        "persistence": "summary",
+        "unit": {
+          "prefix": "$",
+          "magnitude": 3,
+          "what": "expenses per month"
+        }
+      },
+      "series": [
+        {
+          "id": "expenses",
+          "name": "Expenses",
+          "values": [
+            93,
+            71,
+            90,
+            68,
+            67,
+            62,
+            74,
+            95,
+            84,
+            72,
+            86,
+            77
+          ]
+        },
+        {
+          "id": "budget",
+          "name": "Budget",
+          "role": "target",
+          "values": [
+            89,
+            70,
+            75,
+            85,
+            84,
+            84,
+            96,
+            86,
+            105,
+            73,
+            71,
+            87
+          ]
+        }
+      ]
+    },
+    "facts": {
+      "message": "periods"
+    },
+    "source": {
+      "book": "p. 353 (s. 0321)",
+      "notes": "08-12 #11",
+      "shows": "the book's good combo for individual months against a reference: light bars and a flat budget marker across each; beside the first bar the names would meet March's bar, so they stand beside the last, as the book puts them (G5.5, D-7). The book's first version, bars with the budget as a line, cannot be asked for: a series' mark type follows its role, never a choice made for variety (G1.59)"
+    }
+  },
+  "variants": [
+    {
+      "name": "clustered",
+      "patch": {
+        "data": {
+          "series": [
+            {
+              "id": "expenses",
+              "name": "Expenses",
+              "values": [
+                93,
+                71,
+                90,
+                68,
+                67,
+                62,
+                74,
+                95,
+                84,
+                72,
+                86,
+                77
+              ]
+            },
+            {
+              "id": "budget",
+              "name": "Budget",
+              "values": [
+                89,
+                70,
+                75,
+                85,
+                84,
+                84,
+                96,
+                86,
+                105,
+                73,
+                71,
+                87
+              ]
+            }
+          ]
+        },
+        "source": {
+          "book": "p. 352 (s. 0320)",
+          "shows": "the book's “just bars” version: clustered bars over the months, with a legend; the budget weighs as much as the expenses"
+        }
+      },
+      "expect": {}
+    },
+    {
+      "name": "lines",
+      "patch": {
+        "facts": {
+          "message": "pattern"
+        },
+        "source": {
+          "book": "p. 351 (s. 0319)",
+          "shows": "the book's “only lines” version for the pattern of change: the expenses a line, the budget a target, dotted in the reserved grey (D-21 (c))"
+        }
+      },
+      "expect": {}
+    }
+  ]
+}

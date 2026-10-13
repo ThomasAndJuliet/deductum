@@ -1,0 +1,114 @@
+/* The message layer of the plain style (phase 2; chartgen/annotate.py, SPEC §6.12–§6.14):
+   comments and their arrows, the title connector, comparison lines, good and bad, and the
+   highlight methods other than the strong shade and the thicker line. Imported after
+   base.css and the palette, so that its rules follow theirs (bake takes, for a label, the
+   first rule that mentions each class; marks take the cascade).
+
+   Tagged M (measured in the book), N (the notes' proposal), O (ours). */
+
+:root {
+  /* comments (R5-5, G6.3, G8.7; D-19): New Computer Modern italic in the reserved blue
+     (--comment, base.css), outside the count of text styles */
+  --comment-size: 1em;             /* O: the label size, 10 pt, for a paper; a talk style sets it larger
+                                      (1.3em: 13 pt; the book's handwriting is 1.2–1.4 ×, 13-15 §5.3). The
+                                      layer measures, wraps and places comments at whatever size it gives */
+  --comment-width: 11em;           /* N: lines of about 18–28 characters (G8.7s), 2 to 5 of them; the
+                                      length at the label size, scaled by the layer with --comment-size */
+  --comment-gap: 0.5em;            /* O: least space between a comment and a mark or a text */
+  --comment-arrow-width: 0.8;      /* M 1–1.5 px at the book's size */
+  --comment-arrow-head: bend;      /* owner (30 Sep 2026): the house arrowhead (tools/arrowheads.py), laid
+                                      along the curve (bend, the diagrams' default); also quick, flex */
+  --comment-arrow-head-scale: 1;   /* O: the head at arrowheads.head_size of the stroke width, as the
+                                      diagrams' (0.8 pt: 4.2 pt long, 4.2 pt across) */
+  --comment-arrow-gap: 0.3em;      /* M: an arrow stops about 3 px short of its target */
+  --link-width: 0.8;               /* M: the title connector, 1–1.5 px, in --link (base.css) */
+
+  /* highlight methods (R15-5, G8.11, G8.11s; D-9) */
+  --border-width: 0.2em;           /* G8.11s: about 2 px, just inside the bar */
+  --glow-spread: 0.4em;            /* O: the flat glow's reach beyond a bar or dot (M 5–6 px of halo) */
+  --glow-line: 1.2em;              /* O: the glow along a line, three times a highlighted line */
+  /* The glow's colour is computed per chart (owner, 30 Sep 2026): its hue a per-chart choice
+     (highlight[].glow, guided by the emphasis wanted and whether a contrast would confuse), the
+     target's own hue or that hue turned 180° in OKLCH; the style gives only its lightness and
+     its chroma's cap, so that the two differ only in hue and both stay pale. The book's light
+     orange (#f8cbad, s. 0366) is L 0.87, C 0.065; the complement of the single blue at these
+     values comes to #edceb3. The layer paints each glow's group with the computed colour. */
+  --glow-lightness: 0.87;          /* M: the book's glow, s. 0366 */
+  --glow-chroma: 0.065;            /* M: its chroma, the most a glow takes (a paler colour keeps its own) */
+  --band: #fce2d3;                 /* M s. 0370: a tinted band behind the target */
+  --icon: #c5392a;                 /* M s. 0370: the book's red marker (the bad red: see SPEC §6.14) */
+  --icon-size: 1.2em;              /* M ≈ 0.4 × the bar width at the book's size (s. 0370) */
+  --icon-gap: 0.25em;              /* O: the icon's point to its target */
+  --value-label-gap: 0.3em;        /* O: a value label to its bar's end or its point */
+  --good-bad-mode: semantic;       /* D-18 (owner, 1 Oct 2026): semantic colours for every reader, plain
+                                      red for bad and green for good, one file, no texture. safe-pair (a
+                                      style for publications to unknown readers): the colour-blind-safe
+                                      pair (orange bad, blue good) in the file, a red/green copy beside
+                                      it. In black and white (a chart's audience.bw_risk, a fact, not a
+                                      style value) either is textured, which serves colour-blind readers
+                                      too: a hatch on bad area marks, a dither on good ones, a bad dot
+                                      filled; the safe pair then makes one file, no copy. The layer reads it */
+  --texture-bad: hatch 62 34;      /* O: bad as a 45° hatch of two tones of the red, their OKHSL lightness
+                                      (ground, strokes), the strokes' coverage keeping the red's luminance
+                                      (another colour of the side keeps their distances from the red) */
+  --texture-good: bayer 72 46;     /* O: good as an ordered (bayer) dither of two tones of the green */
+  --texture-hue-shift: 0;          /* O: degrees the two tones' hues turn apart (an impressionist variant) */
+}
+
+/* Comments and connectors: the maker's own layer. */
+.comment       { font-size: var(--comment-size); font-style: italic; fill: var(--comment); }
+.comment-arrow { fill: none; stroke: var(--comment); stroke-width: var(--comment-arrow-width);
+                 stroke-linecap: round; stroke-linejoin: round; }
+.title-link    { fill: none; stroke: var(--link); stroke-width: var(--link-width);
+                 stroke-linecap: round; stroke-linejoin: round; }
+/* Their heads: the house arrowhead, flat, filled in the arrow's own colour (no strip, no
+   swelling ink, no shadow: the plain style). The shaft runs into its notch. */
+.comment-arrow-head { fill: var(--comment); stroke: none; }
+.title-link-head    { fill: var(--link); stroke: none; }
+
+/* Captions naming a side, in its colour (G8.14): red and green, or a safe-pair style's pair. */
+.text-good     { fill: var(--good-text); }
+.text-bad      { fill: var(--bad-text); }
+.text-good-cvd { fill: var(--good-cvd-text); }
+.text-bad-cvd  { fill: var(--bad-cvd-text); }
+
+/* Good and bad marks where a style chooses --good-bad-mode: safe-pair: the colour-blind-safe pair
+   (orange bad, blue good) in the chart, which carries cvd-safe; the red/green copy lacks the class. */
+.cvd-safe .good { fill: var(--good-cvd); stroke: var(--good-cvd); }
+.cvd-safe .bad  { fill: var(--bad-cvd); stroke: var(--bad-cvd); }
+.cvd-safe .bar  { stroke: none; }                /* bars stay flat, as .chart .bar has them */
+
+/* The textures of black and white (audience.bw_risk; D-18, owner 1 Oct 2026), in either mode: over
+   each good or bad area mark, its shape again in a group (textures) that the layer paints with the
+   chart's own two-tone pattern of the mark's colour (computed into its defs: a hatch for bad, a
+   dither for good); and a dot plot's bad dot filled where a good one is open. */
+.texture         { stroke: none; }
+.chart.categorical .dot.filled.bad  { fill: var(--bad); }
+.chart.categorical .dot.filled.good { fill: var(--good); }
+.chart.cvd-safe.categorical .dot.filled.bad  { fill: var(--bad-cvd); }
+.chart.cvd-safe.categorical .dot.filled.good { fill: var(--good-cvd); }
+
+/* A comparison value across the plot (D-21 (c)): an average of the plotted data solid, a
+   target or an outside benchmark dotted, both in the reserved dark grey. */
+.chart .reference-line          { fill: none; stroke: var(--average); stroke-width: var(--line-width);
+                                  stroke-dasharray: var(--projection-dash); stroke-linecap: round; }
+.chart .reference-line.average  { stroke-dasharray: none; stroke-linecap: butt; }
+/* A second reference across each bar (several references, SPEC §6.12.2): a dotted stroke in the dark
+   grey, the look of a reference line, apart from the first reference's solid mark; its legend key the
+   same stroke. */
+.chart .target-mark.secondary   { fill: none; stroke: var(--average); stroke-width: var(--line-width);
+                                  stroke-dasharray: var(--projection-dash); stroke-linecap: round; }
+
+/* A date marked on a time axis (SPEC §6.13.12): a thin line in the dark grey across the plot, beneath
+   the marks, its label the chart's own note (italic, as "As of Dec. 10"). */
+.chart .event-line { fill: none; stroke: var(--average); stroke-width: var(--grid-width); }
+.event-label       { font-size: var(--note-size); font-style: italic; fill: var(--note); }
+
+/* Highlight methods drawn by the layer: a border in the strong shade just inside the bar, a
+   flat underlay (glow, band) beneath the gridlines, an icon. The bar keeps its own colour. */
+.chart .border     { fill: none; stroke-width: var(--border-width); }
+.glow              { stroke: none; }                    /* its fill, computed, from its group */
+.chart .glow-line  { fill: none; stroke-width: var(--glow-line);   /* its stroke likewise */
+                     stroke-linecap: round; stroke-linejoin: round; }
+.highlight-band    { fill: var(--band); stroke: none; }
+.icon              { fill: var(--icon); stroke: none; }

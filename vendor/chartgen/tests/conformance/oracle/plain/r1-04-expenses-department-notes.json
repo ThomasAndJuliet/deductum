@@ -1,0 +1,218 @@
+{
+ "key": "r1-04-expenses-department-notes",
+ "file": "r1-04-expenses-department-notes.json",
+ "variant": null,
+ "requested_type": "bar",
+ "report": {
+  "chart": "r1-04-expenses-department-notes",
+  "style": "plain",
+  "variant": null,
+  "type": "bar",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "R2-24",
+    "level": "locked",
+    "text": "bars start at zero",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "scale 0–600 by 100",
+    "guide": []
+   },
+   {
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "nominal categories sorted by value, descending",
+    "guide": []
+   },
+   {
+    "rule": "R2-32",
+    "level": "guided",
+    "text": "5 values against 7 scale labels: whichever puts fewer numbers on the chart (G2.18): the values labelled directly, the value scale and its gridlines removed, the zero line kept as the baseline",
+    "guide": []
+   },
+   {
+    "rule": "R5-17",
+    "level": "locked",
+    "text": "value labels as a set, one magnitude and one number of decimals, the prefix and suffix on each: $480K, $410K, $300K, $220K, $120K (G6.16, G7.4)",
+    "guide": []
+   },
+   {
+    "rule": "R5-26",
+    "level": "locked",
+    "text": "wrapped onto two lines: Finance & Admin, New England Sales",
+    "guide": []
+   },
+   {
+    "rule": "R2-32",
+    "level": "locked",
+    "text": "every label just outside its bar's end: neither the text grey nor white reads on the bar's colour at 4.5 : 1 (G7.4, G6.5)",
+    "guide": []
+   },
+   {
+    "rule": "R2-07",
+    "level": "locked",
+    "text": "the unit's description on its own line above the plot: “in expenses”; the labels carry its prefix, suffix and magnitude",
+    "guide": []
+   },
+   {
+    "rule": "CG-8",
+    "level": "locked",
+    "text": "notes under the chart, below everything else, left-aligned and wrapped to its 368 pt: a on “in expenses”; b on “$220K”; c on “Sales” (marks in reading order)",
+    "guide": []
+   }
+  ],
+  "findings": [],
+  "overrides": [],
+  "expect": {},
+  "expect_met": true,
+  "source": {
+   "notes": "owner 1 Oct 2026 (footnotes)",
+   "shows": "footnotes on a name wrapped under its bar (the mark on its last line, centred with it), on the unit line, and on one value label (a value's own note)",
+   "status": "generated"
+  },
+  "summary": {
+   "notes": [
+    {
+     "mark": "a",
+     "text": "Operating expenses, salaries included.",
+     "on": [
+      "in expenses"
+     ]
+    },
+    {
+     "mark": "b",
+     "text": "Estimate: December's invoices had not all arrived.",
+     "on": [
+      "$220K"
+     ]
+    },
+    {
+     "mark": "c",
+     "text": "New England's sales team only; the other regions' sales staff are counted under Marketing.",
+     "on": [
+      "Sales"
+     ]
+    }
+   ],
+   "scale": "0–600 by 100",
+   "labels": [
+    "0",
+    "100",
+    "200",
+    "300",
+    "400",
+    "500",
+    "$600K"
+   ],
+   "top": "$600K in expenses",
+   "scale_title": null,
+   "orientation": "vertical",
+   "plot": [
+    0.0,
+    33.5,
+    368.0,
+    254.3
+   ],
+   "band": 73.6,
+   "series": [
+    "exp"
+   ],
+   "labelling": "none",
+   "value_labels": true,
+   "table": false,
+   "width": 368.0,
+   "height": 319.95,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job lookup: no insight stated (a descriptive title will do, D-55)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-1",
+    "level": "guided",
+    "text": "a graph, the values to be compared or a pattern seen (G1.11)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 2,
+    "name": "variables",
+    "rule": "RP3-2",
+    "level": "guided",
+    "text": "one plot: categories along x and 1 series; a further variable would go to small multiples (data.dims, G1.18)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 3,
+    "name": "location",
+    "rule": "R8-2",
+    "level": "guided",
+    "text": "not a map: where the values are is not the message (facts.location_matters; G1.24, G1.25)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-01",
+    "level": "guided",
+    "text": "not parts of a total (no data.parts, no breakdown message; G1.1)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 7,
+    "name": "values across categories",
+    "rule": "R9-1",
+    "level": "guided",
+    "text": "group: bar charts. Values compared across categories (G1.9)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 7,
+    "name": "values across categories",
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "one scale from zero: bars, sorted by value when the categories are nominal (02 D1)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type (G1.59)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "bar charts are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "bar charts"
+   }
+  ],
+  "copies": []
+ },
+ "output_sha256": "cc89df095dcef46e49563891c67c0a0c12adf230081afc8157e886d7b32de686"
+}

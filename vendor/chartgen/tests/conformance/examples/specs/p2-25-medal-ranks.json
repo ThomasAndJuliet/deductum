@@ -1,0 +1,324 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p2-25-medal-ranks",
+    "job": {
+      "kind": "make_aware",
+      "text": "Show how the Netherlands lost ground to the other countries"
+    },
+    "insight": {
+      "important": "The Netherlands led after the first day and finished fifth",
+      "targets": [
+        {
+          "series": "netherlands"
+        }
+      ]
+    },
+    "title": {
+      "text": "The Netherlands Led After the First Day and Finished Fifth",
+      "kind": "insight",
+      "descriptive": "Daily Rank by Medals Won, Winter Olympics, Feb. 10–25, 2018"
+    },
+    "data": {
+      "x": {
+        "kind": "time",
+        "grid": "day",
+        "values": [
+          "2018-02-10",
+          "2018-02-11",
+          "2018-02-12",
+          "2018-02-13",
+          "2018-02-14",
+          "2018-02-15",
+          "2018-02-16",
+          "2018-02-17",
+          "2018-02-18",
+          "2018-02-19",
+          "2018-02-20",
+          "2018-02-21",
+          "2018-02-22",
+          "2018-02-23",
+          "2018-02-24",
+          "2018-02-25"
+        ]
+      },
+      "measure": {
+        "name": "rank by medals won",
+        "kind": "rank",
+        "persistence": "summary",
+        "unit": {
+          "noun": "rank"
+        }
+      },
+      "series": [
+        {
+          "id": "norway",
+          "name": "Norway",
+          "values": [
+            2,
+            1,
+            1,
+            1,
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "id": "germany",
+          "name": "Germany",
+          "values": [
+            3,
+            3,
+            2,
+            4,
+            1,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            3,
+            2,
+            2
+          ]
+        },
+        {
+          "id": "canada",
+          "name": "Canada",
+          "values": [
+            7,
+            4,
+            4,
+            3,
+            4,
+            3,
+            4,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            2,
+            3,
+            3
+          ]
+        },
+        {
+          "id": "united-states",
+          "name": "United States",
+          "values": [
+            8,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            6,
+            4,
+            4,
+            4,
+            4,
+            4
+          ]
+        },
+        {
+          "id": "netherlands",
+          "name": "Netherlands",
+          "values": [
+            1,
+            2,
+            3,
+            2,
+            3,
+            4,
+            3,
+            4,
+            4,
+            4,
+            4,
+            5,
+            5,
+            5,
+            5,
+            5
+          ]
+        },
+        {
+          "id": "south-korea",
+          "name": "South Korea",
+          "values": [
+            4,
+            6,
+            9,
+            9,
+            9,
+            9,
+            10,
+            10,
+            10,
+            9,
+            8,
+            8,
+            8,
+            8,
+            7,
+            6
+          ]
+        },
+        {
+          "id": "russia",
+          "name": "Russia",
+          "values": [
+            6,
+            9,
+            8,
+            7,
+            7,
+            8,
+            7,
+            6,
+            7,
+            7,
+            7,
+            7,
+            7,
+            7,
+            6,
+            7
+          ]
+        },
+        {
+          "id": "switzerland",
+          "name": "Switzerland",
+          "values": [
+            9,
+            10,
+            10,
+            10,
+            10,
+            10,
+            9,
+            9,
+            9,
+            10,
+            10,
+            10,
+            9,
+            9,
+            8,
+            8
+          ]
+        },
+        {
+          "id": "france",
+          "name": "France",
+          "values": [
+            10,
+            8,
+            6,
+            6,
+            6,
+            6,
+            6,
+            7,
+            6,
+            6,
+            5,
+            6,
+            6,
+            6,
+            9,
+            9
+          ]
+        },
+        {
+          "id": "sweden",
+          "name": "Sweden",
+          "values": [
+            5,
+            7,
+            7,
+            8,
+            8,
+            7,
+            8,
+            8,
+            8,
+            8,
+            9,
+            9,
+            10,
+            10,
+            10,
+            10
+          ]
+        }
+      ]
+    },
+    "facts": {
+      "message": "rank"
+    },
+    "source": {
+      "book": "p. 181–187, 226 (s. 0170, 0209)",
+      "notes": "06 T5",
+      "shows": "changes in rank as a bumps chart: rank 1 at the top, the word “Rank” above the numbers, no gridlines, each line labelled at its final rank (G7.24), its curves flat at every day so that they never overshoot (G7.17, R6-40), the Netherlands highlighted. The book's days 1–16 read as the competition days of the 2018 Games"
+    }
+  },
+  "variants": [
+    {
+      "name": "lookup",
+      "patch": {
+        "job": {
+          "kind": "lookup",
+          "text": "Look up each country's rank on each day of the Games"
+        },
+        "insight": null,
+        "title": {
+          "text": "Daily Rank by Medals Won, Winter Olympics, Feb. 10–25, 2018",
+          "kind": "descriptive",
+          "descriptive": null
+        },
+        "source": {
+          "shows": "the book's plain version (s. 0209): nothing highlighted"
+        }
+      },
+      "expect": {
+        "findings": []
+      }
+    },
+    {
+      "name": "line",
+      "patch": {
+        "chart": {
+          "type": "line"
+        },
+        "source": {
+          "shows": "the same ranks as a standard line chart: a guided departure (R6-7), and the lines rise where a country falls behind"
+        }
+      },
+      "expect": {
+        "findings": [
+          "R6-7"
+        ]
+      }
+    }
+  ]
+}

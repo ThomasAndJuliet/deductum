@@ -1,0 +1,231 @@
+{
+ "base": {
+  "chartspec": 1,
+  "id": "p2-63-donations-bar-grid",
+  "job": {
+   "kind": "lookup",
+   "text": "Look up the donations by each payment method for any region and donor type in 2022"
+  },
+  "title": {
+   "text": "Donations by Region, Donor Type and Payment Method, 2022",
+   "kind": "descriptive"
+  },
+  "data": {
+   "x": {
+    "kind": "nominal",
+    "values": [
+     "Credit card",
+     "Cash",
+     "Check"
+    ]
+   },
+   "measure": {
+    "name": "donations",
+    "kind": "amount",
+    "zero": "meaningful",
+    "min": 0,
+    "unit": {
+     "prefix": "$",
+     "noun": "in donations",
+     "magnitude": 3
+    }
+   },
+   "dims": [
+    {
+     "id": "region",
+     "name": "region",
+     "values": [
+      "Central",
+      "East",
+      "South",
+      "West"
+     ]
+    },
+    {
+     "id": "donor",
+     "name": "donor type",
+     "values": [
+      "Corporate",
+      "Foundation",
+      "Individual"
+     ]
+    }
+   ],
+   "series": [
+    {
+     "id": "central-corporate",
+     "keys": {
+      "region": "Central",
+      "donor": "Corporate"
+     },
+     "values": [
+      129,
+      111,
+      143
+     ]
+    },
+    {
+     "id": "central-foundation",
+     "keys": {
+      "region": "Central",
+      "donor": "Foundation"
+     },
+     "values": [
+      104,
+      107,
+      129
+     ]
+    },
+    {
+     "id": "central-individual",
+     "keys": {
+      "region": "Central",
+      "donor": "Individual"
+     },
+     "values": [
+      89,
+      136,
+      114
+     ]
+    },
+    {
+     "id": "east-corporate",
+     "keys": {
+      "region": "East",
+      "donor": "Corporate"
+     },
+     "values": [
+      104,
+      157,
+      104
+     ]
+    },
+    {
+     "id": "east-foundation",
+     "keys": {
+      "region": "East",
+      "donor": "Foundation"
+     },
+     "values": [
+      186,
+      111,
+      143
+     ]
+    },
+    {
+     "id": "east-individual",
+     "keys": {
+      "region": "East",
+      "donor": "Individual"
+     },
+     "values": [
+      111,
+      96,
+      175
+     ]
+    },
+    {
+     "id": "south-corporate",
+     "keys": {
+      "region": "South",
+      "donor": "Corporate"
+     },
+     "values": [
+      80,
+      142,
+      113
+     ]
+    },
+    {
+     "id": "south-foundation",
+     "keys": {
+      "region": "South",
+      "donor": "Foundation"
+     },
+     "values": [
+      156,
+      138,
+      95
+     ]
+    },
+    {
+     "id": "south-individual",
+     "keys": {
+      "region": "South",
+      "donor": "Individual"
+     },
+     "values": [
+      149,
+      142,
+      102
+     ]
+    },
+    {
+     "id": "west-corporate",
+     "keys": {
+      "region": "West",
+      "donor": "Corporate"
+     },
+     "values": [
+      118,
+      111,
+      139
+     ]
+    },
+    {
+     "id": "west-foundation",
+     "keys": {
+      "region": "West",
+      "donor": "Foundation"
+     },
+     "values": [
+      139,
+      186,
+      182
+     ]
+    },
+    {
+     "id": "west-individual",
+     "keys": {
+      "region": "West",
+      "donor": "Individual"
+     },
+     "values": [
+      132,
+      100,
+      164
+     ]
+    }
+   ]
+  },
+  "source": {
+   "book": "p. 377 (s. 0343)",
+   "notes": "13-15 F4 (bar grid)",
+   "shows": "any chart type fills the panels (G1.21): a grid of column charts, one bar per payment method, on one shared scale; the names under the bottom row only, one colour for every bar since every variable is on the rows, the columns or the axis (G7.50), where the book colours the methods and keys them in a legend; the procedure puts the four regions across and the three donor types down; values read off the book's figure, whose scale carries no unit ($K assumed)"
+  }
+ },
+ "variants": [
+  {
+   "name": "book-arrangement",
+   "patch": {
+    "panels": {
+     "arrangement": {
+      "rows": "region",
+      "columns": "donor"
+     }
+    },
+    "reasons": {
+     "panels.arrangement": "the book's arrangement: regions down, donor types across"
+    },
+    "source": {
+     "shows": "the book's arrangement, regions down and donor types across, given with its reason"
+    }
+   },
+   "expect": {
+    "findings": [
+     "RP3-3"
+    ]
+   }
+  }
+ ]
+}

@@ -1,0 +1,96 @@
+{
+ "base": {
+  "chartspec": 1,
+  "id": "p3-63-net-donations",
+  "job": {
+   "kind": "answer",
+   "text": "Which regions gained donors' money and which lost it?"
+  },
+  "insight": {
+   "important": "East gained most; Central and West lost money",
+   "targets": [
+    {
+     "category": "East"
+    }
+   ]
+  },
+  "title": {
+   "text": "East Gained Most; Central and West Lost Money",
+   "kind": "insight",
+   "descriptive": "Net Donations by Region, 2022"
+  },
+  "data": {
+   "x": {
+    "kind": "nominal",
+    "values": [
+     "East",
+     "South",
+     "North",
+     "Central",
+     "West",
+     "Total"
+    ],
+    "roles": {
+     "Total": "total"
+    }
+   },
+   "measure": {
+    "name": "net donations",
+    "kind": "amount",
+    "zero": "meaningful",
+    "unit": {
+     "prefix": "$",
+     "magnitude": 3,
+     "what": "net donations"
+    },
+    "good": "higher",
+    "dividing_point": 0
+   },
+   "series": [
+    {
+     "id": "net",
+     "name": "Net donations",
+     "values": [
+      34,
+      8.5,
+      8,
+      -4.3,
+      -16.5,
+      29.7
+     ]
+    }
+   ],
+   "parts": {
+    "meaningful_total": true,
+    "all_parts": true,
+    "overlap": false
+   }
+  },
+  "facts": {
+   "message": "fraction_of_total"
+  },
+  "source": {
+   "book": "p. 255–257 (s. 0235–0237)",
+   "notes": "07 #8",
+   "shows": "fractions asked of parts of both signs: the sign check fails (areas cannot be negative, R7-04, G0.15), so a bar chart closed by its grey Total bar (G7.3, D-43), gains and losses coloured by the audience's reading"
+  }
+ },
+ "variants": [
+  {
+   "name": "pie",
+   "patch": {
+    "chart": {
+     "type": "pie"
+    },
+    "source": {
+     "shows": "the book's pie of mixed signs, where East looks like half the total but is 110 % of it: refused (R7-04, G0.15 [L])"
+    }
+   },
+   "expect": {
+    "refused": [
+     "R7-04"
+    ]
+   }
+  }
+ ]
+}

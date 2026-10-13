@@ -1,0 +1,262 @@
+{
+ "key": "p2-25-medal-ranks--lookup",
+ "file": "p2-25-medal-ranks.json",
+ "variant": "lookup",
+ "requested_type": "auto",
+ "report": {
+  "chart": "p2-25-medal-ranks",
+  "style": "plain",
+  "variant": "lookup",
+  "type": "bumps",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "R6-7",
+    "level": "guided",
+    "text": "type bumps: changes in rank are the point (06 DP6-1): a bumps chart",
+    "guide": []
+   },
+   {
+    "rule": "R6-7",
+    "level": "locked",
+    "text": "a rank scale, 1 at the top to 10 at the bottom, one label per rank, “Rank” above them (G7.24)",
+    "guide": []
+   },
+   {
+    "rule": "R6-28",
+    "level": "locked",
+    "text": "each line its own colour, handed out top to bottom by the final ranks: Norway slot 1, Germany slot 2, Canada slot 3, United States slot 4, Netherlands slot 5, South Korea slot 6, Russia slot 7, Switzerland slot 8, France slot 9, Sweden slot 10",
+    "guide": []
+   },
+   {
+    "rule": "R6-40",
+    "level": "locked",
+    "text": "each line drawn with curves flat at every point, so that it never overshoots the ranks it joins (G7.17, G7.24)",
+    "guide": []
+   },
+   {
+    "rule": "R6-32",
+    "level": "locked",
+    "text": "each line labelled at its right end, at its final rank, so the labels read in final-rank order (G7.24)",
+    "guide": []
+   },
+   {
+    "rule": "R6-7",
+    "level": "locked",
+    "text": "no gridlines: the rank numbers stand beside each row, and the lines are read by their order (G7.24)",
+    "guide": []
+   },
+   {
+    "rule": "R2-40",
+    "level": "locked",
+    "text": "time axis: row 1 full",
+    "guide": []
+   },
+   {
+    "rule": "R5-26",
+    "level": "locked",
+    "text": "the title wraps onto two lines",
+    "guide": []
+   }
+  ],
+  "findings": [
+   {
+    "rule": "R2-11",
+    "severity": "info",
+    "message": "the unit phrase “rank” is one word; say what is counted, which subset and per what period",
+    "path": "data.measure.unit.noun",
+    "level": "locked",
+    "guide": [],
+    "title": "a unit phrase specific enough for one reading"
+   },
+   {
+    "rule": "R3-22",
+    "severity": "warn",
+    "message": "10 regular colours, every series labelled directly: check that similar colours never sit side by side (G4.20)",
+    "elements": [
+     "path.line[data-series=norway]",
+     "path.line[data-series=germany]",
+     "path.line[data-series=canada]",
+     "path.line[data-series=united-states]",
+     "path.line[data-series=netherlands]",
+     "path.line[data-series=south-korea]",
+     "path.line[data-series=russia]",
+     "path.line[data-series=switzerland]",
+     "path.line[data-series=france]",
+     "path.line[data-series=sweden]"
+    ],
+    "level": "locked",
+    "guide": [],
+    "title": "more than eight colours only with every series labelled directly"
+   },
+   {
+    "rule": "R3-19",
+    "severity": "info",
+    "message": "#558bb9 and #9a77b7 are 0.018 apart under deuteranopia (at least 0.06): readers with colour-vision deficiency may not tell them apart (every series is labelled directly) (G4.18, D-34)",
+    "elements": [
+     "path.line[data-series=russia]",
+     "path.line[data-series=south-korea]"
+    ],
+    "level": "locked",
+    "guide": [],
+    "title": "colours that must be told apart survive colour-vision deficiency"
+   }
+  ],
+  "overrides": [],
+  "expect": {
+   "findings": []
+  },
+  "expect_met": true,
+  "source": {
+   "book": "p. 181–187, 226 (s. 0170, 0209)",
+   "notes": "06 T5",
+   "shows": "the book's plain version (s. 0209): nothing highlighted",
+   "status": "generated"
+  },
+  "summary": {
+   "scale": "1–10 by 1",
+   "labels": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7",
+    "8",
+    "9",
+    "10"
+   ],
+   "top": "10",
+   "scale_title": null,
+   "orientation": "vertical",
+   "plot": [
+    19.0,
+    48.5,
+    305.72,
+    220.53
+   ],
+   "slot": 18.34,
+   "ranks": 10,
+   "colours": {
+    "norway": "series-1",
+    "germany": "series-2",
+    "canada": "series-3",
+    "united-states": "series-4",
+    "netherlands": "series-5",
+    "south-korea": "series-6",
+    "russia": "series-7",
+    "switzerland": "series-8",
+    "france": "series-9",
+    "sweden": "series-10"
+   },
+   "width": 368.0,
+   "height": 264.14,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job lookup: no insight stated (a descriptive title will do, D-55)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-1",
+    "level": "guided",
+    "text": "a graph, the values to be compared or a pattern seen (G1.11)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 2,
+    "name": "variables",
+    "rule": "RP3-2",
+    "level": "guided",
+    "text": "one plot: time along x and 10 series; more than 5 lines read well only if they rarely cross, else a stack of small line charts (panels by data.dims, G1.20); a further variable would go to small multiples (data.dims, G1.18)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 3,
+    "name": "location",
+    "rule": "R8-2",
+    "level": "guided",
+    "text": "not a map: where the values are is not the message (facts.location_matters; G1.24, G1.25)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-01",
+    "level": "guided",
+    "text": "not parts of a total (no data.parts, no breakdown message; G1.1)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 6,
+    "name": "values over time",
+    "rule": "R6-13",
+    "level": "guided",
+    "text": "group: data over time. A series of more than two periods, not a breakdown and not tied to places (G1.48)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 6,
+    "name": "values over time",
+    "rule": "R6-3",
+    "level": "locked",
+    "text": "a regular series, enough values known (06 DP6-2)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 6,
+    "name": "values over time",
+    "rule": "R6-7",
+    "level": "guided",
+    "text": "changes in rank are the point (06 DP6-1): a bumps chart",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type, the series told apart by colour (G1.59)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "bumps charts are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R6-18",
+    "level": "guided",
+    "text": "bumps charts may be new to a general audience: teach them (build the chart up, show first the familiar chart that fails, or add two or three callouts stating the obvious; G1.5), or state the insight in a sentence and keep the chart as backup (G1.6)",
+    "guide": [],
+    "group": "data over time"
+   }
+  ],
+  "copies": []
+ },
+ "output_sha256": "3173f60e9c70392e650552b9b6fdb8650b06aed17e31b550c5170fe31b28af50"
+}

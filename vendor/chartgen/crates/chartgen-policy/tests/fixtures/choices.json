@@ -1,0 +1,710 @@
+[
+  {
+    "name": "p1-01-headcount-by-region",
+    "type": "bar",
+    "raw": {
+      "chartspec": 1,
+      "id": "p1-01-headcount-by-region",
+      "purpose": "communication",
+      "job": {
+        "kind": "lookup",
+        "text": "Look up each region's headcount in January 2022"
+      },
+      "title": {
+        "text": "Headcount by Region, January 2022",
+        "kind": "descriptive"
+      },
+      "data": {
+        "x": {
+          "kind": "nominal",
+          "values": [
+            "East",
+            "Central",
+            "South",
+            "West",
+            "North"
+          ]
+        },
+        "measure": {
+          "name": "headcount",
+          "kind": "count",
+          "zero": "meaningful",
+          "min": 0,
+          "unit": {
+            "what": "max employees during month"
+          }
+        },
+        "series": [
+          {
+            "id": "headcount",
+            "name": "Headcount",
+            "values": [
+              48,
+              41,
+              35,
+              33,
+              29
+            ]
+          }
+        ]
+      },
+      "chart": {
+        "type": "bar",
+        "orientation": "auto",
+        "value_labels": "off"
+      },
+      "reasons": {
+        "chart.value_labels": "the book's figure keeps its scale (p. 49): this example shows the unit on the top label, which value labels would take away"
+      },
+      "source": {
+        "book": "p. 49 (s. 0049)",
+        "notes": "00-01 F1",
+        "shows": "non-data elements pruned: no frame, ticks or axis line; light gridlines under the bars, the zero line one of them; the unit on the top label, in parentheses as a description (D-20), the top gridline starting after it"
+      }
+    }
+  },
+  {
+    "name": "p1-09-revenue-by-business-unit",
+    "type": "line",
+    "raw": {
+      "chartspec": 1,
+      "id": "p1-09-revenue-by-business-unit",
+      "job": {
+        "kind": "lookup",
+        "text": "Look up each business unit's revenue by month, and how the two compare"
+      },
+      "title": {
+        "text": "Revenue by Business Unit, Mar–Sep 2021",
+        "kind": "descriptive"
+      },
+      "data": {
+        "x": {
+          "kind": "time",
+          "grid": "month",
+          "values": [
+            "2021-03",
+            "2021-04",
+            "2021-05",
+            "2021-06",
+            "2021-07",
+            "2021-08",
+            "2021-09"
+          ]
+        },
+        "measure": {
+          "name": "revenue",
+          "kind": "amount",
+          "zero": "meaningful",
+          "min": 0,
+          "persistence": "summary",
+          "unit": {
+            "prefix": "$",
+            "magnitude": 6,
+            "what": "revenue per month"
+          }
+        },
+        "series": [
+          {
+            "id": "consumer",
+            "name": "Consumer",
+            "values": [
+              16.69,
+              16.79,
+              17.18,
+              17.31,
+              17.57,
+              16.39,
+              17.76
+            ]
+          },
+          {
+            "id": "business",
+            "name": "Business",
+            "values": [
+              16.39,
+              17.68,
+              16.29,
+              17.29,
+              16.55,
+              17.68,
+              17.19
+            ]
+          }
+        ]
+      },
+      "facts": {
+        "message": "pattern",
+        "small_differences_matter": true
+      },
+      "inset": {
+        "kind": "auto",
+        "position": "above",
+        "compact_main": true
+      },
+      "source": {
+        "book": "p. 83–85 (s. 0080–0081)",
+        "notes": "02 #13",
+        "shows": "the narrow-range inset on lines: the main line chart keeps zero, so the two units look as steady as they are, compact under the inset (inset.compact_main, s. 0081), “$20 million” kept on its scale when the description moves to its own line; the inset above on the same months, 16.0–18.0 by 0.5 with “$18.0 million (revenue per month)” restated, as high as the main chart, both with their end labels; the compact layout shares one time axis, the main chart’s, under the stack; a frame round the main chart’s 15–20 band across its width"
+      }
+    }
+  },
+  {
+    "name": "p1-10-transactions-per-month--sparse",
+    "type": "dot",
+    "raw": {
+      "chartspec": 1,
+      "id": "p1-10-transactions-per-month",
+      "job": {
+        "kind": "lookup",
+        "text": "Look up the successful transactions of each month of 2022"
+      },
+      "title": {
+        "text": "Transactions per Month, 2022",
+        "kind": "descriptive"
+      },
+      "data": {
+        "x": {
+          "kind": "time",
+          "grid": "month",
+          "values": [
+            "2022-01",
+            "2022-02",
+            "2022-03",
+            "2022-04",
+            "2022-05",
+            "2022-06",
+            "2022-07",
+            "2022-08",
+            "2022-09",
+            "2022-10",
+            "2022-11",
+            "2022-12"
+          ]
+        },
+        "measure": {
+          "name": "transactions",
+          "kind": "count",
+          "zero": "meaningful",
+          "min": 0,
+          "persistence": "summary",
+          "unit": {
+            "noun": "successful transactions per month"
+          }
+        },
+        "series": [
+          {
+            "id": "tx",
+            "name": "Transactions",
+            "values": [
+              669,
+              null,
+              669,
+              null,
+              null,
+              651,
+              null,
+              null,
+              971,
+              null,
+              null,
+              949
+            ]
+          }
+        ]
+      },
+      "source": {
+        "book": "p. 205–211 (s. 0191–0195)",
+        "notes": "06 T10",
+        "shows": "the same five months with the type left to the chooser: a dot plot over the whole year, so the empty months show (06 DP6-2, D-27)"
+      }
+    }
+  },
+  {
+    "name": "p1-26-tv-price",
+    "type": "step",
+    "raw": {
+      "chartspec": 1,
+      "id": "p1-26-tv-price",
+      "job": {
+        "kind": "lookup",
+        "text": "Look up the TV's price on any day from April to June"
+      },
+      "title": {
+        "text": "Price of the XLCD65 TV, Apr–Jun 2022",
+        "kind": "descriptive"
+      },
+      "data": {
+        "x": {
+          "kind": "time",
+          "grid": "none"
+        },
+        "as_of": "2022-06-30",
+        "measure": {
+          "name": "price",
+          "kind": "amount",
+          "zero": "meaningful",
+          "min": 0,
+          "persistence": "state",
+          "unit": {
+            "prefix": "$",
+            "what": "price of the TV"
+          }
+        },
+        "series": [
+          {
+            "id": "price",
+            "name": "Price",
+            "points": [
+              [
+                "2022-04-01",
+                400
+              ],
+              [
+                "2022-04-27",
+                350
+              ],
+              [
+                "2022-04-30",
+                375
+              ],
+              [
+                "2022-05-02",
+                350
+              ],
+              [
+                "2022-05-03",
+                275
+              ],
+              [
+                "2022-05-05",
+                360
+              ],
+              [
+                "2022-05-06",
+                325
+              ],
+              [
+                "2022-05-23",
+                300
+              ],
+              [
+                "2022-05-26",
+                380
+              ],
+              [
+                "2022-06-08",
+                350
+              ],
+              [
+                "2022-06-18",
+                330
+              ],
+              [
+                "2022-06-25",
+                300
+              ],
+              [
+                "2022-06-30",
+                250
+              ]
+            ]
+          }
+        ]
+      },
+      "source": {
+        "book": "p. 188–190 (s. 0176–0178)",
+        "notes": "06 T6",
+        "shows": "a price holds until it changes: a step chart, level from each change to the next and then straight up or down, the last price running to the as-of date (G7.19, D-42), on a true time axis with a tick at each day (D-45); to look a price up, how far it stands from zero does not matter, so the scale may leave zero out, as the book's does (G2.8)"
+      },
+      "facts": {
+        "distance_to_zero_irrelevant": true
+      }
+    }
+  },
+  {
+    "name": "p1-27-sales-transactions",
+    "type": "thin_bar",
+    "raw": {
+      "chartspec": 1,
+      "id": "p1-27-sales-transactions",
+      "job": {
+        "kind": "lookup",
+        "text": "Look up the amount of each sales transaction of the last four weeks"
+      },
+      "title": {
+        "text": "Sales Transactions, Jun 20 to Jul 16, 2022",
+        "kind": "descriptive"
+      },
+      "data": {
+        "x": {
+          "kind": "time",
+          "grid": "none"
+        },
+        "measure": {
+          "name": "transaction amount",
+          "kind": "amount",
+          "zero": "meaningful",
+          "min": 0,
+          "persistence": "event",
+          "unit": {
+            "prefix": "$",
+            "what": "amount of each sale"
+          }
+        },
+        "series": [
+          {
+            "id": "sales",
+            "name": "Sales",
+            "points": [
+              [
+                "2022-06-20",
+                3840
+              ],
+              [
+                "2022-06-22",
+                3500
+              ],
+              [
+                "2022-06-25",
+                3670
+              ],
+              [
+                "2022-06-26",
+                3410
+              ],
+              [
+                "2022-06-28",
+                2750
+              ],
+              [
+                "2022-06-30",
+                3035
+              ],
+              [
+                "2022-07-01",
+                2380
+              ],
+              [
+                "2022-07-03",
+                2380
+              ],
+              [
+                "2022-07-03",
+                2665
+              ],
+              [
+                "2022-07-05",
+                2680
+              ],
+              [
+                "2022-07-05",
+                2785
+              ],
+              [
+                "2022-07-09",
+                2640
+              ],
+              [
+                "2022-07-10",
+                2575
+              ],
+              [
+                "2022-07-11",
+                2145
+              ],
+              [
+                "2022-07-12",
+                2575
+              ],
+              [
+                "2022-07-13",
+                2470
+              ],
+              [
+                "2022-07-15",
+                2180
+              ],
+              [
+                "2022-07-16",
+                1990
+              ]
+            ]
+          }
+        ]
+      },
+      "facts": {
+        "message": "individual_values"
+      },
+      "source": {
+        "book": "p. 194–196 (s. 0181–0183)",
+        "notes": "06 T7",
+        "shows": "individual sales at irregular times: a thin bar at each sale's instant, rising from zero, nothing drawn between them (G7.20); two sales on the same day stacked with a hairline gap, each its own length (D-42), so the scale reaches their total; days on row 1, every second, the months under them"
+      }
+    }
+  },
+  {
+    "name": "p2-20-concert-attendance",
+    "type": "thin_bar",
+    "raw": {
+      "chartspec": 1,
+      "id": "p2-20-concert-attendance",
+      "job": {
+        "kind": "lookup",
+        "text": "Look up the attendance at each concert of the spring season"
+      },
+      "title": {
+        "text": "Concert Attendance, Feb–May 2022",
+        "kind": "descriptive"
+      },
+      "data": {
+        "x": {
+          "kind": "time",
+          "grid": "none",
+          "values": [
+            "2022-02-01",
+            "2022-05-31"
+          ]
+        },
+        "measure": {
+          "name": "attendance",
+          "kind": "count",
+          "zero": "meaningful",
+          "min": 0,
+          "persistence": "event",
+          "unit": {
+            "noun": "attendees"
+          }
+        },
+        "series": [
+          {
+            "id": "attendance",
+            "name": "Attendance",
+            "points": [
+              [
+                "2022-02-12",
+                1820
+              ],
+              [
+                "2022-02-13",
+                1450
+              ],
+              [
+                "2022-03-12",
+                1960
+              ],
+              [
+                "2022-03-26",
+                1990
+              ],
+              [
+                "2022-03-27",
+                2190
+              ],
+              [
+                "2022-05-15",
+                2050
+              ]
+            ]
+          }
+        ]
+      },
+      "facts": {
+        "message": "individual_values"
+      },
+      "source": {
+        "book": "p. 196 (s. 0183)",
+        "notes": "06 T8",
+        "shows": "individual events whose values matter in themselves: thin bars at their instants over the season (the window, x.values, February to May), so the empty weeks show; concerts on consecutive days stand side by side, touching, as in the book; months on row 1 with a tick at each day (D-45)"
+      }
+    }
+  },
+  {
+    "name": "p2-26-atm-withdrawals",
+    "type": "thin_bar",
+    "raw": {
+      "chartspec": 1,
+      "id": "p2-26-atm-withdrawals",
+      "job": {
+        "kind": "lookup",
+        "text": "Look up the amount and time of each withdrawal from the ATM yesterday"
+      },
+      "title": {
+        "text": "ATM Withdrawals, Aug. 14, 2022",
+        "kind": "descriptive"
+      },
+      "data": {
+        "x": {
+          "kind": "time",
+          "grid": "none",
+          "values": [
+            "2022-08-14T00",
+            "2022-08-15T00"
+          ]
+        },
+        "measure": {
+          "name": "withdrawal",
+          "kind": "amount",
+          "zero": "meaningful",
+          "min": 0,
+          "persistence": "event",
+          "unit": {
+            "prefix": "$",
+            "what": "amount withdrawn"
+          }
+        },
+        "series": [
+          {
+            "id": "withdrawals",
+            "name": "Withdrawals",
+            "points": [
+              [
+                "2022-08-14T05:20",
+                200
+              ],
+              [
+                "2022-08-14T05:50",
+                80
+              ],
+              [
+                "2022-08-14T06:20",
+                140
+              ],
+              [
+                "2022-08-14T06:45",
+                100
+              ],
+              [
+                "2022-08-14T06:45",
+                160
+              ],
+              [
+                "2022-08-14T06:50",
+                100
+              ],
+              [
+                "2022-08-14T06:55",
+                40
+              ],
+              [
+                "2022-08-14T07:10",
+                40
+              ],
+              [
+                "2022-08-14T08:00",
+                40
+              ],
+              [
+                "2022-08-14T09:30",
+                100
+              ],
+              [
+                "2022-08-14T10:25",
+                100
+              ],
+              [
+                "2022-08-14T11:20",
+                40
+              ],
+              [
+                "2022-08-14T11:35",
+                20
+              ],
+              [
+                "2022-08-14T11:55",
+                60
+              ],
+              [
+                "2022-08-14T13:00",
+                500
+              ],
+              [
+                "2022-08-14T13:10",
+                120
+              ],
+              [
+                "2022-08-14T13:20",
+                40
+              ],
+              [
+                "2022-08-14T13:50",
+                300
+              ],
+              [
+                "2022-08-14T14:30",
+                160
+              ],
+              [
+                "2022-08-14T14:45",
+                200
+              ],
+              [
+                "2022-08-14T16:20",
+                40
+              ],
+              [
+                "2022-08-14T16:45",
+                120
+              ],
+              [
+                "2022-08-14T16:50",
+                140
+              ],
+              [
+                "2022-08-14T17:15",
+                300
+              ],
+              [
+                "2022-08-14T17:40",
+                60
+              ],
+              [
+                "2022-08-14T18:45",
+                160
+              ],
+              [
+                "2022-08-14T18:50",
+                120
+              ],
+              [
+                "2022-08-14T20:05",
+                140
+              ],
+              [
+                "2022-08-14T20:40",
+                100
+              ],
+              [
+                "2022-08-14T20:50",
+                140
+              ],
+              [
+                "2022-08-14T21:05",
+                140
+              ],
+              [
+                "2022-08-14T21:15",
+                120
+              ],
+              [
+                "2022-08-14T21:20",
+                120
+              ],
+              [
+                "2022-08-14T22:50",
+                200
+              ]
+            ]
+          }
+        ]
+      },
+      "facts": {
+        "message": "individual_values"
+      },
+      "source": {
+        "book": "p. 194 (s. 0181)",
+        "notes": "06 §5.3 (synthetic data)",
+        "shows": "events over one day on a true time axis: hours at their instants every third, the day under them, a tick at each hour (D-45); withdrawals at the same minute stacked (D-42). The amounts and times are synthetic, after the book's third thin-bar example"
+      }
+    }
+  }
+]

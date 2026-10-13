@@ -1,0 +1,293 @@
+{
+ "base": {
+  "chartspec": 1,
+  "id": "r1-01-instrument-charges-notes",
+  "job": {
+   "kind": "lookup",
+   "text": "Let researchers and companies look up what each instrument or service costs them, by type of user, from 1 August 2026 (the facility's web page)"
+  },
+  "title": {
+   "text": "Instrument and Service Charges from 1 August 2026 (£, Excluding VAT)",
+   "kind": "descriptive"
+  },
+  "data": {
+   "x": {
+    "kind": "nominal",
+    "values": [
+     "Internal",
+     "External academic",
+     "Commercial"
+    ]
+   },
+   "measure": {
+    "name": "charge",
+    "kind": "amount",
+    "zero": "meaningful",
+    "min": 0,
+    "precision": 0.01,
+    "unit": {
+     "prefix": "£",
+     "noun": "excluding VAT"
+    }
+   },
+   "series": [
+    {
+     "id": "confocal",
+     "name": "per hour",
+     "values": [
+      28,
+      45,
+      110
+     ]
+    },
+    {
+     "id": "light-sheet",
+     "name": "per hour",
+     "values": [
+      35,
+      56,
+      140
+     ]
+    },
+    {
+     "id": "sted",
+     "name": "per hour",
+     "values": [
+      42,
+      67.5,
+      165
+     ]
+    },
+    {
+     "id": "tem",
+     "name": "per hour",
+     "values": [
+      58,
+      93,
+      {
+       "status": "tbd"
+      }
+     ]
+    },
+    {
+     "id": "flow",
+     "name": "per hour",
+     "values": [
+      18,
+      29,
+      75
+     ]
+    },
+    {
+     "id": "sorter",
+     "name": "per hour",
+     "values": [
+      65,
+      104,
+      {
+       "status": "missing"
+      }
+     ]
+    },
+    {
+     "id": "maldi",
+     "name": "per sample",
+     "values": [
+      12,
+      19.2,
+      48
+     ]
+    },
+    {
+     "id": "orbitrap",
+     "name": "per sample",
+     "values": [
+      85,
+      136,
+      {
+       "status": "tbd"
+      }
+     ]
+    },
+    {
+     "id": "training",
+     "name": "per person",
+     "values": [
+      60,
+      96,
+      150
+     ]
+    }
+   ]
+  },
+  "facts": {
+   "message": "lookup_only"
+  },
+  "chart": {
+   "type": "auto"
+  },
+  "table": {
+   "names_title": "Charged",
+   "stub": [
+    {
+     "title": "Instrument or service",
+     "kind": "text",
+     "values": [
+      "Confocal microscope",
+      "Light-sheet microscope",
+      "Super-resolution microscope (STED)",
+      "Transmission electron microscope",
+      "Flow cytometer (analyser)",
+      "Cell sorter (with operator)",
+      "MALDI-TOF mass spectrometry",
+      "Orbitrap LC-MS (proteomics)",
+      "Induction & safety training"
+     ]
+    }
+   ]
+  },
+  "labels": {
+   "notes": {
+    "tbd": "POA",
+    "missing": "n/a"
+   }
+  },
+  "notes": [
+   {
+    "text": "Price on application.",
+    "on": [
+     {
+      "status": "tbd"
+     }
+    ]
+   },
+   {
+    "text": "Not available to commercial users: the sorter has to be run by facility staff, which cannot be offered commercially at present.",
+    "on": [
+     {
+      "status": "missing"
+     }
+    ]
+   }
+  ],
+  "layout": {
+   "width": 460
+  },
+  "source": {
+   "notes": "eval round 1, B12 (opus-G's spec, its notes added)",
+   "shows": "a table's footnotes: a mark on every cell of a status (POA, n/a), the notes under the table, wrapped to its width; variants: the owner's plain note, and the values' own notes"
+  }
+ },
+ "variants": [
+  {
+   "name": "plain-note",
+   "patch": {
+    "notes": [
+     {
+      "text": "POA: price on application. n/a: not available to commercial users (the sorter has to be run by facility staff)."
+     }
+    ]
+   }
+  },
+  {
+   "name": "value-notes",
+   "patch": {
+    "notes": null,
+    "data": {
+     "series": [
+      {
+       "id": "confocal",
+       "name": "per hour",
+       "values": [
+        28,
+        45,
+        110
+       ]
+      },
+      {
+       "id": "light-sheet",
+       "name": "per hour",
+       "values": [
+        35,
+        56,
+        140
+       ]
+      },
+      {
+       "id": "sted",
+       "name": "per hour",
+       "values": [
+        42,
+        67.5,
+        165
+       ]
+      },
+      {
+       "id": "tem",
+       "name": "per hour",
+       "values": [
+        58,
+        93,
+        {
+         "status": "tbd",
+         "note": "Price on application."
+        }
+       ]
+      },
+      {
+       "id": "flow",
+       "name": "per hour",
+       "values": [
+        18,
+        29,
+        75
+       ]
+      },
+      {
+       "id": "sorter",
+       "name": "per hour",
+       "values": [
+        65,
+        104,
+        {
+         "status": "missing",
+         "note": "Not available to commercial users: the sorter has to be run by facility staff, which cannot be offered commercially at present."
+        }
+       ]
+      },
+      {
+       "id": "maldi",
+       "name": "per sample",
+       "values": [
+        12,
+        19.2,
+        48
+       ]
+      },
+      {
+       "id": "orbitrap",
+       "name": "per sample",
+       "values": [
+        85,
+        136,
+        {
+         "status": "tbd",
+         "note": "Price on application."
+        }
+       ]
+      },
+      {
+       "id": "training",
+       "name": "per person",
+       "values": [
+        60,
+        96,
+        150
+       ]
+      }
+     ]
+    }
+   }
+  }
+ ]
+}

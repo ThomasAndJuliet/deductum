@@ -1,0 +1,83 @@
+{
+  "chartspec": 1,
+  "id": "r1-26-transactions-outlier-target",
+  "job": {
+    "kind": "answer",
+    "text": "Which of the smaller regions reached the target of 10 successful transactions?"
+  },
+  "insight": {
+    "important": "Central and South reached the target of 10; West, North and the other regions did not",
+    "targets": [
+      {
+        "category": "Central"
+      },
+      {
+        "category": "South"
+      }
+    ]
+  },
+  "title": {
+    "text": "Of the Smaller Regions, Only Central and South Reached the Target of 10",
+    "kind": "insight",
+    "descriptive": "Successful transactions by region, 2022"
+  },
+  "data": {
+    "x": {
+      "kind": "nominal",
+      "values": [
+        "East",
+        "Central",
+        "South",
+        "West",
+        "North",
+        "Others"
+      ],
+      "roles": {
+        "Others": "all_others"
+      }
+    },
+    "measure": {
+      "name": "transactions",
+      "kind": "count",
+      "zero": "meaningful",
+      "min": 0,
+      "unit": {
+        "noun": "successful transactions"
+      }
+    },
+    "series": [
+      {
+        "id": "tx",
+        "name": "Transactions",
+        "values": [
+          451,
+          16,
+          15,
+          7,
+          5,
+          4
+        ]
+      }
+    ],
+    "comparisons": [
+      {
+        "id": "target",
+        "kind": "target",
+        "label": "Target",
+        "values": [
+          10
+        ]
+      }
+    ]
+  },
+  "facts": {
+    "small_values_matter": true
+  },
+  "chart": {
+    "type": "bar"
+  },
+  "source": {
+    "notes": "evaluation round 1 (a comparison line with an inset); p1-07",
+    "shows": "an outlier inset inside the plot: the target line across the main chart, under the inset's frame, and across the inset, where 10 lies in its range (SPEC §6.12.2)"
+  }
+}

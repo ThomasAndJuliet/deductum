@@ -1,0 +1,27 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p2-51-accidents-per-hours",
+    "job": {"kind": "answer", "text": "Which factory is the most dangerous place to work?"},
+    "insight": {"important": "Factory A has the highest accident rate, though Factory D had the most accidents",
+                "targets": [{"category": "Factory A"}]},
+    "title": {"text": "Factory A Is the Most Dangerous Place to Work", "kind": "insight",
+              "descriptive": "Workplace Accidents per 100K Work Hours by Factory, 2021"},
+    "data": {
+      "x": {"kind": "nominal", "values": ["Factory A", "Factory B", "Factory C", "Factory D"]},
+      "measure": {"name": "workplace accidents", "kind": "count", "zero": "meaningful", "min": 0,
+                  "unit": {"noun": "accidents"}},
+      "series": [{"id": "accidents", "name": "Accidents", "values": [47, 28, 44, 62]}]
+    },
+    "transform": {"kind": "ratio", "per": 100000,
+                  "exposure": {"noun": "work hours", "values": [922000, 1037000, 2588000, 1938000]}},
+    "source": {"book": "p. 412–413 (s. 0378–0379)", "notes": "13-15 F15",
+               "shows": "a ratio: accidents per 100K work hours, since the factories differ in size; the unit says so, and the order changes (R15-15, G8.17)"}
+  },
+  "variants": [
+    {"name": "raw",
+     "patch": {"transform": null,
+               "title": {"descriptive": "Workplace Accidents by Factory, 2021"},
+               "source": {"shows": "the book's raw counts under the same title: Factory D had the most accidents, and the raw chart points at the wrong factory (R15-15)"}}}
+  ]
+}

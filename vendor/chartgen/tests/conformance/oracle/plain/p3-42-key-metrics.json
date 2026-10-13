@@ -1,0 +1,121 @@
+{
+ "key": "p3-42-key-metrics",
+ "file": "p3-42-key-metrics.json",
+ "variant": null,
+ "requested_type": "auto",
+ "report": {
+  "chart": "p3-42-key-metrics",
+  "style": "plain",
+  "variant": null,
+  "type": "table",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "R10-11",
+    "level": "guided",
+    "text": "type table: a table alone: none of its values are comparable with one another (key metrics in different units), the numbers left-aligned (G7.41) (facts.message not_comparable; G1.12)",
+    "guide": []
+   },
+   {
+    "rule": "R10-13",
+    "level": "locked",
+    "text": "a table alone, formatted in the book's order: the digits the purpose needs, two thin rules, space between rows and columns, the numbers left-aligned, each with its unit, not to be compared, nothing bold but the title, the unit once in the title (08-12 DP-4, G7.37–G7.45)",
+    "guide": []
+   },
+   {
+    "rule": "R10-12",
+    "level": "locked",
+    "text": "digits: each value to its measure's precision, else its own decimals, one number of decimals down each column (G7.37, G6.16)",
+    "guide": []
+   },
+   {
+    "rule": "R10-20",
+    "level": "locked",
+    "text": "the values are not comparable with one another (each row its own measure): left-aligned, each with its own unit (G7.41)",
+    "guide": []
+   }
+  ],
+  "findings": [],
+  "overrides": [],
+  "expect": {},
+  "expect_met": true,
+  "source": {
+   "book": "p. 342, 346 (s. 0312, 0316)",
+   "notes": "08-12 #10",
+   "shows": "a table alone because no two values are comparable (R10-11 (c)): six key metrics in six units, the values left-aligned, each with its own unit and digits (R10-20), the audience's abbreviation M for millions; not bold, as the book's are (the owner's rule: nothing bold but the title); headcount 945.5 as on s. 0316 (s. 0312 has 94.5, D-54)",
+   "status": "generated"
+  },
+  "summary": {
+   "orientation": "vertical",
+   "plot": [
+    0.0,
+    12.75,
+    181.64,
+    141.75
+   ],
+   "table": {
+    "rows": [
+     "funds",
+     "overhead",
+     "donor",
+     "staff",
+     "fte",
+     "travel"
+    ],
+    "columns": [
+     "value"
+    ],
+    "comparable": false,
+    "pitch": 21.5,
+    "width": 181.64,
+    "graphics": "none",
+    "highlighted": [],
+    "values": null
+   },
+   "width": 181.64,
+   "height": 142.75,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job lookup: no insight stated (a descriptive title will do, D-55)",
+    "guide": [],
+    "group": "tables"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-11",
+    "level": "guided",
+    "text": "group: tables. A table alone: none of its values are comparable with one another (key metrics in different units), the numbers left-aligned (G7.41) (facts.message not_comparable; G1.12)",
+    "guide": [],
+    "group": "tables"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type, the series told apart by colour (G1.59)",
+    "guide": [],
+    "group": "tables"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "tables are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "tables"
+   }
+  ],
+  "copies": []
+ },
+ "output_sha256": "62228a276911455f1c46eb2fb8386ee6709a7947f7d9737a54a7f8c72565dba0"
+}

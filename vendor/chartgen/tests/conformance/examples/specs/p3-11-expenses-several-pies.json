@@ -1,0 +1,171 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p3-11-expenses-several-pies",
+    "job": {
+      "kind": "answer",
+      "text": "Is Operations more than a quarter of the expenses in every region?"
+    },
+    "insight": {
+      "important": "Operations takes more than a quarter of the expenses in every region",
+      "targets": [
+        {
+          "series": "ops"
+        }
+      ]
+    },
+    "title": {
+      "text": "Operations Takes Over a Quarter of Expenses in Every Region",
+      "kind": "insight",
+      "descriptive": "Expenses by Department and Region, 2022"
+    },
+    "data": {
+      "x": {
+        "kind": "nominal",
+        "values": [
+          "East",
+          "Central",
+          "West"
+        ]
+      },
+      "measure": {
+        "name": "expenses",
+        "kind": "amount",
+        "zero": "meaningful",
+        "min": 0,
+        "unit": {
+          "prefix": "$",
+          "magnitude": 3,
+          "noun": "in expenses"
+        }
+      },
+      "series": [
+        {
+          "id": "ops",
+          "name": "Operations",
+          "values": [
+            1277,
+            843,
+            824
+          ]
+        },
+        {
+          "id": "hr",
+          "name": "HR",
+          "values": [
+            755,
+            655,
+            879
+          ]
+        },
+        {
+          "id": "fin",
+          "name": "Finance",
+          "values": [
+            566,
+            655,
+            318
+          ]
+        },
+        {
+          "id": "out",
+          "name": "Outreach",
+          "values": [
+            238,
+            249,
+            236
+          ]
+        },
+        {
+          "id": "pr",
+          "name": "PR",
+          "values": [
+            176,
+            154,
+            143
+          ]
+        },
+        {
+          "id": "dev",
+          "name": "Development",
+          "values": [
+            99,
+            88,
+            91
+          ]
+        }
+      ],
+      "parts": {
+        "meaningful_total": true,
+        "all_parts": true,
+        "overlap": false
+      }
+    },
+    "facts": {
+      "message": "fractions_within_each_total"
+    },
+    "chart": {
+      "type": "pie"
+    },
+    "source": {
+      "book": "p. 269–271 (s. 0247–0249)",
+      "notes": "07 #12",
+      "shows": "the rare case for several pies: the message is only the fraction within each total (R7-21, G1.41); the regions as categories and their departments as series, as for clustered bars (P2-04); one pie per region, of one size, the departments in one order and one colour in every pie (R7-24, G4.22), named once round the first pie where the book keys them in a legend (G7.27); Operations, which the insight names, in its strong shade in every pie"
+    }
+  },
+  "variants": [
+    {
+      "name": "top-three",
+      "patch": {
+        "job": {
+          "kind": "answer",
+          "text": "How did the three most expensive departments compare within each region?"
+        },
+        "data": {
+          "series": [
+            {
+              "id": "ops",
+              "name": "Operations",
+              "values": [
+                1277,
+                843,
+                824
+              ]
+            },
+            {
+              "id": "hr",
+              "name": "HR",
+              "values": [
+                755,
+                655,
+                879
+              ]
+            },
+            {
+              "id": "fin",
+              "name": "Finance",
+              "values": [
+                566,
+                655,
+                318
+              ]
+            }
+          ],
+          "parts": {
+            "meaningful_total": true,
+            "all_parts": false
+          }
+        },
+        "source": {
+          "book": "p. 271 (s. 0249, chart C)",
+          "shows": "the book's pies of only the three most expensive departments: refused, since a pie claims its slices are the whole, and readers take the three for every department (G0.13; the book's R7-22, G1.42: merged bars, P2-67)"
+        }
+      },
+      "expect": {
+        "refused": [
+          "R7-03"
+        ]
+      }
+    }
+  ]
+}

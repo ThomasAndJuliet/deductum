@@ -1,0 +1,137 @@
+{
+ "base": {
+  "chartspec": 1,
+  "id": "p2-66-sales-and-satisfaction",
+  "job": {
+   "kind": "answer",
+   "text": "How did gross sales and customer satisfaction change over 2022?"
+  },
+  "insight": {
+   "important": "Gross sales and average customer satisfaction both rose over the year"
+  },
+  "title": {
+   "text": "Gross Sales and Customer Satisfaction Both Rose over 2022",
+   "kind": "insight",
+   "descriptive": "Gross Sales and Average Customer Satisfaction by Month, 2022"
+  },
+  "data": {
+   "x": {
+    "kind": "time",
+    "grid": "month",
+    "values": [
+     "2022-01",
+     "2022-02",
+     "2022-03",
+     "2022-04",
+     "2022-05",
+     "2022-06",
+     "2022-07",
+     "2022-08",
+     "2022-09",
+     "2022-10",
+     "2022-11",
+     "2022-12"
+    ]
+   },
+   "measures": [
+    {
+     "id": "sales",
+     "name": "gross sales",
+     "kind": "amount",
+     "zero": "meaningful",
+     "min": 0,
+     "persistence": "summary",
+     "unit": {
+      "prefix": "$",
+      "what": "gross sales",
+      "magnitude": 6
+     }
+    },
+    {
+     "id": "satisfaction",
+     "name": "avg. customer satisfaction",
+     "kind": "score",
+     "zero": "arbitrary",
+     "min": 0,
+     "max": 10,
+     "persistence": "summary",
+     "unit": {
+      "noun": "avg. customer satisfaction",
+      "what": "on 10"
+     }
+    }
+   ],
+   "series": [
+    {
+     "id": "sales",
+     "name": "Gross sales",
+     "measure": "sales",
+     "values": [
+      1.99,
+      2.19,
+      1.72,
+      1.89,
+      2.69,
+      3.0,
+      2.93,
+      2.37,
+      3.16,
+      2.74,
+      2.7,
+      2.82
+     ]
+    },
+    {
+     "id": "satisfaction",
+     "name": "Satisfaction",
+     "measure": "satisfaction",
+     "values": [
+      6.64,
+      6.7,
+      6.7,
+      6.72,
+      7.01,
+      7.3,
+      7.08,
+      7.02,
+      7.23,
+      7.55,
+      7.72,
+      7.8
+     ]
+    }
+   ]
+  },
+  "facts": {
+   "message": "pattern"
+  },
+  "source": {
+   "book": "p. 70 (s. 0069); p. 69 (s. 0068)",
+   "notes": "02 #7",
+   "shows": "a merged chart instead of a dual axis: two lines in different units stacked on one time axis, drawn once at the foot, each panel its own scale with its unit phrase on its top label (G2.31, G2.32); the rating's zero is an anchor, so its line need not start at zero (G2.10); both lines in the single-line colour, since the panels already tell them apart (R3-3), where the book keeps the dual axis's orange and blue"
+  }
+ },
+ "variants": [
+  {
+   "name": "dual-axis",
+   "patch": {
+    "panels": {
+     "arrangement": {
+      "within": [
+       "measure"
+      ]
+     }
+    },
+    "source": {
+     "book": "p. 69 (s. 0068)",
+     "shows": "the book's dual-axis chart, refused: two variables against two value axes in one plot suggest false crossings and similar volatility (G2.31)"
+    }
+   },
+   "expect": {
+    "refused": [
+     "R2-14"
+    ]
+   }
+  }
+ ]
+}

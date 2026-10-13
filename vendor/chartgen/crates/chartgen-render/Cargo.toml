@@ -1,0 +1,11 @@
+[package]
+name = "chartgen-render"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+figkit-model = { path = "../figkit-model" }
+figkit-render = { path = "../figkit-render" }
+chartgen-model.workspace = true
+serde_json.workspace = true

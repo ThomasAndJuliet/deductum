@@ -1,0 +1,20 @@
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{figkit}[2026/10/03 Independent measured figure composition]
+\RequirePackage{pgf}
+\makeatletter
+\newcommand\figkitDeclareNative[2]{%
+  \ifcsname figkit@box@#1\endcsname\else
+    \expandafter\newsavebox\csname figkit@box@#1\endcsname
+  \fi
+  \expandafter\sbox\csname figkit@box@#1\endcsname{#2}%
+}
+\newcommand\figkitUseNative[1]{%
+  \ifcsname figkit@box@#1\endcsname
+    \expandafter\usebox\csname figkit@box@#1\endcsname
+  \else
+    \PackageError{figkit}{Native key #1 unavailable}{Declare native content before composition.}%
+  \fi
+}
+\newcommand\figkitNativeWidth[1]{\wd\csname figkit@box@#1\endcsname}
+\newcommand\figkitNativeHeight[1]{\dimexpr\ht\csname figkit@box@#1\endcsname+\dp\csname figkit@box@#1\endcsname\relax}
+\makeatother

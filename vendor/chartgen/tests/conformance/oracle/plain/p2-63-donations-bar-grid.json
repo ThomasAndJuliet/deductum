@@ -1,0 +1,230 @@
+{
+ "key": "p2-63-donations-bar-grid",
+ "file": "p2-63-donations-bar-grid.json",
+ "variant": null,
+ "requested_type": "auto",
+ "report": {
+  "chart": "p2-63-donations-bar-grid",
+  "style": "plain",
+  "variant": null,
+  "type": "multiples of bar",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "RP3-3",
+    "level": "guided",
+    "text": "arranged: rows by donor type, columns by region: no comparison within a panel is stated (facts.compare): one series per panel, the most panels and the least clutter (13-15 DP-1); runner-up for review: columns by region, series in each panel by donor type (D-38 (i))",
+    "guide": []
+   },
+   {
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "categories sorted by their total over every panel, largest first, the same order in every panel (G2.1)",
+    "guide": []
+   },
+   {
+    "rule": "R3-3",
+    "level": "locked",
+    "text": "one colour for every mark: every variable is on the rows or columns (G7.50)",
+    "guide": []
+   },
+   {
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "type bar: categories compared by value",
+    "guide": []
+   },
+   {
+    "rule": "R6-37",
+    "level": "locked",
+    "text": "one shared scale: one scale for every panel, so that sizes compare across panels (G7.48)",
+    "guide": []
+   },
+   {
+    "rule": "R9-10",
+    "level": "locked",
+    "text": "in a panel 70 pt wide: “Check” and “Cash” come within 10 pt of each other under vertical bars, with every multi-word name wrapped: horizontal bars, names right-aligned at the left",
+    "guide": []
+   },
+   {
+    "rule": "R2-24",
+    "level": "locked",
+    "text": "bars start at zero",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "scale 0–200 by 100 (at most 2 intervals in a panel about 48 pt wide)",
+    "guide": []
+   },
+   {
+    "rule": "R5-26",
+    "level": "locked",
+    "text": "the title wraps onto two lines",
+    "guide": []
+   },
+   {
+    "rule": "R2-21",
+    "level": "locked",
+    "text": "labels as a set, 0 decimals, bare numbers: 0, 100, 200",
+    "guide": []
+   },
+   {
+    "rule": "R5-10",
+    "level": "locked",
+    "text": "digits hidden: thousands, stated in the scale's title (R2-05, D-3): “Donations ($K)”",
+    "guide": []
+   },
+   {
+    "rule": "R2-07",
+    "level": "locked",
+    "text": "a horizontal scale: bare numbers, and its title centred below with the unit in parentheses: “Donations ($K)”",
+    "guide": []
+   },
+   {
+    "rule": "6.10",
+    "level": "locked",
+    "text": "3 × 4 panels of equal size, abutting, divided by light separators, no box round a panel (G7.51); each 48 pt wide",
+    "guide": []
+   },
+   {
+    "rule": "RP3-8",
+    "level": "locked",
+    "text": "the names once, at the left of the first column; the scale labels under the bottom row, its title once; column headers above the top row (G7.49)",
+    "guide": []
+   }
+  ],
+  "findings": [
+   {
+    "rule": "RP3-4",
+    "severity": "info",
+    "message": "facts.compare not given: say which dims the insight compares directly, so that their series share a panel (G1.19)",
+    "path": "facts.compare",
+    "level": "locked",
+    "guide": [],
+    "title": "the series the insight compares directly share a panel"
+   }
+  ],
+  "overrides": [],
+  "expect": {},
+  "expect_met": true,
+  "source": {
+   "book": "p. 377 (s. 0343)",
+   "notes": "13-15 F4 (bar grid)",
+   "shows": "any chart type fills the panels (G1.21): a grid of column charts, one bar per payment method, on one shared scale; the names under the bottom row only, one colour for every bar since every variable is on the rows, the columns or the axis (G7.50), where the book colours the methods and keys them in a legend; the procedure puts the four regions across and the three donor types down; values read off the book's figure, whose scale carries no unit ($K assumed)",
+   "status": "generated"
+  },
+  "summary": {
+   "arrangement": "rows by donor type, columns by region",
+   "kind": "multiples",
+   "rows": 3,
+   "columns": 4,
+   "panels": 12,
+   "scale_mode": "shared",
+   "scale": "0–200 by 100",
+   "labels": [
+    "0",
+    "100",
+    "200"
+   ],
+   "top": "$200K in donations",
+   "orientation": "horizontal",
+   "scales": {
+    "Corporate, Central": "0–200 by 100",
+    "Corporate, East": "0–200 by 100",
+    "Corporate, South": "0–200 by 100",
+    "Corporate, West": "0–200 by 100",
+    "Foundation, Central": "0–200 by 100",
+    "Foundation, East": "0–200 by 100",
+    "Foundation, South": "0–200 by 100",
+    "Foundation, West": "0–200 by 100",
+    "Individual, Central": "0–200 by 100",
+    "Individual, East": "0–200 by 100",
+    "Individual, South": "0–200 by 100",
+    "Individual, West": "0–200 by 100"
+   },
+   "plots": {
+    "Corporate, Central": [
+     115.67,
+     44.55,
+     163.38,
+     104.55
+    ],
+    "Corporate, East": [
+     181.38,
+     44.55,
+     229.08,
+     104.55
+    ],
+    "Corporate, South": [
+     247.08,
+     44.55,
+     294.79,
+     104.55
+    ],
+    "Corporate, West": [
+     312.79,
+     44.55,
+     360.5,
+     104.55
+    ],
+    "Foundation, Central": [
+     115.67,
+     112.55,
+     163.38,
+     172.55
+    ],
+    "Foundation, East": [
+     181.38,
+     112.55,
+     229.08,
+     172.55
+    ],
+    "Foundation, South": [
+     247.08,
+     112.55,
+     294.79,
+     172.55
+    ],
+    "Foundation, West": [
+     312.79,
+     112.55,
+     360.5,
+     172.55
+    ],
+    "Individual, Central": [
+     115.67,
+     180.55,
+     163.38,
+     240.55
+    ],
+    "Individual, East": [
+     181.38,
+     180.55,
+     229.08,
+     240.55
+    ],
+    "Individual, South": [
+     247.08,
+     180.55,
+     294.79,
+     240.55
+    ],
+    "Individual, West": [
+     312.79,
+     180.55,
+     360.5,
+     240.55
+    ]
+   },
+   "width": 368.0,
+   "height": 268.36,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [],
+  "copies": []
+ },
+ "output_sha256": "1553d57d29601ef4fc3e1083080758d6f3e5d38fcb850e3076dc518114e873d6"
+}

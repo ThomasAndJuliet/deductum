@@ -1,0 +1,4455 @@
+{
+ "statuses": {
+  "partly ignored": 23,
+  "ignored": 33,
+  "no evidence": 58,
+  "responds": 68,
+  "not probed": 15,
+  "refusals agree": 46,
+  "diagnosed": 20,
+  "refusal missed": 16
+ },
+ "options": [
+  {
+   "option": "audience",
+   "status": "partly ignored",
+   "verdicts": {
+    "SILENT": 1,
+    "rewrite-diagnosed": 1,
+    "rewrite-reacted": 1
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "0/1",
+   "flagged_original_change": "output",
+   "rust_pointer_refs": [
+    "crates/chartgen-data/src/schema.rs:395",
+    "crates/chartgen-format/src/lib.rs:544",
+    "crates/chartgen-format/src/lib.rs:545"
+   ],
+   "rust_key_refs": []
+  },
+  {
+   "option": "audience.abbreviations",
+   "status": "ignored",
+   "verdicts": {
+    "SILENT": 1,
+    "oracle-unchanged": 1,
+    "rewrite-blocked": 2
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "output",
+   "rust_pointer_refs": [
+    "crates/chartgen-format/src/lib.rs:544",
+    "crates/chartgen-format/src/lib.rs:560"
+   ],
+   "rust_key_refs": []
+  },
+  {
+   "option": "audience.bw_risk",
+   "status": "ignored",
+   "verdicts": {
+    "SILENT": 4,
+    "oracle-unchanged": 1
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "output",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "audience.cvd",
+   "status": "no evidence",
+   "verdicts": {
+    "oracle-unchanged": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "audience.data_savvy",
+   "status": "responds",
+   "verdicts": {
+    "oracle-unchanged": 2,
+    "rewrite-reacted": 2
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "0/2",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [
+    "crates/chartgen-policy/src/lib.rs:175",
+    "crates/chartgen-policy/src/lib.rs:583"
+   ],
+   "rust_key_refs": []
+  },
+  {
+   "option": "audience.date_format",
+   "status": "not probed",
+   "verdicts": {},
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "audience.knows_scale",
+   "status": "no evidence",
+   "verdicts": {
+    "oracle-unchanged": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "audience.locale",
+   "status": "ignored",
+   "verdicts": {
+    "SILENT": 2,
+    "oracle-unchanged": 4
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "output",
+   "rust_pointer_refs": [
+    "crates/chartgen-data/src/schema.rs:395",
+    "crates/chartgen-format/src/lib.rs:545",
+    "crates/chartgen-format/src/lib.rs:559"
+   ],
+   "rust_key_refs": []
+  },
+  {
+   "option": "audience.pie_averse",
+   "status": "responds",
+   "verdicts": {
+    "oracle-unchanged": 1,
+    "rewrite-diagnosed": 3,
+    "rewrite-reacted": 2
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [
+    "crates/chartgen-policy/src/lib.rs:116",
+    "crates/chartgen-policy/src/lib.rs:136"
+   ],
+   "rust_key_refs": []
+  },
+  {
+   "option": "chart",
+   "status": "refusals agree",
+   "verdicts": {
+    "rewrite-reacted": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "2/2",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [
+    "crates/chartgen-data/src/schema.rs:627",
+    "crates/chartgen-layout/src/families/circular.rs:218",
+    "crates/chartgen-layout/src/families/matrix.rs:611"
+   ],
+   "rust_key_refs": [
+    "crates/chartgen-panels/src/lib.rs:528",
+    "crates/chartgen-panels/src/lib.rs:529",
+    "crates/chartgen-scene/src/lib.rs:200"
+   ]
+  },
+  {
+   "option": "chart.breaks",
+   "status": "no evidence",
+   "verdicts": {
+    "oracle-unchanged": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "chart.cells",
+   "status": "ignored",
+   "verdicts": {
+    "SILENT": 2,
+    "oracle-unchanged": 4
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "findings",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "chart.change_panels",
+   "status": "diagnosed",
+   "verdicts": {
+    "oracle-unchanged": 7,
+    "rewrite-diagnosed": 2
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [
+    "crates/chartgen-layout/src/lib.rs:223"
+   ],
+   "rust_key_refs": []
+  },
+  {
+   "option": "chart.classing",
+   "status": "no evidence",
+   "verdicts": {
+    "oracle-unchanged": 10,
+    "rewrite-blocked": 5
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "chart.encoding",
+   "status": "refusal missed",
+   "verdicts": {
+    "SILENT": 3,
+    "oracle-unchanged": 3,
+    "rewrite-blocked": 3
+   },
+   "refusal_missed": 1,
+   "refusals_agree": "",
+   "flagged_original_change": "status",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "chart.gridlines",
+   "status": "refusal missed",
+   "verdicts": {
+    "SILENT": 3
+   },
+   "refusal_missed": 3,
+   "refusals_agree": "",
+   "flagged_original_change": "status",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "chart.labelling",
+   "status": "diagnosed",
+   "verdicts": {
+    "oracle-unchanged": 2,
+    "rewrite-diagnosed": 4
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [
+    "crates/chartgen-layout/src/lib.rs:221"
+   ],
+   "rust_key_refs": []
+  },
+  {
+   "option": "chart.orientation",
+   "status": "partly ignored",
+   "verdicts": {
+    "SILENT": 1,
+    "oracle-unchanged": 1,
+    "rewrite-diagnosed": 2,
+    "rewrite-reacted": 5
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "3/3",
+   "flagged_original_change": "decisions/summary",
+   "rust_pointer_refs": [
+    "crates/chartgen-layout/src/orientation.rs:13",
+    "crates/chartgen-policy/src/lib.rs:646"
+   ],
+   "rust_key_refs": [
+    "crates/chartgen-layout/src/lib.rs:470",
+    "crates/chartgen-layout/src/lib.rs:1334"
+   ]
+  },
+  {
+   "option": "chart.sort",
+   "status": "refusals agree",
+   "verdicts": {
+    "oracle-unchanged": 2,
+    "rewrite-reacted": 9
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "8/8",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [
+    "crates/chartgen-layout/src/families/circular.rs:218",
+    "crates/chartgen-panels/src/lib.rs:177",
+    "crates/chartgen-panels/src/lib.rs:236"
+   ],
+   "rust_key_refs": [
+    "crates/chartgen-panels/src/lib.rs:528"
+   ]
+  },
+  {
+   "option": "chart.sort_by",
+   "status": "no evidence",
+   "verdicts": {
+    "oracle-unchanged": 5
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [
+    "crates/chartgen-data/src/schema.rs:627",
+    "crates/chartgen-policy/src/lib.rs:707"
+   ],
+   "rust_key_refs": [
+    "crates/chartgen-panels/src/lib.rs:529"
+   ]
+  },
+  {
+   "option": "chart.type",
+   "status": "refusal missed",
+   "verdicts": {
+    "rewrite-diagnosed": 9,
+    "rewrite-reacted": 87
+   },
+   "refusal_missed": 6,
+   "refusals_agree": "11/81",
+   "flagged_original_change": "status",
+   "rust_pointer_refs": [
+    "crates/chartgen-lint/src/lib.rs:36",
+    "crates/chartgen-policy/src/lib.rs:264",
+    "crates/chartgen-policy/src/lib.rs:366"
+   ],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/schema.rs:92",
+    "crates/chartgen-data/src/schema.rs:106",
+    "crates/chartgen-data/src/schema.rs:111"
+   ]
+  },
+  {
+   "option": "chart.value_labels",
+   "status": "refusals agree",
+   "verdicts": {
+    "oracle-unchanged": 1,
+    "rewrite-reacted": 8
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "8/8",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [
+    "crates/chartgen-layout/src/families/matrix.rs:611",
+    "crates/chartgen-layout/src/guides.rs:232",
+    "crates/chartgen-layout/src/lib.rs:222"
+   ],
+   "rust_key_refs": []
+  },
+  {
+   "option": "colours",
+   "status": "no evidence",
+   "verdicts": {
+    "rewrite-blocked": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [
+    "crates/chartgen-colours/src/lib.rs:105",
+    "crates/chartgen-colours/src/lib.rs:294",
+    "crates/chartgen-data/src/schema.rs:632"
+   ],
+   "rust_key_refs": []
+  },
+  {
+   "option": "colours.registry",
+   "status": "no evidence",
+   "verdicts": {
+    "rewrite-blocked": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "colours.slots",
+   "status": "responds",
+   "verdicts": {
+    "oracle-unchanged": 3,
+    "rewrite-blocked": 1,
+    "rewrite-reacted": 2
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [
+    "crates/chartgen-colours/src/lib.rs:105",
+    "crates/chartgen-colours/src/lib.rs:294",
+    "crates/chartgen-data/src/schema.rs:632"
+   ],
+   "rust_key_refs": []
+  },
+  {
+   "option": "comments",
+   "status": "responds",
+   "verdicts": {
+    "rewrite-blocked": 1,
+    "rewrite-reacted": 2
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [
+    "crates/chartgen-data/src/schema.rs:537",
+    "crates/chartgen-data/src/schema.rs:614",
+    "crates/chartgen-note-layout/src/lib.rs:101"
+   ],
+   "rust_key_refs": [
+    "crates/chartgen-layout/src/comments.rs:6",
+    "crates/chartgen-layout/src/comments.rs:9",
+    "crates/chartgen-layout/src/comments.rs:30"
+   ]
+  },
+  {
+   "option": "comments[].anchors",
+   "status": "responds",
+   "verdicts": {
+    "rewrite-blocked": 1,
+    "rewrite-reacted": 2
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/schema.rs:539",
+    "crates/chartgen-layout/src/comments.rs:49",
+    "crates/chartgen-layout/src/comments.rs:110"
+   ]
+  },
+  {
+   "option": "comments[].anchors[].category",
+   "status": "responds",
+   "verdicts": {
+    "rewrite-blocked": 2,
+    "rewrite-diagnosed": 2,
+    "rewrite-reacted": 1
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/schema.rs:248",
+    "crates/chartgen-data/src/schema.rs:583",
+    "crates/chartgen-data/src/schema.rs:592"
+   ]
+  },
+  {
+   "option": "comments[].anchors[].panel",
+   "status": "responds",
+   "verdicts": {
+    "rewrite-diagnosed": 2,
+    "rewrite-reacted": 1
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-panel-layout/src/lib.rs:348",
+    "crates/chartgen-panels/src/lib.rs:546",
+    "crates/chartgen-panels/src/lib.rs:558"
+   ]
+  },
+  {
+   "option": "comments[].anchors[].series",
+   "status": "responds",
+   "verdicts": {
+    "rewrite-blocked": 3,
+    "rewrite-diagnosed": 2,
+    "rewrite-reacted": 4
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:303",
+    "crates/chartgen-data/src/lib.rs:341",
+    "crates/chartgen-data/src/lib.rs:638"
+   ]
+  },
+  {
+   "option": "comments[].anchors[].x",
+   "status": "responds",
+   "verdicts": {
+    "rewrite-blocked": 2,
+    "rewrite-diagnosed": 2,
+    "rewrite-reacted": 1
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "comments[].answers",
+   "status": "ignored",
+   "verdicts": {
+    "SILENT": 4,
+    "oracle-unchanged": 1,
+    "rewrite-blocked": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "decisions/summary",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "comments[].arrow",
+   "status": "responds",
+   "verdicts": {
+    "rewrite-diagnosed": 2,
+    "rewrite-reacted": 1
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-layout/src/comments.rs:309",
+    "crates/chartgen-model/src/lib.rs:163",
+    "crates/chartgen-model/src/lib.rs:188"
+   ]
+  },
+  {
+   "option": "comments[].placement",
+   "status": "diagnosed",
+   "verdicts": {
+    "rewrite-blocked": 3,
+    "rewrite-diagnosed": 6
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-layout/src/comments.rs:42",
+    "crates/chartgen-layout/src/comments.rs:236"
+   ]
+  },
+  {
+   "option": "comments[].text",
+   "status": "responds",
+   "verdicts": {
+    "rewrite-blocked": 1,
+    "rewrite-reacted": 2
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-colours/src/lib.rs:202",
+    "crates/chartgen-data/src/schema.rs:565",
+    "crates/chartgen-data/src/schema.rs:570"
+   ]
+  },
+  {
+   "option": "data.actions",
+   "status": "refusals agree",
+   "verdicts": {
+    "oracle-unchanged": 5,
+    "rewrite-diagnosed": 2,
+    "rewrite-reacted": 10
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "2/2",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [
+    "crates/chartgen-data/src/schema.rs:451",
+    "crates/chartgen-layout/src/families/matrix.rs:869"
+   ],
+   "rust_key_refs": [
+    "crates/chartgen-layout/src/families/matrix.rs:932"
+   ]
+  },
+  {
+   "option": "data.as_of",
+   "status": "refusals agree",
+   "verdicts": {
+    "rewrite-blocked": 1,
+    "rewrite-diagnosed": 1,
+    "rewrite-reacted": 4
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "3/3",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [
+    "crates/chartgen-data/src/lib.rs:205",
+    "crates/chartgen-data/src/schema.rs:462"
+   ],
+   "rust_key_refs": []
+  },
+  {
+   "option": "data.comparisons",
+   "status": "refusals agree",
+   "verdicts": {
+    "rewrite-reacted": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "2/2",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [
+    "crates/chartgen-data/src/lib.rs:257",
+    "crates/chartgen-data/src/lib.rs:555",
+    "crates/chartgen-data/src/lib.rs:673"
+   ],
+   "rust_key_refs": [
+    "crates/chartgen-layout/src/guides.rs:196",
+    "crates/chartgen-panels/src/lib.rs:500"
+   ]
+  },
+  {
+   "option": "data.comparisons[].compute",
+   "status": "refusals agree",
+   "verdicts": {
+    "rewrite-reacted": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "3/3",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:283",
+    "crates/chartgen-data/src/lib.rs:585",
+    "crates/chartgen-policy/src/lib.rs:414"
+   ]
+  },
+  {
+   "option": "data.comparisons[].factor",
+   "status": "responds",
+   "verdicts": {
+    "rewrite-diagnosed": 1,
+    "rewrite-reacted": 2
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "1/2",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:313",
+    "crates/chartgen-data/src/lib.rs:314",
+    "crates/chartgen-policy/src/lib.rs:299"
+   ]
+  },
+  {
+   "option": "data.comparisons[].id",
+   "status": "partly ignored",
+   "verdicts": {
+    "SILENT": 1,
+    "rewrite-reacted": 2
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "2/2",
+   "flagged_original_change": "output",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "data.comparisons[].kind",
+   "status": "ignored",
+   "verdicts": {
+    "SILENT": 13,
+    "oracle-unchanged": 5
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "findings",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:280",
+    "crates/chartgen-data/src/lib.rs:412",
+    "crates/chartgen-data/src/lib.rs:416"
+   ]
+  },
+  {
+   "option": "data.comparisons[].label",
+   "status": "partly ignored",
+   "verdicts": {
+    "SILENT": 2,
+    "oracle-unchanged": 3,
+    "rewrite-reacted": 1
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "decisions/summary",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:337",
+    "crates/chartgen-data/src/lib.rs:785",
+    "crates/chartgen-layout/src/guides.rs:196"
+   ]
+  },
+  {
+   "option": "data.comparisons[].reason",
+   "status": "no evidence",
+   "verdicts": {
+    "oracle-unchanged": 6
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-policy/src/lib.rs:17"
+   ]
+  },
+  {
+   "option": "data.comparisons[].render",
+   "status": "refusals agree",
+   "verdicts": {
+    "oracle-unchanged": 4,
+    "rewrite-diagnosed": 6,
+    "rewrite-reacted": 2
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "1/1",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:339",
+    "crates/chartgen-policy/src/lib.rs:311",
+    "crates/chartgen-policy/src/lib.rs:470"
+   ]
+  },
+  {
+   "option": "data.comparisons[].series",
+   "status": "responds",
+   "verdicts": {
+    "rewrite-diagnosed": 3,
+    "rewrite-reacted": 1
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:303",
+    "crates/chartgen-data/src/lib.rs:341",
+    "crates/chartgen-data/src/lib.rs:638"
+   ]
+  },
+  {
+   "option": "data.comparisons[].unit.fallback",
+   "status": "refusals agree",
+   "verdicts": {
+    "rewrite-reacted": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "3/3",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-format/src/lib.rs:164"
+   ]
+  },
+  {
+   "option": "data.comparisons[].unit.given_in",
+   "status": "refusals agree",
+   "verdicts": {
+    "rewrite-reacted": 12
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "12/12",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:227",
+    "crates/chartgen-format/src/lib.rs:147"
+   ]
+  },
+  {
+   "option": "data.comparisons[].unit.magnitude",
+   "status": "not probed",
+   "verdicts": {},
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:232",
+    "crates/chartgen-data/src/lib.rs:794",
+    "crates/chartgen-data/src/schema.rs:666"
+   ]
+  },
+  {
+   "option": "data.comparisons[].unit.noun",
+   "status": "refusals agree",
+   "verdicts": {
+    "rewrite-reacted": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "3/3",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:239",
+    "crates/chartgen-data/src/lib.rs:792",
+    "crates/chartgen-data/src/lib.rs:794"
+   ]
+  },
+  {
+   "option": "data.comparisons[].unit.prefix",
+   "status": "refusals agree",
+   "verdicts": {
+    "rewrite-reacted": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "3/3",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:236",
+    "crates/chartgen-data/src/lib.rs:794",
+    "crates/chartgen-data/src/lib.rs:857"
+   ]
+  },
+  {
+   "option": "data.comparisons[].unit.scale_title",
+   "status": "refusals agree",
+   "verdicts": {
+    "rewrite-reacted": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "3/3",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-format/src/lib.rs:165"
+   ]
+  },
+  {
+   "option": "data.comparisons[].unit.suffix",
+   "status": "refusals agree",
+   "verdicts": {
+    "rewrite-reacted": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "3/3",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:237",
+    "crates/chartgen-data/src/lib.rs:792",
+    "crates/chartgen-data/src/lib.rs:794"
+   ]
+  },
+  {
+   "option": "data.comparisons[].unit.what",
+   "status": "refusals agree",
+   "verdicts": {
+    "rewrite-reacted": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "3/3",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:834",
+    "crates/chartgen-data/src/lib.rs:924",
+    "crates/chartgen-data/src/lib.rs:941"
+   ]
+  },
+  {
+   "option": "data.comparisons[].valid",
+   "status": "refusals agree",
+   "verdicts": {
+    "rewrite-diagnosed": 2,
+    "rewrite-reacted": 1
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "1/1",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:340",
+    "crates/chartgen-policy/src/lib.rs:310",
+    "crates/chartgen-policy/src/lib.rs:469"
+   ]
+  },
+  {
+   "option": "data.comparisons[].values",
+   "status": "refusals agree",
+   "verdicts": {
+    "rewrite-reacted": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "3/3",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:284",
+    "crates/chartgen-data/src/lib.rs:422",
+    "crates/chartgen-data/src/lib.rs:463"
+   ]
+  },
+  {
+   "option": "data.dims",
+   "status": "diagnosed",
+   "verdicts": {
+    "rewrite-blocked": 1,
+    "rewrite-diagnosed": 2
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [
+    "crates/chartgen-colours/src/lib.rs:81",
+    "crates/chartgen-colours/src/lib.rs:176",
+    "crates/chartgen-layout/src/lib.rs:219"
+   ],
+   "rust_key_refs": [
+    "crates/chartgen-panels/src/lib.rs:517"
+   ]
+  },
+  {
+   "option": "data.dims[].id",
+   "status": "diagnosed",
+   "verdicts": {
+    "rewrite-diagnosed": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "data.dims[].kind",
+   "status": "no evidence",
+   "verdicts": {
+    "oracle-unchanged": 4
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:280",
+    "crates/chartgen-data/src/lib.rs:412",
+    "crates/chartgen-data/src/lib.rs:416"
+   ]
+  },
+  {
+   "option": "data.dims[].name",
+   "status": "no evidence",
+   "verdicts": {
+    "rewrite-blocked": 6
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-colours/src/lib.rs:123",
+    "crates/chartgen-data/src/lib.rs:373",
+    "crates/chartgen-data/src/lib.rs:375"
+   ]
+  },
+  {
+   "option": "data.dims[].values",
+   "status": "diagnosed",
+   "verdicts": {
+    "rewrite-diagnosed": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:284",
+    "crates/chartgen-data/src/lib.rs:422",
+    "crates/chartgen-data/src/lib.rs:463"
+   ]
+  },
+  {
+   "option": "data.measure",
+   "status": "responds",
+   "verdicts": {
+    "rewrite-reacted": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "1/3",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [
+    "crates/chartgen-data/src/lib.rs:316",
+    "crates/chartgen-data/src/lib.rs:319",
+    "crates/chartgen-data/src/lib.rs:402"
+   ],
+   "rust_key_refs": [
+    "crates/chartgen-panels/src/lib.rs:84",
+    "crates/chartgen-panels/src/lib.rs:91",
+    "crates/chartgen-panels/src/lib.rs:155"
+   ]
+  },
+  {
+   "option": "data.measure.additive",
+   "status": "refusal missed",
+   "verdicts": {
+    "SILENT": 2,
+    "oracle-unchanged": 3
+   },
+   "refusal_missed": 2,
+   "refusals_agree": "",
+   "flagged_original_change": "status",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "data.measure.cumulative",
+   "status": "no evidence",
+   "verdicts": {
+    "oracle-unchanged": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "data.measure.dividing_point",
+   "status": "partly ignored",
+   "verdicts": {
+    "SILENT": 2,
+    "rewrite-reacted": 1
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "1/1",
+   "flagged_original_change": "output",
+   "rust_pointer_refs": [
+    "crates/chartgen-policy/src/lib.rs:476"
+   ],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:771"
+   ]
+  },
+  {
+   "option": "data.measure.good",
+   "status": "partly ignored",
+   "verdicts": {
+    "SILENT": 4,
+    "oracle-unchanged": 2,
+    "rewrite-reacted": 1
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "1/1",
+   "flagged_original_change": "output",
+   "rust_pointer_refs": [
+    "crates/chartgen-policy/src/lib.rs:475"
+   ],
+   "rust_key_refs": [
+    "crates/chartgen-layout/src/colours.rs:27",
+    "crates/chartgen-layout/src/families/matrix.rs:903"
+   ]
+  },
+  {
+   "option": "data.measure.heading",
+   "status": "no evidence",
+   "verdicts": {
+    "oracle-unchanged": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-panels/src/lib.rs:432",
+    "crates/chartgen-panels/src/lib.rs:433"
+   ]
+  },
+  {
+   "option": "data.measure.id",
+   "status": "no evidence",
+   "verdicts": {
+    "oracle-unchanged": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "data.measure.kind",
+   "status": "responds",
+   "verdicts": {
+    "oracle-unchanged": 15,
+    "rewrite-reacted": 9
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:280",
+    "crates/chartgen-data/src/lib.rs:412",
+    "crates/chartgen-data/src/lib.rs:416"
+   ]
+  },
+  {
+   "option": "data.measure.max",
+   "status": "responds",
+   "verdicts": {
+    "oracle-unchanged": 5,
+    "rewrite-diagnosed": 2,
+    "rewrite-reacted": 2
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "data.measure.min",
+   "status": "refusal missed",
+   "verdicts": {
+    "SILENT": 3,
+    "oracle-unchanged": 5,
+    "rewrite-reacted": 1
+   },
+   "refusal_missed": 2,
+   "refusals_agree": "0/1",
+   "flagged_original_change": "status",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "data.measure.name",
+   "status": "no evidence",
+   "verdicts": {
+    "oracle-unchanged": 6
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-colours/src/lib.rs:123",
+    "crates/chartgen-data/src/lib.rs:373",
+    "crates/chartgen-data/src/lib.rs:375"
+   ]
+  },
+  {
+   "option": "data.measure.persistence",
+   "status": "refusals agree",
+   "verdicts": {
+    "oracle-unchanged": 6,
+    "rewrite-blocked": 1,
+    "rewrite-reacted": 2
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "2/2",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [
+    "crates/chartgen-policy/src/lib.rs:146",
+    "crates/chartgen-policy/src/lib.rs:344",
+    "crates/chartgen-policy/src/lib.rs:356"
+   ],
+   "rust_key_refs": []
+  },
+  {
+   "option": "data.measure.precision",
+   "status": "ignored",
+   "verdicts": {
+    "SILENT": 3,
+    "rewrite-blocked": 6
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "output",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:770",
+    "crates/chartgen-data/src/lib.rs:867",
+    "crates/chartgen-data/src/lib.rs:947"
+   ]
+  },
+  {
+   "option": "data.measure.unit",
+   "status": "responds",
+   "verdicts": {
+    "rewrite-reacted": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "1/3",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [
+    "crates/chartgen-data/src/lib.rs:316",
+    "crates/chartgen-data/src/lib.rs:319",
+    "crates/chartgen-data/src/schema.rs:654"
+   ],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:315",
+    "crates/chartgen-data/src/lib.rs:788",
+    "crates/chartgen-data/src/lib.rs:789"
+   ]
+  },
+  {
+   "option": "data.measure.unit.fallback",
+   "status": "partly ignored",
+   "verdicts": {
+    "SILENT": 2,
+    "rewrite-blocked": 2,
+    "rewrite-reacted": 2
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "output",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-format/src/lib.rs:164"
+   ]
+  },
+  {
+   "option": "data.measure.unit.given_in",
+   "status": "refusals agree",
+   "verdicts": {
+    "rewrite-reacted": 12
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "4/4",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:227",
+    "crates/chartgen-format/src/lib.rs:147"
+   ]
+  },
+  {
+   "option": "data.measure.unit.magnitude",
+   "status": "responds",
+   "verdicts": {
+    "rewrite-blocked": 3,
+    "rewrite-reacted": 1
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:232",
+    "crates/chartgen-data/src/lib.rs:794",
+    "crates/chartgen-data/src/schema.rs:666"
+   ]
+  },
+  {
+   "option": "data.measure.unit.noun",
+   "status": "partly ignored",
+   "verdicts": {
+    "SILENT": 1,
+    "rewrite-reacted": 5
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "2/4",
+   "flagged_original_change": "output",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:239",
+    "crates/chartgen-data/src/lib.rs:792",
+    "crates/chartgen-data/src/lib.rs:794"
+   ]
+  },
+  {
+   "option": "data.measure.unit.prefix",
+   "status": "responds",
+   "verdicts": {
+    "rewrite-blocked": 4,
+    "rewrite-reacted": 2
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:236",
+    "crates/chartgen-data/src/lib.rs:794",
+    "crates/chartgen-data/src/lib.rs:857"
+   ]
+  },
+  {
+   "option": "data.measure.unit.scale_title",
+   "status": "no evidence",
+   "verdicts": {
+    "oracle-unchanged": 4,
+    "rewrite-blocked": 2
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-format/src/lib.rs:165"
+   ]
+  },
+  {
+   "option": "data.measure.unit.suffix",
+   "status": "partly ignored",
+   "verdicts": {
+    "SILENT": 2,
+    "rewrite-blocked": 2,
+    "rewrite-diagnosed": 2
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "output",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:237",
+    "crates/chartgen-data/src/lib.rs:792",
+    "crates/chartgen-data/src/lib.rs:794"
+   ]
+  },
+  {
+   "option": "data.measure.unit.what",
+   "status": "responds",
+   "verdicts": {
+    "rewrite-blocked": 2,
+    "rewrite-reacted": 4
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "0/1",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:834",
+    "crates/chartgen-data/src/lib.rs:924",
+    "crates/chartgen-data/src/lib.rs:941"
+   ]
+  },
+  {
+   "option": "data.measure.zero",
+   "status": "refusals agree",
+   "verdicts": {
+    "oracle-unchanged": 5,
+    "rewrite-reacted": 1
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "1/1",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [
+    "crates/chartgen-policy/src/lib.rs:182"
+   ],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:767",
+    "crates/chartgen-data/src/lib.rs:865",
+    "crates/chartgen-data/src/lib.rs:944"
+   ]
+  },
+  {
+   "option": "data.measures",
+   "status": "responds",
+   "verdicts": {
+    "oracle-unchanged": 1,
+    "rewrite-reacted": 2
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "0/2",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [
+    "crates/chartgen-data/src/schema.rs:657",
+    "crates/chartgen-layout/src/lib.rs:220",
+    "crates/chartgen-panels/src/lib.rs:62"
+   ],
+   "rust_key_refs": [
+    "crates/chartgen-panels/src/lib.rs:518"
+   ]
+  },
+  {
+   "option": "data.measures[].additive",
+   "status": "not probed",
+   "verdicts": {},
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "data.measures[].cumulative",
+   "status": "not probed",
+   "verdicts": {},
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "data.measures[].dividing_point",
+   "status": "not probed",
+   "verdicts": {},
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:771"
+   ]
+  },
+  {
+   "option": "data.measures[].good",
+   "status": "not probed",
+   "verdicts": {},
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-layout/src/colours.rs:27",
+    "crates/chartgen-layout/src/families/matrix.rs:903"
+   ]
+  },
+  {
+   "option": "data.measures[].heading",
+   "status": "no evidence",
+   "verdicts": {
+    "rewrite-blocked": 6
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-panels/src/lib.rs:432",
+    "crates/chartgen-panels/src/lib.rs:433"
+   ]
+  },
+  {
+   "option": "data.measures[].id",
+   "status": "diagnosed",
+   "verdicts": {
+    "oracle-unchanged": 2,
+    "rewrite-diagnosed": 4
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "data.measures[].kind",
+   "status": "responds",
+   "verdicts": {
+    "oracle-unchanged": 18,
+    "rewrite-blocked": 3,
+    "rewrite-reacted": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:280",
+    "crates/chartgen-data/src/lib.rs:412",
+    "crates/chartgen-data/src/lib.rs:416"
+   ]
+  },
+  {
+   "option": "data.measures[].max",
+   "status": "no evidence",
+   "verdicts": {
+    "oracle-unchanged": 6
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "data.measures[].min",
+   "status": "no evidence",
+   "verdicts": {
+    "oracle-unchanged": 6
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "data.measures[].name",
+   "status": "responds",
+   "verdicts": {
+    "oracle-unchanged": 2,
+    "rewrite-blocked": 2,
+    "rewrite-reacted": 2
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-colours/src/lib.rs:123",
+    "crates/chartgen-data/src/lib.rs:373",
+    "crates/chartgen-data/src/lib.rs:375"
+   ]
+  },
+  {
+   "option": "data.measures[].persistence",
+   "status": "refusals agree",
+   "verdicts": {
+    "oracle-unchanged": 6,
+    "rewrite-blocked": 2,
+    "rewrite-reacted": 1
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "1/1",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "data.measures[].precision",
+   "status": "no evidence",
+   "verdicts": {
+    "oracle-unchanged": 1,
+    "rewrite-blocked": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:770",
+    "crates/chartgen-data/src/lib.rs:867",
+    "crates/chartgen-data/src/lib.rs:947"
+   ]
+  },
+  {
+   "option": "data.measures[].unit",
+   "status": "responds",
+   "verdicts": {
+    "oracle-unchanged": 1,
+    "rewrite-blocked": 1,
+    "rewrite-reacted": 1
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "0/1",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:315",
+    "crates/chartgen-data/src/lib.rs:316",
+    "crates/chartgen-data/src/lib.rs:319"
+   ]
+  },
+  {
+   "option": "data.measures[].unit.fallback",
+   "status": "not probed",
+   "verdicts": {},
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-format/src/lib.rs:164"
+   ]
+  },
+  {
+   "option": "data.measures[].unit.given_in",
+   "status": "not probed",
+   "verdicts": {},
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:227",
+    "crates/chartgen-format/src/lib.rs:147"
+   ]
+  },
+  {
+   "option": "data.measures[].unit.magnitude",
+   "status": "responds",
+   "verdicts": {
+    "oracle-unchanged": 2,
+    "rewrite-blocked": 3,
+    "rewrite-reacted": 2
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:232",
+    "crates/chartgen-data/src/lib.rs:794",
+    "crates/chartgen-data/src/schema.rs:666"
+   ]
+  },
+  {
+   "option": "data.measures[].unit.noun",
+   "status": "partly ignored",
+   "verdicts": {
+    "SILENT": 1,
+    "oracle-unchanged": 2,
+    "rewrite-blocked": 2,
+    "rewrite-reacted": 1
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "findings",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:239",
+    "crates/chartgen-data/src/lib.rs:792",
+    "crates/chartgen-data/src/lib.rs:794"
+   ]
+  },
+  {
+   "option": "data.measures[].unit.prefix",
+   "status": "responds",
+   "verdicts": {
+    "oracle-unchanged": 2,
+    "rewrite-blocked": 2,
+    "rewrite-diagnosed": 1,
+    "rewrite-reacted": 1
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:236",
+    "crates/chartgen-data/src/lib.rs:794",
+    "crates/chartgen-data/src/lib.rs:857"
+   ]
+  },
+  {
+   "option": "data.measures[].unit.scale_title",
+   "status": "ignored",
+   "verdicts": {
+    "SILENT": 2,
+    "oracle-unchanged": 1,
+    "rewrite-blocked": 1
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "output",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-format/src/lib.rs:165"
+   ]
+  },
+  {
+   "option": "data.measures[].unit.suffix",
+   "status": "no evidence",
+   "verdicts": {
+    "rewrite-blocked": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:237",
+    "crates/chartgen-data/src/lib.rs:792",
+    "crates/chartgen-data/src/lib.rs:794"
+   ]
+  },
+  {
+   "option": "data.measures[].unit.what",
+   "status": "refusals agree",
+   "verdicts": {
+    "oracle-unchanged": 1,
+    "rewrite-blocked": 3,
+    "rewrite-reacted": 2
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "1/1",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:834",
+    "crates/chartgen-data/src/lib.rs:924",
+    "crates/chartgen-data/src/lib.rs:941"
+   ]
+  },
+  {
+   "option": "data.measures[].zero",
+   "status": "responds",
+   "verdicts": {
+    "oracle-unchanged": 4,
+    "rewrite-blocked": 1,
+    "rewrite-reacted": 1
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:767",
+    "crates/chartgen-data/src/lib.rs:865",
+    "crates/chartgen-data/src/lib.rs:944"
+   ]
+  },
+  {
+   "option": "data.parts",
+   "status": "responds",
+   "verdicts": {
+    "rewrite-reacted": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "0/2",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [
+    "crates/chartgen-colours/src/lib.rs:242",
+    "crates/chartgen-colours/src/lib.rs:384",
+    "crates/chartgen-data/src/schema.rs:452"
+   ],
+   "rust_key_refs": []
+  },
+  {
+   "option": "data.parts.all_parts",
+   "status": "refusal missed",
+   "verdicts": {
+    "SILENT": 1,
+    "oracle-unchanged": 1,
+    "rewrite-reacted": 4
+   },
+   "refusal_missed": 1,
+   "refusals_agree": "0/4",
+   "flagged_original_change": "status",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-policy/src/lib.rs:96",
+    "crates/chartgen-policy/src/lib.rs:541"
+   ]
+  },
+  {
+   "option": "data.parts.groups",
+   "status": "ignored",
+   "verdicts": {
+    "SILENT": 2
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "output",
+   "rust_pointer_refs": [
+    "crates/chartgen-data/src/schema.rs:452"
+   ],
+   "rust_key_refs": [
+    "crates/chartgen-layout/src/families/circular.rs:731"
+   ]
+  },
+  {
+   "option": "data.parts.kind",
+   "status": "ignored",
+   "verdicts": {
+    "SILENT": 2
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "output",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:280",
+    "crates/chartgen-data/src/lib.rs:412",
+    "crates/chartgen-data/src/lib.rs:416"
+   ]
+  },
+  {
+   "option": "data.parts.meaningful_total",
+   "status": "responds",
+   "verdicts": {
+    "oracle-unchanged": 2,
+    "rewrite-reacted": 4
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "0/4",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-policy/src/lib.rs:95",
+    "crates/chartgen-policy/src/lib.rs:540"
+   ]
+  },
+  {
+   "option": "data.parts.order",
+   "status": "partly ignored",
+   "verdicts": {
+    "SILENT": 1,
+    "rewrite-reacted": 1
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "output",
+   "rust_pointer_refs": [
+    "crates/chartgen-policy/src/lib.rs:678"
+   ],
+   "rust_key_refs": [
+    "crates/chartgen-layout/src/families/matrix.rs:925"
+   ]
+  },
+  {
+   "option": "data.parts.overlap",
+   "status": "responds",
+   "verdicts": {
+    "oracle-unchanged": 2,
+    "rewrite-reacted": 4
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "0/4",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-policy/src/lib.rs:97",
+    "crates/chartgen-policy/src/lib.rs:542",
+    "crates/chartgen-policy/src/lib.rs:545"
+   ]
+  },
+  {
+   "option": "data.parts.overlaps",
+   "status": "refusal missed",
+   "verdicts": {
+    "SILENT": 1
+   },
+   "refusal_missed": 1,
+   "refusals_agree": "",
+   "flagged_original_change": "status",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-policy/src/lib.rs:545"
+   ]
+  },
+  {
+   "option": "data.parts.total",
+   "status": "no evidence",
+   "verdicts": {
+    "oracle-unchanged": 1
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-layout/src/colours.rs:24",
+    "crates/chartgen-layout/src/families/matrix.rs:117",
+    "crates/chartgen-layout/src/families/matrix.rs:137"
+   ]
+  },
+  {
+   "option": "data.series",
+   "status": "not probed",
+   "verdicts": {},
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [
+    "crates/chartgen-colours/src/lib.rs:99",
+    "crates/chartgen-data/src/lib.rs:263",
+    "crates/chartgen-data/src/lib.rs:347"
+   ],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:303",
+    "crates/chartgen-data/src/lib.rs:341",
+    "crates/chartgen-data/src/lib.rs:638"
+   ]
+  },
+  {
+   "option": "data.series[].certainty",
+   "status": "no evidence",
+   "verdicts": {
+    "oracle-unchanged": 9
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:93",
+    "crates/chartgen-data/src/lib.rs:100",
+    "crates/chartgen-data/src/lib.rs:137"
+   ]
+  },
+  {
+   "option": "data.series[].id",
+   "status": "responds",
+   "verdicts": {
+    "rewrite-reacted": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "data.series[].keys",
+   "status": "diagnosed",
+   "verdicts": {
+    "rewrite-diagnosed": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-colours/src/lib.rs:129",
+    "crates/chartgen-panels/src/lib.rs:356",
+    "crates/chartgen-panels/src/lib.rs:390"
+   ]
+  },
+  {
+   "option": "data.series[].measure",
+   "status": "diagnosed",
+   "verdicts": {
+    "oracle-unchanged": 2,
+    "rewrite-diagnosed": 4
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-panels/src/lib.rs:84",
+    "crates/chartgen-panels/src/lib.rs:91",
+    "crates/chartgen-panels/src/lib.rs:155"
+   ]
+  },
+  {
+   "option": "data.series[].name",
+   "status": "no evidence",
+   "verdicts": {
+    "oracle-unchanged": 6
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-colours/src/lib.rs:123",
+    "crates/chartgen-data/src/lib.rs:373",
+    "crates/chartgen-data/src/lib.rs:375"
+   ]
+  },
+  {
+   "option": "data.series[].points",
+   "status": "refusals agree",
+   "verdicts": {
+    "rewrite-reacted": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "3/3",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/irregular.rs:30",
+    "crates/chartgen-data/src/lib.rs:354",
+    "crates/chartgen-data/src/schema.rs:257"
+   ]
+  },
+  {
+   "option": "data.series[].role",
+   "status": "refusal missed",
+   "verdicts": {
+    "oracle-unchanged": 4,
+    "rewrite-blocked": 6,
+    "rewrite-reacted": 8
+   },
+   "refusal_missed": 2,
+   "refusals_agree": "2/4",
+   "flagged_original_change": "status",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-colours/src/lib.rs:170",
+    "crates/chartgen-data/src/lib.rs:597",
+    "crates/chartgen-layout/src/colours.rs:42"
+   ]
+  },
+  {
+   "option": "data.series[].slot",
+   "status": "partly ignored",
+   "verdicts": {
+    "SILENT": 1,
+    "oracle-unchanged": 2,
+    "rewrite-reacted": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "decisions/summary",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-colours/src/lib.rs:133",
+    "crates/chartgen-data/src/schema.rs:357",
+    "crates/chartgen-layout/src/colours.rs:35"
+   ]
+  },
+  {
+   "option": "data.x.events",
+   "status": "diagnosed",
+   "verdicts": {
+    "rewrite-blocked": 2,
+    "rewrite-diagnosed": 1
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [
+    "crates/chartgen-data/src/schema.rs:502",
+    "crates/chartgen-layout/src/special/events.rs:6"
+   ],
+   "rust_key_refs": [
+    "crates/chartgen-layout/src/lib.rs:171"
+   ]
+  },
+  {
+   "option": "data.x.events[].at",
+   "status": "refusals agree",
+   "verdicts": {
+    "rewrite-blocked": 7,
+    "rewrite-reacted": 2
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "2/2",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "data.x.events[].label",
+   "status": "no evidence",
+   "verdicts": {
+    "rewrite-blocked": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:337",
+    "crates/chartgen-data/src/lib.rs:785",
+    "crates/chartgen-layout/src/guides.rs:196"
+   ]
+  },
+  {
+   "option": "data.x.grid",
+   "status": "refusals agree",
+   "verdicts": {
+    "rewrite-reacted": 24
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "24/24",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [
+    "crates/chartgen-data/src/lib.rs:213",
+    "crates/chartgen-data/src/schema.rs:250",
+    "crates/chartgen-layout/src/timeaxis.rs:95"
+   ],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:412",
+    "crates/chartgen-data/src/schema.rs:298",
+    "crates/chartgen-data/src/schema.rs:364"
+   ]
+  },
+  {
+   "option": "data.x.groups",
+   "status": "responds",
+   "verdicts": {
+    "rewrite-blocked": 2,
+    "rewrite-diagnosed": 3,
+    "rewrite-reacted": 1
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [
+    "crates/chartgen-colours/src/lib.rs:215",
+    "crates/chartgen-data/src/schema.rs:450",
+    "crates/chartgen-layout/src/families/circular.rs:51"
+   ],
+   "rust_key_refs": [
+    "crates/chartgen-layout/src/families/circular.rs:731"
+   ]
+  },
+  {
+   "option": "data.x.kind",
+   "status": "refusals agree",
+   "verdicts": {
+    "rewrite-reacted": 6
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "4/4",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [
+    "crates/chartgen-data/src/schema.rs:250",
+    "crates/chartgen-panels/src/lib.rs:82"
+   ],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:280",
+    "crates/chartgen-data/src/lib.rs:412",
+    "crates/chartgen-data/src/lib.rs:416"
+   ]
+  },
+  {
+   "option": "data.x.levels",
+   "status": "not probed",
+   "verdicts": {},
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "data.x.names",
+   "status": "ignored",
+   "verdicts": {
+    "SILENT": 2,
+    "oracle-unchanged": 2,
+    "rewrite-blocked": 2
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "output",
+   "rust_pointer_refs": [
+    "crates/chartgen-colours/src/lib.rs:209"
+   ],
+   "rust_key_refs": [
+    "crates/chartgen-layout/src/guides.rs:165",
+    "crates/chartgen-layout/src/guides.rs:174",
+    "crates/chartgen-layout/src/timeaxis.rs:111"
+   ]
+  },
+  {
+   "option": "data.x.order",
+   "status": "ignored",
+   "verdicts": {
+    "SILENT": 1,
+    "oracle-unchanged": 2
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "decisions/summary",
+   "rust_pointer_refs": [
+    "crates/chartgen-policy/src/lib.rs:677"
+   ],
+   "rust_key_refs": [
+    "crates/chartgen-layout/src/families/matrix.rs:925"
+   ]
+  },
+  {
+   "option": "data.x.roles",
+   "status": "partly ignored",
+   "verdicts": {
+    "SILENT": 6,
+    "rewrite-blocked": 5,
+    "rewrite-reacted": 4
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "output",
+   "rust_pointer_refs": [
+    "crates/chartgen-colours/src/lib.rs:212",
+    "crates/chartgen-data/src/schema.rs:449",
+    "crates/chartgen-layout/src/families/circular.rs:45"
+   ],
+   "rust_key_refs": [
+    "crates/chartgen-layout/src/colours.rs:108"
+   ]
+  },
+  {
+   "option": "data.x.title",
+   "status": "ignored",
+   "verdicts": {
+    "SILENT": 1,
+    "oracle-unchanged": 2
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "output",
+   "rust_pointer_refs": [
+    "crates/chartgen-data/src/schema.rs:602"
+   ],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/schema.rs:599",
+    "crates/chartgen-layout/src/comments.rs:349",
+    "crates/chartgen-layout/src/families/circular.rs:160"
+   ]
+  },
+  {
+   "option": "data.x.values",
+   "status": "refusals agree",
+   "verdicts": {
+    "rewrite-reacted": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "3/3",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:284",
+    "crates/chartgen-data/src/lib.rs:422",
+    "crates/chartgen-data/src/lib.rs:463"
+   ]
+  },
+  {
+   "option": "data.x.week_start",
+   "status": "refusals agree",
+   "verdicts": {
+    "oracle-unchanged": 4,
+    "rewrite-reacted": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "3/3",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [
+    "crates/chartgen-data/src/schema.rs:401"
+   ],
+   "rust_key_refs": []
+  },
+  {
+   "option": "facts",
+   "status": "responds",
+   "verdicts": {
+    "rewrite-blocked": 1,
+    "rewrite-reacted": 2
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [
+    "crates/chartgen-colours/src/lib.rs:75",
+    "crates/chartgen-layout/src/families/matrix.rs:371",
+    "crates/chartgen-panels/src/lib.rs:97"
+   ],
+   "rust_key_refs": [
+    "crates/chartgen-panels/src/lib.rs:526",
+    "crates/chartgen-panels/src/lib.rs:527"
+   ]
+  },
+  {
+   "option": "facts.compare",
+   "status": "diagnosed",
+   "verdicts": {
+    "rewrite-blocked": 3,
+    "rewrite-diagnosed": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [
+    "crates/chartgen-colours/src/lib.rs:75",
+    "crates/chartgen-panels/src/lib.rs:97"
+   ],
+   "rust_key_refs": [
+    "crates/chartgen-panels/src/lib.rs:526"
+   ]
+  },
+  {
+   "option": "facts.compare_shapes",
+   "status": "refusals agree",
+   "verdicts": {
+    "oracle-unchanged": 2,
+    "rewrite-reacted": 1
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "1/1",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [
+    "crates/chartgen-panels/src/lib.rs:326"
+   ],
+   "rust_key_refs": [
+    "crates/chartgen-panels/src/lib.rs:527"
+   ]
+  },
+  {
+   "option": "facts.distance_to_zero_irrelevant",
+   "status": "responds",
+   "verdicts": {
+    "oracle-unchanged": 1,
+    "rewrite-blocked": 2,
+    "rewrite-reacted": 2
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [
+    "crates/chartgen-scales/src/lib.rs:449"
+   ],
+   "rust_key_refs": []
+  },
+  {
+   "option": "facts.exact_values_needed",
+   "status": "ignored",
+   "verdicts": {
+    "SILENT": 3,
+    "rewrite-blocked": 2
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "output",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "facts.focus",
+   "status": "ignored",
+   "verdicts": {
+    "SILENT": 4,
+    "oracle-unchanged": 2
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "type",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "facts.incomplete_value_needed",
+   "status": "no evidence",
+   "verdicts": {
+    "oracle-unchanged": 2,
+    "rewrite-blocked": 2
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "facts.location_matters",
+   "status": "refusal missed",
+   "verdicts": {
+    "OUTPUT-IGNORED": 4
+   },
+   "refusal_missed": 2,
+   "refusals_agree": "",
+   "flagged_original_change": "status",
+   "rust_pointer_refs": [
+    "crates/chartgen-policy/src/lib.rs:229"
+   ],
+   "rust_key_refs": []
+  },
+  {
+   "option": "facts.message",
+   "status": "responds",
+   "verdicts": {
+    "oracle-unchanged": 2,
+    "rewrite-blocked": 3,
+    "rewrite-reacted": 10
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [
+    "crates/chartgen-layout/src/families/matrix.rs:371",
+    "crates/chartgen-policy/src/lib.rs:80",
+    "crates/chartgen-policy/src/lib.rs:193"
+   ],
+   "rust_key_refs": []
+  },
+  {
+   "option": "facts.ramp_focus",
+   "status": "no evidence",
+   "verdicts": {
+    "oracle-unchanged": 2,
+    "rewrite-blocked": 4
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "facts.small_differences_matter",
+   "status": "no evidence",
+   "verdicts": {
+    "rewrite-blocked": 6
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "facts.small_values_matter",
+   "status": "ignored",
+   "verdicts": {
+    "SILENT": 2,
+    "oracle-unchanged": 2,
+    "rewrite-blocked": 2
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "findings",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "facts.total_matters",
+   "status": "ignored",
+   "verdicts": {
+    "SILENT": 6
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "findings",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "highlight",
+   "status": "partly ignored",
+   "verdicts": {
+    "SILENT": 1,
+    "rewrite-blocked": 1,
+    "rewrite-diagnosed": 1
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "decisions/summary",
+   "rust_pointer_refs": [
+    "crates/chartgen-data/src/schema.rs:521"
+   ],
+   "rust_key_refs": [
+    "crates/chartgen-layout/src/annotations.rs:19",
+    "crates/chartgen-layout/src/annotations.rs:33",
+    "crates/chartgen-layout/src/annotations.rs:35"
+   ]
+  },
+  {
+   "option": "highlight[].dim_others",
+   "status": "refusals agree",
+   "verdicts": {
+    "rewrite-blocked": 4,
+    "rewrite-reacted": 1
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "1/1",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-layout/src/annotations.rs:86"
+   ]
+  },
+  {
+   "option": "highlight[].emphasis",
+   "status": "responds",
+   "verdicts": {
+    "oracle-unchanged": 2,
+    "rewrite-reacted": 1
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "highlight[].glow",
+   "status": "responds",
+   "verdicts": {
+    "oracle-unchanged": 2,
+    "rewrite-diagnosed": 2,
+    "rewrite-reacted": 2
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "highlight[].method",
+   "status": "partly ignored",
+   "verdicts": {
+    "SILENT": 2,
+    "oracle-unchanged": 7,
+    "rewrite-blocked": 1,
+    "rewrite-diagnosed": 23
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "findings",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-layout/src/annotations.rs:71"
+   ]
+  },
+  {
+   "option": "highlight[].targets",
+   "status": "diagnosed",
+   "verdicts": {
+    "rewrite-diagnosed": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/schema.rs:523",
+    "crates/chartgen-layout/src/annotations.rs:67",
+    "crates/chartgen-panels/src/lib.rs:552"
+   ]
+  },
+  {
+   "option": "highlight[].targets[].category",
+   "status": "responds",
+   "verdicts": {
+    "rewrite-blocked": 3,
+    "rewrite-reacted": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/schema.rs:248",
+    "crates/chartgen-data/src/schema.rs:583",
+    "crates/chartgen-data/src/schema.rs:592"
+   ]
+  },
+  {
+   "option": "highlight[].targets[].panel",
+   "status": "responds",
+   "verdicts": {
+    "oracle-unchanged": 1,
+    "rewrite-diagnosed": 1,
+    "rewrite-reacted": 1
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-panel-layout/src/lib.rs:348",
+    "crates/chartgen-panels/src/lib.rs:546",
+    "crates/chartgen-panels/src/lib.rs:558"
+   ]
+  },
+  {
+   "option": "highlight[].targets[].series",
+   "status": "responds",
+   "verdicts": {
+    "rewrite-blocked": 2,
+    "rewrite-diagnosed": 5,
+    "rewrite-reacted": 2
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:303",
+    "crates/chartgen-data/src/lib.rs:341",
+    "crates/chartgen-data/src/lib.rs:638"
+   ]
+  },
+  {
+   "option": "highlight[].targets[].x",
+   "status": "diagnosed",
+   "verdicts": {
+    "oracle-unchanged": 2,
+    "rewrite-blocked": 2,
+    "rewrite-diagnosed": 1
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "inset",
+   "status": "responds",
+   "verdicts": {
+    "oracle-unchanged": 2,
+    "rewrite-reacted": 1
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [
+    "src/lib.rs:302"
+   ],
+   "rust_key_refs": [
+    "crates/chartgen-layout/src/lib.rs:166",
+    "crates/chartgen-panels/src/lib.rs:530"
+   ]
+  },
+  {
+   "option": "inset.compact_main",
+   "status": "no evidence",
+   "verdicts": {
+    "oracle-unchanged": 1,
+    "rewrite-blocked": 4
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "inset.kind",
+   "status": "refusals agree",
+   "verdicts": {
+    "oracle-unchanged": 6,
+    "rewrite-blocked": 3,
+    "rewrite-reacted": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "3/3",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [
+    "src/lib.rs:302"
+   ],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:280",
+    "crates/chartgen-data/src/lib.rs:412",
+    "crates/chartgen-data/src/lib.rs:416"
+   ]
+  },
+  {
+   "option": "inset.members",
+   "status": "no evidence",
+   "verdicts": {
+    "oracle-unchanged": 2
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "inset.position",
+   "status": "no evidence",
+   "verdicts": {
+    "oracle-unchanged": 10,
+    "rewrite-blocked": 5
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-model/src/lib.rs:588"
+   ]
+  },
+  {
+   "option": "inset.share_axis",
+   "status": "no evidence",
+   "verdicts": {
+    "oracle-unchanged": 6
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "insight",
+   "status": "partly ignored",
+   "verdicts": {
+    "SILENT": 1,
+    "rewrite-blocked": 1,
+    "rewrite-reacted": 1
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "output",
+   "rust_pointer_refs": [
+    "crates/chartgen-data/src/schema.rs:516",
+    "crates/chartgen-layout/src/annotations.rs:25",
+    "crates/chartgen-policy/src/lib.rs:708"
+   ],
+   "rust_key_refs": [
+    "crates/chartgen-lint/src/lib.rs:28",
+    "crates/chartgen-panels/src/lib.rs:551"
+   ]
+  },
+  {
+   "option": "insight.action",
+   "status": "no evidence",
+   "verdicts": {
+    "oracle-unchanged": 5
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "insight.explain",
+   "status": "no evidence",
+   "verdicts": {
+    "oracle-unchanged": 6
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "insight.explain_anchor",
+   "status": "no evidence",
+   "verdicts": {
+    "oracle-unchanged": 2
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "insight.explain_anchor.category",
+   "status": "no evidence",
+   "verdicts": {
+    "oracle-unchanged": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/schema.rs:248",
+    "crates/chartgen-data/src/schema.rs:583",
+    "crates/chartgen-data/src/schema.rs:592"
+   ]
+  },
+  {
+   "option": "insight.explain_anchor.panel",
+   "status": "no evidence",
+   "verdicts": {
+    "oracle-unchanged": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-panel-layout/src/lib.rs:348",
+    "crates/chartgen-panels/src/lib.rs:546",
+    "crates/chartgen-panels/src/lib.rs:558"
+   ]
+  },
+  {
+   "option": "insight.explain_anchor.series",
+   "status": "no evidence",
+   "verdicts": {
+    "oracle-unchanged": 7
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:303",
+    "crates/chartgen-data/src/lib.rs:341",
+    "crates/chartgen-data/src/lib.rs:638"
+   ]
+  },
+  {
+   "option": "insight.explain_anchor.x",
+   "status": "no evidence",
+   "verdicts": {
+    "oracle-unchanged": 5
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "insight.important",
+   "status": "ignored",
+   "verdicts": {
+    "SILENT": 4,
+    "rewrite-blocked": 2
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "output",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "insight.targets",
+   "status": "responds",
+   "verdicts": {
+    "oracle-unchanged": 2,
+    "rewrite-reacted": 1
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [
+    "crates/chartgen-data/src/schema.rs:516",
+    "crates/chartgen-layout/src/annotations.rs:25",
+    "crates/chartgen-policy/src/lib.rs:708"
+   ],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/schema.rs:523",
+    "crates/chartgen-layout/src/annotations.rs:67",
+    "crates/chartgen-panels/src/lib.rs:552"
+   ]
+  },
+  {
+   "option": "insight.targets[].category",
+   "status": "responds",
+   "verdicts": {
+    "rewrite-diagnosed": 3,
+    "rewrite-reacted": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/schema.rs:248",
+    "crates/chartgen-data/src/schema.rs:583",
+    "crates/chartgen-data/src/schema.rs:592"
+   ]
+  },
+  {
+   "option": "insight.targets[].panel",
+   "status": "diagnosed",
+   "verdicts": {
+    "oracle-unchanged": 1,
+    "rewrite-blocked": 2,
+    "rewrite-diagnosed": 1
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-panel-layout/src/lib.rs:348",
+    "crates/chartgen-panels/src/lib.rs:546",
+    "crates/chartgen-panels/src/lib.rs:558"
+   ]
+  },
+  {
+   "option": "insight.targets[].series",
+   "status": "responds",
+   "verdicts": {
+    "oracle-unchanged": 6,
+    "rewrite-reacted": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:303",
+    "crates/chartgen-data/src/lib.rs:341",
+    "crates/chartgen-data/src/lib.rs:638"
+   ]
+  },
+  {
+   "option": "insight.targets[].x",
+   "status": "responds",
+   "verdicts": {
+    "oracle-unchanged": 2,
+    "rewrite-reacted": 2
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "insight.why_care",
+   "status": "no evidence",
+   "verdicts": {
+    "oracle-unchanged": 4
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "job",
+   "status": "responds",
+   "verdicts": {
+    "rewrite-reacted": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "0/3",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [
+    "crates/chartgen-policy/src/lib.rs:203",
+    "crates/chartgen-policy/src/lib.rs:332",
+    "crates/chartgen-policy/src/lib.rs:479"
+   ],
+   "rust_key_refs": []
+  },
+  {
+   "option": "job.kind",
+   "status": "refusal missed",
+   "verdicts": {
+    "OUTPUT-IGNORED": 9,
+    "rewrite-reacted": 6
+   },
+   "refusal_missed": 9,
+   "refusals_agree": "",
+   "flagged_original_change": "status",
+   "rust_pointer_refs": [
+    "crates/chartgen-policy/src/lib.rs:203",
+    "crates/chartgen-policy/src/lib.rs:479"
+   ],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:280",
+    "crates/chartgen-data/src/lib.rs:412",
+    "crates/chartgen-data/src/lib.rs:416"
+   ]
+  },
+  {
+   "option": "job.text",
+   "status": "no evidence",
+   "verdicts": {
+    "oracle-unchanged": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-colours/src/lib.rs:202",
+    "crates/chartgen-data/src/schema.rs:565",
+    "crates/chartgen-data/src/schema.rs:570"
+   ]
+  },
+  {
+   "option": "labels",
+   "status": "responds",
+   "verdicts": {
+    "rewrite-diagnosed": 1,
+    "rewrite-reacted": 2
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [
+    "crates/chartgen-layout/src/guides.rs:204",
+    "crates/chartgen-layout/src/special.rs:9",
+    "crates/chartgen-note-layout/src/lib.rs:109"
+   ],
+   "rust_key_refs": [
+    "crates/chartgen-layout/src/lib.rs:179",
+    "crates/chartgen-layout/src/lib.rs:182",
+    "crates/chartgen-layout/src/lib.rs:184"
+   ]
+  },
+  {
+   "option": "labels.notes",
+   "status": "responds",
+   "verdicts": {
+    "rewrite-blocked": 3,
+    "rewrite-diagnosed": 1,
+    "rewrite-reacted": 2
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [
+    "crates/chartgen-layout/src/guides.rs:204",
+    "crates/chartgen-layout/src/special.rs:9",
+    "crates/chartgen-note-layout/src/lib.rs:109"
+   ],
+   "rust_key_refs": [
+    "crates/chartgen-layout/src/lib.rs:169",
+    "crates/chartgen-layout/src/lib.rs:183",
+    "crates/chartgen-layout/src/lib.rs:186"
+   ]
+  },
+  {
+   "option": "labels.parts",
+   "status": "responds",
+   "verdicts": {
+    "oracle-unchanged": 2,
+    "rewrite-blocked": 5,
+    "rewrite-diagnosed": 3,
+    "rewrite-reacted": 1
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "layout",
+   "status": "ignored",
+   "verdicts": {
+    "SILENT": 1,
+    "rewrite-blocked": 2
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "output",
+   "rust_pointer_refs": [
+    "crates/chartgen-data/src/schema.rs:640",
+    "crates/chartgen-data/src/schema.rs:641"
+   ],
+   "rust_key_refs": [
+    "crates/chartgen-layout/src/families/circular.rs:10",
+    "crates/chartgen-layout/src/families/matrix.rs:9",
+    "crates/chartgen-layout/src/guides.rs:76"
+   ]
+  },
+  {
+   "option": "layout.height",
+   "status": "ignored",
+   "verdicts": {
+    "SILENT": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "findings",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "layout.plot_aspect",
+   "status": "ignored",
+   "verdicts": {
+    "SILENT": 3,
+    "oracle-unchanged": 2,
+    "rewrite-blocked": 4
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "output",
+   "rust_pointer_refs": [
+    "crates/chartgen-data/src/schema.rs:641"
+   ],
+   "rust_key_refs": []
+  },
+  {
+   "option": "layout.width",
+   "status": "partly ignored",
+   "verdicts": {
+    "SILENT": 2,
+    "rewrite-blocked": 4,
+    "rewrite-reacted": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "output",
+   "rust_pointer_refs": [
+    "crates/chartgen-data/src/schema.rs:640"
+   ],
+   "rust_key_refs": []
+  },
+  {
+   "option": "notes",
+   "status": "responds",
+   "verdicts": {
+    "rewrite-blocked": 2,
+    "rewrite-reacted": 1
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [
+    "crates/chartgen-data/src/schema.rs:563",
+    "crates/chartgen-notes/src/lib.rs:124"
+   ],
+   "rust_key_refs": [
+    "crates/chartgen-layout/src/lib.rs:169",
+    "crates/chartgen-layout/src/lib.rs:183",
+    "crates/chartgen-layout/src/lib.rs:186"
+   ]
+  },
+  {
+   "option": "notes[].on",
+   "status": "responds",
+   "verdicts": {
+    "rewrite-blocked": 2,
+    "rewrite-reacted": 1
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "notes[].on[].category",
+   "status": "refusals agree",
+   "verdicts": {
+    "rewrite-blocked": 1,
+    "rewrite-reacted": 5
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "4/4",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/schema.rs:248",
+    "crates/chartgen-data/src/schema.rs:583",
+    "crates/chartgen-data/src/schema.rs:592"
+   ]
+  },
+  {
+   "option": "notes[].on[].comment",
+   "status": "refusals agree",
+   "verdicts": {
+    "rewrite-reacted": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "3/3",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/schema.rs:579",
+    "crates/chartgen-data/src/schema.rs:588",
+    "crates/chartgen-data/src/schema.rs:613"
+   ]
+  },
+  {
+   "option": "notes[].on[].element",
+   "status": "refusals agree",
+   "verdicts": {
+    "rewrite-blocked": 2,
+    "rewrite-reacted": 15
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "15/15",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/schema.rs:579",
+    "crates/chartgen-data/src/schema.rs:587",
+    "crates/chartgen-data/src/schema.rs:597"
+   ]
+  },
+  {
+   "option": "notes[].on[].series",
+   "status": "refusals agree",
+   "verdicts": {
+    "rewrite-blocked": 3,
+    "rewrite-reacted": 4
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "4/4",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:303",
+    "crates/chartgen-data/src/lib.rs:341",
+    "crates/chartgen-data/src/lib.rs:638"
+   ]
+  },
+  {
+   "option": "notes[].on[].status",
+   "status": "refusals agree",
+   "verdicts": {
+    "rewrite-blocked": 5,
+    "rewrite-reacted": 13
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "13/13",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:78",
+    "crates/chartgen-data/src/lib.rs:79",
+    "crates/chartgen-data/src/schema.rs:579"
+   ]
+  },
+  {
+   "option": "notes[].on[].stub",
+   "status": "not probed",
+   "verdicts": {},
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/schema.rs:579",
+    "crates/chartgen-data/src/schema.rs:589",
+    "crates/chartgen-data/src/schema.rs:618"
+   ]
+  },
+  {
+   "option": "notes[].text",
+   "status": "responds",
+   "verdicts": {
+    "rewrite-blocked": 2,
+    "rewrite-reacted": 1
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-colours/src/lib.rs:202",
+    "crates/chartgen-data/src/schema.rs:565",
+    "crates/chartgen-data/src/schema.rs:570"
+   ]
+  },
+  {
+   "option": "overrides",
+   "status": "not probed",
+   "verdicts": {},
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [
+    "crates/chartgen-policy/src/lib.rs:14"
+   ],
+   "rust_key_refs": []
+  },
+  {
+   "option": "overrides[].reason",
+   "status": "no evidence",
+   "verdicts": {
+    "oracle-unchanged": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-policy/src/lib.rs:17"
+   ]
+  },
+  {
+   "option": "overrides[].rule",
+   "status": "no evidence",
+   "verdicts": {
+    "oracle-unchanged": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-colours/src/lib.rs:202",
+    "crates/chartgen-layout/src/families/matrix.rs:49",
+    "crates/chartgen-policy/src/lib.rs:16"
+   ]
+  },
+  {
+   "option": "panels",
+   "status": "no evidence",
+   "verdicts": {
+    "rewrite-blocked": 1
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [
+    "crates/chartgen-colours/src/lib.rs:66",
+    "crates/chartgen-panels/src/lib.rs:67",
+    "crates/chartgen-panels/src/lib.rs:306"
+   ],
+   "rust_key_refs": [
+    "crates/chartgen-layout/src/lib.rs:170",
+    "crates/chartgen-panel-layout/src/lib.rs:234",
+    "crates/chartgen-panels/src/lib.rs:525"
+   ]
+  },
+  {
+   "option": "panels.arrangement",
+   "status": "no evidence",
+   "verdicts": {
+    "rewrite-blocked": 1
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [
+    "crates/chartgen-colours/src/lib.rs:66",
+    "crates/chartgen-panels/src/lib.rs:67"
+   ],
+   "rust_key_refs": []
+  },
+  {
+   "option": "panels.arrangement.columns",
+   "status": "diagnosed",
+   "verdicts": {
+    "rewrite-diagnosed": 4
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-layout/src/families/matrix.rs:561",
+    "crates/chartgen-panels/src/lib.rs:71"
+   ]
+  },
+  {
+   "option": "panels.arrangement.rows",
+   "status": "diagnosed",
+   "verdicts": {
+    "rewrite-diagnosed": 6
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-layout/src/families/matrix.rs:557",
+    "crates/chartgen-panels/src/lib.rs:70"
+   ]
+  },
+  {
+   "option": "panels.arrangement.within",
+   "status": "diagnosed",
+   "verdicts": {
+    "rewrite-diagnosed": 4
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [
+    "crates/chartgen-colours/src/lib.rs:66"
+   ],
+   "rust_key_refs": [
+    "crates/chartgen-panels/src/lib.rs:72"
+   ]
+  },
+  {
+   "option": "panels.scale",
+   "status": "refusals agree",
+   "verdicts": {
+    "oracle-unchanged": 7,
+    "rewrite-reacted": 2
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "2/2",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [
+    "crates/chartgen-panels/src/lib.rs:306",
+    "crates/chartgen-panels/src/lib.rs:315"
+   ],
+   "rust_key_refs": [
+    "crates/chartgen-model/src/lib.rs:347",
+    "crates/chartgen-model/src/lib.rs:352",
+    "crates/chartgen-policy/src/lib.rs:643"
+   ]
+  },
+  {
+   "option": "panels.series_labels",
+   "status": "no evidence",
+   "verdicts": {
+    "oracle-unchanged": 9
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "purpose",
+   "status": "responds",
+   "verdicts": {
+    "oracle-unchanged": 4,
+    "rewrite-reacted": 2
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [
+    "crates/chartgen-policy/src/lib.rs:20",
+    "crates/chartgen-policy/src/lib.rs:202",
+    "crates/chartgen-policy/src/lib.rs:332"
+   ],
+   "rust_key_refs": []
+  },
+  {
+   "option": "reasons",
+   "status": "ignored",
+   "verdicts": {
+    "SILENT": 5,
+    "oracle-unchanged": 1
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "findings",
+   "rust_pointer_refs": [
+    "crates/chartgen-policy/src/lib.rs:41"
+   ],
+   "rust_key_refs": []
+  },
+  {
+   "option": "scale",
+   "status": "no evidence",
+   "verdicts": {
+    "oracle-unchanged": 2,
+    "rewrite-blocked": 1
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [
+    "crates/chartgen-format/src/lib.rs:530",
+    "crates/chartgen-format/src/lib.rs:533",
+    "crates/chartgen-format/src/lib.rs:543"
+   ],
+   "rust_key_refs": [
+    "crates/chartgen-model/src/lib.rs:347",
+    "crates/chartgen-model/src/lib.rs:352",
+    "crates/chartgen-policy/src/lib.rs:643"
+   ]
+  },
+  {
+   "option": "scale.allow_2_5",
+   "status": "no evidence",
+   "verdicts": {
+    "oracle-unchanged": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-scales/src/lib.rs:442"
+   ]
+  },
+  {
+   "option": "scale.breathing",
+   "status": "ignored",
+   "verdicts": {
+    "SILENT": 2,
+    "oracle-unchanged": 4
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "decisions/summary",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-scales/src/lib.rs:448"
+   ]
+  },
+  {
+   "option": "scale.magnitude",
+   "status": "no evidence",
+   "verdicts": {
+    "rewrite-blocked": 1
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [
+    "crates/chartgen-format/src/lib.rs:530",
+    "crates/chartgen-format/src/lib.rs:533"
+   ],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:232",
+    "crates/chartgen-data/src/lib.rs:794",
+    "crates/chartgen-data/src/schema.rs:666"
+   ]
+  },
+  {
+   "option": "scale.magnitude_style",
+   "status": "ignored",
+   "verdicts": {
+    "SILENT": 2,
+    "oracle-unchanged": 4
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "findings",
+   "rust_pointer_refs": [
+    "crates/chartgen-format/src/lib.rs:543"
+   ],
+   "rust_key_refs": []
+  },
+  {
+   "option": "scale.max",
+   "status": "refusal missed",
+   "verdicts": {
+    "OUTPUT-IGNORED": 1,
+    "oracle-unchanged": 1,
+    "rewrite-diagnosed": 3,
+    "rewrite-reacted": 1
+   },
+   "refusal_missed": 2,
+   "refusals_agree": "0/1",
+   "flagged_original_change": "status",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "scale.min",
+   "status": "partly ignored",
+   "verdicts": {
+    "SILENT": 1,
+    "oracle-unchanged": 3,
+    "rewrite-blocked": 1,
+    "rewrite-diagnosed": 2,
+    "rewrite-reacted": 2
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "0/2",
+   "flagged_original_change": "decisions/summary",
+   "rust_pointer_refs": [
+    "crates/chartgen-policy/src/lib.rs:636"
+   ],
+   "rust_key_refs": []
+  },
+  {
+   "option": "scale.precision_value",
+   "status": "not probed",
+   "verdicts": {},
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-scales/src/lib.rs:447"
+   ]
+  },
+  {
+   "option": "scale.step",
+   "status": "no evidence",
+   "verdicts": {
+    "oracle-unchanged": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-model/src/lib.rs:161",
+    "crates/chartgen-model/src/lib.rs:186",
+    "crates/chartgen-policy/src/lib.rs:148"
+   ]
+  },
+  {
+   "option": "scale.steps",
+   "status": "ignored",
+   "verdicts": {
+    "SILENT": 1,
+    "oracle-unchanged": 2
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "findings",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-scales/src/lib.rs:417"
+   ]
+  },
+  {
+   "option": "scale.target_intervals",
+   "status": "partly ignored",
+   "verdicts": {
+    "SILENT": 1,
+    "oracle-unchanged": 3,
+    "rewrite-reacted": 2
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "1/1",
+   "flagged_original_change": "decisions/summary",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-scales/src/lib.rs:443"
+   ]
+  },
+  {
+   "option": "scale.unit_position",
+   "status": "ignored",
+   "verdicts": {
+    "SILENT": 2,
+    "oracle-unchanged": 7
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "findings",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "scale.zero",
+   "status": "ignored",
+   "verdicts": {
+    "SILENT": 1,
+    "oracle-unchanged": 3,
+    "rewrite-blocked": 2
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "decisions/summary",
+   "rust_pointer_refs": [
+    "crates/chartgen-policy/src/lib.rs:183",
+    "crates/chartgen-policy/src/lib.rs:635"
+   ],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:767",
+    "crates/chartgen-data/src/lib.rs:865",
+    "crates/chartgen-data/src/lib.rs:944"
+   ]
+  },
+  {
+   "option": "source",
+   "status": "no evidence",
+   "verdicts": {
+    "oracle-unchanged": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [
+    "src/lib.rs:117",
+    "src/lib.rs:252"
+   ],
+   "rust_key_refs": []
+  },
+  {
+   "option": "source.book",
+   "status": "no evidence",
+   "verdicts": {
+    "oracle-unchanged": 6
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "source.notes",
+   "status": "no evidence",
+   "verdicts": {
+    "oracle-unchanged": 6
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-layout/src/lib.rs:169",
+    "crates/chartgen-layout/src/lib.rs:183",
+    "crates/chartgen-layout/src/lib.rs:186"
+   ]
+  },
+  {
+   "option": "source.shows",
+   "status": "no evidence",
+   "verdicts": {
+    "oracle-unchanged": 6
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "source.status",
+   "status": "no evidence",
+   "verdicts": {
+    "oracle-unchanged": 9
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:78",
+    "crates/chartgen-data/src/lib.rs:79",
+    "crates/chartgen-data/src/schema.rs:579"
+   ]
+  },
+  {
+   "option": "table",
+   "status": "ignored",
+   "verdicts": {
+    "SILENT": 1,
+    "rewrite-blocked": 2
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "output",
+   "rust_pointer_refs": [
+    "crates/chartgen-data/src/schema.rs:467",
+    "crates/chartgen-data/src/schema.rs:495",
+    "crates/chartgen-data/src/schema.rs:603"
+   ],
+   "rust_key_refs": [
+    "crates/chartgen-layout/src/families/matrix.rs:555",
+    "crates/chartgen-model/src/lib.rs:175",
+    "crates/chartgen-model/src/lib.rs:200"
+   ]
+  },
+  {
+   "option": "table.bold",
+   "status": "refusal missed",
+   "verdicts": {
+    "SILENT": 3,
+    "oracle-unchanged": 3,
+    "rewrite-blocked": 3
+   },
+   "refusal_missed": 3,
+   "refusals_agree": "",
+   "flagged_original_change": "status",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-layout/src/guides.rs:47",
+    "crates/chartgen-layout/src/guides.rs:87",
+    "crates/chartgen-render/src/lib.rs:49"
+   ]
+  },
+  {
+   "option": "table.graphics",
+   "status": "refusal missed",
+   "verdicts": {
+    "rewrite-diagnosed": 2,
+    "rewrite-reacted": 13
+   },
+   "refusal_missed": 2,
+   "refusals_agree": "0/2",
+   "flagged_original_change": "status",
+   "rust_pointer_refs": [
+    "crates/chartgen-layout/src/families/matrix.rs:340",
+    "crates/chartgen-layout/src/families/matrix.rs:365"
+   ],
+   "rust_key_refs": []
+  },
+  {
+   "option": "table.graphics_columns",
+   "status": "no evidence",
+   "verdicts": {
+    "oracle-unchanged": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [
+    "crates/chartgen-data/src/schema.rs:495"
+   ],
+   "rust_key_refs": []
+  },
+  {
+   "option": "table.legend",
+   "status": "ignored",
+   "verdicts": {
+    "SILENT": 2,
+    "oracle-unchanged": 4
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "output",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "table.names_title",
+   "status": "ignored",
+   "verdicts": {
+    "SILENT": 2,
+    "rewrite-blocked": 4
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "output",
+   "rust_pointer_refs": [
+    "crates/chartgen-data/src/schema.rs:603"
+   ],
+   "rust_key_refs": [
+    "crates/chartgen-note-layout/src/lib.rs:16"
+   ]
+  },
+  {
+   "option": "table.row_key",
+   "status": "no evidence",
+   "verdicts": {
+    "oracle-unchanged": 21
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "table.stripes",
+   "status": "diagnosed",
+   "verdicts": {
+    "oracle-unchanged": 1,
+    "rewrite-blocked": 1,
+    "rewrite-diagnosed": 1
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [
+    "crates/chartgen-layout/src/families/matrix.rs:336"
+   ],
+   "rust_key_refs": []
+  },
+  {
+   "option": "table.stub",
+   "status": "ignored",
+   "verdicts": {
+    "SILENT": 1,
+    "rewrite-blocked": 2
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "output",
+   "rust_pointer_refs": [
+    "crates/chartgen-data/src/schema.rs:467",
+    "crates/chartgen-data/src/schema.rs:619"
+   ],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/schema.rs:579",
+    "crates/chartgen-data/src/schema.rs:589",
+    "crates/chartgen-data/src/schema.rs:618"
+   ]
+  },
+  {
+   "option": "table.stub[].kind",
+   "status": "partly ignored",
+   "verdicts": {
+    "SILENT": 2,
+    "oracle-unchanged": 1,
+    "rewrite-blocked": 2,
+    "rewrite-reacted": 1
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "1/1",
+   "flagged_original_change": "findings",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:280",
+    "crates/chartgen-data/src/lib.rs:412",
+    "crates/chartgen-data/src/lib.rs:416"
+   ]
+  },
+  {
+   "option": "table.stub[].title",
+   "status": "ignored",
+   "verdicts": {
+    "SILENT": 2,
+    "rewrite-blocked": 4
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "output",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/schema.rs:599",
+    "crates/chartgen-layout/src/comments.rs:349",
+    "crates/chartgen-layout/src/families/circular.rs:160"
+   ]
+  },
+  {
+   "option": "table.stub[].values",
+   "status": "refusal missed",
+   "verdicts": {
+    "SILENT": 1,
+    "rewrite-blocked": 2
+   },
+   "refusal_missed": 1,
+   "refusals_agree": "",
+   "flagged_original_change": "status",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:284",
+    "crates/chartgen-data/src/lib.rs:422",
+    "crates/chartgen-data/src/lib.rs:463"
+   ]
+  },
+  {
+   "option": "title",
+   "status": "refusal missed",
+   "verdicts": {
+    "rewrite-reacted": 3
+   },
+   "refusal_missed": 3,
+   "refusals_agree": "0/3",
+   "flagged_original_change": "status",
+   "rust_pointer_refs": [
+    "crates/chartgen-data/src/schema.rs:553",
+    "crates/chartgen-data/src/schema.rs:556",
+    "crates/chartgen-data/src/schema.rs:599"
+   ],
+   "rust_key_refs": [
+    "crates/chartgen-layout/src/comments.rs:349",
+    "crates/chartgen-layout/src/families/circular.rs:160",
+    "crates/chartgen-layout/src/families/circular.rs:163"
+   ]
+  },
+  {
+   "option": "title.descriptive",
+   "status": "refusals agree",
+   "verdicts": {
+    "rewrite-blocked": 2,
+    "rewrite-reacted": 4
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "3/3",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [
+    "crates/chartgen-data/src/schema.rs:600",
+    "crates/chartgen-scene/src/lib.rs:244"
+   ],
+   "rust_key_refs": [
+    "crates/chartgen-layout/src/families/circular.rs:167",
+    "crates/chartgen-layout/src/families/matrix.rs:162",
+    "crates/chartgen-layout/src/guides.rs:289"
+   ]
+  },
+  {
+   "option": "title.kind",
+   "status": "refusals agree",
+   "verdicts": {
+    "oracle-unchanged": 3,
+    "rewrite-reacted": 6
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "6/6",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:280",
+    "crates/chartgen-data/src/lib.rs:412",
+    "crates/chartgen-data/src/lib.rs:416"
+   ]
+  },
+  {
+   "option": "title.link",
+   "status": "responds",
+   "verdicts": {
+    "rewrite-reacted": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [
+    "crates/chartgen-data/src/schema.rs:553",
+    "crates/chartgen-data/src/schema.rs:556",
+    "crates/chartgen-layout/src/comments.rs:18"
+   ],
+   "rust_key_refs": []
+  },
+  {
+   "option": "title.link.category",
+   "status": "responds",
+   "verdicts": {
+    "rewrite-diagnosed": 3,
+    "rewrite-reacted": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/schema.rs:248",
+    "crates/chartgen-data/src/schema.rs:583",
+    "crates/chartgen-data/src/schema.rs:592"
+   ]
+  },
+  {
+   "option": "title.link.panel",
+   "status": "responds",
+   "verdicts": {
+    "rewrite-diagnosed": 2,
+    "rewrite-reacted": 1
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-panel-layout/src/lib.rs:348",
+    "crates/chartgen-panels/src/lib.rs:546",
+    "crates/chartgen-panels/src/lib.rs:558"
+   ]
+  },
+  {
+   "option": "title.link.series",
+   "status": "responds",
+   "verdicts": {
+    "rewrite-diagnosed": 3,
+    "rewrite-reacted": 1
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:303",
+    "crates/chartgen-data/src/lib.rs:341",
+    "crates/chartgen-data/src/lib.rs:638"
+   ]
+  },
+  {
+   "option": "title.link.x",
+   "status": "responds",
+   "verdicts": {
+    "rewrite-diagnosed": 2,
+    "rewrite-reacted": 1
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "title.text",
+   "status": "refusals agree",
+   "verdicts": {
+    "rewrite-reacted": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "1/1",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [
+    "crates/chartgen-data/src/schema.rs:599",
+    "crates/chartgen-scene/src/lib.rs:234"
+   ],
+   "rust_key_refs": [
+    "crates/chartgen-colours/src/lib.rs:202",
+    "crates/chartgen-data/src/schema.rs:565",
+    "crates/chartgen-data/src/schema.rs:570"
+   ]
+  },
+  {
+   "option": "transform",
+   "status": "responds",
+   "verdicts": {
+    "rewrite-reacted": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "1/2",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [
+    "crates/chartgen-data/src/lib.rs:654",
+    "crates/chartgen-policy/src/lib.rs:471",
+    "crates/chartgen-policy/src/lib.rs:472"
+   ],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:660",
+    "crates/chartgen-data/src/lib.rs:716",
+    "crates/chartgen-data/src/lib.rs:823"
+   ]
+  },
+  {
+   "option": "transform.at",
+   "status": "responds",
+   "verdicts": {
+    "oracle-unchanged": 2,
+    "rewrite-diagnosed": 1,
+    "rewrite-reacted": 2
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "transform.base",
+   "status": "refusals agree",
+   "verdicts": {
+    "rewrite-diagnosed": 3,
+    "rewrite-reacted": 4
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "1/1",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:876",
+    "crates/chartgen-data/src/lib.rs:879"
+   ]
+  },
+  {
+   "option": "transform.comparison",
+   "status": "refusals agree",
+   "verdicts": {
+    "rewrite-reacted": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "3/3",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [
+    "crates/chartgen-policy/src/lib.rs:472"
+   ],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:670",
+    "crates/chartgen-data/src/lib.rs:772",
+    "crates/chartgen-layout/src/lib.rs:1190"
+   ]
+  },
+  {
+   "option": "transform.exposure",
+   "status": "refusals agree",
+   "verdicts": {
+    "rewrite-reacted": 1
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "1/1",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:798",
+    "crates/chartgen-data/src/lib.rs:846"
+   ]
+  },
+  {
+   "option": "transform.exposure.noun",
+   "status": "partly ignored",
+   "verdicts": {
+    "SILENT": 1,
+    "rewrite-reacted": 2
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "0/1",
+   "flagged_original_change": "output",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:239",
+    "crates/chartgen-data/src/lib.rs:792",
+    "crates/chartgen-data/src/lib.rs:794"
+   ]
+  },
+  {
+   "option": "transform.exposure.values",
+   "status": "not probed",
+   "verdicts": {},
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:284",
+    "crates/chartgen-data/src/lib.rs:422",
+    "crates/chartgen-data/src/lib.rs:463"
+   ]
+  },
+  {
+   "option": "transform.kind",
+   "status": "responds",
+   "verdicts": {
+    "rewrite-reacted": 6
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "3/4",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [
+    "crates/chartgen-policy/src/lib.rs:471"
+   ],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:280",
+    "crates/chartgen-data/src/lib.rs:412",
+    "crates/chartgen-data/src/lib.rs:416"
+   ]
+  },
+  {
+   "option": "transform.name",
+   "status": "refusals agree",
+   "verdicts": {
+    "rewrite-reacted": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "1/1",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-colours/src/lib.rs:123",
+    "crates/chartgen-data/src/lib.rs:373",
+    "crates/chartgen-data/src/lib.rs:375"
+   ]
+  },
+  {
+   "option": "transform.per",
+   "status": "responds",
+   "verdicts": {
+    "rewrite-reacted": 4
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "0/1",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "transform.relative",
+   "status": "responds",
+   "verdicts": {
+    "rewrite-reacted": 4
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "2/3",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:690"
+   ]
+  },
+  {
+   "option": "transform.unit",
+   "status": "ignored",
+   "verdicts": {
+    "SILENT": 1
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "output",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:315",
+    "crates/chartgen-data/src/lib.rs:316",
+    "crates/chartgen-data/src/lib.rs:319"
+   ]
+  },
+  {
+   "option": "transform.unit.fallback",
+   "status": "responds",
+   "verdicts": {
+    "rewrite-reacted": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "0/2",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-format/src/lib.rs:164"
+   ]
+  },
+  {
+   "option": "transform.unit.given_in",
+   "status": "responds",
+   "verdicts": {
+    "rewrite-reacted": 12
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "4/8",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:227",
+    "crates/chartgen-format/src/lib.rs:147"
+   ]
+  },
+  {
+   "option": "transform.unit.magnitude",
+   "status": "not probed",
+   "verdicts": {},
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:232",
+    "crates/chartgen-data/src/lib.rs:794",
+    "crates/chartgen-data/src/schema.rs:666"
+   ]
+  },
+  {
+   "option": "transform.unit.noun",
+   "status": "responds",
+   "verdicts": {
+    "rewrite-reacted": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "0/1",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:239",
+    "crates/chartgen-data/src/lib.rs:792",
+    "crates/chartgen-data/src/lib.rs:794"
+   ]
+  },
+  {
+   "option": "transform.unit.prefix",
+   "status": "partly ignored",
+   "verdicts": {
+    "SILENT": 2,
+    "rewrite-reacted": 2
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "0/1",
+   "flagged_original_change": "output",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:236",
+    "crates/chartgen-data/src/lib.rs:794",
+    "crates/chartgen-data/src/lib.rs:857"
+   ]
+  },
+  {
+   "option": "transform.unit.scale_title",
+   "status": "responds",
+   "verdicts": {
+    "rewrite-reacted": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "0/2",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-format/src/lib.rs:165"
+   ]
+  },
+  {
+   "option": "transform.unit.suffix",
+   "status": "responds",
+   "verdicts": {
+    "rewrite-reacted": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "0/1",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:237",
+    "crates/chartgen-data/src/lib.rs:792",
+    "crates/chartgen-data/src/lib.rs:794"
+   ]
+  },
+  {
+   "option": "transform.unit.what",
+   "status": "partly ignored",
+   "verdicts": {
+    "SILENT": 1,
+    "rewrite-reacted": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "1/2",
+   "flagged_original_change": "output",
+   "rust_pointer_refs": [],
+   "rust_key_refs": [
+    "crates/chartgen-data/src/lib.rs:834",
+    "crates/chartgen-data/src/lib.rs:924",
+    "crates/chartgen-data/src/lib.rs:941"
+   ]
+  },
+  {
+   "option": "data value: estimate",
+   "status": "no evidence",
+   "verdicts": {
+    "oracle-unchanged": 7,
+    "rewrite-blocked": 1
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "data value: incomplete",
+   "status": "diagnosed",
+   "verdicts": {
+    "oracle-unchanged": 6,
+    "rewrite-blocked": 1,
+    "rewrite-diagnosed": 1
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "data value: missing-null",
+   "status": "refusals agree",
+   "verdicts": {
+    "rewrite-blocked": 2,
+    "rewrite-diagnosed": 3,
+    "rewrite-reacted": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "2/2",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "data value: noted",
+   "status": "diagnosed",
+   "verdicts": {
+    "rewrite-blocked": 2,
+    "rewrite-diagnosed": 6
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "data value: pending",
+   "status": "refusals agree",
+   "verdicts": {
+    "rewrite-blocked": 2,
+    "rewrite-diagnosed": 3,
+    "rewrite-reacted": 3
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "2/2",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "data value: projection",
+   "status": "no evidence",
+   "verdicts": {
+    "oracle-unchanged": 7,
+    "rewrite-blocked": 1
+   },
+   "refusal_missed": 0,
+   "refusals_agree": "",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  },
+  {
+   "option": "data value: zero",
+   "status": "refusal missed",
+   "verdicts": {
+    "rewrite-blocked": 3,
+    "rewrite-diagnosed": 1,
+    "rewrite-reacted": 4
+   },
+   "refusal_missed": 1,
+   "refusals_agree": "1/3",
+   "flagged_original_change": "",
+   "rust_pointer_refs": [],
+   "rust_key_refs": []
+  }
+ ]
+}

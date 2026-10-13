@@ -1,0 +1,40 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p3-09-donations-highlight-west",
+    "job": {"kind": "answer", "text": "What fraction of the year's donations came from the West?"},
+    "insight": {"important": "The West gave about a quarter of all donations",
+                "targets": [{"category": "West"}]},
+    "title": {"text": "The West Gave About a Quarter of All Donations", "kind": "insight",
+              "descriptive": "Donations by Region, 2022"},
+    "data": {
+      "x": {"kind": "nominal", "values": ["West", "Int'l", "North", "East", "South", "Central"]},
+      "measure": {"name": "donations", "kind": "amount", "zero": "meaningful", "min": 0,
+                  "unit": {"prefix": "$", "magnitude": 3, "noun": "in donations"}},
+      "series": [{"id": "donations", "name": "Donations", "values": [428, 445, 142, 0, 299, 288]}],
+      "parts": {"meaningful_total": true, "all_parts": true, "overlap": false}
+    },
+    "facts": {"message": "fraction_of_total"},
+    "chart": {"type": "pie"},
+    "highlight": [{"targets": [{"category": "West"}], "dim_others": true}],
+    "reasons": {"highlight[0].dim_others": "the book's darker slice with the others paled (s. 0268)"},
+    "source": {"book": "p. 293–294 (s. 0267–0268)", "notes": "07 #15",
+               "shows": "one slice highlighted by a darker shade of its own colour, the others paled (G7.30, G4.26); a slice is never pulled out"}
+  },
+  "variants": [
+    {"name": "border",
+     "patch": {"highlight": [{"targets": [{"category": "West"}], "method": "border", "dim_others": false}],
+               "reasons": {"highlight[0].method": "the book's bordered slice (s. 0268)"},
+               "source": {"shows": "the slice highlighted by a border in the strong shade of its colour, kept inside the slice so that its size is unchanged (G7.30, G7.26: borders are kept for highlighting)"}},
+     "expect": {}},
+    {"name": "exploded",
+     "patch": {"highlight": [{"targets": [{"category": "West"}], "method": "explode", "dim_others": false}],
+               "source": {"shows": "the slice pulled out of the pie: refused, since separating it makes it harder to compare with the others and with the whole (R7-38, G7.30)"}},
+     "expect": {"refused": ["R7-38"]}},
+    {"name": "exploded-overridden",
+     "patch": {"highlight": [{"targets": [{"category": "West"}], "method": "explode", "dim_others": false}],
+               "overrides": [{"rule": "R7-38", "reason": "the book's exploded slice, rebuilt for comparison (s. 0267)"}],
+               "source": {"shows": "the exploded slice drawn through an override: the slice a tenth of the radius out along its middle ray, its label with it"}},
+     "expect": {"refused": ["R7-38"]}}
+  ]
+}

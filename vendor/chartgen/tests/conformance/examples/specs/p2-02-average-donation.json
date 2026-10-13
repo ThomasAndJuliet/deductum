@@ -1,0 +1,89 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p2-02-average-donation",
+    "job": {
+      "kind": "lookup",
+      "text": "Look up the average donation in each region"
+    },
+    "title": {
+      "text": "Average Donation Amount by Region, 2022",
+      "kind": "descriptive"
+    },
+    "data": {
+      "x": {
+        "kind": "nominal",
+        "values": [
+          "East",
+          "North",
+          "West",
+          "Central"
+        ]
+      },
+      "measure": {
+        "name": "average donation",
+        "kind": "amount",
+        "zero": "meaningful",
+        "min": 0,
+        "unit": {
+          "prefix": "$",
+          "noun": "average donation amount"
+        }
+      },
+      "series": [
+        {
+          "id": "avg",
+          "name": "Average donation",
+          "values": [
+            53.7,
+            42.2,
+            39.5,
+            16.7
+          ]
+        }
+      ]
+    },
+    "source": {
+      "book": "p. 93 (s. 0089)",
+      "notes": "02 #16",
+      "shows": "four values against a scale of seven labels (0–60 by 10): the values labelled directly and the scale and its gridlines removed, the zero line kept (G2.18); the labels formatted as a set, “$54” to “$17”, the fewest digits that tell them apart (the book writes cents, “$53.70”); outside the bars, since neither the text grey nor white reads on the muted blue (G7.4); the unit's words on their own line"
+    }
+  },
+  "variants": [
+    {
+      "name": "scale",
+      "patch": {
+        "chart": {
+          "value_labels": "off"
+        },
+        "source": {
+          "shows": "the book's first version, the scale kept: seven numbers where four would do, a guided finding (G2.18)"
+        }
+      },
+      "expect": {
+        "findings": [
+          "R2-32"
+        ]
+      }
+    },
+    {
+      "name": "horizontal",
+      "patch": {
+        "chart": {
+          "orientation": "horizontal"
+        },
+        "reasons": {
+          "chart.orientation": "to show value labels beside horizontal bars"
+        },
+        "source": {
+          "shows": "turned: each label just past its bar's end"
+        }
+      },
+      "expect": {
+        "findings": [
+          "R9-10"
+        ]
+      }
+    }
+  ]
+}

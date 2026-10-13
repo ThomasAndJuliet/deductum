@@ -1,0 +1,234 @@
+{
+ "key": "p2-08-expenses-budget-monthly--lines",
+ "file": "p2-08-expenses-budget-monthly.json",
+ "variant": "lines",
+ "requested_type": "auto",
+ "report": {
+  "chart": "p2-08-expenses-budget-monthly",
+  "style": "plain",
+  "variant": "lines",
+  "type": "line",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "R6-4",
+    "level": "guided",
+    "text": "type line: a regular series whose pattern of change is the point (06 DP6-1, G1.51)",
+    "guide": []
+   },
+   {
+    "rule": "R2-22",
+    "level": "locked",
+    "text": "zero included (a narrow range far from zero wants an inset)",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "scale 0–120 by 20",
+    "guide": []
+   },
+   {
+    "rule": "R6-32",
+    "level": "locked",
+    "text": "each line labelled at its end, in the text grey, none moved",
+    "guide": []
+   },
+   {
+    "rule": "R6-27",
+    "level": "locked",
+    "text": "no point markers: no value is isolated and no straight run hides one",
+    "guide": []
+   },
+   {
+    "rule": "R6-24",
+    "level": "locked",
+    "text": "dotted only where the values are of lower certainty: Budget throughout",
+    "guide": []
+   },
+   {
+    "rule": "R6-33",
+    "level": "locked",
+    "text": "a projection continues its line dotted, in its colour, from the last actual value; the label at its end",
+    "guide": []
+   },
+   {
+    "rule": "R6-34",
+    "level": "locked",
+    "text": "reference series in the reserved dark grey, labelled in bold: Budget",
+    "guide": []
+   },
+   {
+    "rule": "R2-07",
+    "level": "locked",
+    "text": "the unit phrase on the top label: “$120K (expenses per month)”; the top gridline starts after it",
+    "guide": []
+   },
+   {
+    "rule": "R2-21",
+    "level": "locked",
+    "text": "labels as a set, 0 decimals: 0, 20, 40, 60, 80, 100, $120K",
+    "guide": []
+   },
+   {
+    "rule": "R5-10",
+    "level": "locked",
+    "text": "digits hidden: thousands, stated once on the top label (R2-05, D-3): “$120K (expenses per month)”",
+    "guide": []
+   },
+   {
+    "rule": "R2-40",
+    "level": "locked",
+    "text": "time axis: row 1 full",
+    "guide": []
+   },
+   {
+    "rule": "R2-39",
+    "level": "locked",
+    "text": "time axis: row 2 (“2022”) left out, the title gives it (G2.37)",
+    "guide": []
+   }
+  ],
+  "findings": [],
+  "overrides": [],
+  "expect": {},
+  "expect_met": true,
+  "source": {
+   "book": "p. 351 (s. 0319)",
+   "notes": "08-12 #11",
+   "shows": "the book's “only lines” version for the pattern of change: the expenses a line, the budget a target, dotted in the reserved grey (D-21 (c))",
+   "status": "generated"
+  },
+  "summary": {
+   "scale": "0–120 by 20",
+   "labels": [
+    "0",
+    "20",
+    "40",
+    "60",
+    "80",
+    "100",
+    "$120K"
+   ],
+   "top": "$120K (expenses per month)",
+   "scale_title": null,
+   "orientation": "vertical",
+   "plot": [
+    29.0,
+    21.0,
+    325.25,
+    198.75
+   ],
+   "slot": 25.54,
+   "labelling": "direct",
+   "label_shifts": {
+    "expenses": 0.0,
+    "budget": 0.0
+   },
+   "leaders": [],
+   "markers": [],
+   "colours": {
+    "expenses": "single",
+    "budget": "reference"
+   },
+   "width": 368.0,
+   "height": 216.64,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job lookup: no insight stated (a descriptive title will do, D-55)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-1",
+    "level": "guided",
+    "text": "a graph, the values to be compared or a pattern seen (G1.11)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 2,
+    "name": "variables",
+    "rule": "RP3-2",
+    "level": "guided",
+    "text": "one plot: time along x and 1 series; a further variable would go to small multiples (data.dims, G1.18)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 3,
+    "name": "location",
+    "rule": "R8-2",
+    "level": "guided",
+    "text": "not a map: where the values are is not the message (facts.location_matters; G1.24, G1.25)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-01",
+    "level": "guided",
+    "text": "not parts of a total (no data.parts, no breakdown message; G1.1)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 6,
+    "name": "values over time",
+    "rule": "R6-13",
+    "level": "guided",
+    "text": "group: data over time. A series of more than two periods, not a breakdown and not tied to places (G1.48)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 6,
+    "name": "values over time",
+    "rule": "R6-3",
+    "level": "locked",
+    "text": "a regular series, enough values known (06 DP6-2)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 6,
+    "name": "values over time",
+    "rule": "R6-4",
+    "level": "guided",
+    "text": "a regular series whose pattern of change is the point (06 DP6-1, G1.51)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-3",
+    "level": "guided",
+    "text": "Budget: a reference, drawn as another mark, a flat marker across each bar or a line, on the same scale (G1.60)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "line charts are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "data over time"
+   }
+  ],
+  "copies": []
+ },
+ "output_sha256": "22a4dbbf66767536258559fc424784f1f88709e0de91f63e90369aa81942b2c1"
+}

@@ -1,0 +1,13 @@
+[package]
+name = "chartgen-luatex"
+version.workspace = true
+edition.workspace = true
+publish = false
+description = "LuaTeX module running chartgen inside a LuaLaTeX document (chartgen.sty's in-process route)"
+
+[lib]
+name = "chartgen_luatex"
+crate-type = ["cdylib"]
+
+[dependencies]
+chartgen-tex = { path = "../chartgen-tex" }

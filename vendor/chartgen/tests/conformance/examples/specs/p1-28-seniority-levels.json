@@ -1,0 +1,115 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p1-28-seniority-levels",
+    "purpose": "communication",
+    "job": {
+      "kind": "lookup",
+      "text": "Compare how the four companies' employees spread across the seniority levels"
+    },
+    "title": {
+      "text": "Employees by Level of Seniority in Four Companies",
+      "kind": "descriptive"
+    },
+    "audience": {
+      "data_savvy": true
+    },
+    "data": {
+      "x": {
+        "kind": "ordinal",
+        "values": [
+          "Temps/Interns",
+          "Junior",
+          "Senior",
+          "Manager",
+          "Executive"
+        ]
+      },
+      "measure": {
+        "name": "share of employees",
+        "kind": "percent",
+        "zero": "meaningful",
+        "min": 0,
+        "max": 100,
+        "unit": {
+          "noun": "of employees in company"
+        }
+      },
+      "series": [
+        {
+          "id": "a",
+          "name": "Company A",
+          "values": [
+            12,
+            33,
+            22,
+            17,
+            16
+          ]
+        },
+        {
+          "id": "b",
+          "name": "Company B",
+          "values": [
+            13,
+            37,
+            31,
+            11,
+            8
+          ]
+        },
+        {
+          "id": "c",
+          "name": "Company C",
+          "values": [
+            7,
+            46,
+            32,
+            8,
+            7
+          ]
+        },
+        {
+          "id": "d",
+          "name": "Company D",
+          "values": [
+            19,
+            53,
+            17,
+            8,
+            3
+          ]
+        }
+      ]
+    },
+    "chart": {
+      "type": "line"
+    },
+    "reasons": {
+      "chart.type": "a data-savvy audience comparing the shapes of four distributions over ordered levels (the book's allowed case, p. 228)"
+    },
+    "source": {
+      "book": "p. 226–228 (s. 0209–0210)",
+      "notes": "06 T17 (a)",
+      "shows": "a line across ordered categories, allowed only for a data-savvy audience (G1.58), and then a guided departure from bars, with its reason"
+    }
+  },
+  "variants": [
+    {
+      "name": "general-audience",
+      "patch": {
+        "audience": {
+          "data_savvy": false
+        },
+        "source": {
+          "shows": "the same line for a general audience, who read any line as change over time: refused"
+        }
+      },
+      "expect": {
+        "refused": [
+          "R6-41"
+        ]
+      }
+    }
+  ]
+}

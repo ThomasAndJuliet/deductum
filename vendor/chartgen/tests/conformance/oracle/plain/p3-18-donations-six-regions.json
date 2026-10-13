@@ -1,0 +1,192 @@
+{
+ "key": "p3-18-donations-six-regions",
+ "file": "p3-18-donations-six-regions.json",
+ "variant": null,
+ "requested_type": "auto",
+ "report": {
+  "chart": "p3-18-donations-six-regions",
+  "style": "plain",
+  "variant": null,
+  "type": "pie",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "R7-07",
+    "level": "guided",
+    "text": "type pie: fractions of the total are the message: a pie, which shows ½, ⅓ and ¼ at a glance and announces the whole (G1.36)",
+    "guide": []
+   },
+   {
+    "rule": "R7-35",
+    "level": "guided",
+    "text": "slices largest first, clockwise from 12 o'clock: Southeast, Northwest, Southwest, Midwest, Mid-Atlantic, West",
+    "guide": []
+   },
+   {
+    "rule": "R7-32",
+    "level": "locked",
+    "text": "each slice its own colour, handed out in slice order (D-22 (a)): Southeast series-1, Northwest series-2, Southwest series-3, Midwest series-4, Mid-Atlantic series-5, West series-6",
+    "guide": []
+   },
+   {
+    "rule": "R7-34",
+    "level": "locked",
+    "text": "each slice named outside it, its value under the name, formatted as one set (G7.27, D-51 (ii)): $288K, $279K, $248K, $220K, $188K, $69K",
+    "guide": []
+   },
+   {
+    "rule": "R7-33",
+    "level": "locked",
+    "text": "no outlines: true gaps 1.0 pt wide between the slices (G7.26s: 0.7 % of the diameter)",
+    "guide": []
+   }
+  ],
+  "findings": [],
+  "overrides": [],
+  "expect": {},
+  "expect_met": true,
+  "source": {
+   "book": "p. 123 (s. 0114)",
+   "notes": "03-04 #6",
+   "shows": "the regions as unordered parts, so a categorical palette, a hue each, where the book's bad version shades them in one blue at random and the darker slices seem to hold more of something (G4.6, G4.8 [L]); six parts, a pie's comfortable most (D-23), the sixth in the palette's purple; the values hidden to thousands as one set, $288K for $287,735 (R5-10, G6.12). The bad version cannot be asked for: colours are the style's and the parts' kind the data's",
+   "status": "generated"
+  },
+  "summary": {
+   "kind": "pie",
+   "pies": 1,
+   "radius": 73.6,
+   "centres": [
+    [
+     184.0,
+     123.59
+    ]
+   ],
+   "order": [
+    "Southeast",
+    "Northwest",
+    "Southwest",
+    "Midwest",
+    "Mid-Atlantic",
+    "West"
+   ],
+   "labels": "value",
+   "leaders": [],
+   "width": 368.0,
+   "height": 227.97,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job lookup: no insight stated (a descriptive title will do, D-55)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-1",
+    "level": "guided",
+    "text": "a graph, the values to be compared or a pattern seen (G1.11)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 2,
+    "name": "variables",
+    "rule": "RP3-2",
+    "level": "guided",
+    "text": "one plot: categories along x and 1 series; a further variable would go to small multiples (data.dims, G1.18)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 3,
+    "name": "location",
+    "rule": "R8-2",
+    "level": "guided",
+    "text": "not a map: where the values are is not the message (facts.location_matters; G1.24, G1.25)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "RP2-7",
+    "level": "guided",
+    "text": "group: breakdowns of totals. One total of 6 parts (07 §4.1, G1.8)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-02",
+    "level": "locked",
+    "text": "check, meaningful total: passes: the values add up to a total someone would quote (parts.meaningful_total)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-03",
+    "level": "locked",
+    "text": "check, all parts: passes: every part of the total is shown (parts.all_parts)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-05",
+    "level": "locked",
+    "text": "check, overlap: passes: no part contains or overlaps another (parts.overlap)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-04",
+    "level": "locked",
+    "text": "check, signs: passes: the parts are all of one sign",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-07",
+    "level": "guided",
+    "text": "fractions of the total are the message: a pie, which shows ½, ⅓ and ¼ at a glance and announces the whole (G1.36)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type (G1.59)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "pies are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   }
+  ],
+  "copies": []
+ },
+ "output_sha256": "f12b5cd43a629f010d72aee12c6c00b28eab6aabe6645bb0ebcb5759bfba03f7"
+}

@@ -1,0 +1,15 @@
+[package]
+name = "chartgen-note-layout"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+chartgen-model.workspace = true
+chartgen-layout = { path = "../chartgen-layout" }
+chartgen-notes = { path = "../chartgen-notes" }
+chartgen-format = { path = "../chartgen-format" }
+chartgen-style.workspace = true
+serde_json.workspace = true
+chrono = { version = "0.4", default-features = false, features = ["std"] }
+

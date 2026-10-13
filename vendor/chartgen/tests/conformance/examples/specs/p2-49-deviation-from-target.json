@@ -1,0 +1,104 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p2-49-deviation-from-target",
+    "job": {
+      "kind": "answer",
+      "text": "Which region beat its donation target by the most?"
+    },
+    "insight": {
+      "important": "Central beat its target by the most, by about $21K"
+    },
+    "title": {
+      "text": "Central Beat Its Donation Target by the Most",
+      "kind": "insight",
+      "descriptive": "Deviation from Target Donations by Region, 2022"
+    },
+    "data": {
+      "x": {
+        "kind": "nominal",
+        "values": [
+          "South",
+          "West",
+          "Central",
+          "East",
+          "North"
+        ]
+      },
+      "measure": {
+        "name": "donations",
+        "kind": "amount",
+        "zero": "meaningful",
+        "min": 0,
+        "unit": {
+          "prefix": "$",
+          "magnitude": 3,
+          "noun": "in donations"
+        }
+      },
+      "series": [
+        {
+          "id": "actual",
+          "name": "Actual donations",
+          "values": [
+            471,
+            286,
+            281,
+            265,
+            151
+          ]
+        }
+      ],
+      "comparisons": [
+        {
+          "id": "target",
+          "kind": "target",
+          "label": "Target",
+          "values": [
+            458,
+            284.5,
+            260,
+            250,
+            136
+          ]
+        }
+      ]
+    },
+    "transform": {
+      "kind": "deviation",
+      "comparison": "target"
+    },
+    "comments": [
+      {
+        "text": "Central beat its target by the most",
+        "anchors": [
+          {
+            "category": "Central"
+          }
+        ],
+        "answers": [
+          "important"
+        ]
+      }
+    ],
+    "source": {
+      "book": "p. 410–411 (s. 0376–0377)",
+      "notes": "13-15 F14",
+      "shows": "a deviation: each region's donations minus its target, sorted by the deviation, the unit saying so (“above target”); the comment points at Central (R15-14, G8.16)"
+    }
+  },
+  "variants": [
+    {
+      "name": "raw",
+      "patch": {
+        "transform": null,
+        "title": {
+          "descriptive": "Donations vs. Target by Region, 2022"
+        },
+        "source": {
+          "shows": "the book's first version: raw donations with their targets as marks; which region beat its target by the most is left to the reader's arithmetic (R15-14)"
+        }
+      }
+    }
+  ]
+}

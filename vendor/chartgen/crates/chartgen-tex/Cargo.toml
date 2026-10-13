@@ -1,0 +1,12 @@
+[package]
+name = "chartgen-tex"
+version.workspace = true
+edition.workspace = true
+publish = false
+description = "Charts set inside LaTeX documents: the TeX host adapter shared by chartgen.sty's routes"
+
+[dependencies]
+chartgen.workspace = true
+chartgen-model.workspace = true
+figkit-render = { path = "../figkit-render" }
+serde_json.workspace = true

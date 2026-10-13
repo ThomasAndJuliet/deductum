@@ -1,0 +1,144 @@
+{
+ "key": "p3-78-donations-3d--3d",
+ "file": "p3-78-donations-3d.json",
+ "variant": "3d",
+ "requested_type": "3d",
+ "report": {
+  "chart": "p3-78-donations-3d",
+  "style": "plain",
+  "variant": "3d",
+  "type": null,
+  "status": "refused",
+  "decisions": [],
+  "findings": [
+   {
+    "rule": "R12-7",
+    "severity": "error",
+    "message": "3d charts are on the avoid-list: perspective distorts the values and a z-axis hides the back marks",
+    "path": "chart.type",
+    "supply": "type auto (the flat chart; a third variable as the series of clustered bars, R12-8)",
+    "level": "locked",
+    "guide": [],
+    "title": "no 3-D effects on a 2-D chart"
+   }
+  ],
+  "overrides": [],
+  "expect": {
+   "refused": [
+    "R12-7"
+   ]
+  },
+  "expect_met": true,
+  "source": {
+   "book": "p. 363–364 (s. 0330–0331)",
+   "notes": "08-12 #17",
+   "shows": "the 3-D chart asked for: refused, perspective distorting the values and the front bars hiding the back ones (R12-7, R12-8, G1.61 [L])",
+   "status": "generated"
+  },
+  "summary": {
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job lookup: no insight stated (a descriptive title will do, D-55)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-1",
+    "level": "guided",
+    "text": "a graph, the values to be compared or a pattern seen (G1.11)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 2,
+    "name": "variables",
+    "rule": "RP3-2",
+    "level": "guided",
+    "text": "one plot: categories along x and 4 series; a further variable would go to small multiples (data.dims, G1.18)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 3,
+    "name": "location",
+    "rule": "R8-2",
+    "level": "guided",
+    "text": "not a map: where the values are is not the message (facts.location_matters; G1.24, G1.25)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-01",
+    "level": "guided",
+    "text": "not parts of a total (no data.parts, no breakdown message; G1.1)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 7,
+    "name": "values across categories",
+    "rule": "R9-1",
+    "level": "guided",
+    "text": "group: bar charts. Values compared across categories (G1.9)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 7,
+    "name": "values across categories",
+    "rule": "R9-11",
+    "level": "guided",
+    "text": "4 series of one measure: clustered bars (G1.56); several measures would be a merged chart (data.measures), never a dual axis",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 7,
+    "name": "values across categories",
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "bars from zero (02 D1)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type, the series told apart by colour (G1.59)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "bar charts are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-7",
+    "level": "locked",
+    "guide": [],
+    "text": "chart.type 3d is on the avoid-list: perspective distorts the values and a z-axis hides the back marks; instead, type auto (the flat chart; a third variable as the series of clustered bars, R12-8) (G1.61)"
+   }
+  ],
+  "copies": []
+ }
+}

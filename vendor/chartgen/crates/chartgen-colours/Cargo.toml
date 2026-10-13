@@ -1,0 +1,19 @@
+[package]
+name = "chartgen-colours"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+chartgen-model.workspace = true
+chartgen-colour-space = { path = "../chartgen-colour-space" }
+chartgen-style.workspace = true
+chartgen-geometry.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+chartgen-data = { path = "../chartgen-data" }
+chartgen-panels = { path = "../chartgen-panels" }
+chartgen-policy = { path = "../chartgen-policy" }
+roxmltree = "0.20"

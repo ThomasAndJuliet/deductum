@@ -1,0 +1,58 @@
+{
+  "chartspec": 1,
+  "id": "native-label-test",
+  "job": {
+    "kind": "lookup",
+    "text": "Look up the counts by site"
+  },
+  "title": {
+    "text": {
+      "typst": "Counts by Site ($n = 60$)",
+      "latex": "Counts by Site ($n = 60$)",
+      "alternative": "Counts by Site (n = 60)"
+    },
+    "kind": "descriptive"
+  },
+  "data": {
+    "x": {
+      "kind": "nominal",
+      "values": [
+        "Site A",
+        "Site B",
+        "Site C"
+      ],
+      "names": {
+        "Site B": {
+          "typst": "#smallcaps[Site B]",
+          "latex": "\\textsc{Site B}",
+          "alternative": "Site B"
+        }
+      }
+    },
+    "measure": {
+      "name": "count",
+      "kind": "count",
+      "zero": "meaningful",
+      "min": 0
+    },
+    "series": [
+      {
+        "id": "counts",
+        "name": "Counts",
+        "values": [
+          30,
+          20,
+          10
+        ]
+      }
+    ]
+  },
+  "chart": {
+    "type": "bar",
+    "orientation": "auto",
+    "value_labels": "off"
+  },
+  "layout": {
+    "width": 480
+  }
+}

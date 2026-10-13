@@ -1,0 +1,100 @@
+{
+  "chartspec": 1,
+  "id": "r1-22-donations-target-and-stretch",
+  "job": {
+    "kind": "answer",
+    "text": "Which regions met their donation targets, and did any reach its stretch goal?"
+  },
+  "insight": {
+    "important": "East and South beat their targets; no region reached its stretch goal",
+    "targets": [
+      {
+        "category": "East"
+      },
+      {
+        "category": "South"
+      }
+    ]
+  },
+  "title": {
+    "text": "East and South Beat Their Targets; No Region Reached Its Stretch Goal",
+    "kind": "insight",
+    "descriptive": "Donations by region against target and stretch goal, 2022"
+  },
+  "data": {
+    "x": {
+      "kind": "nominal",
+      "values": [
+        "East",
+        "Central",
+        "South",
+        "West",
+        "North"
+      ]
+    },
+    "measure": {
+      "name": "donations",
+      "kind": "amount",
+      "zero": "meaningful",
+      "min": 0,
+      "good": "higher",
+      "dividing_point": {
+        "comparison": "target"
+      },
+      "unit": {
+        "prefix": "$",
+        "given_in": "thousands",
+        "noun": "in donations"
+      }
+    },
+    "series": [
+      {
+        "id": "donations",
+        "name": "Donations",
+        "values": [
+          520,
+          410,
+          380,
+          290,
+          175
+        ]
+      }
+    ],
+    "comparisons": [
+      {
+        "id": "target",
+        "kind": "target",
+        "label": "Target",
+        "values": [
+          500,
+          450,
+          350,
+          300,
+          200
+        ]
+      },
+      {
+        "id": "stretch",
+        "kind": "target",
+        "label": "Stretch goal",
+        "values": [
+          560,
+          500,
+          400,
+          340,
+          230
+        ]
+      }
+    ]
+  },
+  "facts": {
+    "message": "compare"
+  },
+  "chart": {
+    "type": "auto"
+  },
+  "source": {
+    "notes": "evaluation round 1 (several references)",
+    "shows": "two references across each column, a target and a stretch goal: the first a flat mark, in the dark grey across a good or bad bar, the second a dotted one; the bars green or red by the target; both named once beside the last bar, with leaders (SPEC §6.12.2)"
+  }
+}

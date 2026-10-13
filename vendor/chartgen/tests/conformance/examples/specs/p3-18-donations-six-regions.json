@@ -1,0 +1,68 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p3-18-donations-six-regions",
+    "job": {
+      "kind": "lookup",
+      "text": "Look up what fraction of the year's donations each region gave"
+    },
+    "title": {
+      "text": "Donations by Region, 2022",
+      "kind": "descriptive"
+    },
+    "data": {
+      "x": {
+        "kind": "nominal",
+        "values": [
+          "Southeast",
+          "Northwest",
+          "Southwest",
+          "Midwest",
+          "Mid-Atlantic",
+          "West"
+        ]
+      },
+      "measure": {
+        "name": "donations",
+        "kind": "amount",
+        "zero": "meaningful",
+        "min": 0,
+        "unit": {
+          "prefix": "$",
+          "noun": "in donations"
+        }
+      },
+      "series": [
+        {
+          "id": "donations",
+          "name": "Donations",
+          "values": [
+            287735,
+            278895,
+            247789,
+            220448,
+            187998,
+            68776
+          ]
+        }
+      ],
+      "parts": {
+        "meaningful_total": true,
+        "all_parts": true,
+        "overlap": false
+      }
+    },
+    "facts": {
+      "message": "fraction_of_total"
+    },
+    "chart": {
+      "type": "auto"
+    },
+    "source": {
+      "book": "p. 123 (s. 0114)",
+      "notes": "03-04 #6",
+      "shows": "the regions as unordered parts, so a categorical palette, a hue each, where the book's bad version shades them in one blue at random and the darker slices seem to hold more of something (G4.6, G4.8 [L]); six parts, a pie's comfortable most (D-23), the sixth in the palette's purple; the values hidden to thousands as one set, $288K for $287,735 (R5-10, G6.12). The bad version cannot be asked for: colours are the style's and the parts' kind the data's"
+    }
+  },
+  "variants": []
+}

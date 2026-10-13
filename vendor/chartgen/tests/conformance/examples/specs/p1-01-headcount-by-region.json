@@ -1,0 +1,120 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p1-01-headcount-by-region",
+    "purpose": "communication",
+    "job": {
+      "kind": "lookup",
+      "text": "Look up each region's headcount in January 2022"
+    },
+    "title": {
+      "text": "Headcount by Region, January 2022",
+      "kind": "descriptive"
+    },
+    "data": {
+      "x": {
+        "kind": "nominal",
+        "values": [
+          "East",
+          "Central",
+          "South",
+          "West",
+          "North"
+        ]
+      },
+      "measure": {
+        "name": "headcount",
+        "kind": "count",
+        "zero": "meaningful",
+        "min": 0,
+        "unit": {
+          "what": "max employees during month"
+        }
+      },
+      "series": [
+        {
+          "id": "headcount",
+          "name": "Headcount",
+          "values": [
+            48,
+            41,
+            35,
+            33,
+            29
+          ]
+        }
+      ]
+    },
+    "chart": {
+      "type": "bar",
+      "orientation": "auto",
+      "value_labels": "off"
+    },
+    "reasons": {
+      "chart.value_labels": "the book's figure keeps its scale (p. 49): this example shows the unit on the top label, which value labels would take away"
+    },
+    "source": {
+      "book": "p. 49 (s. 0049)",
+      "notes": "00-01 F1",
+      "shows": "non-data elements pruned: no frame, ticks or axis line; light gridlines under the bars, the zero line one of them; the unit on the top label, in parentheses as a description (D-20), the top gridline starting after it"
+    }
+  },
+  "variants": [
+    {
+      "name": "over-pruned",
+      "patch": {
+        "chart": {
+          "gridlines": false
+        },
+        "overrides": [
+          {
+            "rule": "R1-06",
+            "reason": "the book’s over-pruned version (p. 49, middle), rebuilt for comparison"
+          }
+        ],
+        "source": {
+          "shows": "the book’s over-pruned version: without gridlines the plot area is undefined and values are hard to estimate"
+        }
+      },
+      "expect": {
+        "refused": [
+          "R1-06"
+        ]
+      }
+    },
+    {
+      "name": "no-job",
+      "patch": {
+        "job": null,
+        "source": {
+          "shows": "a spec without its job is refused before anything is drawn"
+        }
+      },
+      "expect": {
+        "refused": [
+          "R0-07"
+        ]
+      }
+    },
+    {
+      "name": "as-answer",
+      "patch": {
+        "job": {
+          "kind": "answer",
+          "text": "How does headcount compare across the regions?"
+        },
+        "insight": {
+          "important": "East has the most employees and North the fewest"
+        },
+        "source": {
+          "shows": "the same chart with a job that answers a question: its descriptive title does not state the insight, so it is refused (G8.2, locked for answer, persuade and make-aware jobs); as a look-up chart (above) it passes"
+        }
+      },
+      "expect": {
+        "refused": [
+          "R0-10"
+        ]
+      }
+    }
+  ]
+}

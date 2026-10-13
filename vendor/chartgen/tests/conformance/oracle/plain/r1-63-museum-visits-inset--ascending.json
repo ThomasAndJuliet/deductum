@@ -1,0 +1,228 @@
+{
+ "key": "r1-63-museum-visits-inset--ascending",
+ "file": "r1-63-museum-visits-inset.json",
+ "variant": "ascending",
+ "requested_type": "auto",
+ "report": {
+  "chart": "r1-63-museum-visits-inset",
+  "style": "plain",
+  "variant": "ascending",
+  "type": "bar",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "type bar: categories compared by value",
+    "guide": []
+   },
+   {
+    "rule": "R2-24",
+    "level": "locked",
+    "text": "bars start at zero",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "scale 0–2,000 by 500",
+    "guide": []
+   },
+   {
+    "rule": "R2-20",
+    "level": "guided",
+    "text": "an outlier inset: Northgate Museum & Art Gallery (1840) dwarfs the others (at most 142.3), and the small values must be compared (facts.small_values_matter); the full scale from zero kept, and Harbour Maritime Museum, Castle Keep & Grounds, Hartley Museum of Textiles, Victoria Mill Engine House, Ropewalk Folk Museum, St Bede's Chapel & Undercroft, Lowfield Tram Depot, Weavers' Cottages and Old Grammar School Gallery re-plotted on their own scale from zero, 0–150 by 50 (G2.26)",
+    "guide": []
+   },
+   {
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "nominal categories sorted by value, ascending",
+    "guide": []
+   },
+   {
+    "rule": "R9-10",
+    "level": "locked",
+    "text": "“Old Grammar School Gallery” and “Weavers' Cottages” come within 10 pt of each other under vertical bars, with every multi-word name wrapped: horizontal bars, names right-aligned at the left",
+    "guide": []
+   },
+   {
+    "rule": "R2-21",
+    "level": "locked",
+    "text": "labels as a set, 0 decimals, bare numbers: 0, 500, 1,000, 1,500, 2,000",
+    "guide": []
+   },
+   {
+    "rule": "R5-10",
+    "level": "locked",
+    "text": "digits hidden: thousands, stated in the scale's title (R2-05, D-3): “Visits counted at the door (thousands)”",
+    "guide": []
+   },
+   {
+    "rule": "R5-26",
+    "level": "guided",
+    "text": "the names' column widened to 150 pt (41% of the width, at most 50%), so that Northgate Museum & Art Gallery stands on one line and fewer wrapped names crowd their neighbours",
+    "guide": []
+   },
+   {
+    "rule": "R2-07",
+    "level": "locked",
+    "text": "a horizontal scale: bare numbers, and its title centred below with the unit in parentheses: “Visits counted at the door (thousands)”",
+    "guide": []
+   }
+  ],
+  "findings": [
+   {
+    "rule": "R2-01",
+    "severity": "info",
+    "message": "chart.sort asc departs from the procedure, which gives desc (nominal categories by value, largest first)",
+    "path": "chart.sort",
+    "reason": "to show where the inset goes when the outlier is the last row (a test)",
+    "level": "guided",
+    "recommended": "desc",
+    "guide": [],
+    "title": "nominal categories sorted by value, largest first"
+   },
+   {
+    "rule": "R2-05",
+    "severity": "info",
+    "message": "scale.magnitude thousands departs from the procedure, which gives millions (digits hidden from five integer digits, by the largest unit needing at most one decimal (R5-10, D-4))",
+    "path": "scale.magnitude",
+    "reason": "the inset's scale is in thousands; the same magnitude on the main scale lets the panel read both scales as one set of numbers",
+    "level": "guided",
+    "recommended": "millions",
+    "guide": [],
+    "title": "large magnitudes stated once, not as trailing zeros"
+   },
+   {
+    "rule": "6.6",
+    "severity": "warn",
+    "message": "the inset is not drawn: no empty area of the plot holds it (at least 217 by 70 pt); on the members' rows, its members are not the last rows, under the outliers; a place below, beside or above the chart (G2.29) is a later stage, so a wider chart (layout.width) is the remedy; the main chart is drawn alone",
+    "path": "inset",
+    "level": "guided",
+    "guide": [],
+    "title": "an inset: a frame round the magnified marks, a larger frame round a complete small chart, two links forming a widening cone, beneath the frames; nothing of the main chart covered"
+   }
+  ],
+  "overrides": [],
+  "expect": {
+   "findings": [
+    "6.6"
+   ]
+  },
+  "expect_met": true,
+  "source": {
+   "shows": "an outlier inset at the text width (eval round 1, B06): no empty area of the plot holds the small chart with its own names, so it stands beside the members' bars, on their rows, sharing the names (the owner's exception for an aligned inset when space is short); wide, at 480 pt, the inset in the plot's empty area with its names repeated; ascending, the members above the outlier: nothing holds the inset, which is not drawn, with a warning",
+   "status": "generated"
+  },
+  "summary": {
+   "scale": "0–2,000 by 500",
+   "labels": [
+    "0",
+    "500",
+    "1,000",
+    "1,500",
+    "2,000"
+   ],
+   "top": "2,000K visits counted at the door",
+   "scale_title": "Visits counted at the door (thousands)",
+   "orientation": "horizontal",
+   "plot": [
+    155.66,
+    21.0,
+    356.61,
+    221.0
+   ],
+   "band": 20.0,
+   "width": 368.0,
+   "height": 248.81,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job other: no insight stated (a descriptive title will do, D-55)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-1",
+    "level": "guided",
+    "text": "a graph, the values to be compared or a pattern seen (G1.11)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 2,
+    "name": "variables",
+    "rule": "RP3-2",
+    "level": "guided",
+    "text": "one plot: categories along x and 1 series; a further variable would go to small multiples (data.dims, G1.18)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 3,
+    "name": "location",
+    "rule": "R8-2",
+    "level": "guided",
+    "text": "not a map: where the values are is not the message (facts.location_matters; G1.24, G1.25)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-01",
+    "level": "guided",
+    "text": "not parts of a total (no data.parts, no breakdown message; G1.1)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 7,
+    "name": "values across categories",
+    "rule": "R9-1",
+    "level": "guided",
+    "text": "group: bar charts. Values compared across categories (G1.9)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 7,
+    "name": "values across categories",
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "one scale from zero: bars, sorted by value when the categories are nominal (02 D1)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type (G1.59)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "bar charts are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "bar charts"
+   }
+  ],
+  "copies": []
+ },
+ "output_sha256": "ec93988d31661dab9629b65aed0654d33a37b54da0af34bd0186e040c1dd6d29"
+}
