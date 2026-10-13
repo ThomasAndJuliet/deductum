@@ -1,0 +1,213 @@
+{
+ "key": "p2-64-orders-by-province--spaghetti",
+ "file": "p2-64-orders-by-province.json",
+ "variant": "spaghetti",
+ "requested_type": "auto",
+ "report": {
+  "chart": "p2-64-orders-by-province",
+  "style": "plain",
+  "variant": "spaghetti",
+  "type": "multiples of line",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "R6-4",
+    "level": "guided",
+    "text": "type line: a regular series whose pattern of change is the point (06 DP6-1, G1.51)",
+    "guide": []
+   },
+   {
+    "rule": "R6-37",
+    "level": "locked",
+    "text": "one shared scale: one scale for every panel, so that sizes compare across panels (G7.48)",
+    "guide": []
+   },
+   {
+    "rule": "R2-25",
+    "level": "locked",
+    "text": "the values are not far from zero compared with their spread",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "scale 0–200 by 50",
+    "guide": []
+   },
+   {
+    "rule": "R4-2",
+    "level": "locked",
+    "text": "a legend instead of end labels: the label of B.C. would move 3.4 line heights from its line (at most 1.5 with a leader) (G5.3, G5.7)",
+    "guide": []
+   },
+   {
+    "rule": "R6-27",
+    "level": "locked",
+    "text": "no point markers: no value is isolated and no straight run hides one",
+    "guide": []
+   },
+   {
+    "rule": "R2-07",
+    "level": "locked",
+    "text": "the unit phrase on the top label: “200 orders per month”; the top gridline starts after it",
+    "guide": []
+   },
+   {
+    "rule": "R2-21",
+    "level": "locked",
+    "text": "labels as a set, 0 decimals: 0, 50, 100, 150, 200",
+    "guide": []
+   },
+   {
+    "rule": "R2-40",
+    "level": "locked",
+    "text": "time axis: row 1 narrow",
+    "guide": []
+   },
+   {
+    "rule": "R2-39",
+    "level": "locked",
+    "text": "time axis: row 2 (“2022”) left out, the title gives it (G2.37)",
+    "guide": []
+   },
+   {
+    "rule": "R4-5",
+    "level": "locked",
+    "text": "legend entries in the order of the lines at the latest point: Ontario, Quebec, B.C., Manitoba, Alberta, Nova Scotia, New Brunswick, Saskatchewan, Newfoundland, N.W.T. & Nunavut, P.E.I., Yukon",
+    "guide": []
+   },
+   {
+    "rule": "R4-7",
+    "level": "locked",
+    "text": "the legend at the right of the plot, beside the latest values, centred on the plot",
+    "guide": []
+   },
+   {
+    "rule": "6.10",
+    "level": "locked",
+    "text": "one panel holding every series",
+    "guide": []
+   }
+  ],
+  "findings": [
+   {
+    "rule": "RP3-3",
+    "severity": "info",
+    "message": "panels.arrangement series in each panel by province or territory departs from the procedure, which gives rows by province or territory (no comparison within a panel is stated (facts.compare): one series per panel, the most panels and the least clutter (13-15 DP-1); 12 panels are stacked in rows (more than 6 across would be too narrow))",
+    "path": "panels.arrangement",
+    "reason": "the book's spaghetti chart: every series in one chart",
+    "level": "guided",
+    "recommended": "rows by province or territory",
+    "guide": [],
+    "title": "the arrangement of small multiples chosen for the insight, from the range of candidates"
+   },
+   {
+    "rule": "RP3-5",
+    "severity": "warn",
+    "message": "12 lines in one chart, crossing 30 times, not labelled directly: a general audience gets fewer series per panel, more panels (G1.20; five lines, D-28, a provisional threshold)",
+    "path": "panels.arrangement",
+    "level": "guided",
+    "guide": [],
+    "title": "no single chart of many overlapping series for a general audience"
+   },
+   {
+    "rule": "R6-35",
+    "severity": "warn",
+    "message": "12 lines crossing 30 times, not labelled directly: more than five lines only if they rarely cross (about once per line) and are labelled directly; else small multiples (G1.20, D-28)",
+    "level": "locked",
+    "guide": [],
+    "title": "at most about five lines, more only if they rarely cross and are labelled directly"
+   },
+   {
+    "rule": "R3-21",
+    "severity": "overridden",
+    "message": "12 regular colours: beyond eight they cannot be told apart; drop, group or merge categories, or label every series directly (G4.19, G4.21, D-14)",
+    "elements": [
+     "path.line[data-series=ontario]",
+     "path.line[data-series=quebec]",
+     "path.line[data-series=bc]",
+     "path.line[data-series=alberta]",
+     "path.line[data-series=manitoba]",
+     "path.line[data-series=saskatchewan]",
+     "path.line[data-series=nova-scotia]",
+     "path.line[data-series=new-brunswick]",
+     "path.line[data-series=newfoundland]",
+     "path.line[data-series=pei]",
+     "path.line[data-series=nwt-nunavut]",
+     "path.line[data-series=yukon]"
+    ],
+    "reason": "the book's spaghetti chart (s. 0202, right), rebuilt: twelve colours",
+    "level": "locked",
+    "guide": [],
+    "title": "at most eight regular colours"
+   },
+   {
+    "rule": "R3-19",
+    "severity": "warn",
+    "message": "#558bb9 and #9a77b7 are 0.018 apart under deuteranopia (at least 0.06): readers with colour-vision deficiency may not tell them apart (G4.18, D-34)",
+    "elements": [
+     "path.line[data-series=new-brunswick]",
+     "path.line[data-series=nova-scotia]"
+    ],
+    "level": "locked",
+    "guide": [],
+    "title": "colours that must be told apart survive colour-vision deficiency"
+   }
+  ],
+  "overrides": [
+   {
+    "rule": "R3-21",
+    "reason": "the book's spaghetti chart (s. 0202, right), rebuilt: twelve colours"
+   }
+  ],
+  "expect": {
+   "findings": [
+    "RP3-5",
+    "R3-21"
+   ]
+  },
+  "expect_met": true,
+  "source": {
+   "book": "p. 219 (s. 0202)",
+   "notes": "06 T13",
+   "shows": "the book's spaghetti chart, rebuilt: twelve lines that cross often in one chart, which the generator warns about (G1.20, D-28) and draws with a legend",
+   "status": "generated"
+  },
+  "summary": {
+   "arrangement": "series in each panel by province or territory",
+   "kind": "multiples",
+   "rows": 1,
+   "columns": 1,
+   "panels": 1,
+   "scale_mode": "shared",
+   "scale": "0–200 by 50",
+   "labels": [
+    "0",
+    "50",
+    "100",
+    "150",
+    "200"
+   ],
+   "top": "200 orders per month",
+   "orientation": "vertical",
+   "scales": {
+    "the panel": "0–200 by 50"
+   },
+   "plots": {
+    "the panel": [
+     24.0,
+     37.15,
+     249.15,
+     172.24
+    ]
+   },
+   "width": 368.0,
+   "height": 188.29,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [],
+  "copies": []
+ },
+ "output_sha256": "e3f6e19bc84bb979d2d0f0564857c371fa2602c5bf0e69af1a252a30ce45cf76"
+}

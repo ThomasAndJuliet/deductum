@@ -1,0 +1,241 @@
+{
+ "key": "r1-26-transactions-outlier-target",
+ "file": "r1-26-transactions-outlier-target.json",
+ "variant": null,
+ "requested_type": "bar",
+ "report": {
+  "chart": "r1-26-transactions-outlier-target",
+  "style": "plain",
+  "variant": null,
+  "type": "bar",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "R2-24",
+    "level": "locked",
+    "text": "bars start at zero",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "scale 0–500 by 100",
+    "guide": []
+   },
+   {
+    "rule": "R2-20",
+    "level": "guided",
+    "text": "an outlier inset: East (451) dwarfs the others (at most 16), and the small values must be compared (facts.small_values_matter); the full scale from zero kept, and Central, South, West, North and Others re-plotted on their own scale from zero, 0–20 by 5 (G2.26)",
+    "guide": []
+   },
+   {
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "nominal categories sorted by value, descending",
+    "guide": []
+   },
+   {
+    "rule": "R9-9",
+    "level": "locked",
+    "text": "last: Others (catch-all, missing, total, then values not known)",
+    "guide": []
+   },
+   {
+    "rule": "R15-5",
+    "level": "locked",
+    "text": "highlighting what the insight names",
+    "guide": []
+   },
+   {
+    "rule": "R9-10",
+    "level": "locked",
+    "text": "every name fits under its bar, neighbours at least 10 pt apart: vertical bars",
+    "guide": []
+   },
+   {
+    "rule": "R2-21",
+    "level": "locked",
+    "text": "labels as a set, 0 decimals: 0, 100, 200, 300, 400, 500",
+    "guide": []
+   },
+   {
+    "rule": "R2-07",
+    "level": "locked",
+    "text": "the unit phrase on the top label: “500 successful transactions”; the top gridline starts after it",
+    "guide": []
+   },
+   {
+    "rule": "R5-26",
+    "level": "locked",
+    "text": "the title wraps onto two lines",
+    "guide": []
+   },
+   {
+    "rule": "R3-7",
+    "level": "locked",
+    "text": "highlighted in the strong shade of their colour: Central, South; the others keep their colour",
+    "guide": []
+   },
+   {
+    "rule": "R2-20",
+    "level": "guided",
+    "text": "the inset inside the plot, in its largest empty area, above the small bars (G2.29, s. 0076)",
+    "guide": []
+   },
+   {
+    "rule": "6.6",
+    "level": "locked",
+    "text": "the inset's form: a frame round the bars of Central, South, West, North and Others, a larger frame round a complete small chart (0–20 by 5, bare numbers (the unit is the main scale's, beside it), the category labels repeated, no title, text at inset size), two links forming a widening cone, beneath the frames (G2.27)",
+    "guide": []
+   },
+   {
+    "rule": "R15-7",
+    "level": "locked",
+    "text": "Target (10) as a dotted line in the dark grey across the plot, unlabelled (no free place), named in the inset in bold (D-21 (c), G8.13, G7.16)",
+    "guide": []
+   },
+   {
+    "rule": "R15-7",
+    "level": "guided",
+    "text": "Target drawn in the inset too, its value within the inset's range (0–20 by 5), labelled there at the inset's size, the main chart having no place for it (6.6, G8.13)",
+    "guide": []
+   }
+  ],
+  "findings": [],
+  "overrides": [],
+  "expect": {},
+  "expect_met": true,
+  "source": {
+   "notes": "evaluation round 1 (a comparison line with an inset); p1-07",
+   "shows": "an outlier inset inside the plot: the target line across the main chart, under the inset's frame, and across the inset, where 10 lies in its range (SPEC §6.12.2)",
+   "status": "generated"
+  },
+  "summary": {
+   "scale": "0–500 by 100",
+   "labels": [
+    "0",
+    "100",
+    "200",
+    "300",
+    "400",
+    "500"
+   ],
+   "top": "500 successful transactions",
+   "scale_title": null,
+   "orientation": "vertical",
+   "plot": [
+    24.0,
+    51.07,
+    368.0,
+    257.47
+   ],
+   "band": 57.33,
+   "inset": {
+    "kind": "outlier",
+    "position": "inside",
+    "scale": "0–20 by 5",
+    "frame": [
+     120.42,
+     64.51,
+     367.25,
+     236.87
+    ],
+    "source": [
+     76.86,
+     246.87,
+     367.25,
+     261.47
+    ]
+   },
+   "width": 368.0,
+   "height": 273.52,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job answer: insight “Central and South reached the target of 10; West, North and the other regions did not”",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-1",
+    "level": "guided",
+    "text": "a graph, the values to be compared or a pattern seen (G1.11)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 2,
+    "name": "variables",
+    "rule": "RP3-2",
+    "level": "guided",
+    "text": "one plot: categories along x and 1 series; a further variable would go to small multiples (data.dims, G1.18)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 3,
+    "name": "location",
+    "rule": "R8-2",
+    "level": "guided",
+    "text": "not a map: where the values are is not the message (facts.location_matters; G1.24, G1.25)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-01",
+    "level": "guided",
+    "text": "not parts of a total (no data.parts, no breakdown message; G1.1)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 7,
+    "name": "values across categories",
+    "rule": "R9-1",
+    "level": "guided",
+    "text": "group: bar charts. Values compared across categories (G1.9)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 7,
+    "name": "values across categories",
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "one scale from zero: bars, sorted by value when the categories are nominal (02 D1)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type (G1.59)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "bar charts are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "bar charts"
+   }
+  ],
+  "copies": []
+ },
+ "output_sha256": "8775962863ac347ba6fef148cfb635507925a7580f1b7a393930e4844d6ed96e"
+}

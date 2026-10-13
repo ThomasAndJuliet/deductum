@@ -1,0 +1,292 @@
+{
+ "key": "p3-51-measles-heatmap--extremes",
+ "file": "p3-51-measles-heatmap.json",
+ "variant": "extremes",
+ "requested_type": "auto",
+ "report": {
+  "chart": "p3-51-measles-heatmap",
+  "style": "plain",
+  "variant": "extremes",
+  "type": "heatmap",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "R6-36",
+    "level": "guided",
+    "text": "type heatmap: 51 series, more than a stack of small charts holds (about 20–30): a heatmap, a row per series (G1.20, G7.35; D-28)",
+    "guide": []
+   },
+   {
+    "rule": "R5-26",
+    "level": "locked",
+    "text": "the title wraps onto two lines",
+    "guide": []
+   },
+   {
+    "rule": "R6-36",
+    "level": "guided",
+    "text": "no values in the cells; the values do not fit their cells: the colour alone, read against the key (G5.13)",
+    "guide": []
+   },
+   {
+    "rule": "R12-6",
+    "level": "guided",
+    "text": "the cells strong: a heatmap, whose colour is the message: the steps at full strength (owner, 1 Oct 2026)",
+    "guide": []
+   },
+   {
+    "rule": "R3-12",
+    "level": "guided",
+    "text": "the cells: a sequential palette; no dividing value the audience sees: one ramp, darker meaning more, never diverging about the middle of the data (G4.10, D-37 (a))",
+    "guide": []
+   },
+   {
+    "rule": "G4.29",
+    "level": "guided",
+    "text": "the cells: the values are skewed (one of seven equal steps would hold 80 % of them) and their few extremes are the message (facts.ramp_focus): equal steps on rounded values",
+    "guide": []
+   },
+   {
+    "rule": "R4-9",
+    "level": "locked",
+    "text": "a key: a bar of the 7 classes, “Measles cases (per 100,000 people)” above it, 0, 500, 1,000, 1,500, 2,000, 2,500, 3,000, 3,500 under it, and a separate entry for the 47 values not known, above the grid at its right (G5.13, s. 0204)",
+    "guide": []
+   },
+   {
+    "rule": "G4.34",
+    "level": "locked",
+    "text": "the lightest step #dceaf6: OKLab ΔE 0.073 from the page and 0.206 from the missing grey; the breaks in the key rounded and formatted as a set",
+    "guide": []
+   },
+   {
+    "rule": "R3-9",
+    "level": "locked",
+    "text": "the cells coloured in classes, sequential, equal steps: 0–500 | 500–1,000 | 1,000–1,500 | 1,500–2,000 | 2,000–2,500 | 2,500–3,000 | 3,000–3,500, darker meaning further from the lowest (G4.14)",
+    "guide": []
+   },
+   {
+    "rule": "R6-23",
+    "level": "locked",
+    "text": "47 values not known in grey cells, never the colour of zero (G7.35)",
+    "guide": []
+   },
+   {
+    "rule": "R2-40",
+    "level": "locked",
+    "text": "time axis: every 5th year, on the years divisible by 5 (round years, which the eye counts on; every label would crowd)",
+    "guide": []
+   }
+  ],
+  "findings": [],
+  "overrides": [],
+  "expect": {},
+  "expect_met": true,
+  "source": {
+   "book": "p. 221 (s. 0204)",
+   "notes": "06 T14",
+   "shows": "the same values cut in equal steps on rounded values, as for a message about the few extreme years (G4.29): before the vaccine nearly every cell falls in the two palest steps",
+   "status": "generated"
+  },
+  "summary": {
+   "orientation": "vertical",
+   "plot": [
+    23.78,
+    88.34,
+    368.0,
+    598.34
+   ],
+   "heatmap": {
+    "rows": [
+     "al",
+     "ak",
+     "az",
+     "ar",
+     "ca",
+     "co",
+     "ct",
+     "de",
+     "dc",
+     "fl",
+     "ga",
+     "hi",
+     "id",
+     "il",
+     "in",
+     "ia",
+     "ks",
+     "ky",
+     "la",
+     "me",
+     "md",
+     "ma",
+     "mi",
+     "mn",
+     "ms",
+     "mo",
+     "mt",
+     "ne",
+     "nv",
+     "nh",
+     "nj",
+     "nm",
+     "ny",
+     "nc",
+     "nd",
+     "oh",
+     "ok",
+     "or",
+     "pa",
+     "ri",
+     "sc",
+     "sd",
+     "tn",
+     "tx",
+     "ut",
+     "vt",
+     "va",
+     "wa",
+     "wv",
+     "wi",
+     "wy"
+    ],
+    "columns": [
+     "1940",
+     "1941",
+     "1942",
+     "1943",
+     "1944",
+     "1945",
+     "1946",
+     "1947",
+     "1948",
+     "1949",
+     "1950",
+     "1951",
+     "1952",
+     "1953",
+     "1954",
+     "1955",
+     "1956",
+     "1957",
+     "1958",
+     "1959",
+     "1960",
+     "1961",
+     "1962",
+     "1963",
+     "1964",
+     "1965",
+     "1966",
+     "1967",
+     "1968",
+     "1969",
+     "1970",
+     "1971",
+     "1972",
+     "1973",
+     "1974",
+     "1975",
+     "1976",
+     "1977",
+     "1978",
+     "1979",
+     "1980",
+     "1981",
+     "1982",
+     "1983",
+     "1984",
+     "1985",
+     "1986",
+     "1987",
+     "1988",
+     "1989"
+    ],
+    "labelled": false,
+    "ramp": "sequential",
+    "cells": "strong",
+    "classing": "linear",
+    "breaks": [
+     "500",
+     "1000",
+     "1500",
+     "2000",
+     "2500",
+     "3000"
+    ],
+    "domain": [
+     "0",
+     "3500"
+    ],
+    "dividing": null,
+    "key": [
+     "Measles cases (per 100,000 people)",
+     "0",
+     "500",
+     "1,000",
+     "1,500",
+     "2,000",
+     "2,500",
+     "3,000",
+     "3,500",
+     "Missing"
+    ],
+    "pitch": 10.0,
+    "values": null,
+    "censored": null
+   },
+   "width": 368.0,
+   "height": 614.39,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job make_aware: insight “Measles fell to almost nothing within a few years of the 1963 vaccine, in every state”",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-1",
+    "level": "guided",
+    "text": "a graph, the values to be compared or a pattern seen (G1.11)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 2,
+    "name": "variables",
+    "rule": "R6-36",
+    "level": "guided",
+    "text": "group: data over time. 51 series, more than a stack of small charts holds (about 20–30): a heatmap, a row per series (G1.20, G7.35; D-28)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type, the series told apart by colour (G1.59)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "heatmaps are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "data over time"
+   }
+  ],
+  "copies": []
+ },
+ "output_sha256": "75ce24605622ea263b79b0d85292487bf1fc349944fd290486e9a05509bb7a28"
+}

@@ -1,0 +1,29 @@
+[package]
+name = "chartgen"
+version = "0.1.0"
+edition = "2024"
+description = "Rust rewrite of the chartgen plotting library"
+publish = false
+
+[dependencies]
+chartgen-model = { path = "../chartgen-model" }
+chartgen-data = { path = "../chartgen-data" }
+chartgen-policy = { path = "../chartgen-policy" }
+chartgen-grammar = { path = "../chartgen-grammar" }
+chartgen-scales = { path = "../chartgen-scales" }
+chartgen-format = { path = "../chartgen-format" }
+chartgen-layout = { path = "../chartgen-layout" }
+chartgen-scene = { path = "../chartgen-scene" }
+chartgen-lint = { path = "../chartgen-lint" }
+chartgen-svg-lint = { path = "../chartgen-svg-lint" }
+chartgen-notes = { path = "../chartgen-notes" }
+chartgen-note-layout = { path = "../chartgen-note-layout" }
+chartgen-panels = { path = "../chartgen-panels" }
+chartgen-panel-layout = { path = "../chartgen-panel-layout" }
+chartgen-colours = { path = "../chartgen-colours" }
+chartgen-render = { path = "../chartgen-render" }
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+roxmltree = "0.20"

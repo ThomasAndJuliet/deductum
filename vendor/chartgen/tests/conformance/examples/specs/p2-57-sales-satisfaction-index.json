@@ -1,0 +1,120 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p2-57-sales-satisfaction-index",
+    "job": {
+      "kind": "answer",
+      "text": "Did gross sales and customer satisfaction change alike over the year?"
+    },
+    "insight": {
+      "important": "Sales rose far more than satisfaction, and less steadily"
+    },
+    "title": {
+      "text": "Sales Rose Far More Than Customer Satisfaction",
+      "kind": "insight",
+      "descriptive": "Gross Sales and Average Customer Satisfaction, Change Since January 2022"
+    },
+    "data": {
+      "x": {
+        "kind": "time",
+        "grid": "month",
+        "values": [
+          "2022-01",
+          "2022-02",
+          "2022-03",
+          "2022-04",
+          "2022-05",
+          "2022-06",
+          "2022-07",
+          "2022-08",
+          "2022-09",
+          "2022-10",
+          "2022-11",
+          "2022-12"
+        ]
+      },
+      "measures": [
+        {
+          "id": "sales",
+          "name": "gross sales",
+          "kind": "amount",
+          "zero": "meaningful",
+          "min": 0,
+          "unit": {
+            "prefix": "$",
+            "magnitude": 6,
+            "noun": "in gross sales"
+          }
+        },
+        {
+          "id": "satisfaction",
+          "name": "average customer satisfaction",
+          "kind": "score",
+          "zero": "meaningful",
+          "min": 0,
+          "max": 10,
+          "unit": {
+            "what": "average customer satisfaction, on 10"
+          }
+        }
+      ],
+      "measure": {
+        "name": "change since January",
+        "persistence": "summary"
+      },
+      "series": [
+        {
+          "id": "sales",
+          "name": "Gross sales",
+          "measure": "sales",
+          "values": [
+            1.99,
+            2.19,
+            1.72,
+            1.89,
+            2.69,
+            3.0,
+            2.93,
+            2.37,
+            3.16,
+            2.74,
+            2.7,
+            2.82
+          ]
+        },
+        {
+          "id": "satisfaction",
+          "name": "Satisfaction",
+          "measure": "satisfaction",
+          "values": [
+            6.64,
+            6.7,
+            6.7,
+            6.72,
+            7.01,
+            7.3,
+            7.08,
+            7.02,
+            7.23,
+            7.55,
+            7.72,
+            7.8
+          ]
+        }
+      ]
+    },
+    "facts": {
+      "message": "pattern"
+    },
+    "transform": {
+      "kind": "index",
+      "base": 0,
+      "at": "2022-01"
+    },
+    "source": {
+      "book": "p. 70–72 (s. 0068–0070)",
+      "notes": "02 #7",
+      "shows": "an index chart instead of two value axes: sales and satisfaction, in different units, each as its % change since January on one scale (R2-14, R2-17, G2.31, G8.18)"
+    }
+  }
+}

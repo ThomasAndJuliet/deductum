@@ -1,0 +1,96 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "r1-44-average-fares-pence",
+    "job": {
+      "kind": "lookup",
+      "text": "Look up the average single fare on each bus route in September 2026"
+    },
+    "title": {
+      "text": "Average Single Fare by Route, September 2026",
+      "kind": "descriptive"
+    },
+    "data": {
+      "x": {
+        "kind": "nominal",
+        "values": [
+          "Route 1",
+          "Route 4",
+          "Route 7",
+          "Route 12"
+        ]
+      },
+      "measure": {
+        "name": "average fare",
+        "kind": "amount",
+        "zero": "meaningful",
+        "min": 0,
+        "precision": 0.01,
+        "unit": {
+          "prefix": "£",
+          "what": "average single fare"
+        }
+      },
+      "series": [
+        {
+          "id": "fare",
+          "name": "Average fare",
+          "values": [
+            2.35,
+            2.8,
+            1.95,
+            3.4
+          ]
+        }
+      ]
+    },
+    "facts": {
+      "message": "compare"
+    },
+    "chart": {
+      "type": "auto"
+    },
+    "source": {
+      "shows": "amounts of money that need pence take two decimals throughout the set: value labels £3.40, £2.80 (never £3.4); the variant, child fares on a scale by 0.50, reads 0.00 … £2.00 (G6.16, G2.24)"
+    }
+  },
+  "variants": [
+    {
+      "name": "scale",
+      "patch": {
+        "title": {
+          "text": "Average Child Fare by Route, September 2026"
+        },
+        "job": {
+          "text": "Look up the average child fare on each bus route in September 2026"
+        },
+        "data": {
+          "measure": {
+            "name": "average child fare",
+            "unit": {
+              "what": "average child fare"
+            }
+          },
+          "series": [
+            {
+              "id": "fare",
+              "name": "Average child fare",
+              "values": [
+                1.15,
+                1.4,
+                0.95,
+                1.7
+              ]
+            }
+          ]
+        },
+        "chart": {
+          "value_labels": "off"
+        },
+        "reasons": {
+          "chart.value_labels": "a scale, to show its labels in pounds and pence"
+        }
+      }
+    }
+  ]
+}

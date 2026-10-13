@@ -1,0 +1,292 @@
+{
+ "key": "p2-22-headcount-black-and-white--legend",
+ "file": "p2-22-headcount-black-and-white.json",
+ "variant": "legend",
+ "requested_type": "auto",
+ "report": {
+  "chart": "p2-22-headcount-black-and-white",
+  "style": "plain",
+  "variant": "legend",
+  "type": "line",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "R6-4",
+    "level": "guided",
+    "text": "type line: a regular series whose pattern of change is the point (06 DP6-1, G1.51)",
+    "guide": []
+   },
+   {
+    "rule": "R2-25",
+    "level": "locked",
+    "text": "the values are not far from zero compared with their spread",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "scale 0–120 by 20",
+    "guide": []
+   },
+   {
+    "rule": "R6-28",
+    "level": "locked",
+    "text": "each line its own colour, handed out top to bottom by the line ends: East slot 1, Central slot 2, North slot 3, West slot 4, South slot 5, Int'l slot 6",
+    "guide": []
+   },
+   {
+    "rule": "R6-30",
+    "level": "locked",
+    "text": "point markers on every value of East: black-and-white reproduction is likely: the symbol square at every point",
+    "guide": []
+   },
+   {
+    "rule": "R6-30",
+    "level": "locked",
+    "text": "point markers on every value of Central: black-and-white reproduction is likely: the symbol triangle at every point",
+    "guide": []
+   },
+   {
+    "rule": "R6-30",
+    "level": "locked",
+    "text": "point markers on every value of North: black-and-white reproduction is likely: the symbol × at every point",
+    "guide": []
+   },
+   {
+    "rule": "R6-30",
+    "level": "locked",
+    "text": "point markers on every value of West: black-and-white reproduction is likely: the symbol filled circle at every point",
+    "guide": []
+   },
+   {
+    "rule": "R6-30",
+    "level": "locked",
+    "text": "point markers on every value of South: black-and-white reproduction is likely: the symbol + at every point",
+    "guide": []
+   },
+   {
+    "rule": "R6-30",
+    "level": "locked",
+    "text": "point markers on every value of Int'l: black-and-white reproduction is likely: the symbol asterisk at every point",
+    "guide": []
+   },
+   {
+    "rule": "R2-07",
+    "level": "locked",
+    "text": "the unit phrase on the top label: “120 employees”; the top gridline starts after it",
+    "guide": []
+   },
+   {
+    "rule": "R2-21",
+    "level": "locked",
+    "text": "labels as a set, 0 decimals: 0, 20, 40, 60, 80, 100, 120",
+    "guide": []
+   },
+   {
+    "rule": "R2-40",
+    "level": "locked",
+    "text": "time axis: row 1 full",
+    "guide": []
+   },
+   {
+    "rule": "R2-39",
+    "level": "locked",
+    "text": "time axis: row 2 (“2019”) left out, the title gives it (G2.37)",
+    "guide": []
+   },
+   {
+    "rule": "R4-5",
+    "level": "locked",
+    "text": "legend entries in the order of the lines at the latest point: East, Central, North, West, South, Int'l",
+    "guide": []
+   },
+   {
+    "rule": "R4-7",
+    "level": "locked",
+    "text": "the legend at the right of the plot, beside the latest values, centred on the plot",
+    "guide": []
+   }
+  ],
+  "findings": [
+   {
+    "rule": "R4-1",
+    "severity": "warn",
+    "message": "chart.labelling legend departs from the procedure, which gives direct (each line labelled at its end, where the latest values are (G5.1, G5.2))",
+    "path": "chart.labelling",
+    "level": "guided",
+    "recommended": "direct",
+    "guide": [],
+    "title": "label directly rather than with a legend; one series needs neither"
+   },
+   {
+    "rule": "R2-11",
+    "severity": "info",
+    "message": "the unit phrase “employees” is one word; say what is counted, which subset and per what period",
+    "path": "data.measure.unit.noun",
+    "level": "locked",
+    "guide": [],
+    "title": "a unit phrase specific enough for one reading"
+   },
+   {
+    "rule": "R6-35",
+    "severity": "warn",
+    "message": "6 lines crossing 0 times, not labelled directly: more than five lines only if they rarely cross (about once per line) and are labelled directly; else small multiples (G1.20, D-28)",
+    "level": "locked",
+    "guide": [],
+    "title": "at most about five lines, more only if they rarely cross and are labelled directly"
+   }
+  ],
+  "overrides": [],
+  "expect": {
+   "findings": [
+    "R4-1"
+   ]
+  },
+  "expect_met": true,
+  "source": {
+   "book": "p. 214–216 (s. 0198–0200)",
+   "notes": "06 T11",
+   "shows": "the same lines keyed by a legend (a guided departure: the labels fit at the line ends): each entry shows its line's symbol",
+   "status": "generated"
+  },
+  "summary": {
+   "scale": "0–120 by 20",
+   "labels": [
+    "0",
+    "20",
+    "40",
+    "60",
+    "80",
+    "100",
+    "120"
+   ],
+   "top": "120 employees",
+   "scale_title": null,
+   "orientation": "vertical",
+   "plot": [
+    24.0,
+    21.0,
+    302.97,
+    188.38
+   ],
+   "slot": 39.85,
+   "labelling": "legend",
+   "label_shifts": {},
+   "leaders": [],
+   "markers": [
+    "east",
+    "central",
+    "north",
+    "west",
+    "south",
+    "intl"
+   ],
+   "colours": {
+    "east": "series-1",
+    "central": "series-2",
+    "north": "series-3",
+    "west": "series-4",
+    "south": "series-5",
+    "intl": "series-6"
+   },
+   "width": 368.0,
+   "height": 206.26,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job lookup: no insight stated (a descriptive title will do, D-55)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-1",
+    "level": "guided",
+    "text": "a graph, the values to be compared or a pattern seen (G1.11)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 2,
+    "name": "variables",
+    "rule": "RP3-2",
+    "level": "guided",
+    "text": "one plot: time along x and 6 series; more than 5 lines read well only if they rarely cross, else a stack of small line charts (panels by data.dims, G1.20); a further variable would go to small multiples (data.dims, G1.18)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 3,
+    "name": "location",
+    "rule": "R8-2",
+    "level": "guided",
+    "text": "not a map: where the values are is not the message (facts.location_matters; G1.24, G1.25)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-01",
+    "level": "guided",
+    "text": "not parts of a total (no data.parts, no breakdown message; G1.1)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 6,
+    "name": "values over time",
+    "rule": "R6-13",
+    "level": "guided",
+    "text": "group: data over time. A series of more than two periods, not a breakdown and not tied to places (G1.48)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 6,
+    "name": "values over time",
+    "rule": "R6-3",
+    "level": "locked",
+    "text": "a regular series, enough values known (06 DP6-2)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 6,
+    "name": "values over time",
+    "rule": "R6-4",
+    "level": "guided",
+    "text": "a regular series whose pattern of change is the point (06 DP6-1, G1.51)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type, the series told apart by colour (G1.59)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "line charts are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "data over time"
+   }
+  ],
+  "copies": []
+ },
+ "output_sha256": "22e55a5463173f2c508f98701c3ea6e852ca758ff8267e7ab06195d6af0cd208"
+}

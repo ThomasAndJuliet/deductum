@@ -1,0 +1,79 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p1-29-department-expenses",
+    "job": {
+      "kind": "lookup",
+      "text": "Look up each department's expenses for 2022"
+    },
+    "title": {
+      "text": "Annual Expenses by Department, 2022",
+      "kind": "descriptive"
+    },
+    "data": {
+      "x": {
+        "kind": "nominal",
+        "values": [
+          "Marketing",
+          "Operations",
+          "Finance",
+          "R&D",
+          "I.T."
+        ]
+      },
+      "measure": {
+        "name": "expenses",
+        "kind": "amount",
+        "zero": "meaningful",
+        "min": 0,
+        "unit": {
+          "prefix": "$",
+          "magnitude": 6,
+          "what": "annual expenses"
+        }
+      },
+      "series": [
+        {
+          "id": "expenses",
+          "name": "Expenses",
+          "values": [
+            14.4,
+            13.9,
+            7.5,
+            5.7,
+            5.5
+          ]
+        }
+      ]
+    },
+    "chart": {
+      "value_labels": "off"
+    },
+    "reasons": {
+      "chart.value_labels": "the book's chart keeps its scale (p. 229): this example shows the chooser's bars, set beside the line it refuses"
+    },
+    "source": {
+      "book": "p. 228–229 (s. 0210–0211)",
+      "notes": "06 T17 (b)",
+      "shows": "departments have no order: the chooser gives bars, sorted by value"
+    }
+  },
+  "variants": [
+    {
+      "name": "line",
+      "patch": {
+        "chart": {
+          "type": "line"
+        },
+        "source": {
+          "shows": "the book's line across departments, which implies an order and links between neighbours that do not exist: refused"
+        }
+      },
+      "expect": {
+        "refused": [
+          "R6-42"
+        ]
+      }
+    }
+  ]
+}

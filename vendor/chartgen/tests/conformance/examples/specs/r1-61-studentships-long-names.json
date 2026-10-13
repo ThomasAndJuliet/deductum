@@ -1,0 +1,99 @@
+{
+ "base": {
+  "chartspec": 1,
+  "id": "r1-61-studentships-long-names",
+  "job": {
+   "kind": "lookup",
+   "text": "Let each department (PGR Directors, intranet readers) find its 2027 studentship allocation and see how it compares with the other departments"
+  },
+  "title": {
+   "text": "Fully Funded PhD Studentships by Department, October 2027 Entry",
+   "kind": "descriptive"
+  },
+  "data": {
+   "x": {
+    "kind": "nominal",
+    "values": [
+     "Archaeology, History & Classics",
+     "Biosciences",
+     "Chemical & Biological Engineering",
+     "Chemistry",
+     "Computer Science",
+     "Earth & Environmental Sciences",
+     "Economics",
+     "Mathematics & Statistics",
+     "Mechanical, Aerospace & Civil Engineering",
+     "Medical School",
+     "Music",
+     "Philosophy",
+     "Physics & Astronomy",
+     "Politics & International Relations",
+     "Psychology & Language Sciences"
+    ]
+   },
+   "measure": {
+    "name": "studentships allocated",
+    "kind": "count",
+    "zero": "meaningful",
+    "min": 0,
+    "unit": {
+     "noun": "fully funded studentships",
+     "scale_title": "Studentships allocated"
+    }
+   },
+   "series": [
+    {
+     "id": "alloc",
+     "name": "Studentships",
+     "values": [
+      6,
+      38,
+      19,
+      24,
+      31,
+      17,
+      9,
+      15,
+      22,
+      {
+       "status": "tbd",
+       "note": "depends on the MRC DTP renewal, due in November"
+      },
+      2,
+      0,
+      27,
+      7,
+      14
+     ]
+    }
+   ]
+  },
+  "facts": {
+   "message": "compare",
+   "exact_values_needed": true
+  },
+  "labels": {
+   "notes": {
+    "tbd": "(TBC)",
+    "zero": "(none: no bid this year)"
+   }
+  },
+  "chart": {
+   "type": "auto"
+  },
+  "source": {
+   "shows": "long category names beside horizontal bars at the text width (eval round 1, B01): two wrapped names met at 368 pt; now the name column widens (to at most half the width) so that fewer names wrap, and the rows open up until wrapped names stay 1 em clear of their neighbours",
+   "status": "generated"
+  }
+ },
+ "variants": [
+  {
+   "name": "wide",
+   "patch": {
+    "layout": {
+     "width": 480
+    }
+   }
+  }
+ ]
+}

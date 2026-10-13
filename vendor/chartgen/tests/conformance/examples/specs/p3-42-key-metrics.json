@@ -1,0 +1,152 @@
+{
+ "base": {
+  "chartspec": 1,
+  "id": "p3-42-key-metrics",
+  "job": {
+   "kind": "lookup",
+   "text": "Look up this month's key metrics"
+  },
+  "title": {
+   "text": "Key Metrics, November 2022",
+   "kind": "descriptive"
+  },
+  "audience": {
+   "abbreviations": {
+    "million": "M"
+   }
+  },
+  "data": {
+   "x": {
+    "kind": "nominal",
+    "values": [
+     "value"
+    ],
+    "names": {
+     "value": ""
+    }
+   },
+   "measure": {
+    "name": "key metrics",
+    "kind": "quantity",
+    "zero": "meaningful"
+   },
+   "measures": [
+    {
+     "id": "funds",
+     "name": "funds raised",
+     "kind": "amount",
+     "precision": 0.001,
+     "unit": {
+      "prefix": "$",
+      "magnitude": 6
+     }
+    },
+    {
+     "id": "overhead",
+     "name": "admin. overhead",
+     "kind": "percent",
+     "precision": 0.01,
+     "unit": {
+      "suffix": "%"
+     }
+    },
+    {
+     "id": "donor",
+     "name": "donor satisfaction",
+     "kind": "score",
+     "zero": "arbitrary",
+     "precision": 0.01,
+     "unit": {
+      "what": "on 10"
+     }
+    },
+    {
+     "id": "staff",
+     "name": "employee satisfaction",
+     "kind": "score",
+     "zero": "arbitrary",
+     "precision": 0.01,
+     "unit": {
+      "what": "on 10"
+     }
+    },
+    {
+     "id": "fte",
+     "name": "headcount",
+     "kind": "quantity",
+     "precision": 0.1,
+     "unit": {
+      "noun": "FTEs"
+     }
+    },
+    {
+     "id": "travel",
+     "name": "travel costs",
+     "kind": "amount",
+     "precision": 1,
+     "unit": {
+      "prefix": "$"
+     }
+    }
+   ],
+   "series": [
+    {
+     "id": "funds",
+     "name": "Funds raised",
+     "measure": "funds",
+     "values": [
+      2.337
+     ]
+    },
+    {
+     "id": "overhead",
+     "name": "Admin. overhead",
+     "measure": "overhead",
+     "values": [
+      14.6
+     ]
+    },
+    {
+     "id": "donor",
+     "name": "Donor satisfaction (on 10)",
+     "measure": "donor",
+     "values": [
+      7.43
+     ]
+    },
+    {
+     "id": "staff",
+     "name": "Employee satisfaction (on 10)",
+     "measure": "staff",
+     "values": [
+      8.66
+     ]
+    },
+    {
+     "id": "fte",
+     "name": "Headcount (FTEs)",
+     "measure": "fte",
+     "values": [
+      945.5
+     ]
+    },
+    {
+     "id": "travel",
+     "name": "Travel costs",
+     "measure": "travel",
+     "values": [
+      22847
+     ]
+    }
+   ]
+  },
+  "facts": {
+   "message": "not_comparable"
+  },
+  "source": {
+   "book": "p. 342, 346 (s. 0312, 0316)",
+   "notes": "08-12 #10",
+   "shows": "a table alone because no two values are comparable (R10-11 (c)): six key metrics in six units, the values left-aligned, each with its own unit and digits (R10-20), the audience's abbreviation M for millions; not bold, as the book's are (the owner's rule: nothing bold but the title); headcount 945.5 as on s. 0316 (s. 0312 has 94.5, D-54)"
+  }
+ }
+}

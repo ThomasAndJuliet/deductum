@@ -1,0 +1,14 @@
+[package]
+name = "chartgen-panels"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+chartgen-model.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+chartgen-data = { path = "../chartgen-data" }
+chartgen-policy = { path = "../chartgen-policy" }

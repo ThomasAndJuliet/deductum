@@ -1,0 +1,92 @@
+{
+ "chartspec": 1,
+ "id": "r1-06-donations-pie-notes",
+ "job": {
+  "kind": "answer",
+  "text": "What fraction of all donations did Mrs. Smith give?"
+ },
+ "insight": {
+  "important": "Mrs. Smith contributed almost a quarter of all donations",
+  "targets": [
+   {
+    "category": "Mrs. Smith"
+   }
+  ]
+ },
+ "title": {
+  "text": "Mrs. Smith Contributed Almost a Quarter of All Donations",
+  "kind": "insight",
+  "descriptive": "Donations by Donor, 2022"
+ },
+ "data": {
+  "x": {
+   "kind": "nominal",
+   "values": [
+    "Mrs. Smith",
+    "Mrs. Jones",
+    "Mr. & Mrs. Perez",
+    "The Chetley Family",
+    "Ms. Flaherty"
+   ]
+  },
+  "measure": {
+   "name": "donations",
+   "kind": "amount",
+   "zero": "meaningful",
+   "min": 0,
+   "unit": {
+    "prefix": "$",
+    "magnitude": 3,
+    "noun": "in donations"
+   }
+  },
+  "series": [
+   {
+    "id": "donations",
+    "name": "Donations",
+    "values": [
+     165,
+     160,
+     135,
+     125,
+     100
+    ]
+   }
+  ],
+  "parts": {
+   "meaningful_total": true,
+   "all_parts": true,
+   "overlap": false
+  }
+ },
+ "facts": {
+  "message": "fraction_of_total"
+ },
+ "chart": {
+  "type": "pie"
+ },
+ "source": {
+  "book": "p. 238–241 (s. 0219–0222)",
+  "notes": "p3-01-donations-by-donor-pie, with notes (owner, 1 Oct 2026: footnotes)",
+  "shows": "footnotes on a slice's name and on a slice's value (the line under its name)"
+ },
+ "notes": [
+  {
+   "text": "Including a bequest received in March.",
+   "on": [
+    {
+     "category": "Mrs. Smith"
+    }
+   ]
+  },
+  {
+   "text": "Pledged; $40K had been received by Dec. 31.",
+   "on": [
+    {
+     "series": "donations",
+     "category": "Mrs. Jones"
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,288 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p1-22-headcount-labels",
+    "job": {
+      "kind": "lookup",
+      "text": "Look up each region's headcount by month"
+    },
+    "title": {
+      "text": "Headcount by Region, Jan–Jul 2022",
+      "kind": "descriptive"
+    },
+    "data": {
+      "x": {
+        "kind": "time",
+        "grid": "month",
+        "values": [
+          "2022-01",
+          "2022-02",
+          "2022-03",
+          "2022-04",
+          "2022-05",
+          "2022-06",
+          "2022-07"
+        ]
+      },
+      "measure": {
+        "name": "headcount",
+        "kind": "count",
+        "zero": "meaningful",
+        "min": 0,
+        "persistence": "summary",
+        "unit": {
+          "noun": "employees"
+        }
+      },
+      "series": [
+        {
+          "id": "east",
+          "name": "East",
+          "values": [
+            100,
+            109,
+            91,
+            95,
+            98,
+            89,
+            100
+          ]
+        },
+        {
+          "id": "central",
+          "name": "Central",
+          "values": [
+            90,
+            95,
+            77,
+            94,
+            91,
+            87,
+            90
+          ]
+        },
+        {
+          "id": "north",
+          "name": "North",
+          "values": [
+            60,
+            73,
+            66,
+            61,
+            60,
+            62,
+            60
+          ]
+        },
+        {
+          "id": "west",
+          "name": "West",
+          "values": [
+            40,
+            47,
+            36,
+            41,
+            38,
+            41,
+            40
+          ]
+        },
+        {
+          "id": "south",
+          "name": "South",
+          "values": [
+            30,
+            35,
+            29,
+            32,
+            35,
+            25,
+            30
+          ]
+        }
+      ]
+    },
+    "source": {
+      "book": "p. 144 (s. 0134)",
+      "notes": "03-04 #16",
+      "shows": "direct labels instead of the book's bad legend: each line named at its end, nothing to memorise"
+    }
+  },
+  "variants": [
+    {
+      "name": "dynamic",
+      "patch": {
+        "data": {
+          "series": [
+            {
+              "id": "east",
+              "name": "East",
+              "values": [
+                100,
+                104,
+                100,
+                76,
+                102,
+                89,
+                91
+              ]
+            },
+            {
+              "id": "central",
+              "name": "Central",
+              "values": [
+                90,
+                100,
+                86,
+                86,
+                107,
+                85,
+                90
+              ]
+            },
+            {
+              "id": "north",
+              "name": "North",
+              "values": [
+                60,
+                56,
+                67,
+                41,
+                66,
+                67,
+                60
+              ]
+            },
+            {
+              "id": "west",
+              "name": "West",
+              "values": [
+                40,
+                38,
+                39,
+                44,
+                45,
+                38,
+                58
+              ]
+            },
+            {
+              "id": "south",
+              "name": "South",
+              "values": [
+                30,
+                32,
+                30,
+                28,
+                28,
+                31,
+                30
+              ]
+            }
+          ]
+        },
+        "source": {
+          "book": "p. 146 (s. 0136)",
+          "notes": "03-04 #18",
+          "shows": "the book's “dynamic” data, where software without a collision test overprints East on Central and North on West; the packing sets each pair one line apart, in order, so the chart keeps its end labels"
+        }
+      },
+      "expect": {}
+    },
+    {
+      "name": "converging",
+      "patch": {
+        "data": {
+          "series": [
+            {
+              "id": "east",
+              "name": "East",
+              "values": [
+                100,
+                104,
+                100,
+                86,
+                82,
+                70,
+                62
+              ]
+            },
+            {
+              "id": "central",
+              "name": "Central",
+              "values": [
+                90,
+                100,
+                86,
+                86,
+                80,
+                72,
+                61
+              ]
+            },
+            {
+              "id": "north",
+              "name": "North",
+              "values": [
+                60,
+                56,
+                67,
+                61,
+                66,
+                64,
+                60
+              ]
+            },
+            {
+              "id": "west",
+              "name": "West",
+              "values": [
+                40,
+                38,
+                49,
+                54,
+                55,
+                58,
+                59
+              ]
+            },
+            {
+              "id": "south",
+              "name": "South",
+              "values": [
+                30,
+                32,
+                40,
+                48,
+                52,
+                55,
+                58
+              ]
+            }
+          ]
+        },
+        "source": {
+          "notes": "03-04 #18 (synthetic data)",
+          "shows": "synthetic data: five regions ending within four employees of one another; packed, the outer labels would move more than a line and a half from their lines, so the chart takes a legend at the right, in the order of the line ends (G5.3, G5.9, G5.11)"
+        }
+      },
+      "expect": {}
+    },
+    {
+      "name": "legend",
+      "patch": {
+        "chart": {
+          "labelling": "legend"
+        },
+        "source": {
+          "shows": "a legend asked for where end labels fit: drawn, with the guided finding that the procedure labels the lines directly"
+        }
+      },
+      "expect": {
+        "findings": [
+          "R4-1"
+        ]
+      }
+    }
+  ]
+}

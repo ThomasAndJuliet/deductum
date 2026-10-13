@@ -1,0 +1,233 @@
+{
+ "key": "p2-68-donor-measures",
+ "file": "p2-68-donor-measures.json",
+ "variant": null,
+ "requested_type": "auto",
+ "report": {
+  "chart": "p2-68-donor-measures",
+  "style": "plain",
+  "variant": null,
+  "type": "merged of bar",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "RP3-3",
+    "level": "guided",
+    "text": "arranged: columns by measure: series in different measures: one panel per measure, side by side on the shared categories, each with its own scale (G1.56, G2.32)",
+    "guide": []
+   },
+   {
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "categories sorted by Avg. donation (D-46), largest first, the same order in every panel (G2.1)",
+    "guide": []
+   },
+   {
+    "rule": "R3-3",
+    "level": "locked",
+    "text": "one colour for every mark: each panel holds one measure, and the panels tell them apart (G7.6)",
+    "guide": []
+   },
+   {
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "Avg. donation: type bar: categories compared by value",
+    "guide": []
+   },
+   {
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "Donor satisfaction: type bar: categories compared by value",
+    "guide": []
+   },
+   {
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "Avg. household income: type bar: categories compared by value",
+    "guide": []
+   },
+   {
+    "rule": "R2-24",
+    "level": "locked",
+    "text": "Avg. donation: bars start at zero",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "Avg. donation: scale 0–150 by 50 (at most 4 intervals in a panel about 96 pt wide)",
+    "guide": []
+   },
+   {
+    "rule": "R2-24",
+    "level": "locked",
+    "text": "Donor satisfaction: bars start at zero",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "Donor satisfaction: scale 0–10 by 2",
+    "guide": []
+   },
+   {
+    "rule": "R2-24",
+    "level": "locked",
+    "text": "Avg. household income: bars start at zero",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "Avg. household income: scale 0–100 by 50 (at most 4 intervals in a panel about 96 pt wide)",
+    "guide": []
+   },
+   {
+    "rule": "R5-26",
+    "level": "locked",
+    "text": "the title wraps onto two lines",
+    "guide": []
+   },
+   {
+    "rule": "R2-21",
+    "level": "locked",
+    "text": "Avg. donation: labels as a set, 0 decimals, bare numbers: 0, 50, 100, 150",
+    "guide": []
+   },
+   {
+    "rule": "R2-07",
+    "level": "locked",
+    "text": "Avg. donation: a horizontal scale: bare numbers, and its title centred below with the unit in parentheses: “Avg. donation ($)”",
+    "guide": []
+   },
+   {
+    "rule": "R2-21",
+    "level": "locked",
+    "text": "Donor satisfaction: labels as a set, 0 decimals, bare numbers: 0, 2, 4, 6, 8, 10",
+    "guide": []
+   },
+   {
+    "rule": "R2-07",
+    "level": "locked",
+    "text": "Donor satisfaction: a horizontal scale: bare numbers, and its title centred below with the unit in parentheses: “Donor satisfaction (on 10)”",
+    "guide": []
+   },
+   {
+    "rule": "R2-21",
+    "level": "locked",
+    "text": "Avg. household income: labels as a set, 0 decimals, bare numbers: 0, 50, 100",
+    "guide": []
+   },
+   {
+    "rule": "R5-10",
+    "level": "locked",
+    "text": "Avg. household income: digits hidden: thousands, stated in the scale's title (R2-05, D-3): “Avg. household income ($K)”",
+    "guide": []
+   },
+   {
+    "rule": "R2-07",
+    "level": "locked",
+    "text": "Avg. household income: a horizontal scale: bare numbers, and its title centred below with the unit in parentheses: “Avg. household income ($K)”",
+    "guide": []
+   },
+   {
+    "rule": "R9-11",
+    "level": "locked",
+    "text": "merged bars: 3 panels side by side, horizontal bars in one colour, the names once at the left, each panel its own scale from zero along the bottom, its title below and a heading above naming its measure (G7.6)",
+    "guide": []
+   }
+  ],
+  "findings": [
+   {
+    "rule": "R2-27",
+    "severity": "warn",
+    "message": "53% of room at the top of the scale (5–25 % expected)",
+    "level": "locked",
+    "guide": [],
+    "title": "the upper limit leaves 10–20 % of room (the data never touch it)"
+   },
+   {
+    "rule": "R2-32",
+    "severity": "info",
+    "message": "3 values against 4 scale labels: labelling the values directly would put fewer numbers on the chart (phase 2)",
+    "level": "locked",
+    "guide": [],
+    "title": "fewer values than scale labels: label the values directly"
+   },
+   {
+    "rule": "R2-27",
+    "severity": "warn",
+    "message": "27% of room at the top of the scale (5–25 % expected)",
+    "level": "locked",
+    "guide": [],
+    "title": "the upper limit leaves 10–20 % of room (the data never touch it)"
+   },
+   {
+    "rule": "R2-32",
+    "severity": "info",
+    "message": "3 values against 6 scale labels: labelling the values directly would put fewer numbers on the chart (phase 2)",
+    "level": "locked",
+    "guide": [],
+    "title": "fewer values than scale labels: label the values directly"
+   }
+  ],
+  "overrides": [],
+  "expect": {},
+  "expect_met": true,
+  "source": {
+   "book": "p. 274 (s. 0251, chart D); p. 334 (s. 0304)",
+   "notes": "07 #13; 08-12 #5",
+   "shows": "three measures of three regions: never stacked, clustered or in pies on one scale (G2.30), but merged bars, one panel and one scale from zero each, the rows in the order of the first measure (G7.6); the data follow 07 #13, since 08-12 #5 reads the second and third panels' values the other way round (D-54)",
+   "status": "generated"
+  },
+  "summary": {
+   "arrangement": "columns by measure",
+   "kind": "merged",
+   "rows": 1,
+   "columns": 3,
+   "panels": 3,
+   "scale_mode": "per_measure",
+   "scale": "0–150 by 50",
+   "labels": [
+    "0",
+    "50",
+    "100",
+    "150"
+   ],
+   "top": "$150 (avg. donation)",
+   "orientation": "horizontal",
+   "scales": {
+    "Avg. donation": "0–150 by 50",
+    "Donor satisfaction": "0–10 by 2",
+    "Avg. household income": "0–100 by 50"
+   },
+   "plots": {
+    "Avg. donation": [
+     38.53,
+     59.39,
+     134.69,
+     119.39
+    ],
+    "Donor satisfaction": [
+     152.69,
+     59.39,
+     248.84,
+     119.39
+    ],
+    "Avg. household income": [
+     264.34,
+     59.39,
+     360.5,
+     119.39
+    ]
+   },
+   "width": 368.0,
+   "height": 132.27,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [],
+  "copies": []
+ },
+ "output_sha256": "cb8097c2d9ea45e7cc015656e2d7f4d8a65467387ff71ad1f9cf057905f616cc"
+}

@@ -1,0 +1,91 @@
+{
+ "base": {
+  "chartspec": 1,
+  "id": "p3-45-monthly-sales",
+  "job": {
+   "kind": "lookup",
+   "text": "Look up each salesperson's sales in each month"
+  },
+  "title": {
+   "text": "Monthly Sales ($K) by Salesperson, Jan–Mar 2022",
+   "kind": "descriptive"
+  },
+  "data": {
+   "x": {
+    "kind": "time",
+    "grid": "month",
+    "values": [
+     "2022-01",
+     "2022-02",
+     "2022-03"
+    ]
+   },
+   "measure": {
+    "name": "sales",
+    "kind": "amount",
+    "zero": "meaningful",
+    "min": 0,
+    "persistence": "summary",
+    "unit": {
+     "prefix": "$",
+     "magnitude": 3,
+     "what": "sales"
+    }
+   },
+   "series": [
+    {
+     "id": "joe",
+     "name": "Joe P.",
+     "values": [
+      553,
+      473,
+      490
+     ]
+    },
+    {
+     "id": "lisa",
+     "name": "Lisa Q.",
+     "values": [
+      489,
+      401,
+      521
+     ]
+    },
+    {
+     "id": "kim",
+     "name": "Kim J.",
+     "values": [
+      459,
+      422,
+      482
+     ]
+    }
+   ]
+  },
+  "facts": {
+   "message": "lookup_only"
+  },
+  "table": {
+   "names_title": "Salesperson"
+  },
+  "source": {
+   "book": "p. 167 (s. 0156)",
+   "notes": "05 #10",
+   "shows": "the gallery's table: the unit and its magnitude once, in the title, the cells bare numbers (the book's $553K in every cell, R10-25); the year is ours; variant heat, the book's table with graphical elements, its cells shaded by value, pale enough to read"
+  }
+ },
+ "variants": [
+  {
+   "name": "heat",
+   "patch": {
+    "table": {
+     "graphics": "heat"
+    },
+    "reasons": {
+     "table.graphics": "the audience wants a table but should see the sizes (G1.16)"
+    }
+   },
+   "expect": {}
+  }
+ ]
+}

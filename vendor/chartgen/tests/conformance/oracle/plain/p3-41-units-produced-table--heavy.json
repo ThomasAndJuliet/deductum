@@ -1,0 +1,172 @@
+{
+ "key": "p3-41-units-produced-table--heavy",
+ "file": "p3-41-units-produced-table.json",
+ "variant": "heavy",
+ "requested_type": "auto",
+ "report": {
+  "chart": "p3-41-units-produced-table",
+  "style": "plain",
+  "variant": "heavy",
+  "type": "table",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "R10-11",
+    "level": "guided",
+    "text": "type table: a table alone: its sole use is looking up individual values (facts.message lookup_only; G1.12)",
+    "guide": []
+   },
+   {
+    "rule": "R10-13",
+    "level": "locked",
+    "text": "a table alone, formatted in the book's order: the digits the purpose needs, two thin rules, space between rows and columns, the numbers right-aligned to be compared, nothing bold but the title, the unit once in the title (08-12 DP-4, G7.37–G7.45)",
+    "guide": []
+   },
+   {
+    "rule": "R10-12",
+    "level": "locked",
+    "text": "digits: each column at its data's own decimals, one number of decimals down each column (G7.37, G6.16)",
+    "guide": []
+   },
+   {
+    "rule": "R10-16",
+    "level": "locked",
+    "text": "every other row shaded: the book's rejected version, through an override",
+    "guide": []
+   },
+   {
+    "rule": "R10-22",
+    "level": "locked",
+    "text": "the totals last under the darker rule, named in the names' column, in regular weight (D-52 (ii)); the printed totals are the data's, never recomputed",
+    "guide": []
+   },
+   {
+    "rule": "R10-25",
+    "level": "locked",
+    "text": "the unit once, in the title; the cells bare numbers (G7.45)",
+    "guide": []
+   }
+  ],
+  "findings": [
+   {
+    "rule": "R10-16",
+    "severity": "overridden",
+    "message": "zebra stripes add clutter, and a shaded row looks highlighted; rows set well apart are scanned without them",
+    "path": "table.stripes",
+    "supply": "no stripes",
+    "reason": "the book's heavy version: grey stripes (s. 0050)",
+    "level": "locked",
+    "guide": [],
+    "title": "no zebra stripes"
+   },
+   {
+    "rule": "R10-22",
+    "severity": "overridden",
+    "message": "bold header, totals: their place, spacing and rules already set them apart; bold is kept for what matters",
+    "path": "table.bold",
+    "supply": "no bold",
+    "reason": "the book's heavy version: a bold header and totals (s. 0050)",
+    "level": "locked",
+    "guide": [],
+    "title": "no bold header, totals row or Total column"
+   }
+  ],
+  "overrides": [
+   {
+    "rule": "R10-16",
+    "reason": "the book's heavy version: grey stripes (s. 0050)"
+   },
+   {
+    "rule": "R10-22",
+    "reason": "the book's heavy version: a bold header and totals (s. 0050)"
+   }
+  ],
+  "expect": {
+   "refused": [
+    "R10-16",
+    "R10-22"
+   ]
+  },
+  "expect_met": true,
+  "source": {
+   "book": "p. 50 (s. 0050)",
+   "notes": "00-01 F2",
+   "shows": "the book's lightened table: no fills, borders or stripes, the month headings right-aligned over their numbers, a thin rule under them and another above the totals, the rows well apart; the printed totals kept, although the January and February ones are one more than their rows add up to (D-54); the Total label kept in regular weight (D-52 (ii)), where the book's light version drops it",
+   "status": "generated"
+  },
+  "summary": {
+   "orientation": "vertical",
+   "plot": [
+    0.0,
+    30.38,
+    243.29,
+    137.88
+   ],
+   "table": {
+    "rows": [
+     "east",
+     "central",
+     "north",
+     "west",
+     "total"
+    ],
+    "columns": [
+     "2022-01",
+     "2022-02",
+     "2022-03",
+     "2022-04"
+    ],
+    "comparable": true,
+    "pitch": 21.5,
+    "width": 243.29,
+    "graphics": "none",
+    "highlighted": [],
+    "values": null
+   },
+   "width": 253.93,
+   "height": 138.88,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job lookup: no insight stated (a descriptive title will do, D-55)",
+    "guide": [],
+    "group": "tables"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-11",
+    "level": "guided",
+    "text": "group: tables. A table alone: its sole use is looking up individual values (facts.message lookup_only; G1.12)",
+    "guide": [],
+    "group": "tables"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R6-34",
+    "level": "locked",
+    "text": "Total: a reference series in the reserved dark grey, the same mark (G4.15, G7.16)",
+    "guide": [],
+    "group": "tables"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "tables are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "tables"
+   }
+  ],
+  "copies": []
+ },
+ "output_sha256": "886c028c33d1c594935e8bd5b32d8ee072935b90dd659e54235228b77bf67966"
+}

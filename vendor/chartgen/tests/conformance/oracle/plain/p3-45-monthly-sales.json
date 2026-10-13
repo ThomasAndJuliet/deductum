@@ -1,0 +1,120 @@
+{
+ "key": "p3-45-monthly-sales",
+ "file": "p3-45-monthly-sales.json",
+ "variant": null,
+ "requested_type": "auto",
+ "report": {
+  "chart": "p3-45-monthly-sales",
+  "style": "plain",
+  "variant": null,
+  "type": "table",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "R10-11",
+    "level": "guided",
+    "text": "type table: a table alone: its sole use is looking up individual values (facts.message lookup_only; G1.12)",
+    "guide": []
+   },
+   {
+    "rule": "R10-13",
+    "level": "locked",
+    "text": "a table alone, formatted in the book's order: the digits the purpose needs, two thin rules, space between rows and columns, the numbers right-aligned to be compared, nothing bold but the title, the unit once in the title (08-12 DP-4, G7.37–G7.45)",
+    "guide": []
+   },
+   {
+    "rule": "R10-12",
+    "level": "locked",
+    "text": "digits: each column at its data's own decimals, one number of decimals down each column (G7.37, G6.16)",
+    "guide": []
+   },
+   {
+    "rule": "R10-25",
+    "level": "locked",
+    "text": "the unit once, in the title; the cells bare numbers (G7.45)",
+    "guide": []
+   }
+  ],
+  "findings": [],
+  "overrides": [],
+  "expect": {},
+  "expect_met": true,
+  "source": {
+   "book": "p. 167 (s. 0156)",
+   "notes": "05 #10",
+   "shows": "the gallery's table: the unit and its magnitude once, in the title, the cells bare numbers (the book's $553K in every cell, R10-25); the year is ours; variant heat, the book's table with graphical elements, its cells shaded by value, pale enough to read",
+   "status": "generated"
+  },
+  "summary": {
+   "orientation": "vertical",
+   "plot": [
+    0.0,
+    31.0,
+    144.91,
+    95.5
+   ],
+   "table": {
+    "rows": [
+     "joe",
+     "lisa",
+     "kim"
+    ],
+    "columns": [
+     "2022-01",
+     "2022-02",
+     "2022-03"
+    ],
+    "comparable": true,
+    "pitch": 21.5,
+    "width": 144.91,
+    "graphics": "none",
+    "highlighted": [],
+    "values": null
+   },
+   "width": 307.38,
+   "height": 96.5,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job lookup: no insight stated (a descriptive title will do, D-55)",
+    "guide": [],
+    "group": "tables"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-11",
+    "level": "guided",
+    "text": "group: tables. A table alone: its sole use is looking up individual values (facts.message lookup_only; G1.12)",
+    "guide": [],
+    "group": "tables"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type, the series told apart by colour (G1.59)",
+    "guide": [],
+    "group": "tables"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "tables are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "tables"
+   }
+  ],
+  "copies": []
+ },
+ "output_sha256": "afc39a14fd331f97a31ce7bad1bd40ecb6fcb4bdd4b11f44146b475cfcef3902"
+}

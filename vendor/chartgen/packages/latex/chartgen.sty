@@ -1,0 +1,166 @@
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{chartgen}[2026/10/03 Chartgen PGF, native text and in-document charts]
+\RequirePackage{pgf}
+\makeatletter
+% Declare in the intended font context, before including the generated PGF.
+% Store the typeset box so measurement and final output refer to the same content.
+\newcommand\chartgenDeclareNative[2]{%
+  \ifcsname chartgen@box@#1\endcsname\else
+    \expandafter\newsavebox\csname chartgen@box@#1\endcsname
+  \fi
+  \expandafter\gdef\csname chartgen@body@#1\endcsname{#2}%
+  \expandafter\sbox\csname chartgen@box@#1\endcsname{#2}%
+}
+\newcommand\chartgenUseNative[1]{%
+  \ifcsname chartgen@body@#1\endcsname
+    \csname chartgen@body@#1\endcsname
+  \else
+    \PackageError{chartgen}{Native text key `#1' is undefined}{Declare it with \string\chartgenDeclareNative\space before including the chart.}%
+  \fi
+}
+\newcommand\chartgenNativeWidth[1]{\wd\csname chartgen@box@#1\endcsname}
+\newcommand\chartgenNativeHeight[1]{\dimexpr\ht\csname chartgen@box@#1\endcsname+\dp\csname chartgen@box@#1\endcsname\relax}
+
+% ---------------------------------------------------------------------------
+% Charts drawn inside the document: \chartgen[options]{spec.json}
+%
+% The engine runs while the document compiles and measures every label where the chart
+% stands, in the document's own fonts, as the Typst plugin does in Typst. Two routes, both
+% needing shell escape (LuaTeX loads binary modules only with it):
+%   lua    LuaLaTeX loads the chartgen_luatex module and runs it in process: one pass,
+%          no files, no processes.
+%   shell  any engine runs the chartgen-tex program once a round through \write18, with
+%          the round's files named after \jobname.
+% route=auto (the default) takes lua under LuaLaTeX when the module loads, else shell.
+\RequirePackage{pdftexcmds}
+\RequirePackage{graphicx}
+\newif\ifchartgen@fit
+\newcount\chartgen@count
+\newbox\chartgen@box
+\newbox\chartgen@picture
+\newwrite\chartgen@out
+\pgfkeys{/chartgen/.is family, /chartgen,
+  route/.store in=\chartgen@route, route=auto,
+  program/.store in=\chartgen@program, program=chartgen-tex,
+  module/.store in=\chartgen@module, module=chartgen_luatex,
+  width/.store in=\chartgen@width, width=,
+  height/.store in=\chartgen@height, height=,
+  theme/.store in=\chartgen@theme, theme=,
+  variant/.store in=\chartgen@variant, variant=,
+  max rounds/.store in=\chartgen@maxrounds, max rounds=8,
+  % Scale a chart wider than the line down to the line, labels and all
+  fit/.is if=chartgen@fit,
+}
+\newcommand\chartgenset[1]{\pgfkeys{/chartgen,#1}}
+\def\chartgenRoute{none}
+\ifdefined\directlua
+  \directlua{require("chartgen")}
+\fi
+% A dimension as a number of bp (1/72 inch), the engine's unit
+\def\chartgen@bp#1{\strip@pt\dimexpr(#1)*7200/7227\relax}
+% Set a label exactly as the PGF output will, and record its box in scaled points
+\def\chartgen@measure#1#2#3{%
+  \setbox\chartgen@box=\hbox{#3}%
+  \chartgen@record{#1}{\number\wd\chartgen@box}{\number\ht\chartgen@box}{\number\dp\chartgen@box}{#2}}
+\def\chartgen@status#1{\gdef\chartgen@state{#1}}
+\def\chartgen@fail#1{\gdef\chartgen@state{error}\PackageError{chartgen}{#1}{The chart is left out.}}
+\def\chartgen@warning#1{\PackageWarning{chartgen}{#1}}
+% The options for the engine, as key=value lines
+\def\chartgen@options{%
+  id=\chartgen@id^^J%
+  \ifx\chartgen@width\@empty default_width=\chartgen@bp{\linewidth}\else width=\chartgen@bp{\chartgen@width}\fi^^J%
+  \ifx\chartgen@height\@empty\else height=\chartgen@bp{\chartgen@height}^^J\fi
+  context=latex:\fontname\font:\f@size^^J%
+  \ifx\chartgen@theme\@empty\else theme_file=\chartgen@theme^^J\fi
+  \ifx\chartgen@variant\@empty\else variant=\chartgen@variant^^J\fi
+  max_rounds=\chartgen@maxrounds}
+\newcommand\chartgen[2][]{%
+  \begingroup
+  \pgfkeys{/chartgen,#1}%
+  \global\advance\chartgen@count\@ne
+  \edef\chartgen@id{chartgen\the\chartgen@count}%
+  \def\chartgen@chosen{none}%
+  \ifnum\pdf@shellescape=\@ne
+    \def\chartgen@try{lua}%
+    \ifx\chartgen@route\chartgen@try\chartgen@iflua{\def\chartgen@chosen{lua}}{}\fi
+    \def\chartgen@try{auto}%
+    \ifx\chartgen@route\chartgen@try
+      \chartgen@iflua{\def\chartgen@chosen{lua}}{\def\chartgen@chosen{shell}}%
+    \fi
+    \def\chartgen@try{shell}%
+    \ifx\chartgen@route\chartgen@try\def\chartgen@chosen{shell}\fi
+  \fi
+  % Which route drew the last chart: lua, shell or none, for documents to report
+  \global\let\chartgenRoute\chartgen@chosen
+  % Built in a box, then placed like \includegraphics places an image
+  \setbox\chartgen@picture=\hbox{\csname chartgen@run@\chartgen@chosen\endcsname{#2}\unskip}%
+  \ifdim\wd\chartgen@picture>\linewidth
+    \ifchartgen@fit
+      \setbox\chartgen@picture=\hbox{\resizebox{\linewidth}{!}{\box\chartgen@picture}}%
+    \else
+      \PackageWarning{chartgen}{#2 is wider than the line
+        (\the\wd\chartgen@picture\space > \the\linewidth);
+        give it a width, or fit to scale it down}%
+    \fi
+  \fi
+  \leavevmode\box\chartgen@picture
+  \endgroup}
+% Whether the in-process route can run here
+\def\chartgen@iflua#1#2{%
+  \ifdefined\directlua
+    \ifnum\directlua{chartgen.available("\luaescapestring{\chartgen@module}")}=\@ne #1\else #2\fi
+  \else #2\fi}
+\def\chartgen@run@none#1{%
+  \PackageError{chartgen}{Cannot draw #1 without shell escape
+    (route \chartgen@route)}{Compile with --shell-escape. Under LuaLaTeX the engine then
+    runs in process (the chartgen_luatex module); other engines run \chartgen@program.}}
+\def\chartgen@run@lua#1{%
+  \begingroup\newlinechar=`\^^J%
+  \directlua{chartgen.chart("\luaescapestring{#1}", "\luaescapestring{\chartgen@options}")}%
+  \endgroup}
+\def\chartgen@record@lua#1#2#3#4#5{\directlua{chartgen.record("#1", "#2", "#3", "#4", "#5")}}
+% The shell route: options and measurements go to files; each round's reply is \input
+\def\chartgen@run@shell#1{%
+  \IfFileExists{#1}{}{\PackageError{chartgen}{Cannot find the chart specification #1}{}}%
+  % The replies use the package's own macros
+  \makeatletter
+  \edef\chartgen@base{\jobname-\chartgen@id}%
+  \begingroup\newlinechar=`\^^J%
+    \immediate\openout\chartgen@out=\chartgen@base.opt\relax
+    \immediate\write\chartgen@out{\chartgen@options}%
+    \immediate\closeout\chartgen@out
+  \endgroup
+  \gdef\chartgen@collected{}%
+  \let\chartgen@record\chartgen@record@shell
+  \chartgen@write@measurements
+  \chartgen@shell@round{#1}{0}}
+\def\chartgen@record@shell#1#2#3#4#5{%
+  \xdef\chartgen@collected{\chartgen@collected\noexpand\chartgen@line{#1 #2 #3 #4 #5}}}
+\def\chartgen@write@measurements{%
+  \immediate\openout\chartgen@out=\chartgen@base.meas\relax
+  \def\chartgen@line##1{\immediate\write\chartgen@out{##1}}%
+  \chartgen@collected
+  \immediate\closeout\chartgen@out}
+\def\chartgen@shell@round#1#2{%
+  \gdef\chartgen@state{missing}%
+  % Never read an earlier compile's reply
+  \immediate\openout\chartgen@out=\chartgen@base.tex\relax\immediate\closeout\chartgen@out
+  \immediate\write18{\chartgen@program\space "#1" "\chartgen@base.opt" "\chartgen@base.meas" "\chartgen@base.tex"}%
+  \IfFileExists{\chartgen@base.tex}{\input{\chartgen@base.tex}}{}%
+  \def\chartgen@try{measure}%
+  \ifx\chartgen@state\chartgen@try
+    \chartgen@write@measurements
+    \ifnum#2<\chartgen@maxrounds\relax
+      \chartgen@shell@round{#1}{\the\numexpr#2+1\relax}%
+    \else
+      \PackageError{chartgen}{The layout of #1 did not settle}{}%
+    \fi
+  \else
+    \def\chartgen@try{missing}%
+    \ifx\chartgen@state\chartgen@try
+      \PackageError{chartgen}{\chartgen@program\space gave no reply for #1}{Is
+        \chartgen@program\space on the PATH? Set its path with \string\chartgenset{program=...}.}%
+    \fi
+  \fi}
+\let\chartgen@record\chartgen@record@lua
+\makeatother

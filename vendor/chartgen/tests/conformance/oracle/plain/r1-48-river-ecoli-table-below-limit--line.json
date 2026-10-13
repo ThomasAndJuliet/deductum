@@ -1,0 +1,44 @@
+{
+ "key": "r1-48-river-ecoli-table-below-limit--line",
+ "file": "r1-48-river-ecoli-table-below-limit.json",
+ "variant": "line",
+ "requested_type": "line",
+ "report": {
+  "chart": "r1-48-river-ecoli-table-below-limit",
+  "style": "plain",
+  "variant": "line",
+  "type": null,
+  "status": "refused",
+  "decisions": [],
+  "findings": [
+   {
+    "rule": "R0-12",
+    "severity": "error",
+    "message": "11 censored values (below or above a limit, as “<1”): a line chart would draw them as gaps, as if not known, or as zero; only a heatmap (a step of their own, in the key) and a table (“<1” in the cell) draw them yet",
+    "path": "data.series[0].values[2]",
+    "supply": "chart.type heatmap or table; or, if the limit may stand for the value for this message, the limit itself as a number, said in a note",
+    "level": "locked",
+    "guide": [],
+    "title": "a missing value is never drawn as zero; a known zero is labelled"
+   }
+  ],
+  "overrides": [],
+  "expect": {
+   "refused": [
+    "R0-12"
+   ]
+  },
+  "expect_met": true,
+  "source": {
+   "notes": "eval B10",
+   "shows": "results below the detection limit written “<1” in their cells, aligned as numbers, apart from “(missing)”; the variant, a line chart, is refused: it would draw them as gaps or zero (R0-12)",
+   "status": "generated"
+  },
+  "summary": {
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [],
+  "copies": []
+ }
+}

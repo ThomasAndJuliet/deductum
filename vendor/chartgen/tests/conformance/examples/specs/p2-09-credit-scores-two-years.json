@@ -1,0 +1,111 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p2-09-credit-scores-two-years",
+    "job": {
+      "kind": "lookup",
+      "text": "Look up each customer's credit score at the end of 2021 and 2022"
+    },
+    "title": {
+      "text": "Credit Scores, Dec. 31, 2021 and 2022",
+      "kind": "descriptive"
+    },
+    "data": {
+      "x": {
+        "kind": "nominal",
+        "values": [
+          "Jasmine",
+          "Pablo",
+          "Elena",
+          "Cynthia",
+          "Andy"
+        ]
+      },
+      "measure": {
+        "name": "credit score",
+        "kind": "score",
+        "zero": "arbitrary",
+        "min": 300,
+        "max": 850,
+        "unit": {
+          "what": "credit score"
+        }
+      },
+      "series": [
+        {
+          "id": "y2022",
+          "name": "2022",
+          "values": [
+            467,
+            445,
+            361,
+            314,
+            307
+          ]
+        },
+        {
+          "id": "y2021",
+          "name": "2021",
+          "values": [
+            452,
+            431,
+            378,
+            322,
+            318
+          ]
+        }
+      ]
+    },
+    "facts": {
+      "message": "periods"
+    },
+    "reasons": {
+      "facts.message": "the job is to look up each customer's score at each year end, not the change between them (the book's dot plot, p. 89)"
+    },
+    "chart": {
+      "type": "dot"
+    },
+    "source": {
+      "book": "p. 89 (s. 0085), with 2021 scores of ours",
+      "notes": "02 #15 (synthetic 2021)",
+      "shows": "a dot plot of two series on a scale from the theoretical minimum: the two dots of a customer share its place, each year in its own colour, one size; named beside the dots of the last customer, in their order (G5.1, D-7)"
+    }
+  },
+  "variants": [
+    {
+      "name": "legend",
+      "patch": {
+        "chart": {
+          "labelling": "legend"
+        },
+        "source": {
+          "shows": "a legend asked for where the names fit beside the dots: the legend row above, with the guided finding (G5.1)"
+        }
+      },
+      "expect": {
+        "findings": [
+          "R4-1"
+        ]
+      }
+    },
+    {
+      "name": "horizontal",
+      "patch": {
+        "chart": {
+          "orientation": "horizontal"
+        },
+        "reasons": {
+          "chart.orientation": "to show two series of dots in rows"
+        },
+        "source": {
+          "shows": "turned: the dots of a customer share its row, so the series are keyed by a legend row above (G5.10)"
+        }
+      },
+      "expect": {
+        "findings": [
+          "R9-10"
+        ]
+      }
+    }
+  ]
+}

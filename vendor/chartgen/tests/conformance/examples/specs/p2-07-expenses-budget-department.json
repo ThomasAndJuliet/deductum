@@ -1,0 +1,103 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p2-07-expenses-budget-department",
+    "job": {
+      "kind": "lookup",
+      "text": "Look up each department's expenses against its budget"
+    },
+    "title": {
+      "text": "Expenses and Budget by Department, 2022",
+      "kind": "descriptive"
+    },
+    "data": {
+      "x": {
+        "kind": "nominal",
+        "values": [
+          "Operations",
+          "Marketing",
+          "Finance & Admin",
+          "IT",
+          "R&D"
+        ]
+      },
+      "measure": {
+        "name": "expenses",
+        "kind": "amount",
+        "zero": "meaningful",
+        "min": 0,
+        "unit": {
+          "prefix": "$",
+          "noun": "in expenses"
+        }
+      },
+      "series": [
+        {
+          "id": "expenses",
+          "name": "Expenses",
+          "values": [
+            534942,
+            377123,
+            363122,
+            161994,
+            133800
+          ]
+        },
+        {
+          "id": "budget",
+          "name": "Budget",
+          "role": "target",
+          "values": [
+            497496,
+            343182,
+            374016,
+            158754,
+            115068
+          ]
+        }
+      ]
+    },
+    "source": {
+      "book": "p. 158 (s. 0148)",
+      "notes": "05 #8",
+      "shows": "the book's “non-ugly” chart: the expenses as bars and the budget, a reference, as a short flat marker across each bar in the strong shade of the bars' blue, on the one zero-based scale (G1.60, G7.57); the two named once, beside the first bar, with thin grey leaders (G5.5, D-7)"
+    }
+  },
+  "variants": [
+    {
+      "name": "clustered",
+      "patch": {
+        "data": {
+          "series": [
+            {
+              "id": "expenses",
+              "name": "Expenses",
+              "values": [
+                534942,
+                377123,
+                363122,
+                161994,
+                133800
+              ]
+            },
+            {
+              "id": "budget",
+              "name": "Budget",
+              "values": [
+                497496,
+                343182,
+                374016,
+                158754,
+                115068
+              ]
+            }
+          ]
+        },
+        "source": {
+          "shows": "the budget as a second series of bars: clustered bars with a legend, the tidy form of the book's “fugly” original, where the budget weighs as much as the expenses"
+        }
+      },
+      "expect": {}
+    }
+  ]
+}

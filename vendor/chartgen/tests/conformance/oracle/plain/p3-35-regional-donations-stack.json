@@ -1,0 +1,266 @@
+{
+ "key": "p3-35-regional-donations-stack",
+ "file": "p3-35-regional-donations-stack.json",
+ "variant": null,
+ "requested_type": "auto",
+ "report": {
+  "chart": "p3-35-regional-donations-stack",
+  "style": "plain",
+  "variant": null,
+  "type": "stacked_bar",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "R7-08",
+    "level": "guided",
+    "text": "type stacked_bar: a subtotal of several parts as an amount: a stacked bar, the summed parts adjacent at its base (G1.37)",
+    "guide": []
+   },
+   {
+    "rule": "R2-24",
+    "level": "locked",
+    "text": "bars start at zero",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "scale 0–300 by 50",
+    "guide": []
+   },
+   {
+    "rule": "R7-08",
+    "level": "guided",
+    "text": "one total, Donations, stacked from its 6 parts",
+    "guide": []
+   },
+   {
+    "rule": "R7-24",
+    "level": "guided",
+    "text": "stacking order from the base: East, Central, South, Int'l, West, North (the largest at the base, where it is read precisely; G7.31, D-26 (b))",
+    "guide": []
+   },
+   {
+    "rule": "R7-24",
+    "level": "locked",
+    "text": "each part in one colour and one place in every total: East (slot 1), Central (slot 2), South (slot 3), Int'l (slot 4), West (slot 5), North (slot 6) (G4.22)",
+    "guide": []
+   },
+   {
+    "rule": "R9-10",
+    "level": "locked",
+    "text": "one total: one stack, standing upright (07 §5.4), its parts named beside it: vertical stacked bars",
+    "guide": []
+   },
+   {
+    "rule": "R2-32",
+    "level": "guided",
+    "text": "6 values against 7 scale labels: whichever puts fewer numbers on the chart (G2.18): the values labelled directly, the value scale and its gridlines removed, the zero line kept as the baseline",
+    "guide": []
+   },
+   {
+    "rule": "R5-17",
+    "level": "locked",
+    "text": "value labels as a set, one magnitude and one number of decimals, the prefix and suffix on each: $133K, $72K, $60K, $6K, $4K, $3K (G6.16, G7.4)",
+    "guide": []
+   },
+   {
+    "rule": "R2-32",
+    "level": "locked",
+    "text": "each value before its part's name beside the stack: the text grey does not read on the parts' colours at 4.5 : 1 inside them (G7.4, G6.5)",
+    "guide": []
+   },
+   {
+    "rule": "R2-07",
+    "level": "locked",
+    "text": "the unit's description on its own line above the plot: “donations per region”; the labels carry its prefix, suffix and magnitude",
+    "guide": []
+   },
+   {
+    "rule": "R4-1",
+    "level": "guided",
+    "text": "each part named beside the stack, level with the middle of its segment, top to bottom as stacked: North, West, Int'l, South, Central, East; thin leaders to North, Int'l, moved off their segments to clear the others (their values before them) (G5.4, D-31 (c))",
+    "guide": []
+   },
+   {
+    "rule": "R5-26",
+    "level": "locked",
+    "text": "the title wraps onto two lines",
+    "guide": []
+   }
+  ],
+  "findings": [],
+  "overrides": [],
+  "expect": {},
+  "expect_met": true,
+  "source": {
+   "book": "p. 77 (s. 0077)",
+   "notes": "02 #10b",
+   "shows": "one stacked bar with three thin parts at its top, named beside it on thin leaders where they had to move (D-7); the book's inset on the top of the stack (G2.26) is a later stage for stacks: not drawn",
+   "status": "generated"
+  },
+  "summary": {
+   "scale": "0–300 by 50",
+   "labels": [
+    "0",
+    "50",
+    "100",
+    "150",
+    "200",
+    "250",
+    "$300K"
+   ],
+   "top": "$300K in donations",
+   "scale_title": null,
+   "orientation": "vertical",
+   "plot": [
+    0.0,
+    63.53,
+    98.2,
+    219.53
+   ],
+   "band": 98.2,
+   "series": [
+    "East",
+    "Central",
+    "South",
+    "Int'l",
+    "West",
+    "North"
+   ],
+   "labelling": "direct",
+   "value_labels": true,
+   "table": false,
+   "bar": 54.6,
+   "stack": "stacked",
+   "parts": [
+    "East",
+    "Central",
+    "South",
+    "Int'l",
+    "West",
+    "North"
+   ],
+   "percent": false,
+   "totals": [
+    "Donations"
+   ],
+   "width": 260.0,
+   "height": 220.53,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job answer: insight “East, Central and South gave nearly all of the year's donations”",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-1",
+    "level": "guided",
+    "text": "a graph, the values to be compared or a pattern seen (G1.11)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 2,
+    "name": "variables",
+    "rule": "RP3-2",
+    "level": "guided",
+    "text": "one plot: categories along x and 1 series; a further variable would go to small multiples (data.dims, G1.18)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 3,
+    "name": "location",
+    "rule": "R8-2",
+    "level": "guided",
+    "text": "not a map: where the values are is not the message (facts.location_matters; G1.24, G1.25)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "RP2-7",
+    "level": "guided",
+    "text": "group: breakdowns of totals. One total of 6 parts (07 §4.1, G1.8)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-02",
+    "level": "locked",
+    "text": "check, meaningful total: passes: the values add up to a total someone would quote (parts.meaningful_total)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-03",
+    "level": "locked",
+    "text": "check, all parts: passes: every part of the total is shown (parts.all_parts)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-05",
+    "level": "locked",
+    "text": "check, overlap: passes: no part contains or overlaps another (parts.overlap)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-04",
+    "level": "locked",
+    "text": "check, signs: passes: the parts are all of one sign",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-08",
+    "level": "guided",
+    "text": "a subtotal of several parts as an amount: a stacked bar, the summed parts adjacent at its base (G1.37)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type (G1.59)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "stacked bar charts are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   }
+  ],
+  "copies": []
+ },
+ "output_sha256": "adce5867a7cd0e298760dde7d8e80ba185b12ad3a64832b45eeafafc81207cda"
+}

@@ -1,0 +1,14 @@
+[package]
+name = "figkit-python"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+# Distinct Cargo artifact; maturin still installs figkit._native (PyInit__native).
+[lib]
+name = "figkit_native"
+crate-type = ["cdylib"]
+
+[dependencies]
+figkit-protocol = { path = "../figkit-protocol" }
+pyo3 = { version = "0.29", features = ["extension-module", "abi3-py310"] }

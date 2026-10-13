@@ -1,0 +1,37 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p2-41-clinic-b-parking",
+    "job": {"kind": "persuade", "text": "Persuade the operations manager to bring back free parking at Clinic B"},
+    "insight": {
+      "important": "Vaccinations fell sharply at Clinic B once its free parking ended",
+      "explain": "Free parking at Clinic B ended in March",
+      "action": "Bring back free parking at Clinic B soon",
+      "targets": [{"series": "b"}],
+      "explain_anchor": {"series": "b", "x": "2022-03"}
+    },
+    "title": {"text": "Vaccinations Fell Sharply at Clinic B When Its Free Parking Ended", "kind": "insight",
+              "descriptive": "Total Vaccinations per Month by Clinic, Jan–Jun 2022"},
+    "data": {
+      "x": {"kind": "time", "grid": "month",
+            "values": ["2022-01", "2022-02", "2022-03", "2022-04", "2022-05", "2022-06"]},
+      "measure": {"name": "total vaccinations", "kind": "count", "zero": "meaningful", "min": 0,
+                  "persistence": "summary", "unit": {"noun": "vaccinations per month", "magnitude": 3}},
+      "series": [
+        {"id": "d", "name": "Clinic D", "values": [67, 64, 72, 72, 66, 65]},
+        {"id": "c", "name": "Clinic C", "values": [43, 46, 48, 50, 47, 51]},
+        {"id": "a", "name": "Clinic A", "values": [27, 31, 31, 34, 33, 34]},
+        {"id": "b", "name": "Clinic B", "values": [66, 67, 63, 41, 32, 25]}
+      ]
+    },
+    "facts": {"message": "pattern"},
+    "comments": [
+      {"text": "Free parking at Clinic B ended in March", "anchors": [{"series": "b", "x": "2022-03"}],
+       "answers": ["explain"]},
+      {"text": "Bring back free parking soon", "anchors": [{"series": "b", "x": "2022-06"}],
+       "answers": ["action"]}
+    ],
+    "source": {"book": "p. 393 (s. 0359)", "notes": "13-15 F8",
+               "shows": "the same clinic data for another insight: Clinic B highlighted by its thickness, a comment at March saying what explains the fall and one at the latest month saying what to do (R15-1, R15-2)"}
+  }
+}

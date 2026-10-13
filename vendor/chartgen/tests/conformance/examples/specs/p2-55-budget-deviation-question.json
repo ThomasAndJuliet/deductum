@@ -1,0 +1,75 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p2-55-budget-deviation-question",
+    "job": {
+      "kind": "other",
+      "text": "The chief executive asked for expenses and budget by department without saying why: one of three views, each answering a likely question (RP5-5)"
+    },
+    "title": {
+      "text": "How Far Above or Below Budget Was Each Department?",
+      "kind": "question",
+      "descriptive": "Expenses Against Budget by Department, 2022"
+    },
+    "data": {
+      "x": {
+        "kind": "nominal",
+        "values": [
+          "Operations",
+          "Marketing",
+          "Finance & Admin",
+          "IT",
+          "R&D"
+        ]
+      },
+      "measure": {
+        "name": "expenses",
+        "kind": "amount",
+        "zero": "meaningful",
+        "min": 0,
+        "good": "lower",
+        "unit": {
+          "prefix": "$",
+          "magnitude": 3,
+          "noun": "in expenses"
+        }
+      },
+      "series": [
+        {
+          "id": "expenses",
+          "name": "Expenses",
+          "values": [
+            562,
+            317,
+            308,
+            244,
+            89
+          ]
+        }
+      ],
+      "comparisons": [
+        {
+          "id": "budget",
+          "kind": "budget",
+          "label": "Budget",
+          "values": [
+            526.4,
+            282,
+            317.2,
+            239,
+            76.8
+          ]
+        }
+      ]
+    },
+    "transform": {
+      "kind": "deviation",
+      "comparison": "budget"
+    },
+    "source": {
+      "book": "p. 396–397 (s. 0362–0363)",
+      "notes": "13-15 F9",
+      "shows": "one view of a spray-and-pray set, titled with the question it answers (RP5-5, RP5-6): expenses minus budget, over budget bad and under budget good, in red and green (G4.16, D-18); the merged set is builder D's"
+    }
+  }
+}

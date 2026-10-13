@@ -1,57 +1,50 @@
-# Deductum, the sibling of COSMIC Agent Terminal for Isabelle and Lean proofs
-# (docs/deductum-decisions.md). This manifest packages a release binary
-# built beforehand in the same SDK (`cargo build --release --bin deductum`),
-# with the session host and prover backend sources the app installs on each
-# machine it connects to.
 app-id: dev.twright.Deductum
 runtime: org.freedesktop.Platform
-runtime-version: "25.08"
+runtime-version: '25.08'
 sdk: org.freedesktop.Sdk
 command: deductum
 appstream-compose: false
-
 finish-args:
-  - --socket=wayland
-  - --socket=fallback-x11
-  - --share=ipc
-  - --device=dri
-  # The session host, ssh, tar and the provers (Isabelle, Lean) run on the host through
-  # flatpak-spawn --host; the runtime has none of them
-  - --talk-name=org.freedesktop.Flatpak
-  # `deductum .` resolves paths as the shell sees them
-  - --filesystem=home:ro
-  # Terminal Agents' machines, and the desktop's theme
-  - --filesystem=xdg-config/cosmic/dev.twright.CosmicTermAgents:ro
-  - --filesystem=xdg-config/cosmic/com.system76.CosmicTheme.Mode:ro
-  - --filesystem=xdg-config/cosmic/com.system76.CosmicTheme.Dark:ro
-  - --filesystem=xdg-config/cosmic/com.system76.CosmicTheme.Light:ro
-  - --filesystem=xdg-config/cosmic/com.system76.CosmicTk:ro
-
+- --socket=wayland
+- --socket=fallback-x11
+- --share=ipc
+- --device=dri
+- --talk-name=org.freedesktop.Flatpak
+- --filesystem=home:ro
+- --filesystem=xdg-config/cosmic/dev.twright.CosmicTermAgents:ro
+- --filesystem=xdg-config/cosmic/com.system76.CosmicTheme.Mode:ro
+- --filesystem=xdg-config/cosmic/com.system76.CosmicTheme.Dark:ro
+- --filesystem=xdg-config/cosmic/com.system76.CosmicTheme.Light:ro
+- --filesystem=xdg-config/cosmic/com.system76.CosmicTk:ro
 modules:
-  - name: deductum
-    buildsystem: simple
-    build-commands:
-      - install -Dm755 deductum /app/bin/deductum
-      - mkdir -p /app/share/deductum && cp -r host backend /app/share/deductum/
-      - rm -rf /app/share/deductum/host/tests /app/share/deductum/host/__pycache__
-        /app/share/deductum/backend/*/lib
-      - install -Dm644 dev.twright.Deductum.desktop /app/share/applications/dev.twright.Deductum.desktop
-      - install -Dm644 dev.twright.Deductum.svg /app/share/icons/hicolor/scalable/apps/dev.twright.Deductum.svg
-      - install -Dm644 dev.twright.Deductum.metainfo.xml /app/share/metainfo/dev.twright.Deductum.metainfo.xml
-      - >-
-        appstreamcli compose --no-net --prefix=/
-        --origin=dev.twright.Deductum --result-root=/app
-        --data-dir=/app/share/app-info/xmls
-        --icons-dir=/app/share/app-info/icons/flatpak
-        --components=dev.twright.Deductum /app
-    sources:
-      - type: file
-        path: ../../target/release/deductum
-      - type: dir
-        path: ../../deductum
-      - type: file
-        path: ../../res/deductum/dev.twright.Deductum.desktop
-      - type: file
-        path: ../../res/deductum/dev.twright.Deductum.svg
-      - type: file
-        path: dev.twright.Deductum.metainfo.xml
+- name: deductum
+  buildsystem: simple
+  build-commands:
+  - cargo --offline --locked build --release --bin deductum
+  - install -Dm755 target/release/deductum /app/bin/deductum
+  - mkdir -p /app/share/deductum && cp -r deductum/host deductum/backend /app/share/deductum/
+  - rm -rf /app/share/deductum/host/tests /app/share/deductum/host/__pycache__ /app/share/deductum/backend/*/lib
+  - install -Dm644 res/deductum/dev.twright.Deductum.desktop /app/share/applications/dev.twright.Deductum.desktop
+  - install -Dm644 res/deductum/dev.twright.Deductum.svg /app/share/icons/hicolor/scalable/apps/dev.twright.Deductum.svg
+  - install -Dm644 packaging/flatpak/dev.twright.Deductum.metainfo.xml /app/share/metainfo/dev.twright.Deductum.metainfo.xml
+  - appstreamcli compose --no-net --prefix=/ --origin=dev.twright.Deductum --result-root=/app --data-dir=/app/share/app-info/xmls
+    --icons-dir=/app/share/app-info/icons/flatpak --components=dev.twright.Deductum /app
+  sources:
+  - type: dir
+    path: ../..
+    dest: cosmic-term
+    skip:
+    - target
+    - build-flatpak
+    - .git
+    - .flatpak-builder
+    - .local-design
+    - ci-artifact
+  - cargo-sources.json
+  subdir: cosmic-term
+sdk-extensions:
+- org.freedesktop.Sdk.Extension.rust-stable
+build-options:
+  append-path: /usr/lib/sdk/rust-stable/bin
+  env:
+    CARGO_HOME: /run/build/cosmic-term/cargo

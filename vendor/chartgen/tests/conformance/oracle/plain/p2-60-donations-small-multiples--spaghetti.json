@@ -1,0 +1,224 @@
+{
+ "key": "p2-60-donations-small-multiples--spaghetti",
+ "file": "p2-60-donations-small-multiples.json",
+ "variant": "spaghetti",
+ "requested_type": "auto",
+ "report": {
+  "chart": "p2-60-donations-small-multiples",
+  "style": "plain",
+  "variant": "spaghetti",
+  "type": "multiples of line",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "R6-4",
+    "level": "guided",
+    "text": "type line: a regular series whose pattern of change is the point (06 DP6-1, G1.51)",
+    "guide": []
+   },
+   {
+    "rule": "R6-37",
+    "level": "locked",
+    "text": "one shared scale: one scale for every panel, so that sizes compare across panels (G7.48)",
+    "guide": []
+   },
+   {
+    "rule": "R2-25",
+    "level": "locked",
+    "text": "the values are not far from zero compared with their spread",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "scale 0–60 by 10",
+    "guide": []
+   },
+   {
+    "rule": "R4-2",
+    "level": "locked",
+    "text": "a legend instead of end labels: the label of Cash, Int'l would move 3.9 line heights from its line (at most 1.5 with a leader) (G5.3, G5.7)",
+    "guide": []
+   },
+   {
+    "rule": "R6-27",
+    "level": "locked",
+    "text": "no point markers: no value is isolated and no straight run hides one",
+    "guide": []
+   },
+   {
+    "rule": "R2-07",
+    "level": "locked",
+    "text": "the unit phrase on the top label: “$60K in donations”; the top gridline starts after it",
+    "guide": []
+   },
+   {
+    "rule": "R2-21",
+    "level": "locked",
+    "text": "labels as a set, 0 decimals: 0, 10, 20, 30, 40, 50, $60K",
+    "guide": []
+   },
+   {
+    "rule": "R5-10",
+    "level": "locked",
+    "text": "digits hidden: thousands, stated once on the top label (R2-05, D-3): “$60K in donations”",
+    "guide": []
+   },
+   {
+    "rule": "R2-40",
+    "level": "locked",
+    "text": "time axis: row 1 narrow",
+    "guide": []
+   },
+   {
+    "rule": "R2-39",
+    "level": "locked",
+    "text": "time axis: row 2 (“2022”) left out, the title gives it (G2.37)",
+    "guide": []
+   },
+   {
+    "rule": "R4-5",
+    "level": "locked",
+    "text": "legend entries in the order of the lines at the latest point: Credit card, Central, Check, Central, Credit card, West, Check, West, Cash, Central, Credit card, North, Check, North, Cash, West, Check, East, Credit card, East, Cash, North, Cash, East, Credit card, Int'l, Check, Int'l, Cash, Int'l",
+    "guide": []
+   },
+   {
+    "rule": "R4-7",
+    "level": "locked",
+    "text": "the legend at the right of the plot, beside the latest values, centred on the plot",
+    "guide": []
+   },
+   {
+    "rule": "6.10",
+    "level": "locked",
+    "text": "one panel holding every series",
+    "guide": []
+   }
+  ],
+  "findings": [
+   {
+    "rule": "RP3-3",
+    "severity": "info",
+    "message": "panels.arrangement series in each panel by payment method and region departs from the procedure, which gives rows by payment method, columns by region (no comparison within a panel is stated (facts.compare): one series per panel, the most panels and the least clutter (13-15 DP-1))",
+    "path": "panels.arrangement",
+    "reason": "the book's rejected version: every series in one chart",
+    "level": "guided",
+    "recommended": "rows by payment method, columns by region",
+    "guide": [],
+    "title": "the arrangement of small multiples chosen for the insight, from the range of candidates"
+   },
+   {
+    "rule": "RP3-5",
+    "severity": "warn",
+    "message": "15 lines in one chart, crossing 32 times, not labelled directly: a general audience gets fewer series per panel, more panels (G1.20; five lines, D-28, a provisional threshold)",
+    "path": "panels.arrangement",
+    "level": "guided",
+    "guide": [],
+    "title": "no single chart of many overlapping series for a general audience"
+   },
+   {
+    "rule": "R6-35",
+    "severity": "warn",
+    "message": "15 lines crossing 32 times, not labelled directly: more than five lines only if they rarely cross (about once per line) and are labelled directly; else small multiples (G1.20, D-28)",
+    "level": "locked",
+    "guide": [],
+    "title": "at most about five lines, more only if they rarely cross and are labelled directly"
+   },
+   {
+    "rule": "R3-21",
+    "severity": "overridden",
+    "message": "15 regular colours: beyond eight they cannot be told apart; drop, group or merge categories, or label every series directly (G4.19, G4.21, D-14)",
+    "elements": [
+     "path.line[data-series=credit-card-central]",
+     "path.line[data-series=credit-card-east]",
+     "path.line[data-series=credit-card-intl]",
+     "path.line[data-series=credit-card-north]",
+     "path.line[data-series=credit-card-west]",
+     "path.line[data-series=check-central]",
+     "path.line[data-series=check-east]",
+     "path.line[data-series=check-intl]",
+     "path.line[data-series=check-north]",
+     "path.line[data-series=check-west]",
+     "path.line[data-series=cash-central]",
+     "path.line[data-series=cash-east]",
+     "path.line[data-series=cash-intl]",
+     "path.line[data-series=cash-north]",
+     "path.line[data-series=cash-west]"
+    ],
+    "reason": "the book's rejected spaghetti chart (s. 0338), rebuilt: fifteen colours with a legend",
+    "level": "locked",
+    "guide": [],
+    "title": "at most eight regular colours"
+   },
+   {
+    "rule": "R3-19",
+    "severity": "warn",
+    "message": "#94712a and #ba5c28 are 0.017 apart under deuteranopia (at least 0.06): readers with colour-vision deficiency may not tell them apart (G4.18, D-34)",
+    "elements": [
+     "path.line[data-series=cash-intl]",
+     "path.line[data-series=cash-west]"
+    ],
+    "level": "locked",
+    "guide": [],
+    "title": "colours that must be told apart survive colour-vision deficiency"
+   }
+  ],
+  "overrides": [
+   {
+    "rule": "R3-21",
+    "reason": "the book's rejected spaghetti chart (s. 0338), rebuilt: fifteen colours with a legend"
+   }
+  ],
+  "expect": {
+   "findings": [
+    "RP3-5",
+    "R3-21"
+   ]
+  },
+  "expect_met": true,
+  "source": {
+   "book": "p. 372 (s. 0338)",
+   "notes": "13-15 F1",
+   "shows": "the other end of the book's spectrum, rebuilt: all fifteen series in one chart, told apart only by a legend of fifteen colours; the generator warns that five lines in a plot are usually enough (G1.20) and lets the colours through only by an override",
+   "status": "generated"
+  },
+  "summary": {
+   "arrangement": "series in each panel by payment method and region",
+   "kind": "multiples",
+   "rows": 1,
+   "columns": 1,
+   "panels": 1,
+   "scale_mode": "shared",
+   "scale": "0–60 by 10",
+   "labels": [
+    "0",
+    "10",
+    "20",
+    "30",
+    "40",
+    "50",
+    "$60K"
+   ],
+   "top": "$60K in donations",
+   "orientation": "vertical",
+   "scales": {
+    "the panel": "0–60 by 10"
+   },
+   "plots": {
+    "the panel": [
+     24.0,
+     41.72,
+     246.3,
+     175.1
+    ]
+   },
+   "width": 368.0,
+   "height": 202.26,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [],
+  "copies": []
+ },
+ "output_sha256": "302285c460a95048312db7ea2bf73d33f0d8a85fafd9d80d26d1654bfbd135a1"
+}

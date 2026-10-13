@@ -1,0 +1,110 @@
+{
+ "base": {
+  "chartspec": 1,
+  "id": "p3-61-average-donations",
+  "job": {
+   "kind": "lookup",
+   "text": "Look up the average donation in each region"
+  },
+  "title": {
+   "text": "Average Donation by Region, 2022",
+   "kind": "descriptive"
+  },
+  "data": {
+   "x": {
+    "kind": "nominal",
+    "values": [
+     "East",
+     "South",
+     "West"
+    ]
+   },
+   "measure": {
+    "name": "average donation",
+    "kind": "amount",
+    "zero": "meaningful",
+    "min": 0,
+    "unit": {
+     "prefix": "$",
+     "what": "average donation"
+    }
+   },
+   "series": [
+    {
+     "id": "avg",
+     "name": "Average donation",
+     "values": [
+      24.55,
+      17.92,
+      16.24
+     ]
+    }
+   ],
+   "parts": {
+    "meaningful_total": false,
+    "all_parts": true,
+    "overlap": false
+   }
+  },
+  "facts": {
+   "message": "fraction_of_total"
+  },
+  "source": {
+   "book": "p. 252 (s. 0232)",
+   "notes": "07 #6",
+   "shows": "a request for fractions of averages: the meaningful-total check fails, since three regions' averages add up to nothing anyone would quote, so a bar chart (R7-02, G0.12)"
+  }
+ },
+ "variants": [
+  {
+   "name": "pie",
+   "patch": {
+    "chart": {
+     "type": "pie"
+    },
+    "source": {
+     "shows": "the book's pie of averages, asked for: refused by the first check (R7-02, G0.12 [L])"
+    }
+   },
+   "expect": {
+    "refused": [
+     "R7-02"
+    ]
+   }
+  },
+  {
+   "name": "stacked",
+   "patch": {
+    "chart": {
+     "type": "stacked_bar"
+    },
+    "source": {
+     "shows": "the book's stacked bar of averages, reaching a meaningless $58: refused by the same check"
+    }
+   },
+   "expect": {
+    "refused": [
+     "R7-02"
+    ]
+   }
+  },
+  {
+   "name": "facts-missing",
+   "patch": {
+    "data": {
+     "parts": null
+    },
+    "source": {
+     "shows": "the same request without the parts' facts: whether the values add up, whether every part is shown and whether a part contains another cannot be read from the numbers, so all three are asked for before any pie (D-1; overlap by the owner's decision of 1 Oct 2026)"
+    }
+   },
+   "expect": {
+    "refused": [
+     "R7-02",
+     "R7-03",
+     "R7-05"
+    ]
+   }
+  }
+ ]
+}

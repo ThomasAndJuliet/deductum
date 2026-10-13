@@ -1,0 +1,22 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p3-07-vehicle-sales-overlaps",
+    "job": {"kind": "lookup", "text": "Look up the share of sales from each kind of vehicle"},
+    "title": {"text": "Sales by Vehicle Type, 2022", "kind": "descriptive"},
+    "data": {
+      "x": {"kind": "nominal",
+            "values": ["Sports Cars", "Other Cars", "Pickup Trucks", "Other Trucks", "Motorcycles"],
+            "groups": {"Sports Cars": "Cars", "Other Cars": "Cars", "Pickup Trucks": "Trucks",
+                       "Other Trucks": "Trucks"}},
+      "measure": {"name": "sales", "kind": "amount", "zero": "meaningful", "min": 0,
+                  "unit": {"prefix": "$", "magnitude": 6, "noun": "in sales"}},
+      "series": [{"id": "sales", "name": "Sales", "values": [36.6, 81.8, 21.4, 40.2, 20.0]}],
+      "parts": {"meaningful_total": true, "all_parts": true, "overlap": false}
+    },
+    "facts": {"message": "fraction_of_total"},
+    "chart": {"type": "pie"},
+    "source": {"book": "p. 259–262 (s. 0239–0241)", "notes": "07 #10",
+               "shows": "overlapping categories separated before they are sliced (Cars less Sports Cars is Other Cars): each group's parts together, the larger group first, its named part first, in the group's colour and a tint of it, so that the containment stays visible (R7-05, G0.14, D-24)"}
+  }
+}

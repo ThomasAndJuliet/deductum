@@ -1,0 +1,79 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p1-14-credit-scores",
+    "job": {
+      "kind": "lookup",
+      "text": "Look up each applicant's credit score"
+    },
+    "title": {
+      "text": "Credit Scores, Dec. 31, 2022",
+      "kind": "descriptive"
+    },
+    "data": {
+      "x": {
+        "kind": "nominal",
+        "values": [
+          "Jasmine",
+          "Pablo",
+          "Elena",
+          "Cynthia",
+          "Andy"
+        ]
+      },
+      "measure": {
+        "name": "credit score",
+        "kind": "score",
+        "zero": "arbitrary",
+        "min": 300,
+        "max": 850,
+        "unit": {
+          "what": "credit score"
+        }
+      },
+      "series": [
+        {
+          "id": "score",
+          "name": "Credit score",
+          "values": [
+            467,
+            445,
+            361,
+            314,
+            307
+          ]
+        }
+      ]
+    },
+    "chart": {
+      "type": "dot"
+    },
+    "source": {
+      "book": "p. 89 (s. 0085)",
+      "notes": "02 #15",
+      "shows": "a categorical dot plot on a scale from the theoretical minimum, 300–500 by 50 (R2-26, G1.57): dots do not encode length, so the scale need not reach zero; hollow dots, the plain style's for categorical dot plots, and “500 (credit score)” on the top label, as the book draws it"
+    }
+  },
+  "variants": [
+    {
+      "name": "bars",
+      "patch": {
+        "chart": {
+          "type": "bar",
+          "value_labels": "off"
+        },
+        "reasons": {
+          "chart.value_labels": "the bad version's point is its scale from zero (p. 89), which value labels would take away"
+        },
+        "source": {
+          "shows": "the same spec as bars: bars start at zero, never at the theoretical minimum, so the scale shows scores no one can have, and the differences shrink; the procedure gives dots (G1.57, D-30), a guided finding"
+        }
+      },
+      "expect": {
+        "findings": [
+          "R2-24"
+        ]
+      }
+    }
+  ]
+}

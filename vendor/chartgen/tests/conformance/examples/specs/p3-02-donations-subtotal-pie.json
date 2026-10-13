@@ -1,0 +1,24 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p3-02-donations-subtotal-pie",
+    "job": {"kind": "answer", "text": "What share of all donations did the two largest donors give together?"},
+    "insight": {"important": "Mrs. Smith and Mrs. Jones gave almost half of all donations",
+                "targets": [{"category": "Mrs. Smith"}, {"category": "Mrs. Jones"}]},
+    "title": {"text": "Mrs. Smith and Mrs. Jones Gave Almost Half of All Donations", "kind": "insight",
+              "descriptive": "Donations by Donor, 2022"},
+    "data": {
+      "x": {"kind": "nominal",
+            "values": ["Mrs. Smith", "Mrs. Jones", "Mr. & Mrs. Perez", "The Chetley Family", "Ms. Flaherty"]},
+      "measure": {"name": "donations", "kind": "amount", "zero": "meaningful", "min": 0,
+                  "unit": {"prefix": "$", "magnitude": 3, "noun": "in donations"}},
+      "series": [{"id": "donations", "name": "Donations", "values": [165, 160, 135, 125, 100]}],
+      "parts": {"meaningful_total": true, "all_parts": true, "overlap": false}
+    },
+    "facts": {"message": "subtotal_fraction"},
+    "chart": {"type": "pie"},
+    "highlight": [{"targets": [{"category": "Mrs. Smith"}, {"category": "Mrs. Jones"}], "dim_others": true}],
+    "source": {"book": "p. 242–244 (s. 0223–0225)", "notes": "07 #1",
+               "shows": "a subtotal stated as a fraction: a pie, the two parts next to each other from 12 o'clock in the strong shades of their colours and the others paled, as the book emphasises a subtotal (G1.37, G7.30; D-9: the others pale only for a subtotal)"}
+  }
+}

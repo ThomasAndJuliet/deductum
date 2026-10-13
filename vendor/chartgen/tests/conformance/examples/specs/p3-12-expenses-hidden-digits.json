@@ -1,0 +1,20 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p3-12-expenses-hidden-digits",
+    "job": {"kind": "lookup", "text": "Look up each region's share of the year's expenses"},
+    "title": {"text": "Expenses by Region, 2022", "kind": "descriptive"},
+    "data": {
+      "x": {"kind": "nominal", "values": ["West", "South", "Central", "East", "North"]},
+      "measure": {"name": "expenses", "kind": "amount", "zero": "meaningful", "min": 0,
+                  "unit": {"prefix": "$", "noun": "in expenses"}},
+      "series": [{"id": "expenses", "name": "Expenses",
+                  "values": [728491.65, 582793.32, 466234.66, 326364.26, 195818.56]}],
+      "parts": {"meaningful_total": true, "all_parts": true, "overlap": false}
+    },
+    "facts": {"message": "fraction_of_total"},
+    "chart": {"type": "pie"},
+    "source": {"book": "p. 152 (s. 0142)", "notes": "05 #2",
+               "shows": "digits hidden in a pie's labels: the values as one set in thousands, rounded half away from zero ($583K and $196K, never $582K and $195K), the K set on every label, since each is read on its own (R5-10, R5-11, R5-16, G6.12)"}
+  }
+}

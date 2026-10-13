@@ -1,0 +1,55 @@
+{
+ "key": "p2-65-call-centres-merged--one-scale",
+ "file": "p2-65-call-centres-merged.json",
+ "variant": "one-scale",
+ "requested_type": "auto",
+ "report": {
+  "chart": "p2-65-call-centres-merged",
+  "style": "plain",
+  "variant": "one-scale",
+  "type": null,
+  "status": "refused",
+  "decisions": [],
+  "findings": [
+   {
+    "rule": "RP3-3",
+    "severity": "warn",
+    "message": "panels.arrangement series in each panel by measure departs from the procedure, which gives columns by measure (series in different measures: one panel per measure, side by side on the shared categories, each with its own scale (G1.56, G2.32))",
+    "path": "panels.arrangement",
+    "level": "guided",
+    "recommended": "columns by measure",
+    "guide": [],
+    "title": "the arrangement of small multiples chosen for the insight, from the range of candidates"
+   },
+   {
+    "rule": "R2-13",
+    "severity": "error",
+    "message": "different measures on one value scale invite comparisons across units that mean nothing",
+    "path": "panels.arrangement",
+    "supply": "arrangement auto: a merged chart, one panel and one scale per measure",
+    "level": "locked",
+    "guide": [],
+    "title": "one unit per scale"
+   }
+  ],
+  "overrides": [],
+  "expect": {
+   "refused": [
+    "R2-13"
+   ]
+  },
+  "expect_met": true,
+  "source": {
+   "book": "p. 67 (s. 0066)",
+   "notes": "02 #6",
+   "shows": "the book's bad version: satisfaction out of 10 and minutes on hold as bars on one 0–10 scale, refused (G2.30)",
+   "status": "generated"
+  },
+  "summary": {
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [],
+  "copies": []
+ }
+}

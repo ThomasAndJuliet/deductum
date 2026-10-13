@@ -1,0 +1,207 @@
+{
+ "key": "p2-70-accidents-count-and-rate",
+ "file": "p2-70-accidents-count-and-rate.json",
+ "variant": null,
+ "requested_type": "auto",
+ "report": {
+  "chart": "p2-70-accidents-count-and-rate",
+  "style": "plain",
+  "variant": null,
+  "type": "merged of bar",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "RP3-3",
+    "level": "guided",
+    "text": "arranged: columns by measure: series in different measures: one panel per measure, side by side on the shared categories, each with its own scale (G1.56, G2.32)",
+    "guide": []
+   },
+   {
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "categories sorted by Accidents (D-46), largest first, the same order in every panel (G2.1)",
+    "guide": []
+   },
+   {
+    "rule": "R3-3",
+    "level": "locked",
+    "text": "one colour for every mark: each panel holds one measure, and the panels tell them apart (G7.6)",
+    "guide": []
+   },
+   {
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "Accidents: type bar: categories compared by value",
+    "guide": []
+   },
+   {
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "Accident rate: type bar: categories compared by value",
+    "guide": []
+   },
+   {
+    "rule": "R2-24",
+    "level": "locked",
+    "text": "Accidents: bars start at zero",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "Accidents: scale 0–80 by 20",
+    "guide": []
+   },
+   {
+    "rule": "R2-24",
+    "level": "locked",
+    "text": "Accident rate: bars start at zero",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "Accident rate: scale 0–6 by 1",
+    "guide": []
+   },
+   {
+    "rule": "R5-26",
+    "level": "locked",
+    "text": "the title wraps onto two lines",
+    "guide": []
+   },
+   {
+    "rule": "R15-5",
+    "level": "locked",
+    "text": "Accidents: highlighting what the insight names",
+    "guide": []
+   },
+   {
+    "rule": "R2-21",
+    "level": "locked",
+    "text": "Accidents: labels as a set, 0 decimals, bare numbers: 0, 20, 40, 60, 80",
+    "guide": []
+   },
+   {
+    "rule": "R2-07",
+    "level": "locked",
+    "text": "Accidents: a horizontal scale: bare numbers, and its title centred below with the unit in parentheses: “Accidents”",
+    "guide": []
+   },
+   {
+    "rule": "R3-7",
+    "level": "locked",
+    "text": "Accidents: highlighted in the strong shade of their colour: Factory A; the others keep their colour",
+    "guide": []
+   },
+   {
+    "rule": "R15-5",
+    "level": "locked",
+    "text": "Accident rate: highlighting what the insight names",
+    "guide": []
+   },
+   {
+    "rule": "R2-21",
+    "level": "locked",
+    "text": "Accident rate: labels as a set, 0 decimals, bare numbers: 0, 1, 2, 3, 4, 5, 6",
+    "guide": []
+   },
+   {
+    "rule": "R2-07",
+    "level": "locked",
+    "text": "Accident rate: a horizontal scale: bare numbers, and its title centred below with the unit in parentheses: “Accidents per 100,000 work hours”",
+    "guide": []
+   },
+   {
+    "rule": "R3-7",
+    "level": "locked",
+    "text": "Accident rate: highlighted in the strong shade of their colour: Factory A; the others keep their colour",
+    "guide": []
+   },
+   {
+    "rule": "R9-11",
+    "level": "locked",
+    "text": "merged bars: 2 panels side by side, horizontal bars in one colour, the names once at the left, each panel its own scale from zero along the bottom, its title below and a heading above naming its measure (G7.6)",
+    "guide": []
+   }
+  ],
+  "findings": [
+   {
+    "rule": "R2-27",
+    "severity": "warn",
+    "message": "29% of room at the top of the scale (5–25 % expected)",
+    "level": "locked",
+    "guide": [],
+    "title": "the upper limit leaves 10–20 % of room (the data never touch it)"
+   },
+   {
+    "rule": "R2-32",
+    "severity": "info",
+    "message": "4 values against 5 scale labels: labelling the values directly would put fewer numbers on the chart (phase 2)",
+    "level": "locked",
+    "guide": [],
+    "title": "fewer values than scale labels: label the values directly"
+   },
+   {
+    "rule": "R2-32",
+    "severity": "info",
+    "message": "4 values against 7 scale labels: labelling the values directly would put fewer numbers on the chart (phase 2)",
+    "level": "locked",
+    "guide": [],
+    "title": "fewer values than scale labels: label the values directly"
+   }
+  ],
+  "overrides": [],
+  "expect": {},
+  "expect_met": true,
+  "source": {
+   "book": "p. 413 (s. 0379); p. 417 (s. 0382)",
+   "notes": "13-15 F15",
+   "shows": "raw and calculated values side by side as panels of a merged chart (G8.19): the count and the rate, each its own scale, the rows in the order of the counts; the factory the insight names in the strong shade in both panels",
+   "status": "generated"
+  },
+  "summary": {
+   "arrangement": "columns by measure",
+   "kind": "merged",
+   "rows": 1,
+   "columns": 2,
+   "panels": 2,
+   "scale_mode": "per_measure",
+   "scale": "0–80 by 20",
+   "labels": [
+    "0",
+    "20",
+    "40",
+    "60",
+    "80"
+   ],
+   "top": "80 accidents in the year",
+   "orientation": "horizontal",
+   "scales": {
+    "Accidents": "0–80 by 20",
+    "Accident rate": "0–6 by 1"
+   },
+   "plots": {
+    "Accidents": [
+     50.2,
+     73.82,
+     200.1,
+     153.82
+    ],
+    "Accident rate": [
+     215.6,
+     73.82,
+     365.5,
+     153.82
+    ]
+   },
+   "width": 368.0,
+   "height": 166.7,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [],
+  "copies": []
+ },
+ "output_sha256": "33191edf04e9bd65553cb55a16050de2ffe2468efcf19a3fae89df2a900c9a6e"
+}

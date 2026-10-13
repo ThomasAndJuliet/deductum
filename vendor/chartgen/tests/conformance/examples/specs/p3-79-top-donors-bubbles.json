@@ -1,0 +1,93 @@
+{
+ "base": {
+  "chartspec": 1,
+  "id": "p3-79-top-donors-bubbles",
+  "job": {
+   "kind": "lookup",
+   "text": "Look up the donations of the fifteen largest donors"
+  },
+  "title": {
+   "text": "Our Top 15 Donors, 2022",
+   "kind": "descriptive"
+  },
+  "data": {
+   "x": {
+    "kind": "nominal",
+    "values": [
+     "Smith and Co.",
+     "Black, Finson & Assoc.",
+     "Mr. and Ms. Mayworth",
+     "Mr. and Mrs. Latimer",
+     "Joseph's Auto Sales",
+     "The Parker Company",
+     "Mr. Hewson",
+     "Winstead Trust",
+     "Ms. Jordan",
+     "Mr. and Mrs. Cho",
+     "Mr. Jefferson",
+     "Apex Chocolates",
+     "Mr. and Mrs. Shirvani",
+     "The Lin Family",
+     "P&J Electric"
+    ]
+   },
+   "measure": {
+    "name": "donations",
+    "kind": "amount",
+    "zero": "meaningful",
+    "min": 0,
+    "unit": {
+     "prefix": "$",
+     "magnitude": 3,
+     "noun": "in donations"
+    }
+   },
+   "series": [
+    {
+     "id": "donations",
+     "name": "Donations",
+     "values": [
+      375,
+      350,
+      202,
+      176,
+      161,
+      151,
+      127,
+      101,
+      96,
+      76,
+      41,
+      34,
+      31,
+      26,
+      21
+     ]
+    }
+   ]
+  },
+  "source": {
+   "book": "p. 357–358 (s. 0325–0326)",
+   "notes": "08-12 #13",
+   "shows": "the donors' amounts as a bar chart sorted largest first, turned for the long names (R12-3)"
+  }
+ },
+ "variants": [
+  {
+   "name": "packed-bubbles",
+   "patch": {
+    "chart": {
+     "type": "packed_bubbles"
+    },
+    "source": {
+     "shows": "packed bubbles asked for: refused, their sizes hard to compare and their places suggesting relations (R12-3, G1.61 [L])"
+    }
+   },
+   "expect": {
+    "refused": [
+     "R12-3"
+    ]
+   }
+  }
+ ]
+}

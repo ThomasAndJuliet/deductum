@@ -1,0 +1,14 @@
+[package]
+name = "chartgen-rulings"
+version.workspace = true
+edition.workspace = true
+description = "Juliet's decided rulings as tests (see docs/chartgen/RULINGS.md); changes need her approval"
+publish = false
+
+[dependencies]
+chartgen = { path = "../../crates/chartgen" }
+chartgen-model = { path = "../../crates/chartgen-model" }
+chartgen-style = { path = "../../crates/chartgen-style" }
+figkit-render = { path = "../../crates/figkit-render" }
+serde_json.workspace = true
+roxmltree = "0.20"

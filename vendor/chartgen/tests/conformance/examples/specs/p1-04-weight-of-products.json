@@ -1,0 +1,57 @@
+{
+  "chartspec": 1,
+  "id": "p1-04-weight-of-products",
+  "job": {
+    "kind": "lookup",
+    "text": "Look up each product's weight"
+  },
+  "title": {
+    "text": "Weight of Products",
+    "kind": "descriptive"
+  },
+  "data": {
+    "x": {
+      "kind": "nominal",
+      "values": [
+        "Widgets",
+        "Doohickies",
+        "Bébelles",
+        "Whatsits",
+        "Thingies",
+        "Bobbles"
+      ]
+    },
+    "measure": {
+      "name": "weight",
+      "kind": "quantity",
+      "zero": "meaningful",
+      "min": 0,
+      "unit": {
+        "suffix": " lbs.",
+        "what": "weight of product"
+      }
+    },
+    "series": [
+      {
+        "id": "weight",
+        "name": "Weight",
+        "values": [
+          0.21,
+          0.2,
+          0.14,
+          0.13,
+          0.124,
+          0.06
+        ]
+      }
+    ]
+  },
+  "chart": {
+    "type": "bar"
+  },
+  "source": {
+    "book": "p. 81 (s. 0078)",
+    "notes": "02 #11",
+    "shows": "labels formatted as a set, every one with two decimals (0.00 … 0.25), never 0, 0.05, 0.1 (R2-21, R5-17); the description in parentheses after the unit, “0.25 lbs. (weight of product)” (D-20, decided)"
+  }
+}

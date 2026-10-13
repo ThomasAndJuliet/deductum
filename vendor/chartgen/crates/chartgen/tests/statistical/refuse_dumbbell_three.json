@@ -1,0 +1,62 @@
+{
+ "chartspec": 1,
+ "purpose": "analysis",
+ "id": "refuse-dumbbell-three",
+ "title": {
+  "text": "Detection latency by witness at two input rates"
+ },
+ "data": {
+  "x": {
+   "kind": "nominal",
+   "values": [
+    "W1 stale read",
+    "W2 equal-valued write",
+    "W3 redirected read",
+    "W4 obsolete ref"
+   ]
+  },
+  "measure": {
+   "name": "latency",
+   "kind": "quantity",
+   "unit": {
+    "suffix": " ms"
+   },
+   "zero": "meaningful"
+  },
+  "series": [
+   {
+    "id": "a",
+    "name": "a",
+    "values": [
+     1,
+     2,
+     3,
+     4
+    ]
+   },
+   {
+    "id": "b",
+    "name": "b",
+    "values": [
+     1,
+     2,
+     3,
+     4
+    ]
+   },
+   {
+    "id": "c",
+    "name": "c",
+    "values": [
+     1,
+     2,
+     3,
+     4
+    ]
+   }
+  ]
+ },
+ "chart": {
+  "type": "dumbbell"
+ }
+}

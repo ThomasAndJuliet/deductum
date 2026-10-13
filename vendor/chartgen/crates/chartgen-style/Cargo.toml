@@ -1,0 +1,17 @@
+[package]
+name = "chartgen-style"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+# Pure: no filesystem. @import is resolved through a host-supplied StyleSource.
+[dependencies]
+figkit-style = { path = "../figkit-style" }
+chartgen-model.workspace = true
+chartgen-colour-space = { path = "../chartgen-colour-space" }
+regex = "1"
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

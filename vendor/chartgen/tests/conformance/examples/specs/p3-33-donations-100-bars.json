@@ -1,0 +1,169 @@
+{
+ "base": {
+  "chartspec": 1,
+  "id": "p3-33-donations-100-bars",
+  "job": {
+   "kind": "answer",
+   "text": "How did each region's share of donations compare from month to month?"
+  },
+  "insight": {
+   "important": "The East was about a third of total donations in September and well over half in October"
+  },
+  "title": {
+   "text": "The East Was a Third of Donations in September, Over Half in October",
+   "kind": "insight",
+   "descriptive": "Donations by Region, % of Each Month's Total, 2022"
+  },
+  "data": {
+   "x": {
+    "kind": "time",
+    "grid": "month",
+    "values": [
+     "2022-01",
+     "2022-02",
+     "2022-03",
+     "2022-04",
+     "2022-05",
+     "2022-06",
+     "2022-07",
+     "2022-08",
+     "2022-09",
+     "2022-10",
+     "2022-11",
+     "2022-12"
+    ]
+   },
+   "measure": {
+    "name": "donations",
+    "kind": "amount",
+    "zero": "meaningful",
+    "min": 0,
+    "persistence": "summary",
+    "unit": {
+     "prefix": "$",
+     "magnitude": 3,
+     "noun": "in donations"
+    }
+   },
+   "series": [
+    {
+     "id": "east",
+     "name": "East",
+     "values": [
+      14.0,
+      20.0,
+      19.8,
+      14.9,
+      14.0,
+      19.6,
+      24.2,
+      25.6,
+      25.7,
+      23.8,
+      26.3,
+      22.4
+     ],
+     "slot": 1
+    },
+    {
+     "id": "west",
+     "name": "West",
+     "values": [
+      12.0,
+      17.3,
+      18.8,
+      10.5,
+      10.0,
+      13.6,
+      26.5,
+      25.5,
+      27.8,
+      8.0,
+      3.2,
+      4.6
+     ],
+     "slot": 2
+    },
+    {
+     "id": "north",
+     "name": "North",
+     "values": [
+      7.4,
+      8.3,
+      7.0,
+      8.7,
+      6.0,
+      7.1,
+      7.0,
+      6.7,
+      11.2,
+      7.3,
+      9.2,
+      7.9
+     ],
+     "slot": 3
+    },
+    {
+     "id": "south",
+     "name": "South",
+     "values": [
+      10.0,
+      8.8,
+      12.8,
+      5.1,
+      5.3,
+      7.9,
+      9.6,
+      14.6,
+      22.4,
+      1.0,
+      10.3,
+      6.0
+     ],
+     "slot": 4
+    }
+   ],
+   "parts": {
+    "meaningful_total": true,
+    "all_parts": true,
+    "overlap": false
+   }
+  },
+  "facts": {
+   "message": "fraction_of_total",
+   "total_matters": false,
+   "focus": "periods"
+  },
+  "source": {
+   "book": "p. 284 (s. 0260)",
+   "notes": "07 #14",
+   "shows": "the same for particular months: 100 % stacked bars (R7-30, R7-28, G1.45); each region in the colour it has in all six charts of 07 #14 (fixed slots, the book's: East blue, West orange, North olive, South gold; R3-24, G4.22, D-22 (a))"
+  }
+ },
+ "variants": [
+  {
+   "name": "west-first",
+   "patch": {
+    "job": {
+     "kind": "answer",
+     "text": "How did the West's share of donations change from month to month?"
+    },
+    "insight": {
+     "important": "The West's share fell from about a third in September to a tenth by the end of the year",
+     "targets": [
+      {
+       "series": "west"
+      }
+     ]
+    },
+    "title": {
+     "text": "The West's Share Fell From a Third to a Tenth"
+    },
+    "source": {
+     "notes": "07 #14; D-26 (b)",
+     "shows": "the part the message is about at the base of every stack, where its share is read on the common baseline (D-26 (b), G7.31; the book's bottom band is East's), in its strong shade; the others in the order of their size, each region in its colour of 07 #14's six charts (R3-24)"
+    }
+   }
+  }
+ ]
+}

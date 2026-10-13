@@ -1,0 +1,111 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p2-23-monthly-expenses",
+    "job": {
+      "kind": "make_aware",
+      "text": "Show that East's expenses follow a quarterly cycle"
+    },
+    "insight": {
+      "important": "East's expenses peaked in the last month of every quarter"
+    },
+    "title": {
+      "text": "East's Expenses Peaked in the Last Month of Every Quarter",
+      "kind": "insight",
+      "descriptive": "Total Monthly Expenses by Region, 2021"
+    },
+    "data": {
+      "x": {
+        "kind": "time",
+        "grid": "month",
+        "values": [
+          "2021-01",
+          "2021-02",
+          "2021-03",
+          "2021-04",
+          "2021-05",
+          "2021-06",
+          "2021-07",
+          "2021-08",
+          "2021-09",
+          "2021-10",
+          "2021-11",
+          "2021-12"
+        ]
+      },
+      "measure": {
+        "name": "expenses",
+        "kind": "amount",
+        "zero": "meaningful",
+        "min": 0,
+        "persistence": "summary",
+        "unit": {
+          "prefix": "$",
+          "magnitude": 3,
+          "what": "total expenses per month"
+        }
+      },
+      "series": [
+        {
+          "id": "west",
+          "name": "West",
+          "values": [
+            28.8,
+            29.3,
+            23.2,
+            25.9,
+            26.9,
+            26.9,
+            26.0,
+            23.7,
+            27.2,
+            29.8,
+            32.4,
+            28.7
+          ]
+        },
+        {
+          "id": "east",
+          "name": "East",
+          "values": [
+            10.8,
+            15.5,
+            17.7,
+            12.1,
+            16.6,
+            19.9,
+            13.4,
+            17.7,
+            20.4,
+            17.4,
+            19.9,
+            23.3
+          ]
+        }
+      ]
+    },
+    "source": {
+      "book": "p. 177 (s. 0166)",
+      "notes": "06 T3",
+      "shows": "a pattern of change over a regular series: lines, on which East's quarterly cycle is plain, each labelled at its end (G1.51)"
+    }
+  },
+  "variants": [
+    {
+      "name": "bars",
+      "patch": {
+        "chart": {
+          "type": "bar"
+        },
+        "source": {
+          "shows": "the book's clustered bars of the same months: a guided departure, since the message is the pattern, which the bars hide (R6-4)"
+        }
+      },
+      "expect": {
+        "findings": [
+          "R6-4"
+        ]
+      }
+    }
+  ]
+}

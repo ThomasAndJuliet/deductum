@@ -1,0 +1,117 @@
+{
+ "base": {
+  "chartspec": 1,
+  "id": "p3-24-income-waterfall",
+  "job": {
+   "kind": "explain",
+   "text": "How did the year's income and costs add up to its net income?"
+  },
+  "title": {
+   "text": "Breakdown of Net Income, 2022",
+   "kind": "descriptive"
+  },
+  "data": {
+   "x": {
+    "kind": "nominal",
+    "values": [
+     "Product sales",
+     "Consulting income",
+     "Cost of goods",
+     "Admin expenses",
+     "Net income"
+    ],
+    "roles": {
+     "Net income": "total"
+    }
+   },
+   "measure": {
+    "name": "net income",
+    "kind": "amount",
+    "zero": "meaningful",
+    "unit": {
+     "prefix": "$",
+     "magnitude": 6,
+     "what": "net income"
+    }
+   },
+   "series": [
+    {
+     "id": "income",
+     "name": "Net income",
+     "values": [
+      3.7,
+      3.55,
+      -2.2,
+      -0.6,
+      4.45
+     ]
+    }
+   ],
+   "parts": {
+    "meaningful_total": true,
+    "all_parts": true,
+    "overlap": false
+   }
+  },
+  "facts": {
+   "message": "cumulative_subtotals"
+  },
+  "source": {
+   "book": "p. 257–258 (s. 0237)",
+   "notes": "07 #9",
+   "shows": "running subtotals of gains and costs: a waterfall, each step from the running total before it, in the income statement's order, the net income a full grey bar from zero, a hairline connector at each running total (R7-11, G1.38, G7.33, D-43); rises and falls in two colours since no good or bad reading is given, blue and orange"
+  }
+ },
+ "variants": [
+  {
+   "name": "labelled",
+   "patch": {
+    "chart": {
+     "value_labels": "on"
+    },
+    "reasons": {
+     "chart.value_labels": "the running figures are read off the steps"
+    },
+    "source": {
+     "shows": "the steps labelled with their signed values and the total unsigned, each past its bar's far end (G7.4, G6.16); asked for, since five values against five scale labels keep the scale"
+    },
+    "data": {
+     "measure": {
+      "unit": {
+       "fallback": "income, costs and net income"
+      }
+     }
+    }
+   }
+  },
+  {
+   "name": "good-bad",
+   "patch": {
+    "data": {
+     "measure": {
+      "good": "higher"
+     }
+    },
+    "source": {
+     "shows": "gains good and costs bad for this audience: green and red, as the book's figure (G4.16, D-18)"
+    }
+   }
+  },
+  {
+   "name": "horizontal",
+   "patch": {
+    "chart": {
+     "orientation": "horizontal"
+    },
+    "source": {
+     "shows": "a waterfall asked for on its side: drawn upright, with the guided finding (D-43: the book shows only the vertical form)"
+    }
+   },
+   "expect": {
+    "findings": [
+     "R7-11"
+    ]
+   }
+  }
+ ]
+}

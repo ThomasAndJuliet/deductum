@@ -1,0 +1,183 @@
+{
+ "key": "p3-61-average-donations--facts-missing",
+ "file": "p3-61-average-donations.json",
+ "variant": "facts-missing",
+ "requested_type": "auto",
+ "report": {
+  "chart": "p3-61-average-donations",
+  "style": "plain",
+  "variant": "facts-missing",
+  "type": "pie",
+  "status": "refused",
+  "decisions": [
+   {
+    "rule": "R7-07",
+    "level": "guided",
+    "text": "type pie: fractions of the total are the message: a pie, which shows ½, ⅓ and ¼ at a glance and announces the whole (G1.36); once the facts above are given",
+    "guide": []
+   }
+  ],
+  "findings": [
+   {
+    "rule": "R7-02",
+    "severity": "error",
+    "message": "before a pie, the spec must say whether the values add up to a total someone would quote (G0.12): the numbers cannot tell, and a guess could misrepresent them (D-1)",
+    "path": "data.parts.meaningful_total",
+    "supply": "data.parts.meaningful_total true or false",
+    "level": "locked",
+    "guide": [],
+    "title": "the meaningful-total check before a pie, stacked chart or treemap"
+   },
+   {
+    "rule": "R7-03",
+    "severity": "error",
+    "message": "before a pie, the spec must say whether every part of the total is shown (G0.13): the numbers cannot tell, and a guess could misrepresent them (D-1)",
+    "path": "data.parts.all_parts",
+    "supply": "data.parts.all_parts true or false",
+    "level": "locked",
+    "guide": [],
+    "title": "the all-parts check before a pie, stacked chart or treemap"
+   },
+   {
+    "rule": "R7-05",
+    "severity": "error",
+    "message": "before a pie, the spec must say whether any part contains or overlaps another (G0.14): the numbers cannot tell, and a guess could misrepresent them (D-1)",
+    "path": "data.parts.overlap",
+    "supply": "data.parts.overlap false, or the pairs in data.parts.overlaps ([part, parent])",
+    "level": "locked",
+    "guide": [],
+    "title": "the overlap check: disjoint parts before a pie, stacked chart or treemap"
+   }
+  ],
+  "overrides": [],
+  "expect": {
+   "refused": [
+    "R7-02",
+    "R7-03",
+    "R7-05"
+   ]
+  },
+  "expect_met": true,
+  "source": {
+   "book": "p. 252 (s. 0232)",
+   "notes": "07 #6",
+   "shows": "the same request without the parts' facts: whether the values add up, whether every part is shown and whether a part contains another cannot be read from the numbers, so all three are asked for before any pie (D-1; overlap by the owner's decision of 1 Oct 2026)",
+   "status": "generated"
+  },
+  "summary": {
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job lookup: no insight stated (a descriptive title will do, D-55)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-1",
+    "level": "guided",
+    "text": "a graph, the values to be compared or a pattern seen (G1.11)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 2,
+    "name": "variables",
+    "rule": "RP3-2",
+    "level": "guided",
+    "text": "one plot: categories along x and 1 series; a further variable would go to small multiples (data.dims, G1.18)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 3,
+    "name": "location",
+    "rule": "R8-2",
+    "level": "guided",
+    "text": "not a map: where the values are is not the message (facts.location_matters; G1.24, G1.25)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "RP2-7",
+    "level": "guided",
+    "text": "group: breakdowns of totals. One total of 3 parts (07 §4.1, G1.8)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-02",
+    "level": "locked",
+    "text": "check, meaningful total: not known: whether the values add up to a total someone would quote is not stated (data.parts.meaningful_total), and the numbers cannot tell (D-1)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-03",
+    "level": "locked",
+    "text": "check, all parts: not known: whether every part of the total is shown is not stated (data.parts.all_parts), and the numbers cannot tell (D-1)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-05",
+    "level": "locked",
+    "text": "check, overlap: not known: whether any part contains or overlaps another is not stated (data.parts.overlap, overlaps), and the numbers cannot tell (D-1)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-04",
+    "level": "locked",
+    "text": "check, signs: passes: the parts are all of one sign",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-07",
+    "level": "guided",
+    "text": "fractions of the total are the message: a pie, which shows ½, ⅓ and ¼ at a glance and announces the whole (G1.36); once the facts above are given",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type (G1.59)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "pies are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   }
+  ],
+  "copies": []
+ }
+}

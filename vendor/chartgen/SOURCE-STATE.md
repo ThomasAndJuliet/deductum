@@ -1,0 +1,1 @@
+Committed chartgen 0.1.0 source at git commit 77c9ecb365c0e4543e9b6f067c953a77ca3d04eb. Includes the committed LaTeX crates and adapters. The `examples/latex` entry is a self-contained export example; repository paper examples and their inputs are omitted.

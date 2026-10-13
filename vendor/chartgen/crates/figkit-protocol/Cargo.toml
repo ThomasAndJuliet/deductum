@@ -1,0 +1,14 @@
+[package]
+name = "figkit-protocol"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+figkit-model = { path = "../figkit-model" }
+figkit-geometry = { path = "../figkit-geometry" }
+figkit-style = { path = "../figkit-style" }
+figkit-scene = { path = "../figkit-scene" }
+figkit-render = { path = "../figkit-render" }
+serde.workspace = true
+serde_json.workspace = true

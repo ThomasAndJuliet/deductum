@@ -1,0 +1,30 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p2-48-donations-vs-target",
+    "job": {"kind": "make_aware", "text": "Show a new manager how each region's donations compare with its target"},
+    "insight": {"important": "Central and North fell short of their targets; the other regions beat theirs"},
+    "title": {"text": "Central and North Missed Their Donation Targets", "kind": "insight",
+              "descriptive": "Donations and Targets by Region, 2022"},
+    "data": {
+      "x": {"kind": "nominal", "values": ["South", "Central", "East", "North", "West"]},
+      "measure": {"name": "donations", "kind": "amount", "zero": "meaningful", "min": 0,
+                  "unit": {"prefix": "$", "magnitude": 6, "noun": "in donations"}},
+      "series": [{"id": "actual", "name": "Actual", "values": [4.4, 4.2, 3.5, 1.7, 1.4]}],
+      "comparisons": [{"id": "target", "kind": "target", "label": "Target", "values": [4.1, 4.6, 2.5, 2.4, 1.2]}]
+    },
+    "source": {"book": "p. 405 (s. 0371)", "notes": "13-15 F12",
+               "shows": "comparison values: each region's target as a short dark mark across its bar, named once beside the first bar with thin leaders, no legend (R15-7, G8.13, G5.5)"}
+  },
+  "variants": [
+    {"name": "bars-alone",
+     "patch": {"data": {"comparisons": null, "measure": {"good": "higher"}},
+               "insight": {"important": "South and Central brought in the most"},
+               "title": {"text": "South and Central Brought in the Most Donations", "descriptive": "Donations by Region, 2022"},
+               "source": {"shows": "the book's version without comparison values: nothing tells the reader how to feel about the numbers; the report asks for a target (R15-7, G8.12)"}},
+     "expect": {"findings": ["R15-7"]}},
+    {"name": "red-green",
+     "patch": {"data": {"measure": {"good": "higher", "dividing_point": {"comparison": "target"}}},
+               "source": {"shows": "each bar coloured by its own target, good or bad, in red and green (G4.16, D-18)"}}}
+  ]
+}

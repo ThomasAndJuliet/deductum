@@ -1,0 +1,106 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p1-09-revenue-by-business-unit",
+    "job": {
+      "kind": "lookup",
+      "text": "Look up each business unit's revenue by month, and how the two compare"
+    },
+    "title": {
+      "text": "Revenue by Business Unit, Mar–Sep 2021",
+      "kind": "descriptive"
+    },
+    "data": {
+      "x": {
+        "kind": "time",
+        "grid": "month",
+        "values": [
+          "2021-03",
+          "2021-04",
+          "2021-05",
+          "2021-06",
+          "2021-07",
+          "2021-08",
+          "2021-09"
+        ]
+      },
+      "measure": {
+        "name": "revenue",
+        "kind": "amount",
+        "zero": "meaningful",
+        "min": 0,
+        "persistence": "summary",
+        "unit": {
+          "prefix": "$",
+          "magnitude": 6,
+          "what": "revenue per month"
+        }
+      },
+      "series": [
+        {
+          "id": "consumer",
+          "name": "Consumer",
+          "values": [
+            16.69,
+            16.79,
+            17.18,
+            17.31,
+            17.57,
+            16.39,
+            17.76
+          ]
+        },
+        {
+          "id": "business",
+          "name": "Business",
+          "values": [
+            16.39,
+            17.68,
+            16.29,
+            17.29,
+            16.55,
+            17.68,
+            17.19
+          ]
+        }
+      ]
+    },
+    "facts": {
+      "message": "pattern",
+      "small_differences_matter": true
+    },
+    "inset": {
+      "kind": "auto",
+      "position": "above",
+      "compact_main": true
+    },
+    "source": {
+      "book": "p. 83–85 (s. 0080–0081)",
+      "notes": "02 #13",
+      "shows": "the narrow-range inset on lines: the main line chart keeps zero, so the two units look as steady as they are, compact under the inset (inset.compact_main, s. 0081), “$20 million” kept on its scale when the description moves to its own line; the inset above on the same months, 16.0–18.0 by 0.5 with “$18.0 million (revenue per month)” restated, as high as the main chart, both with their end labels; the compact layout shares one time axis, the main chart’s, under the stack; a frame round the main chart’s 15–20 band across its width"
+    }
+  },
+  "variants": [
+    {
+      "name": "truncated",
+      "patch": {
+        "scale": {
+          "zero": "truncate"
+        },
+        "inset": {
+          "kind": "none",
+          "position": "auto",
+          "compact_main": false
+        },
+        "source": {
+          "shows": "the book's truncated version (16.0–18.0 on the main chart): every wiggle looks like volatility; drawn, with the guided finding that the procedure keeps zero and adds an inset"
+        }
+      },
+      "expect": {
+        "findings": [
+          "R2-22"
+        ]
+      }
+    }
+  ]
+}

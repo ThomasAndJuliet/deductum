@@ -1,0 +1,78 @@
+{
+ "base": {
+  "chartspec": 1,
+  "id": "p3-62-top-three-donors",
+  "job": {
+   "kind": "lookup",
+   "text": "Look up the donations of the three largest donors"
+  },
+  "title": {
+   "text": "Donations of the Top 3 Donors, 2022",
+   "kind": "descriptive"
+  },
+  "data": {
+   "x": {
+    "kind": "nominal",
+    "values": [
+     "Smith and Co.",
+     "Black, Finson & Assoc.",
+     "Mr. and Mrs. Mayworth"
+    ]
+   },
+   "measure": {
+    "name": "donations",
+    "kind": "amount",
+    "zero": "meaningful",
+    "min": 0,
+    "unit": {
+     "prefix": "$",
+     "magnitude": 3,
+     "noun": "in donations",
+     "fallback": "donations per donor"
+    }
+   },
+   "series": [
+    {
+     "id": "donations",
+     "name": "Donations",
+     "values": [
+      375,
+      348,
+      200
+     ]
+    }
+   ],
+   "parts": {
+    "meaningful_total": true,
+    "all_parts": false,
+    "overlap": false
+   }
+  },
+  "facts": {
+   "message": "fraction_of_total"
+  },
+  "source": {
+   "book": "p. 253–255 (s. 0233–0235)",
+   "notes": "07 #7",
+   "shows": "a top 3 asked for as fractions: the all-parts check fails, readers taking the three for all donors, so a bar chart (R7-03, G0.13)"
+  }
+ },
+ "variants": [
+  {
+   "name": "pie",
+   "patch": {
+    "chart": {
+     "type": "pie"
+    },
+    "source": {
+     "shows": "the book's pie of the top 3, where the top donor looks like more than a third of all donations: refused (R7-03, G0.13 [L])"
+    }
+   },
+   "expect": {
+    "refused": [
+     "R7-03"
+    ]
+   }
+  }
+ ]
+}

@@ -1,0 +1,81 @@
+{
+ "chartspec": 1,
+ "id": "p3-70-donations-lookup-table",
+ "job": {
+  "kind": "lookup",
+  "text": "Look up each region's monthly donations by payment method for the ledger"
+ },
+ "title": {
+  "text": "Monthly Donations (US$) by Region and Payment Method, 2022",
+  "kind": "descriptive"
+ },
+ "data": {
+  "x": {
+   "kind": "nominal",
+   "values": [
+    "East",
+    "North",
+    "West",
+    "Central",
+    "South",
+    "Northwest"
+   ]
+  },
+  "measure": {
+   "name": "monthly donations",
+   "kind": "amount",
+   "zero": "meaningful",
+   "min": 0,
+   "unit": {
+    "prefix": "$",
+    "what": "monthly donations"
+   }
+  },
+  "series": [
+   {
+    "id": "cash",
+    "name": "Cash",
+    "values": [
+     5374,
+     4225,
+     3950,
+     1741,
+     1456,
+     791
+    ]
+   },
+   {
+    "id": "card",
+    "name": "Credit card",
+    "values": [
+     5136,
+     4374,
+     3608,
+     1835,
+     1615,
+     737
+    ]
+   },
+   {
+    "id": "cheque",
+    "name": "Cheque",
+    "values": [
+     3821,
+     2988,
+     2530,
+     1395,
+     1094,
+     524
+    ]
+   }
+  ]
+ },
+ "facts": {
+  "message": "lookup_only"
+ },
+ "source": {
+  "book": "p. 336–343 (s. 0307, 0310–0312)",
+  "notes": "08-12 #7",
+  "shows": "values whose only use is being looked up one at a time: a table alone (R10-11, G1.12); the same data compared would be a graph with its table beneath (P2-01, G1.14)"
+ }
+}

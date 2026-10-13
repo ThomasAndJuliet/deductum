@@ -1,0 +1,90 @@
+{
+ "base": {
+  "chartspec": 1,
+  "id": "p3-65-vehicle-sales-overlapping",
+  "job": {
+   "kind": "lookup",
+   "text": "Look up the sales of each kind of vehicle"
+  },
+  "title": {
+   "text": "Vehicle Sales by Kind, 2022",
+   "kind": "descriptive"
+  },
+  "data": {
+   "x": {
+    "kind": "nominal",
+    "values": [
+     "Cars",
+     "Trucks",
+     "Sports cars",
+     "Pickup trucks",
+     "Motorcycles"
+    ]
+   },
+   "measure": {
+    "name": "sales",
+    "kind": "amount",
+    "zero": "meaningful",
+    "min": 0,
+    "unit": {
+     "prefix": "$",
+     "magnitude": 6,
+     "what": "sales"
+    }
+   },
+   "series": [
+    {
+     "id": "sales",
+     "name": "Sales",
+     "values": [
+      118.4,
+      61.6,
+      36.6,
+      21.4,
+      20.0
+     ]
+    }
+   ],
+   "parts": {
+    "meaningful_total": true,
+    "all_parts": true,
+    "overlaps": [
+     [
+      "Sports cars",
+      "Cars"
+     ],
+     [
+      "Pickup trucks",
+      "Trucks"
+     ]
+    ]
+   }
+  },
+  "facts": {
+   "message": "fraction_of_total"
+  },
+  "source": {
+   "book": "p. 259–264 (s. 0239–0243)",
+   "notes": "07 #10",
+   "shows": "categories that contain one another (sports cars within cars): the overlap check fails, so a plain bar chart, as the book's tree gives (R7-05, G0.14); the better answer, the parts made disjoint in the data (D-24 (b)), is P3-07"
+  }
+ },
+ "variants": [
+  {
+   "name": "pie",
+   "patch": {
+    "chart": {
+     "type": "pie"
+    },
+    "source": {
+     "shows": "the book's pie of overlapping categories, every fraction wrong: refused (R7-05, G0.14 [L])"
+    }
+   },
+   "expect": {
+    "refused": [
+     "R7-05"
+    ]
+   }
+  }
+ ]
+}

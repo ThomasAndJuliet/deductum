@@ -1,0 +1,227 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "r1-41-garden-centre-sales-in-pounds",
+    "purpose": "communication",
+    "job": {
+      "kind": "answer",
+      "text": "Has Elstead Park's performance suffered since the new competitor opened in March 2026, compared with the other three centres?"
+    },
+    "insight": {
+      "important": "Elstead Park's sales have fallen since the new competitor opened in March 2026, while the other three centres kept growing",
+      "targets": [
+        {
+          "series": "elstead_park"
+        }
+      ]
+    },
+    "title": {
+      "text": "Elstead Park's Sales Have Fallen Since the New Competitor Opened",
+      "kind": "insight",
+      "descriptive": "Total monthly sales by garden centre, Jan 2025–Sep 2026"
+    },
+    "data": {
+      "x": {
+        "kind": "time",
+        "grid": "month",
+        "values": [
+          "2025-01",
+          "2025-02",
+          "2025-03",
+          "2025-04",
+          "2025-05",
+          "2025-06",
+          "2025-07",
+          "2025-08",
+          "2025-09",
+          "2025-10",
+          "2025-11",
+          "2025-12",
+          "2026-01",
+          "2026-02",
+          "2026-03",
+          "2026-04",
+          "2026-05",
+          "2026-06",
+          "2026-07",
+          "2026-08",
+          "2026-09"
+        ]
+      },
+      "measure": {
+        "name": "sales",
+        "kind": "amount",
+        "zero": "meaningful",
+        "min": 0,
+        "persistence": "summary",
+        "unit": {
+          "prefix": "£",
+          "what": "monthly sales"
+        }
+      },
+      "series": [
+        {
+          "id": "brackley_hill",
+          "name": "Brackley Hill",
+          "values": [
+            76553.0,
+            93231.0,
+            198345.0,
+            313027.0,
+            377944.0,
+            347773.0,
+            284468.0,
+            224269.0,
+            178985.0,
+            142479.0,
+            104722.0,
+            164640.0,
+            80984.0,
+            99201.0,
+            202024.0,
+            326881.0,
+            413849.0,
+            380489.0,
+            300682.0,
+            230550.0,
+            182191.0
+          ]
+        },
+        {
+          "id": "corwen_road",
+          "name": "Corwen Road",
+          "values": [
+            55437.0,
+            63463.0,
+            133561.0,
+            217630.0,
+            255284.0,
+            254212.0,
+            193249.0,
+            154819.0,
+            125503.0,
+            95332.0,
+            75310.0,
+            113887.0,
+            56672.0,
+            66724.0,
+            138239.0,
+            225184.0,
+            271733.0,
+            260319.0,
+            214704.0,
+            159255.0,
+            132461.0
+          ]
+        },
+        {
+          "id": "dunmore",
+          "name": "Dunmore",
+          "values": [
+            48228.0,
+            57539.0,
+            117191.0,
+            197538.0,
+            226655.0,
+            210003.0,
+            172285.0,
+            136082.0,
+            109991.0,
+            85672.0,
+            66904.0,
+            99250.0,
+            48398.0,
+            58693.0,
+            123584.0,
+            194837.0,
+            240201.0,
+            219055.0,
+            183656.0,
+            141646.0,
+            113604.0
+          ]
+        },
+        {
+          "id": "elstead_park",
+          "name": "Elstead Park",
+          "values": [
+            70005.0,
+            87164.0,
+            177499.0,
+            291176.0,
+            350613.0,
+            320144.0,
+            260689.0,
+            198607.0,
+            165834.0,
+            131092.0,
+            95249.0,
+            152321.0,
+            72538.0,
+            90892.0,
+            173787.0,
+            244388.0,
+            282841.0,
+            261825.0,
+            216941.0,
+            167286.0,
+            138123.0
+          ]
+        }
+      ]
+    },
+    "facts": {
+      "message": "pattern"
+    },
+    "chart": {
+      "type": "line"
+    },
+    "highlight": [
+      {
+        "targets": [
+          {
+            "series": "elstead_park"
+          }
+        ],
+        "method": "auto"
+      }
+    ],
+    "comments": [
+      {
+        "text": "New competitor garden store opened ≈ 1 mile away",
+        "anchors": [
+          {
+            "series": "elstead_park",
+            "x": "2026-03"
+          }
+        ],
+        "answers": [
+          "why_care"
+        ]
+      }
+    ],
+    "source": {
+      "notes": "eval B11 (sonnet-G)",
+      "shows": "monthly sales given in pounds, as the data are: the generator hides the digits itself (“£500K”); the variant gives unit.given_in thousands as if it meant “show it in thousands”, which would read “£500 million”, and is reported (R5-11)"
+    }
+  },
+  "variants": [
+    {
+      "name": "given-in-misread",
+      "patch": {
+        "data": {
+          "measure": {
+            "unit": {
+              "given_in": "thousands"
+            }
+          }
+        }
+      },
+      "expect": {
+        "findings": [
+          "R5-11"
+        ]
+      }
+    }
+  ]
+}

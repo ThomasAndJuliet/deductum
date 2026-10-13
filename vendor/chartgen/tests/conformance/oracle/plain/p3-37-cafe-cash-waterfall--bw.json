@@ -1,0 +1,271 @@
+{
+ "key": "p3-37-cafe-cash-waterfall--bw",
+ "file": "p3-37-cafe-cash-waterfall.json",
+ "variant": "bw",
+ "requested_type": "auto",
+ "report": {
+  "chart": "p3-37-cafe-cash-waterfall",
+  "style": "plain",
+  "variant": "bw",
+  "type": "waterfall",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "R7-11",
+    "level": "guided",
+    "text": "type waterfall: the parts mix positive and negative values and running subtotals are the message: a waterfall, each bar starting where the last ended (G1.38)",
+    "guide": []
+   },
+   {
+    "rule": "R2-30",
+    "level": "locked",
+    "text": "values on both sides of zero: room at both ends",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "scale −100–100 by 50",
+    "guide": []
+   },
+   {
+    "rule": "R7-11",
+    "level": "guided",
+    "text": "the steps in the process's own order, as given; a waterfall is never sorted (D-43)",
+    "guide": []
+   },
+   {
+    "rule": "R7-11",
+    "level": "locked",
+    "text": "each step a bar from the running total before it to the one after it: rises Sales, Loan, falls Fit-out, Ovens, Wages, Rent, green where it rises and red where it falls, higher being good (R15-11, G4.16); Start, End full bars from zero in the reserved grey (G4.15), each equal to the running total there (G7.33)",
+    "guide": []
+   },
+   {
+    "rule": "R2-21",
+    "level": "locked",
+    "text": "labels as a set, 0 decimals: −100, −50, 0, 50, $100K",
+    "guide": []
+   },
+   {
+    "rule": "R5-10",
+    "level": "locked",
+    "text": "digits hidden: thousands, stated once on the top label (R2-05, D-3): “$100K (cash)”",
+    "guide": []
+   },
+   {
+    "rule": "R2-07",
+    "level": "locked",
+    "text": "the unit phrase on the top label: “$100K (cash)”; the top gridline starts after it",
+    "guide": []
+   },
+   {
+    "rule": "R7-11",
+    "level": "locked",
+    "text": "a hairline connector at each running total, from one bar to the next (s. 0237)",
+    "guide": []
+   },
+   {
+    "rule": "R15-12",
+    "level": "locked",
+    "text": "bad: a 45° hatch of #ff4f3c and #8d2419 (0.605 of the area the darker; their mean #c5392b, the colour #c5392a)",
+    "guide": []
+   },
+   {
+    "rule": "R15-12",
+    "level": "locked",
+    "text": "good: an ordered dither of #7fc84f and #46722a (0.375 of the area the darker; their mean #6eae44, the colour #6eae44)",
+    "guide": []
+   },
+   {
+    "rule": "R15-12",
+    "level": "locked",
+    "text": "black and white (audience.bw_risk): red and green told apart without colour too, which serves readers with colour-vision deficiency as well (D-18; owner, 1 Oct 2026): steps laid over with two tones of their own colour, a hatch for bad and a dither for good, their mean the colour",
+    "guide": []
+   },
+   {
+    "rule": "R3-20",
+    "level": "locked",
+    "text": "static output, in black and white: one file, red for bad and green for good, told apart without colour too (D-18; owner, 1 Oct 2026)",
+    "guide": []
+   }
+  ],
+  "findings": [],
+  "overrides": [],
+  "expect": {},
+  "expect_met": true,
+  "source": {
+   "notes": "07 §5.5; D-43",
+   "shows": "the same waterfall for black and white (audience.bw_risk): each fall hatched in two tones of the red, each rise dithered in two tones of the green, the patterns blending to the colours at reading distance and telling them apart in grey and for readers with colour-vision deficiency (D-18); the grey totals untouched",
+   "status": "generated"
+  },
+  "summary": {
+   "scale": "−100–100 by 50",
+   "labels": [
+    "−100",
+    "−50",
+    "0",
+    "50",
+    "$100K"
+   ],
+   "top": "$100K (cash)",
+   "scale_title": null,
+   "orientation": "vertical",
+   "plot": [
+    31.78,
+    36.67,
+    368.0,
+    238.4
+   ],
+   "band": 42.03,
+   "stack": "waterfall",
+   "parts": [
+    "cash"
+   ],
+   "percent": false,
+   "totals": [
+    "Start",
+    "Fit-out",
+    "Ovens",
+    "Sales",
+    "Wages",
+    "Rent",
+    "Loan",
+    "End"
+   ],
+   "annotations": {
+    "textures": {
+     "bad": {
+      "system": "hatch",
+      "ground": "#ff4f3c",
+      "marks": "#8d2419",
+      "coverage": 0.605,
+      "mean": "#c5392b"
+     },
+     "good": {
+      "system": "bayer",
+      "ground": "#7fc84f",
+      "marks": "#46722a",
+      "coverage": 0.375,
+      "mean": "#6eae44"
+     }
+    }
+   },
+   "width": 368.0,
+   "height": 256.29,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job explain: insight “The café's cash fell $85K below zero before sales came in; the loan brought it back to where it started”",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-1",
+    "level": "guided",
+    "text": "a graph, the values to be compared or a pattern seen (G1.11)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 2,
+    "name": "variables",
+    "rule": "RP3-2",
+    "level": "guided",
+    "text": "one plot: categories along x and 1 series; a further variable would go to small multiples (data.dims, G1.18)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 3,
+    "name": "location",
+    "rule": "R8-2",
+    "level": "guided",
+    "text": "not a map: where the values are is not the message (facts.location_matters; G1.24, G1.25)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "RP2-7",
+    "level": "guided",
+    "text": "group: breakdowns of totals. One total of 6 parts (07 §4.1, G1.8)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-02",
+    "level": "locked",
+    "text": "check, meaningful total: passes: the values add up to a total someone would quote (parts.meaningful_total)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-03",
+    "level": "locked",
+    "text": "check, all parts: passes: every part of the total is shown (parts.all_parts)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-05",
+    "level": "locked",
+    "text": "check, overlap: passes: no part contains or overlaps another (parts.overlap)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-04",
+    "level": "locked",
+    "text": "check, signs: fails: the parts mix positive and negative values: areas cannot be negative, and a mixed stack shows neither the net total nor comparable parts (G0.15)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-11",
+    "level": "guided",
+    "text": "the parts mix positive and negative values and running subtotals are the message: a waterfall, each bar starting where the last ended (G1.38)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type (G1.59)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "waterfall charts are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   }
+  ],
+  "copies": []
+ },
+ "output_sha256": "83c065f8f1fc1f812b6de04beb7ad811c45abcfac6482c78c794353295fa44fe"
+}

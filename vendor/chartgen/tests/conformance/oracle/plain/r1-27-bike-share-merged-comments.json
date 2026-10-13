@@ -1,0 +1,281 @@
+{
+ "key": "r1-27-bike-share-merged-comments",
+ "file": "r1-27-bike-share-merged-comments.json",
+ "variant": null,
+ "requested_type": "auto",
+ "report": {
+  "chart": "r1-27-bike-share-merged-comments",
+  "style": "plain",
+  "variant": null,
+  "type": "merged of line",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "RP3-3",
+    "level": "guided",
+    "text": "arranged: rows by measure: series in different measures: one panel per measure, stacked on one time axis drawn at the foot, each with its own scale (G2.31, G2.32)",
+    "guide": []
+   },
+   {
+    "rule": "R3-3",
+    "level": "locked",
+    "text": "one colour for every mark: each panel holds one measure, and the panels tell them apart (G7.6)",
+    "guide": []
+   },
+   {
+    "rule": "R6-4",
+    "level": "guided",
+    "text": "Monthly trips (thousands): type line: a regular series whose pattern of change is the point (06 DP6-1, G1.51)",
+    "guide": []
+   },
+   {
+    "rule": "R6-4",
+    "level": "guided",
+    "text": "County average rainfall: type line: a regular series whose pattern of change is the point (06 DP6-1, G1.51)",
+    "guide": []
+   },
+   {
+    "rule": "R2-25",
+    "level": "locked",
+    "text": "Monthly trips (thousands): the values are not far from zero compared with their spread",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "Monthly trips (thousands): scale 0–120 by 20",
+    "guide": []
+   },
+   {
+    "rule": "R2-25",
+    "level": "locked",
+    "text": "County average rainfall: the values are not far from zero compared with their spread",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "County average rainfall: scale 0–150 by 50",
+    "guide": []
+   },
+   {
+    "rule": "R5-26",
+    "level": "locked",
+    "text": "the title wraps onto two lines",
+    "guide": []
+   },
+   {
+    "rule": "R5-26",
+    "level": "locked",
+    "text": "the descriptive line wraps onto two lines",
+    "guide": []
+   },
+   {
+    "rule": "RP3-7",
+    "level": "locked",
+    "text": "comment 1 (“E-bikes added to Ashcombe's fleet”) in empty space inside the plot, 1 arrow to ashcombe at 2025-04 (G8.7)",
+    "guide": []
+   },
+   {
+    "rule": "RP3-7",
+    "level": "locked",
+    "text": "comment 2 (“The wettest month: trips fell at three…”) in empty space beside the plot, 1 arrow to rainfall at 2025-08 (G8.7)",
+    "guide": []
+   },
+   {
+    "rule": "R5-5",
+    "level": "locked",
+    "text": "the maker's comments in New Computer Modern italic, in the reserved blue, set apart from the labelling and outside its count of text styles (G6.3, D-19)",
+    "guide": []
+   },
+   {
+    "rule": "R15-1",
+    "level": "open",
+    "text": "the four questions answered: what matters: the title; what explains it: comment 1 (not answered: why care, what to do, which need be answered only where known) (G8.3)",
+    "guide": []
+   },
+   {
+    "rule": "R6-32",
+    "level": "locked",
+    "text": "Monthly trips (thousands): each line labelled at its end, in the text grey, packed in order: Kelsby moved 0.70 line heights, Marlow Vale moved 0.37 line heights, Ashcombe moved 0.20 line heights, Dunhurst moved 0.52 line heights",
+    "guide": []
+   },
+   {
+    "rule": "R6-27",
+    "level": "locked",
+    "text": "Monthly trips (thousands): no point markers: no value is isolated and no straight run hides one",
+    "guide": []
+   },
+   {
+    "rule": "R6-22",
+    "level": "locked",
+    "text": "Monthly trips (thousands): missing values left as gaps, never joined or drawn at zero: Ashcombe Mar. 2026",
+    "guide": []
+   },
+   {
+    "rule": "R6-24",
+    "level": "locked",
+    "text": "Monthly trips (thousands): dotted only where the values are of lower certainty: Kelsby from Sept. 2026 to Dec. 2026; Marlow Vale from Sept. 2026 to Dec. 2026; Ashcombe from Sept. 2026 to Dec. 2026; Dunhurst from Sept. 2026 to Dec. 2026",
+    "guide": []
+   },
+   {
+    "rule": "R6-33",
+    "level": "locked",
+    "text": "Monthly trips (thousands): a projection continues its line dotted, in its colour, from the last actual value; the label at its end",
+    "guide": []
+   },
+   {
+    "rule": "R6-29",
+    "level": "locked",
+    "text": "Monthly trips (thousands): highlighted, twice as thick, in the strong shade of its hue, its label bold: Ashcombe; the others keep their colours and widths",
+    "guide": []
+   },
+   {
+    "rule": "R2-07",
+    "level": "locked",
+    "text": "Monthly trips (thousands): the unit phrase on the top label: “120 thousand trips”; the top gridline starts after it",
+    "guide": []
+   },
+   {
+    "rule": "R2-21",
+    "level": "locked",
+    "text": "Monthly trips (thousands): labels as a set, 0 decimals: 0, 20, 40, 60, 80, 100, 120",
+    "guide": []
+   },
+   {
+    "rule": "R6-27",
+    "level": "locked",
+    "text": "County average rainfall: no point markers: no value is isolated and no straight run hides one",
+    "guide": []
+   },
+   {
+    "rule": "R6-22",
+    "level": "locked",
+    "text": "County average rainfall: missing values left as gaps, never joined or drawn at zero: Rainfall Oct. 2026, Nov. 2026, Dec. 2026",
+    "guide": []
+   },
+   {
+    "rule": "R2-07",
+    "level": "locked",
+    "text": "County average rainfall: the unit phrase on the top label: “150 mm”; the top gridline starts after it",
+    "guide": []
+   },
+   {
+    "rule": "R2-21",
+    "level": "locked",
+    "text": "County average rainfall: labels as a set, 0 decimals: 0, 50, 100, 150",
+    "guide": []
+   },
+   {
+    "rule": "R2-40",
+    "level": "locked",
+    "text": "County average rainfall: time axis: row 1 full, every third label, restarting in each group",
+    "guide": []
+   },
+   {
+    "rule": "R2-39",
+    "level": "locked",
+    "text": "County average rainfall: time axis on two levels: row 2 2025, 2026, dividers between the groups",
+    "guide": []
+   },
+   {
+    "rule": "R2-16",
+    "level": "locked",
+    "text": "a merged chart: 2 panels stacked on one time axis, drawn once at the foot; each its own scale with its unit phrase on the top label (G2.32)",
+    "guide": []
+   },
+   {
+    "rule": "CG-8",
+    "level": "locked",
+    "text": "notes under the chart, below everything else, left-aligned and wrapped to its 368 pt: 1 plain note (marks in reading order)",
+    "guide": []
+   }
+  ],
+  "findings": [
+   {
+    "rule": "CG-8",
+    "severity": "info",
+    "message": "the note “lost in a back-office system migration” of the value of ashcombe at 2026-03: nothing in the chart writes that value (a gap in a line has no text to mark), so the note stands under the chart without a mark",
+    "path": "data.series",
+    "level": "locked",
+    "guide": [],
+    "title": "notes under the chart: every mark with its note and every footnote with its mark, the notes below everything else, wrapped to the chart's width, never clipped or dropped (owner, 1 Oct 2026)"
+   }
+  ],
+  "overrides": [],
+  "expect": {},
+  "expect_met": true,
+  "source": {
+   "notes": "evaluation round 1, B02 (sonnet-G)",
+   "shows": "comments on a merged chart (two measures, panels on one time axis): each anchored to a point in its panel, the panel found from the series, placed in the free space of the figure with the arrows of a single chart (SPEC §6.12.6)",
+   "status": "generated"
+  },
+  "summary": {
+   "annotations": {
+    "comments": [
+     [
+      124.0,
+      162.48,
+      195.44,
+      183.97
+     ],
+     [
+      80.0,
+      258.48,
+      204.86,
+      280.08
+     ]
+    ]
+   },
+   "notes": [
+    {
+     "mark": null,
+     "text": "lost in a back-office system migration"
+    }
+   ],
+   "arrangement": "rows by measure",
+   "kind": "merged",
+   "rows": 2,
+   "columns": 1,
+   "panels": 2,
+   "scale_mode": "per_measure",
+   "scale": "0–120 by 20",
+   "labels": [
+    "0",
+    "20",
+    "40",
+    "60",
+    "80",
+    "100",
+    "120"
+   ],
+   "top": "120 thousand trips",
+   "orientation": "vertical",
+   "scales": {
+    "Monthly trips (thousands)": "0–120 by 20",
+    "County average rainfall": "0–150 by 50"
+   },
+   "plots": {
+    "Monthly trips (thousands)": [
+     24.0,
+     77.98,
+     309.97,
+     163.77
+    ],
+    "County average rainfall": [
+     24.0,
+     192.66,
+     309.97,
+     278.45
+    ]
+   },
+   "width": 368.0,
+   "height": 332.6,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [],
+  "copies": []
+ },
+ "output_sha256": "f5905b793705f4fff563e407c32d2bd19bae8c0c8953055d521eca0f9d1bf011"
+}

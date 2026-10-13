@@ -1,0 +1,45 @@
+{
+ "key": "p1-26-tv-price--no-persistence",
+ "file": "p1-26-tv-price.json",
+ "variant": "no-persistence",
+ "requested_type": "auto",
+ "report": {
+  "chart": "p1-26-tv-price",
+  "style": "plain",
+  "variant": "no-persistence",
+  "type": null,
+  "status": "refused",
+  "decisions": [],
+  "findings": [
+   {
+    "rule": "R6-1",
+    "severity": "error",
+    "message": "an irregular series must say whether each value is a state that holds until the next (a price, a balance) or a one-off event (a sale, a visit): the chart type depends on it, and the numbers cannot tell",
+    "path": "data.measure.persistence",
+    "supply": "persistence \"state\" or \"event\"",
+    "level": "locked",
+    "guide": [],
+    "title": "a time series is classified first: an irregular one states whether it holds states or events"
+   }
+  ],
+  "overrides": [],
+  "expect": {
+   "refused": [
+    "R6-1"
+   ]
+  },
+  "expect_met": true,
+  "source": {
+   "book": "p. 188–190 (s. 0176–0178)",
+   "notes": "06 T6",
+   "shows": "an irregular series that does not say whether it holds states or events: refused, since the type depends on it and the numbers cannot tell",
+   "status": "generated"
+  },
+  "summary": {
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [],
+  "copies": []
+ }
+}

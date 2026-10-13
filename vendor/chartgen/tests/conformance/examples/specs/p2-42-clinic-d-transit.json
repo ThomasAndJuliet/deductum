@@ -1,0 +1,20 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p2-42-clinic-d-transit",
+    "job": {"kind": "answer", "text": "Which clinic delivered the most vaccinations in the first half of 2022, and why?"},
+    "insight": {"important": "Clinic D delivered the most vaccinations", "explain": "It is close to public transit"},
+    "title": {"text": "Clinic D, Close to Public Transit, Delivered the Most Vaccinations", "kind": "insight",
+              "descriptive": "Total Vaccinations by Clinic, Jan–Jun 2022", "link": {"category": "Clinic D"}},
+    "data": {
+      "x": {"kind": "nominal", "values": ["Clinic D", "Clinic B", "Clinic C", "Clinic A"]},
+      "measure": {"name": "total vaccinations", "kind": "count", "zero": "meaningful", "min": 0,
+                  "unit": {"noun": "vaccinations", "magnitude": 3}},
+      "series": [{"id": "total", "name": "Total vaccinations", "values": [407, 295, 287, 192]}]
+    },
+    "chart": {"orientation": "horizontal"},
+    "reasons": {"chart.orientation": "the book's figure: the connector runs from the title down to the end of the top bar"},
+    "source": {"book": "p. 393 (s. 0359)", "notes": "13-15 F8",
+               "shows": "a thin grey curved arrow from the end of the insight title to the bar it names, with nothing else highlighted (G8.8)"}
+  }
+}

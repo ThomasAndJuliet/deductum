@@ -1,0 +1,79 @@
+{
+ "chartspec": 1,
+ "id": "p3-36-donations-subtotal-fraction",
+ "job": {
+  "kind": "answer",
+  "text": "What share of donations did Mrs. Jones and the Chetley Family give between them?"
+ },
+ "insight": {
+  "important": "Mrs. Jones and the Chetley Family gave over 40% of all donations between them",
+  "targets": [
+   {
+    "category": "Mrs. Jones"
+   },
+   {
+    "category": "The Chetley Family"
+   }
+  ]
+ },
+ "title": {
+  "text": "Mrs. Jones and the Chetley Family Gave Over 40%",
+  "kind": "insight",
+  "descriptive": "Donations by Donor, % of Total, 2022"
+ },
+ "data": {
+  "x": {
+   "kind": "nominal",
+   "values": [
+    "Mrs. Smith",
+    "Mrs. Jones",
+    "Mr. & Mrs. Perez",
+    "The Chetley Family",
+    "Ms. Flaherty"
+   ]
+  },
+  "measure": {
+   "name": "donations",
+   "kind": "amount",
+   "zero": "meaningful",
+   "min": 0,
+   "unit": {
+    "prefix": "$",
+    "magnitude": 3,
+    "noun": "in donations"
+   }
+  },
+  "series": [
+   {
+    "id": "donations",
+    "name": "Donations",
+    "values": [
+     165,
+     160,
+     135,
+     125,
+     100
+    ]
+   }
+  ],
+  "parts": {
+   "meaningful_total": true,
+   "all_parts": true,
+   "overlap": false
+  }
+ },
+ "facts": {
+  "message": "subtotal_fraction"
+ },
+ "audience": {
+  "pie_averse": true
+ },
+ "layout": {
+  "width": 260
+ },
+ "source": {
+  "book": "p. 242–244 (s. 0223–0224)",
+  "notes": "07 #1; 07 §4.1",
+  "shows": "a subtotal stated as a fraction, for an audience averse to pies: a 100 % stacked bar instead of the pie (R7-08, R7-40, G1.37, G1.40, D-39); the two parts it sums together at the base although neither is the largest, in their strong shades, the others paled (R7-08, D-26 (b), D-9), so that the subtotal is one length from the base; each share before its part's name, five values against six scale labels (G2.18)"
+ }
+}

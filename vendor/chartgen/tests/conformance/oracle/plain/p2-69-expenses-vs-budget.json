@@ -1,0 +1,217 @@
+{
+ "key": "p2-69-expenses-vs-budget",
+ "file": "p2-69-expenses-vs-budget.json",
+ "variant": null,
+ "requested_type": "auto",
+ "report": {
+  "chart": "p2-69-expenses-vs-budget",
+  "style": "plain",
+  "variant": null,
+  "type": "merged of bar",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "RP3-3",
+    "level": "guided",
+    "text": "arranged: columns by measure: series in different measures: one panel per measure, side by side on the shared categories, each with its own scale (G1.56, G2.32)",
+    "guide": []
+   },
+   {
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "categories sorted by How much did each dept. spend? (D-46), largest first, the same order in every panel (G2.1)",
+    "guide": []
+   },
+   {
+    "rule": "R3-3",
+    "level": "locked",
+    "text": "one colour for every mark: each panel holds one measure, and the panels tell them apart (G7.6)",
+    "guide": []
+   },
+   {
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "How much did each dept. spend?: type bar: categories compared by value",
+    "guide": []
+   },
+   {
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "How well did each dept. stick to its budget?: type bar: categories compared by value",
+    "guide": []
+   },
+   {
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "How much above or below budget was each dept.?: type bar: categories compared by value",
+    "guide": []
+   },
+   {
+    "rule": "R2-24",
+    "level": "locked",
+    "text": "How much did each dept. spend?: bars start at zero",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "How much did each dept. spend?: scale 0–600 by 200 (at most 3 intervals in a panel about 73 pt wide)",
+    "guide": []
+   },
+   {
+    "rule": "R2-30",
+    "level": "locked",
+    "text": "How well did each dept. stick to its budget?: values on both sides of zero: room at both ends",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "How well did each dept. stick to its budget?: scale −20–20 by 20 (at most 2 intervals in a panel about 73 pt wide)",
+    "guide": []
+   },
+   {
+    "rule": "R2-30",
+    "level": "locked",
+    "text": "How much above or below budget was each dept.?: values on both sides of zero: room at both ends",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "How much above or below budget was each dept.?: scale −20–40 by 20 (at most 3 intervals in a panel about 73 pt wide)",
+    "guide": []
+   },
+   {
+    "rule": "R2-21",
+    "level": "locked",
+    "text": "How much did each dept. spend?: labels as a set, 0 decimals, bare numbers: 0, 200, 400, 600",
+    "guide": []
+   },
+   {
+    "rule": "R5-10",
+    "level": "locked",
+    "text": "How much did each dept. spend?: digits hidden: thousands, stated in the scale's title (R2-05, D-3): “Expenses ($K)”",
+    "guide": []
+   },
+   {
+    "rule": "R2-07",
+    "level": "locked",
+    "text": "How much did each dept. spend?: a horizontal scale: bare numbers, and its title centred below with the unit in parentheses: “Expenses ($K)”",
+    "guide": []
+   },
+   {
+    "rule": "R2-21",
+    "level": "locked",
+    "text": "How well did each dept. stick to its budget?: labels as a set, 0 decimals, each with its “%” (owner, 1 Oct 2026): −20%, 0%, +20%",
+    "guide": []
+   },
+   {
+    "rule": "R2-07",
+    "level": "locked",
+    "text": "How well did each dept. stick to its budget?: a horizontal scale of percentages: “%” on every label, and its title centred below, without “(%)” (owner, 1 Oct 2026): “Below/above budget”",
+    "guide": []
+   },
+   {
+    "rule": "R2-21",
+    "level": "locked",
+    "text": "How much above or below budget was each dept.?: labels as a set, 0 decimals, bare numbers: −20, 0, +20, +40",
+    "guide": []
+   },
+   {
+    "rule": "R5-10",
+    "level": "locked",
+    "text": "How much above or below budget was each dept.?: digits hidden: thousands, stated in the scale's title (R2-05, D-3): “Below/above budget ($K)”",
+    "guide": []
+   },
+   {
+    "rule": "R2-07",
+    "level": "locked",
+    "text": "How much above or below budget was each dept.?: a horizontal scale: bare numbers, and its title centred below with the unit in parentheses: “Below/above budget ($K)”",
+    "guide": []
+   },
+   {
+    "rule": "R9-11",
+    "level": "locked",
+    "text": "merged bars: 3 panels side by side, horizontal bars in one colour, the names once at the left, each panel its own scale from zero along the bottom, its title below and a heading above naming its measure (G7.6)",
+    "guide": []
+   }
+  ],
+  "findings": [
+   {
+    "rule": "R2-27",
+    "severity": "warn",
+    "message": "35% of room at the top of the scale (5–25 % expected)",
+    "level": "locked",
+    "guide": [],
+    "title": "the upper limit leaves 10–20 % of room (the data never touch it)"
+   },
+   {
+    "rule": "R2-27",
+    "severity": "warn",
+    "message": "100% of room at the bottom of the scale (5–25 % expected)",
+    "level": "locked",
+    "guide": [],
+    "title": "the upper limit leaves 10–20 % of room (the data never touch it)"
+   }
+  ],
+  "overrides": [],
+  "expect": {},
+  "expect_met": true,
+  "source": {
+   "book": "p. 397 (s. 0363)",
+   "notes": "13-15 F9",
+   "shows": "a set of views merged: three panels on the same rows, each headed by the question it answers (RP5-6), each with its own scale and its title below; the deviations signed, their zero line darker; one colour, where the book colours over and under budget red and green (good and bad colours are the message layer's)",
+   "status": "generated"
+  },
+  "summary": {
+   "arrangement": "columns by measure",
+   "kind": "merged",
+   "rows": 1,
+   "columns": 3,
+   "panels": 3,
+   "scale_mode": "per_measure",
+   "scale": "0–600 by 200",
+   "labels": [
+    "0",
+    "200",
+    "400",
+    "600"
+   ],
+   "top": "$600K (expenses)",
+   "orientation": "horizontal",
+   "scales": {
+    "How much did each dept. spend?": "0–600 by 200",
+    "How well did each dept. stick to its budget?": "−20–20 by 20",
+    "How much above or below budget was each dept.?": "−20–40 by 20"
+   },
+   "plots": {
+    "How much did each dept. spend?": [
+     84.2,
+     68.77,
+     156.34,
+     168.77
+    ],
+    "How well did each dept. stick to its budget?": [
+     184.89,
+     68.77,
+     257.03,
+     168.77
+    ],
+    "How much above or below budget was each dept.?": [
+     286.97,
+     68.77,
+     359.11,
+     168.77
+    ]
+   },
+   "width": 368.0,
+   "height": 209.08,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [],
+  "copies": []
+ },
+ "output_sha256": "6d9290d4fed9522de096459fa2eaff19bdb42899f6a0909b7b55c905198cede7"
+}

@@ -1,0 +1,247 @@
+{
+ "key": "p2-04-regional-expenses",
+ "file": "p2-04-regional-expenses.json",
+ "variant": null,
+ "requested_type": "auto",
+ "report": {
+  "chart": "p2-04-regional-expenses",
+  "style": "plain",
+  "variant": null,
+  "type": "bar",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "type bar: categories compared by value",
+    "guide": []
+   },
+   {
+    "rule": "R7-19",
+    "level": "guided",
+    "text": "clustered bars: parts compared across totals: only clustered bars compare them precisely (G1.41)",
+    "guide": []
+   },
+   {
+    "rule": "R2-24",
+    "level": "locked",
+    "text": "bars start at zero",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "scale 0–1,500 by 500",
+    "guide": []
+   },
+   {
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "nominal categories sorted by value, descending (by series ops)",
+    "guide": []
+   },
+   {
+    "rule": "R15-5",
+    "level": "locked",
+    "text": "highlighting what the insight names",
+    "guide": []
+   },
+   {
+    "rule": "R9-12",
+    "level": "locked",
+    "text": "6 series side by side in each cluster, the bars touching, in the same order in every cluster: Operations (slot 1), HR (slot 2), Finance (slot 3), Outreach (slot 4), PR (slot 5), Development (slot 6) (G7.5, G4.22)",
+    "guide": []
+   },
+   {
+    "rule": "R9-10",
+    "level": "locked",
+    "text": "every name fits under its bar, neighbours at least 10 pt apart: vertical bars",
+    "guide": []
+   },
+   {
+    "rule": "R2-21",
+    "level": "locked",
+    "text": "labels as a set, 1 decimals: 0.0, 0.5, 1.0, $1.5",
+    "guide": []
+   },
+   {
+    "rule": "R5-10",
+    "level": "locked",
+    "text": "digits hidden: millions, stated once on the top label (R2-05, D-3): “$1.5 million in expenses”",
+    "guide": []
+   },
+   {
+    "rule": "R2-07",
+    "level": "locked",
+    "text": "the unit phrase on the top label: “$1.5 million in expenses”; the top gridline starts after it",
+    "guide": []
+   },
+   {
+    "rule": "R4-6",
+    "level": "guided",
+    "text": "a legend above the plot, below the title, centred over the plot: labels beside the bars of a cluster would each need a leader (G5.7, G5.10, D-7)",
+    "guide": []
+   },
+   {
+    "rule": "R4-4",
+    "level": "locked",
+    "text": "legend entries in the order of the bars in each cluster, left to right: Operations, HR, Finance, Outreach, PR, Development (G5.8, G5.14: square keys)",
+    "guide": []
+   },
+   {
+    "rule": "R3-7",
+    "level": "locked",
+    "text": "highlighted in the strong shade of their colour: Central (Operations), West (HR); the others keep their colour",
+    "guide": []
+   }
+  ],
+  "findings": [],
+  "overrides": [],
+  "expect": {},
+  "expect_met": true,
+  "source": {
+   "book": "p. 267–268 (s. 0245–0246)",
+   "notes": "07 #12",
+   "shows": "the parts of three totals compared across them: clustered bars, the only chart that compares them precisely (G1.41); six departments in six colours with the legend above, the clusters two and a half bar widths apart; the two bars the insight names in the strong shade of their own hues",
+   "status": "generated"
+  },
+  "summary": {
+   "scale": "0–1,500 by 500",
+   "labels": [
+    "0.0",
+    "0.5",
+    "1.0",
+    "$1.5"
+   ],
+   "top": "$1.5 million in expenses",
+   "scale_title": null,
+   "orientation": "vertical",
+   "plot": [
+    26.78,
+    52.03,
+    368.0,
+    256.77
+   ],
+   "band": 113.74,
+   "series": [
+    "ops",
+    "hr",
+    "fin",
+    "out",
+    "pr",
+    "dev"
+   ],
+   "labelling": "legend",
+   "value_labels": false,
+   "table": false,
+   "bar": 13.54,
+   "width": 368.0,
+   "height": 272.82,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job answer: insight “Central's Operations expenses ($843K) were lower than West's HR expenses ($879K)”",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-1",
+    "level": "guided",
+    "text": "a graph, the values to be compared or a pattern seen (G1.11)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 2,
+    "name": "variables",
+    "rule": "RP3-2",
+    "level": "guided",
+    "text": "one plot: categories along x and 6 series; a further variable would go to small multiples (data.dims, G1.18)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 3,
+    "name": "location",
+    "rule": "R8-2",
+    "level": "guided",
+    "text": "not a map: where the values are is not the message (facts.location_matters; G1.24, G1.25)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "RP2-7",
+    "level": "guided",
+    "text": "group: breakdowns of totals. 3 totals of 6 parts each, the parts as series (07 §4.2, G1.8)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-19",
+    "level": "guided",
+    "text": "parts compared across totals: only clustered bars compare them precisely (G1.41)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 7,
+    "name": "values across categories",
+    "rule": "R9-1",
+    "level": "guided",
+    "text": "on to the bar chart of step 7 (G1.9)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 7,
+    "name": "values across categories",
+    "rule": "R9-11",
+    "level": "guided",
+    "text": "6 series of one measure: clustered bars (G1.56)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 7,
+    "name": "values across categories",
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "bars from zero (02 D1)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type, the series told apart by colour (G1.59)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "bar charts are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   }
+  ],
+  "copies": []
+ },
+ "output_sha256": "0e261131ae3ea3d250424685fa0dd87fbfe5a389d2ef51b77f6d486245fc54d7"
+}

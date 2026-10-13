@@ -1,0 +1,160 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p2-56-comparator-validity",
+    "job": {
+      "kind": "make_aware",
+      "text": "Show a new manager how each region's donations compare with what was expected"
+    },
+    "insight": {
+      "important": "Central and North fell short of their targets"
+    },
+    "title": {
+      "text": "Central and North Missed Their Donation Targets",
+      "kind": "insight",
+      "descriptive": "Donations and Targets by Region, 2022"
+    },
+    "data": {
+      "x": {
+        "kind": "nominal",
+        "values": [
+          "South",
+          "Central",
+          "East",
+          "North",
+          "West"
+        ]
+      },
+      "measure": {
+        "name": "donations",
+        "kind": "amount",
+        "zero": "meaningful",
+        "min": 0,
+        "unit": {
+          "prefix": "$",
+          "magnitude": 6,
+          "noun": "in donations"
+        }
+      },
+      "series": [
+        {
+          "id": "actual",
+          "name": "Actual",
+          "values": [
+            4.4,
+            4.2,
+            3.5,
+            1.7,
+            1.4
+          ]
+        }
+      ],
+      "comparisons": [
+        {
+          "id": "target",
+          "kind": "target",
+          "label": "Target",
+          "values": [
+            4.1,
+            4.6,
+            2.5,
+            2.4,
+            1.2
+          ]
+        },
+        {
+          "id": "last-year",
+          "kind": "previous_period",
+          "label": "2021",
+          "values": [
+            3.9,
+            4.0,
+            3.1,
+            1.9,
+            1.3
+          ]
+        },
+        {
+          "id": "sector",
+          "kind": "peer",
+          "label": "Sector average",
+          "values": [
+            2.0
+          ],
+          "valid": false,
+          "reason": "a national figure for arts charities from 2015"
+        }
+      ]
+    },
+    "source": {
+      "notes": "13-15 R15-7–R15-9; F12's data (the 2021 values and the sector figure supposed, not the book's)",
+      "shows": "which comparison values are drawn (G0.19, D-48): the targets, as marks; last year's values left out, since a target exists (D-48); the doubtful sector average left out, with a warning (R15-9)"
+    }
+  },
+  "variants": [
+    {
+      "name": "doubtful-drawn",
+      "patch": {
+        "data": {
+          "comparisons": [
+            {
+              "id": "sector",
+              "kind": "peer",
+              "label": "Sector average",
+              "values": [
+                2.0
+              ],
+              "valid": false,
+              "render": "line",
+              "reason": "a national figure for arts charities from 2015"
+            }
+          ]
+        },
+        "source": {
+          "shows": "a doubtful comparator the spec asks to draw: refused, since audiences latch onto comparison values (R15-9)"
+        }
+      },
+      "expect": {
+        "refused": [
+          "R15-9"
+        ]
+      }
+    },
+    {
+      "name": "previous-only",
+      "patch": {
+        "data": {
+          "comparisons": [
+            {
+              "id": "last-year",
+              "kind": "previous_period",
+              "label": "2021",
+              "values": [
+                3.9,
+                4.0,
+                3.1,
+                1.9,
+                1.3
+              ]
+            }
+          ]
+        },
+        "insight": {
+          "important": "Every region but North brought in more than in 2021"
+        },
+        "title": {
+          "text": "Only North Brought in Less Than in 2021",
+          "descriptive": "Donations by Region, 2022 and 2021"
+        },
+        "source": {
+          "shows": "last year's values, the only comparator there is: drawn as marks, with the report's flag that previous periods have limitations (D-48)"
+        }
+      },
+      "expect": {
+        "findings": [
+          "R15-7"
+        ]
+      }
+    }
+  ]
+}

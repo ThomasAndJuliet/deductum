@@ -1,0 +1,232 @@
+{
+ "key": "p1-22-headcount-labels",
+ "file": "p1-22-headcount-labels.json",
+ "variant": null,
+ "requested_type": "auto",
+ "report": {
+  "chart": "p1-22-headcount-labels",
+  "style": "plain",
+  "variant": null,
+  "type": "line",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "R6-4",
+    "level": "guided",
+    "text": "type line: a regular series whose pattern of change is the point (06 DP6-1, G1.51)",
+    "guide": []
+   },
+   {
+    "rule": "R2-25",
+    "level": "locked",
+    "text": "the values are not far from zero compared with their spread",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "scale 0–120 by 20",
+    "guide": []
+   },
+   {
+    "rule": "R6-28",
+    "level": "locked",
+    "text": "each line its own colour, handed out top to bottom by the line ends: East slot 1, Central slot 2, North slot 3, West slot 4, South slot 5",
+    "guide": []
+   },
+   {
+    "rule": "R6-32",
+    "level": "locked",
+    "text": "each line labelled at its end, in the text grey, none moved",
+    "guide": []
+   },
+   {
+    "rule": "R6-27",
+    "level": "locked",
+    "text": "no point markers: no value is isolated and no straight run hides one",
+    "guide": []
+   },
+   {
+    "rule": "R2-07",
+    "level": "locked",
+    "text": "the unit phrase on the top label: “120 employees”; the top gridline starts after it",
+    "guide": []
+   },
+   {
+    "rule": "R2-21",
+    "level": "locked",
+    "text": "labels as a set, 0 decimals: 0, 20, 40, 60, 80, 100, 120",
+    "guide": []
+   },
+   {
+    "rule": "R2-40",
+    "level": "locked",
+    "text": "time axis: row 1 full",
+    "guide": []
+   },
+   {
+    "rule": "R2-39",
+    "level": "locked",
+    "text": "time axis: row 2 (“2022”) left out, the title gives it (G2.37)",
+    "guide": []
+   }
+  ],
+  "findings": [
+   {
+    "rule": "R2-11",
+    "severity": "info",
+    "message": "the unit phrase “employees” is one word; say what is counted, which subset and per what period",
+    "path": "data.measure.unit.noun",
+    "level": "locked",
+    "guide": [],
+    "title": "a unit phrase specific enough for one reading"
+   }
+  ],
+  "overrides": [],
+  "expect": {},
+  "expect_met": true,
+  "source": {
+   "book": "p. 144 (s. 0134)",
+   "notes": "03-04 #16",
+   "shows": "direct labels instead of the book's bad legend: each line named at its end, nothing to memorise",
+   "status": "generated"
+  },
+  "summary": {
+   "scale": "0–120 by 20",
+   "labels": [
+    "0",
+    "20",
+    "40",
+    "60",
+    "80",
+    "100",
+    "120"
+   ],
+   "top": "120 employees",
+   "scale_title": null,
+   "orientation": "vertical",
+   "plot": [
+    24.0,
+    21.0,
+    332.97,
+    206.38
+   ],
+   "slot": 47.15,
+   "labelling": "direct",
+   "label_shifts": {
+    "east": 0.0,
+    "central": 0.0,
+    "north": 0.0,
+    "west": 0.0,
+    "south": 0.0
+   },
+   "leaders": [],
+   "markers": [],
+   "colours": {
+    "east": "series-1",
+    "central": "series-2",
+    "north": "series-3",
+    "west": "series-4",
+    "south": "series-5"
+   },
+   "width": 368.0,
+   "height": 224.26,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job lookup: no insight stated (a descriptive title will do, D-55)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-1",
+    "level": "guided",
+    "text": "a graph, the values to be compared or a pattern seen (G1.11)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 2,
+    "name": "variables",
+    "rule": "RP3-2",
+    "level": "guided",
+    "text": "one plot: time along x and 5 series; a further variable would go to small multiples (data.dims, G1.18)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 3,
+    "name": "location",
+    "rule": "R8-2",
+    "level": "guided",
+    "text": "not a map: where the values are is not the message (facts.location_matters; G1.24, G1.25)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-01",
+    "level": "guided",
+    "text": "not parts of a total (no data.parts, no breakdown message; G1.1)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 6,
+    "name": "values over time",
+    "rule": "R6-13",
+    "level": "guided",
+    "text": "group: data over time. A series of more than two periods, not a breakdown and not tied to places (G1.48)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 6,
+    "name": "values over time",
+    "rule": "R6-3",
+    "level": "locked",
+    "text": "a regular series, enough values known (06 DP6-2)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 6,
+    "name": "values over time",
+    "rule": "R6-4",
+    "level": "guided",
+    "text": "a regular series whose pattern of change is the point (06 DP6-1, G1.51)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type, the series told apart by colour (G1.59)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "line charts are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "data over time"
+   }
+  ],
+  "copies": []
+ },
+ "output_sha256": "00c5ae5732d309d486e8a36f617fa732d5c89c047554d73f74e8371d3c6ef008"
+}

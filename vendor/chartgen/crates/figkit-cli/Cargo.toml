@@ -1,0 +1,12 @@
+[package]
+name = "figkit-cli"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[[bin]]
+name = "figkit-dispatch"
+path = "src/main.rs"
+
+[dependencies]
+figkit-protocol = { path = "../figkit-protocol" }

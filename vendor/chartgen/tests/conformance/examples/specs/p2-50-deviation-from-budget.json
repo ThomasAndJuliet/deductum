@@ -1,0 +1,92 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p2-50-deviation-from-budget",
+    "job": {
+      "kind": "make_aware",
+      "text": "Make the finance director aware of which departments ran over budget in January"
+    },
+    "insight": {
+      "important": "Marketing and Operations ran furthest over budget; IT and Finance stayed under"
+    },
+    "title": {
+      "text": "Marketing and Operations Ran Furthest over Budget",
+      "kind": "insight",
+      "descriptive": "Deviation from Budget by Department, January 2020"
+    },
+    "data": {
+      "x": {
+        "kind": "nominal",
+        "values": [
+          "Marketing",
+          "Operations",
+          "R&D",
+          "IT",
+          "Finance"
+        ]
+      },
+      "measure": {
+        "name": "expenses as a share of budget",
+        "kind": "percent",
+        "zero": "meaningful",
+        "min": 0,
+        "good": "lower",
+        "unit": {
+          "suffix": "%",
+          "what": "of budget"
+        }
+      },
+      "series": [
+        {
+          "id": "spent",
+          "name": "Spent",
+          "values": [
+            109.5,
+            107.8,
+            102.1,
+            95.4,
+            92.2
+          ]
+        }
+      ],
+      "comparisons": [
+        {
+          "id": "budget",
+          "kind": "budget",
+          "label": "Budget",
+          "values": [
+            100
+          ]
+        }
+      ]
+    },
+    "transform": {
+      "kind": "deviation",
+      "comparison": "budget"
+    },
+    "source": {
+      "book": "p. 409 (s. 0375)",
+      "notes": "13-15 F13",
+      "shows": "red and green for bad and good (G4.16, G8.14): bars over budget bad, under budget good, the extreme labels saying which side is which in its colour; semantic colours for every reader, plain, in one file (D-18)"
+    },
+    "chart": {
+      "value_labels": "off"
+    },
+    "reasons": {
+      "chart.value_labels": "the book's deviation chart keeps its scale, whose extreme labels name the sides (s. 0375, G8.14)"
+    }
+  },
+  "variants": [
+    {
+      "name": "bw",
+      "patch": {
+        "audience": {
+          "bw_risk": true
+        },
+        "source": {
+          "shows": "the same chart where black-and-white reproduction is likely (audience.bw_risk): red and green told apart without colour too, which serves readers with colour-vision deficiency as well, a hatch of two tones of the red over each bad bar and a dither of two tones of the green over each good one, each blending to its colour at reading distance; one file (D-18). The colour-blind-safe pair, orange and blue with a red/green copy, is a style's option for publications to unknown readers, not a chart's"
+        }
+      }
+    }
+  ]
+}

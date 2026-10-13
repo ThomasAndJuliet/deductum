@@ -1,0 +1,130 @@
+{
+ "base": {
+  "chartspec": 1,
+  "id": "p3-71-weekly-sales-totals",
+  "job": {
+   "kind": "answer",
+   "text": "Are sales falling, as the individual transactions seem to show?"
+  },
+  "insight": {
+   "important": "Weekly sales rose, from $11.0K to $13.9K"
+  },
+  "title": {
+   "text": "Weekly Sales Rose Over the Four Weeks",
+   "kind": "insight",
+   "descriptive": "Total Weekly Sales, Jun 19 to Jul 16, 2022"
+  },
+  "data": {
+   "x": {
+    "kind": "time",
+    "grid": "week",
+    "week_start": "sunday",
+    "values": [
+     "2022-06-19",
+     "2022-06-26",
+     "2022-07-03",
+     "2022-07-10"
+    ]
+   },
+   "measure": {
+    "name": "weekly sales",
+    "kind": "amount",
+    "zero": "meaningful",
+    "min": 0,
+    "persistence": "summary",
+    "additive": true,
+    "unit": {
+     "prefix": "$",
+     "what": "total sales per week"
+    }
+   },
+   "series": [
+    {
+     "id": "sales",
+     "name": "Weekly sales",
+     "values": [
+      11010,
+      11575,
+      13150,
+      13935
+     ]
+    }
+   ]
+  },
+  "facts": {
+   "message": "pattern"
+  },
+  "source": {
+   "book": "p. 194–195 (s. 0181–0182)",
+   "notes": "06 T7",
+   "shows": "the sales of P1-27 totalled per week, as the chooser asks when their pattern is the message (R6-10, G1.54): weeks of the book's, Sunday to Saturday (x.week_start), labelled Jun 19–25 … Jul 10–16 with the year under them, a line"
+  }
+ },
+ "variants": [
+  {
+   "name": "monday-weeks",
+   "patch": {
+    "data": {
+     "x": {
+      "week_start": "monday",
+      "values": [
+       "2022-06-20",
+       "2022-06-27",
+       "2022-07-04",
+       "2022-07-11"
+      ]
+     },
+     "series": [
+      {
+       "id": "sales",
+       "name": "Weekly sales",
+       "values": [
+        14420,
+        13210,
+        10680,
+        11360
+       ]
+      }
+     ],
+     "as_of": "2022-07-16"
+    },
+    "job": {
+     "kind": "lookup",
+     "text": "Look up the weekly sales totals"
+    },
+    "insight": null,
+    "title": {
+     "text": "Total Weekly Sales, Jun 20 to Jul 16, 2022",
+     "kind": "descriptive",
+     "descriptive": null
+    },
+    "source": {
+     "shows": "the same sales totalled in ISO weeks, Monday to Sunday: now they fall, and the last week, cut short by the data's end on Saturday, Jul 16, is left out (R2-42); where the week starts is a fact of the data, so the spec says it (x.week_start; audience.locale en-US would give Sunday)"
+    }
+   }
+  },
+  {
+   "name": "iso-weeks",
+   "patch": {
+    "data": {
+     "x": {
+      "values": [
+       "2022-W24",
+       "2022-W25",
+       "2022-W26",
+       "2022-W27"
+      ]
+     }
+    },
+    "source": {
+     "shows": "ISO weeks given where the weeks start on Sunday: invalid, an ISO week running Monday to Sunday"
+    }
+   },
+   "expect": {
+    "refused": [
+     "CG-4"
+    ]
+   }
+  }
+ ]
+}

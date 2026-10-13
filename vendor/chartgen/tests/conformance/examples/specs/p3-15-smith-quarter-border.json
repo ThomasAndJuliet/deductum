@@ -1,0 +1,122 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p3-15-smith-quarter-border",
+    "job": {
+      "kind": "make_aware",
+      "text": "Make the reader aware that Mrs. Smith gave almost a quarter of all donations"
+    },
+    "insight": {
+      "important": "Mrs. Smith contributed almost a quarter of all donations",
+      "targets": [
+        {
+          "category": "Mrs. Smith"
+        }
+      ]
+    },
+    "title": {
+      "text": "Mrs. Smith Contributed Almost a Quarter of All Donations",
+      "kind": "insight",
+      "descriptive": "Donations by Donor, 2022"
+    },
+    "data": {
+      "x": {
+        "kind": "nominal",
+        "values": [
+          "Mrs. Smith",
+          "Mrs. Jones",
+          "Mr. & Mrs. Perez",
+          "The Chetley Family",
+          "Ms. Flaherty"
+        ]
+      },
+      "measure": {
+        "name": "donations",
+        "kind": "amount",
+        "zero": "meaningful",
+        "min": 0,
+        "unit": {
+          "prefix": "$",
+          "magnitude": 3,
+          "noun": "in donations"
+        }
+      },
+      "series": [
+        {
+          "id": "donations",
+          "name": "Donations",
+          "values": [
+            165,
+            160,
+            135,
+            125,
+            100
+          ]
+        }
+      ],
+      "parts": {
+        "meaningful_total": true,
+        "all_parts": true,
+        "overlap": false
+      }
+    },
+    "facts": {
+      "message": "fraction_of_total"
+    },
+    "chart": {
+      "type": "auto"
+    },
+    "highlight": [
+      {
+        "targets": [
+          {
+            "category": "Mrs. Smith"
+          }
+        ],
+        "method": "border"
+      }
+    ],
+    "labels": {
+      "parts": "name"
+    },
+    "reasons": {
+      "highlight[0].method": "the book's outlined slice (s. 0368)"
+    },
+    "source": {
+      "book": "p. 402 (s. 0368)",
+      "notes": "13-15 F10",
+      "shows": "a design choice that features the insight: the chart type chosen from the message, a fraction of the whole, so a pie, where a quarter is seen at a glance (G1.36, G8.1); Mrs. Smith's slice outlined in the strong shade of its own colour, kept inside the slice, the others unchanged (G7.30, G8.9); the names alone outside the slices, as the book's (labels.parts name, open); the book's taupe for Ms. Flaherty is the palette's fifth colour here, grey being reserved (G4.15)"
+    }
+  },
+  "variants": [
+    {
+      "name": "columns",
+      "patch": {
+        "chart": {
+          "type": "bar"
+        },
+        "highlight": [
+          {
+            "targets": [
+              {
+                "category": "Mrs. Smith"
+              }
+            ]
+          }
+        ],
+        "reasons": null,
+        "labels": {
+          "parts": "auto"
+        },
+        "source": {
+          "shows": "the book's bad version: columns with Mrs. Smith's darker, which make the reader work out a quarter from the scale; drawn, as the type asked for, with the guided finding that a fraction of the total is a pie's message (G1.36)"
+        }
+      },
+      "expect": {
+        "findings": [
+          "R7-07"
+        ]
+      }
+    }
+  ]
+}

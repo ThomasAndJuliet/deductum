@@ -1,0 +1,13 @@
+[package]
+name = "chartgen-model"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+rust_decimal.workspace = true
+indexmap = { version = "2", features = ["serde"] }
+figkit-model = { path = "../figkit-model" }

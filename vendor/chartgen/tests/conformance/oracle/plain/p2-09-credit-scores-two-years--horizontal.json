@@ -1,0 +1,240 @@
+{
+ "key": "p2-09-credit-scores-two-years--horizontal",
+ "file": "p2-09-credit-scores-two-years.json",
+ "variant": "horizontal",
+ "requested_type": "dot",
+ "report": {
+  "chart": "p2-09-credit-scores-two-years",
+  "style": "plain",
+  "variant": "horizontal",
+  "type": "dot",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "6.7",
+    "level": "locked",
+    "text": "a dot plot of 2 series, the dots of a category sharing its position, each series in its own colour, every dot of one size (G7.18)",
+    "guide": []
+   },
+   {
+    "rule": "R2-26",
+    "level": "locked",
+    "text": "the theoretical minimum 300 lies just below the data",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "scale 300–500 by 50",
+    "guide": []
+   },
+   {
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "nominal categories sorted by value, descending (by series y2022)",
+    "guide": []
+   },
+   {
+    "rule": "R2-21",
+    "level": "locked",
+    "text": "labels as a set, 0 decimals, bare numbers: 300, 350, 400, 450, 500",
+    "guide": []
+   },
+   {
+    "rule": "R2-07",
+    "level": "locked",
+    "text": "a horizontal scale: bare numbers, and its title centred below with the unit in parentheses: “Credit score”",
+    "guide": []
+   },
+   {
+    "rule": "R4-6",
+    "level": "guided",
+    "text": "a legend above the plot, below the title, centred over the plot: the dots of a category share its row (G5.10)",
+    "guide": []
+   },
+   {
+    "rule": "R4-4",
+    "level": "locked",
+    "text": "legend entries in series order: 2022, 2021 (G5.8)",
+    "guide": []
+   },
+   {
+    "rule": "R2-24",
+    "level": "guided",
+    "text": "type dot, as given and as the procedure gives: a scale that should not start at zero wants dots, not bars (G1.57, D-30): the theoretical minimum 300 lies just below the data",
+    "guide": []
+   }
+  ],
+  "findings": [
+   {
+    "rule": "R6-15",
+    "severity": "info",
+    "message": "two periods (2022, 2021) with facts.message periods: bars of each period's values, by the guide's exception for individual periods (G1.51), where the procedure gives an arrow chart (G1.46)",
+    "path": "facts.message",
+    "reason": "the job is to look up each customer's score at each year end, not the change between them (the book's dot plot, p. 89)",
+    "level": "guided",
+    "recommended": "arrow",
+    "guide": [],
+    "title": "two periods: an arrow chart"
+   },
+   {
+    "rule": "R9-10",
+    "severity": "info",
+    "message": "chart.orientation horizontal departs from the procedure, which gives vertical (every name fits under its dot, neighbours at least 10 pt apart)",
+    "path": "chart.orientation",
+    "reason": "to show two series of dots in rows",
+    "level": "guided",
+    "recommended": "vertical",
+    "guide": [],
+    "title": "long category names: horizontal bars"
+   }
+  ],
+  "overrides": [],
+  "expect": {
+   "findings": [
+    "R9-10"
+   ]
+  },
+  "expect_met": true,
+  "source": {
+   "book": "p. 89 (s. 0085), with 2021 scores of ours",
+   "notes": "02 #15 (synthetic 2021)",
+   "shows": "turned: the dots of a customer share its row, so the series are keyed by a legend row above (G5.10)",
+   "status": "generated"
+  },
+  "summary": {
+   "scale": "300–500 by 50",
+   "labels": [
+    "300",
+    "350",
+    "400",
+    "450",
+    "500"
+   ],
+   "top": "500 (credit score)",
+   "scale_title": "Credit score",
+   "orientation": "horizontal",
+   "plot": [
+    41.19,
+    37.03,
+    360.5,
+    137.03
+   ],
+   "band": 20.0,
+   "series": [
+    "y2022",
+    "y2021"
+   ],
+   "labelling": "legend",
+   "value_labels": false,
+   "table": false,
+   "width": 368.0,
+   "height": 162.46,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job lookup: no insight stated (a descriptive title will do, D-55)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-1",
+    "level": "guided",
+    "text": "a graph, the values to be compared or a pattern seen (G1.11)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 2,
+    "name": "variables",
+    "rule": "RP3-2",
+    "level": "guided",
+    "text": "one plot: categories along x and 2 series; a further variable would go to small multiples (data.dims, G1.18)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 3,
+    "name": "location",
+    "rule": "R8-2",
+    "level": "guided",
+    "text": "not a map: where the values are is not the message (facts.location_matters; G1.24, G1.25)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-01",
+    "level": "guided",
+    "text": "not parts of a total (no data.parts, no breakdown message; G1.1)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 5,
+    "name": "two periods",
+    "rule": "R6-15",
+    "level": "guided",
+    "text": "the two series are two periods (2022, 2021), but each period's own values are the message (facts.message periods), for the reason given: “the job is to look up each customer's score at each year end, not the change between them (the book's dot plot, p. 89)” (G1.51's exception to G1.46): on to clustered bars",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 7,
+    "name": "values across categories",
+    "rule": "R9-1",
+    "level": "guided",
+    "text": "group: bar charts. Values compared across categories (G1.9)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 7,
+    "name": "values across categories",
+    "rule": "R2-24",
+    "level": "guided",
+    "text": "a scale that should not start at zero wants dots, not bars (G1.57, D-30): the theoretical minimum 300 lies just below the data",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type, the series told apart by colour (G1.59)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "dot plots are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R6-18",
+    "level": "guided",
+    "text": "dot plots may be new to a general audience: teach them (build the chart up, show first the familiar chart that fails, or add two or three callouts stating the obvious; G1.5), or state the insight in a sentence and keep the chart as backup (G1.6)",
+    "guide": [],
+    "group": "bar charts"
+   }
+  ],
+  "copies": []
+ },
+ "output_sha256": "f5b7081d770f571ef3f50a1ac431a69387c85a26979317ac62e4e12efc7f8b8a"
+}

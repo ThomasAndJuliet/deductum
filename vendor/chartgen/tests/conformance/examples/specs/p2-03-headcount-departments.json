@@ -1,0 +1,100 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p2-03-headcount-departments",
+    "job": {
+      "kind": "lookup",
+      "text": "Look up each region's headcount by department"
+    },
+    "title": {
+      "text": "Headcount by Region and Department, Jan. 14, 2022",
+      "kind": "descriptive"
+    },
+    "data": {
+      "x": {
+        "kind": "nominal",
+        "values": [
+          "North",
+          "Central",
+          "South",
+          "West"
+        ]
+      },
+      "measure": {
+        "name": "headcount",
+        "kind": "count",
+        "zero": "meaningful",
+        "min": 0,
+        "unit": {
+          "noun": "employees"
+        }
+      },
+      "series": [
+        {
+          "id": "ops",
+          "name": "Operations",
+          "values": [
+            100,
+            97,
+            122,
+            96
+          ]
+        },
+        {
+          "id": "fin",
+          "name": "Finance",
+          "values": [
+            90,
+            93,
+            88,
+            96
+          ]
+        },
+        {
+          "id": "sup",
+          "name": "Support",
+          "values": [
+            60,
+            57,
+            50,
+            66
+          ]
+        },
+        {
+          "id": "other",
+          "name": "Other depts",
+          "role": "all_others",
+          "values": [
+            40,
+            47,
+            46,
+            37
+          ]
+        }
+      ]
+    },
+    "source": {
+      "book": "p. 145 (s. 0135)",
+      "notes": "03-04 #17",
+      "shows": "the book's good version: a legend row above the plot whose entries run in the order and direction of the bars in each cluster (G5.8, G5.10); “Other depts”, a catch-all, in its reserved grey (G4.15; the book draws it gold), and the regions sorted by the first series (D-46; the book keeps them unsorted)"
+    }
+  },
+  "variants": [
+    {
+      "name": "direct",
+      "patch": {
+        "chart": {
+          "labelling": "direct"
+        },
+        "source": {
+          "shows": "the book's “messy” version: each series named beside its bar of the last cluster, every label on a leader; drawn with the guided finding that clustered bars take a legend (G5.7)"
+        }
+      },
+      "expect": {
+        "findings": [
+          "R4-2"
+        ]
+      }
+    }
+  ]
+}

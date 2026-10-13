@@ -1,0 +1,25 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p3-13-headcount-percent",
+    "job": {"kind": "lookup", "text": "Look up each region's share of the headcount"},
+    "title": {"text": "Headcount by Region, January 14, 2022", "kind": "descriptive"},
+    "data": {
+      "x": {"kind": "nominal", "values": ["East", "Central", "North", "West", "South"]},
+      "measure": {"name": "share of headcount", "kind": "percent", "zero": "meaningful", "min": 0,
+                  "unit": {"what": "of employees"}},
+      "series": [{"id": "share", "name": "Share of headcount", "values": [29, 20, 19, 18, 14]}],
+      "parts": {"meaningful_total": true, "all_parts": true, "overlap": false}
+    },
+    "facts": {"message": "fraction_of_total"},
+    "chart": {"type": "pie"},
+    "source": {"book": "p. 144 (s. 0134)", "notes": "03-04 #16",
+               "shows": "a pie labelled directly, name and percentage outside each slice, where the book's bad version keys the slices in a legend (R4-1, G5.1, G7.27); the book's grey for South is the palette's fifth colour here, grey being reserved (G4.15, D-15)"}
+  },
+  "variants": [
+    {"name": "legend",
+     "patch": {"chart": {"labelling": "legend"},
+               "source": {"shows": "the book's legend version: refused (R7-34, G7.27)"}},
+     "expect": {"refused": ["R7-34"]}}
+  ]
+}

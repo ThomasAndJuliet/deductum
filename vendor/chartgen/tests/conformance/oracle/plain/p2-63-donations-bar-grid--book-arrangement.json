@@ -1,0 +1,230 @@
+{
+ "key": "p2-63-donations-bar-grid--book-arrangement",
+ "file": "p2-63-donations-bar-grid.json",
+ "variant": "book-arrangement",
+ "requested_type": "auto",
+ "report": {
+  "chart": "p2-63-donations-bar-grid",
+  "style": "plain",
+  "variant": "book-arrangement",
+  "type": "multiples of bar",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "categories sorted by their total over every panel, largest first, the same order in every panel (G2.1)",
+    "guide": []
+   },
+   {
+    "rule": "R3-3",
+    "level": "locked",
+    "text": "one colour for every mark: every variable is on the rows or columns (G7.50)",
+    "guide": []
+   },
+   {
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "type bar: categories compared by value",
+    "guide": []
+   },
+   {
+    "rule": "R6-37",
+    "level": "locked",
+    "text": "one shared scale: one scale for every panel, so that sizes compare across panels (G7.48)",
+    "guide": []
+   },
+   {
+    "rule": "R9-10",
+    "level": "locked",
+    "text": "in a panel 99 pt wide: “Check” and “Cash” come within 10 pt of each other under vertical bars, with every multi-word name wrapped: horizontal bars, names right-aligned at the left",
+    "guide": []
+   },
+   {
+    "rule": "R2-24",
+    "level": "locked",
+    "text": "bars start at zero",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "scale 0–200 by 100 (at most 3 intervals in a panel about 75 pt wide)",
+    "guide": []
+   },
+   {
+    "rule": "R5-26",
+    "level": "locked",
+    "text": "the title wraps onto two lines",
+    "guide": []
+   },
+   {
+    "rule": "R2-21",
+    "level": "locked",
+    "text": "labels as a set, 0 decimals, bare numbers: 0, 100, 200",
+    "guide": []
+   },
+   {
+    "rule": "R5-10",
+    "level": "locked",
+    "text": "digits hidden: thousands, stated in the scale's title (R2-05, D-3): “Donations ($K)”",
+    "guide": []
+   },
+   {
+    "rule": "R2-07",
+    "level": "locked",
+    "text": "a horizontal scale: bare numbers, and its title centred below with the unit in parentheses: “Donations ($K)”",
+    "guide": []
+   },
+   {
+    "rule": "6.10",
+    "level": "locked",
+    "text": "4 × 3 panels of equal size, abutting, divided by light separators, no box round a panel (G7.51); each 75 pt wide",
+    "guide": []
+   },
+   {
+    "rule": "RP3-8",
+    "level": "locked",
+    "text": "the names once, at the left of the first column; the scale labels under the bottom row, its title once; column headers above the top row (G7.49)",
+    "guide": []
+   }
+  ],
+  "findings": [
+   {
+    "rule": "RP3-3",
+    "severity": "info",
+    "message": "panels.arrangement rows by region, columns by donor type departs from the procedure, which gives rows by donor type, columns by region (no comparison within a panel is stated (facts.compare): one series per panel, the most panels and the least clutter (13-15 DP-1))",
+    "path": "panels.arrangement",
+    "reason": "the book's arrangement: regions down, donor types across",
+    "level": "guided",
+    "recommended": "rows by donor type, columns by region",
+    "guide": [],
+    "title": "the arrangement of small multiples chosen for the insight, from the range of candidates"
+   }
+  ],
+  "overrides": [],
+  "expect": {
+   "findings": [
+    "RP3-3"
+   ]
+  },
+  "expect_met": true,
+  "source": {
+   "book": "p. 377 (s. 0343)",
+   "notes": "13-15 F4 (bar grid)",
+   "shows": "the book's arrangement, regions down and donor types across, given with its reason",
+   "status": "generated"
+  },
+  "summary": {
+   "arrangement": "rows by region, columns by donor type",
+   "kind": "multiples",
+   "rows": 4,
+   "columns": 3,
+   "panels": 12,
+   "scale_mode": "shared",
+   "scale": "0–200 by 100",
+   "labels": [
+    "0",
+    "100",
+    "200"
+   ],
+   "top": "$200K in donations",
+   "orientation": "horizontal",
+   "scales": {
+    "Central, Corporate": "0–200 by 100",
+    "Central, Foundation": "0–200 by 100",
+    "Central, Individual": "0–200 by 100",
+    "East, Corporate": "0–200 by 100",
+    "East, Foundation": "0–200 by 100",
+    "East, Individual": "0–200 by 100",
+    "South, Corporate": "0–200 by 100",
+    "South, Foundation": "0–200 by 100",
+    "South, Individual": "0–200 by 100",
+    "West, Corporate": "0–200 by 100",
+    "West, Foundation": "0–200 by 100",
+    "West, Individual": "0–200 by 100"
+   },
+   "plots": {
+    "Central, Corporate": [
+     98.59,
+     46.27,
+     173.89,
+     106.27
+    ],
+    "Central, Foundation": [
+     191.89,
+     46.27,
+     267.2,
+     106.27
+    ],
+    "Central, Individual": [
+     285.2,
+     46.27,
+     360.5,
+     106.27
+    ],
+    "East, Corporate": [
+     98.59,
+     114.27,
+     173.89,
+     174.27
+    ],
+    "East, Foundation": [
+     191.89,
+     114.27,
+     267.2,
+     174.27
+    ],
+    "East, Individual": [
+     285.2,
+     114.27,
+     360.5,
+     174.27
+    ],
+    "South, Corporate": [
+     98.59,
+     182.27,
+     173.89,
+     242.27
+    ],
+    "South, Foundation": [
+     191.89,
+     182.27,
+     267.2,
+     242.27
+    ],
+    "South, Individual": [
+     285.2,
+     182.27,
+     360.5,
+     242.27
+    ],
+    "West, Corporate": [
+     98.59,
+     250.27,
+     173.89,
+     310.27
+    ],
+    "West, Foundation": [
+     191.89,
+     250.27,
+     267.2,
+     310.27
+    ],
+    "West, Individual": [
+     285.2,
+     250.27,
+     360.5,
+     310.27
+    ]
+   },
+   "width": 368.0,
+   "height": 338.08,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [],
+  "copies": []
+ },
+ "output_sha256": "0b3dd804a6544152a613221562018c294655bcae42863bf363a5753931d95d63"
+}

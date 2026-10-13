@@ -1,0 +1,193 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p2-05-sales-by-product-line",
+    "job": {
+      "kind": "lookup",
+      "text": "Look up each product line's July sales at home and abroad"
+    },
+    "title": {
+      "text": "Sales by Product Line and Market, July 2022",
+      "kind": "descriptive"
+    },
+    "data": {
+      "x": {
+        "kind": "nominal",
+        "values": [
+          "Guitars",
+          "Drums",
+          "Woodwinds",
+          "Brass",
+          "Amps & Speakers",
+          "Other Strings",
+          "Pianos/Organs",
+          "Keyboards",
+          "Microphones",
+          "Accessories"
+        ]
+      },
+      "measure": {
+        "name": "sales",
+        "kind": "amount",
+        "zero": "meaningful",
+        "min": 0,
+        "unit": {
+          "prefix": "$",
+          "magnitude": 3,
+          "noun": "in sales"
+        }
+      },
+      "series": [
+        {
+          "id": "dom",
+          "name": "Domestic",
+          "values": [
+            2780,
+            2090,
+            980,
+            1245,
+            1345,
+            1235,
+            970,
+            770,
+            475,
+            275
+          ]
+        },
+        {
+          "id": "intl",
+          "name": "International",
+          "values": [
+            890,
+            475,
+            1135,
+            675,
+            545,
+            630,
+            770,
+            235,
+            365,
+            370
+          ]
+        }
+      ]
+    },
+    "source": {
+      "book": "p. 136 (s. 0126)",
+      "notes": "03-04 #12",
+      "shows": "the book's data the other way round: the ten product lines as the categories and the two markets as the series, so two colours instead of ten; the names do not fit under columns, so the clusters turn, and their colours, running top to bottom, are named beside the bars of the last cluster (D-31 (c))"
+    }
+  },
+  "variants": [
+    {
+      "name": "ten-colours",
+      "patch": {
+        "data": {
+          "x": {
+            "kind": "nominal",
+            "values": [
+              "Domestic",
+              "International"
+            ]
+          },
+          "series": [
+            {
+              "id": "p0",
+              "name": "Guitars",
+              "values": [
+                2780,
+                890
+              ]
+            },
+            {
+              "id": "p1",
+              "name": "Drums",
+              "values": [
+                2090,
+                475
+              ]
+            },
+            {
+              "id": "p2",
+              "name": "Woodwinds",
+              "values": [
+                980,
+                1135
+              ]
+            },
+            {
+              "id": "p3",
+              "name": "Brass",
+              "values": [
+                1245,
+                675
+              ]
+            },
+            {
+              "id": "p4",
+              "name": "Amps & Speakers",
+              "values": [
+                1345,
+                545
+              ]
+            },
+            {
+              "id": "p5",
+              "name": "Other Strings",
+              "values": [
+                1235,
+                630
+              ]
+            },
+            {
+              "id": "p6",
+              "name": "Pianos/Organs",
+              "values": [
+                970,
+                770
+              ]
+            },
+            {
+              "id": "p7",
+              "name": "Keyboards",
+              "values": [
+                770,
+                235
+              ]
+            },
+            {
+              "id": "p8",
+              "name": "Microphones",
+              "values": [
+                475,
+                365
+              ]
+            },
+            {
+              "id": "p9",
+              "name": "Accessories",
+              "values": [
+                275,
+                370
+              ]
+            }
+          ]
+        },
+        "overrides": [
+          {
+            "rule": "R3-21",
+            "reason": "the book's version (p. 136), rebuilt to show why"
+          }
+        ],
+        "source": {
+          "shows": "the book's version: the two markets as clusters and ten product lines as series, keyed by a legend of ten colours that start to look alike; the colour count refuses it (G4.19: at most eight), and it is drawn here through an override"
+        }
+      },
+      "expect": {
+        "refused": [
+          "R3-21"
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,149 @@
+{
+ "key": "p2-20-concert-attendance--line",
+ "file": "p2-20-concert-attendance.json",
+ "variant": "line",
+ "requested_type": "line",
+ "report": {
+  "chart": "p2-20-concert-attendance",
+  "style": "plain",
+  "variant": "line",
+  "type": "line",
+  "status": "refused",
+  "decisions": [],
+  "findings": [
+   {
+    "rule": "R6-12",
+    "severity": "warn",
+    "message": "chart.type line departs from the procedure, which gives thin_bar (individual irregular events: thin bars at their instants on a true time axis, never a standard line (G1.54))",
+    "path": "chart.type",
+    "level": "guided",
+    "recommended": "thin_bar",
+    "guide": [],
+    "title": "individual irregular events: thin bars, never a standard line"
+   },
+   {
+    "rule": "R6-3",
+    "severity": "error",
+    "message": "a standard line joins one value per regular interval; across irregular events: the segments suggest values between events and can even reverse the trend (R6-12)",
+    "path": "chart.type",
+    "supply": "type auto (thin bars)",
+    "level": "locked",
+    "guide": [],
+    "title": "a standard line only for a regular series, one value per interval"
+   }
+  ],
+  "overrides": [],
+  "expect": {
+   "refused": [
+    "R6-3"
+   ],
+   "findings": [
+    "R6-12"
+   ]
+  },
+  "expect_met": true,
+  "source": {
+   "book": "p. 196 (s. 0183)",
+   "notes": "06 T8",
+   "shows": "a standard line through the concerts: refused, since it would draw attendance between concerts that never happened (G1.54)",
+   "status": "generated"
+  },
+  "summary": {
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job lookup: no insight stated (a descriptive title will do, D-55)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-1",
+    "level": "guided",
+    "text": "a graph, the values to be compared or a pattern seen (G1.11)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 2,
+    "name": "variables",
+    "rule": "RP3-2",
+    "level": "guided",
+    "text": "one plot: time along x and 1 series; a further variable would go to small multiples (data.dims, G1.18)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 3,
+    "name": "location",
+    "rule": "R8-2",
+    "level": "guided",
+    "text": "not a map: where the values are is not the message (facts.location_matters; G1.24, G1.25)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-01",
+    "level": "guided",
+    "text": "not parts of a total (no data.parts, no breakdown message; G1.1)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 6,
+    "name": "values over time",
+    "rule": "R6-13",
+    "level": "guided",
+    "text": "group: data over time. A series of more than two periods, not a breakdown and not tied to places (G1.48)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 6,
+    "name": "values over time",
+    "rule": "R6-12",
+    "level": "guided",
+    "text": "an irregular series (event): individual irregular events: thin bars at their instants on a true time axis, never a standard line (G1.54)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type (G1.59)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "thin bar charts are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R6-18",
+    "level": "guided",
+    "text": "thin bar charts may be new to a general audience: teach them (build the chart up, show first the familiar chart that fails, or add two or three callouts stating the obvious; G1.5), or state the insight in a sentence and keep the chart as backup (G1.6)",
+    "guide": [],
+    "group": "data over time"
+   }
+  ],
+  "copies": []
+ }
+}

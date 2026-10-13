@@ -1,0 +1,120 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p1-20-client-satisfaction",
+    "job": {
+      "kind": "lookup",
+      "text": "Look up each client's satisfaction rating for 2020"
+    },
+    "title": {
+      "text": "Client Satisfaction Ratings, 2020",
+      "kind": "descriptive"
+    },
+    "data": {
+      "x": {
+        "kind": "nominal",
+        "values": [
+          "Client A",
+          "Client B",
+          "Client C",
+          "Client D"
+        ]
+      },
+      "measure": {
+        "name": "satisfaction rating",
+        "kind": "score",
+        "zero": "arbitrary",
+        "max": 10,
+        "unit": {
+          "noun": "on 10"
+        }
+      },
+      "series": [
+        {
+          "id": "rating",
+          "name": "Satisfaction rating",
+          "values": [
+            9.0,
+            8.3,
+            8.1,
+            7.4
+          ]
+        }
+      ]
+    },
+    "chart": {
+      "type": "auto",
+      "orientation": "horizontal"
+    },
+    "reasons": {
+      "chart.orientation": "as the book draws it (p. 85): the clients read down a list, the rating scale runs along the bottom"
+    },
+    "source": {
+      "book": "p. 85 (s. 0082)",
+      "notes": "02 #14",
+      "shows": "a truncated scale where it is fine: the zero of a rating is arbitrary, so the procedure gives dots on a scale that starts near the data (G1.57, G2.8, G2.10); horizontal by choice, with the reason, and the scale’s title below, “Satisfaction rating (on 10)”; the book draws 7–10 by 1 with the levels “Neutral” and “Very satisfied” named above the scale (G2.10), which the generator does not draw yet"
+    }
+  },
+  "variants": [
+    {
+      "name": "highlight",
+      "patch": {
+        "job": {
+          "kind": "make_aware",
+          "text": "Client D is the least satisfied of the four"
+        },
+        "insight": {
+          "important": "Client D is the least satisfied client",
+          "targets": [
+            {
+              "category": "Client D"
+            }
+          ]
+        },
+        "title": {
+          "text": "Client D Is the Least Satisfied",
+          "kind": "insight",
+          "descriptive": "Client satisfaction ratings, 2020"
+        },
+        "source": {
+          "shows": "the insight's target highlighted: its dot in the strong shade of its own hue, the others unchanged (R3-7, D-9, 6.9); the title states the insight (G8.2)"
+        }
+      }
+    },
+    {
+      "name": "bigger-dot",
+      "patch": {
+        "job": {
+          "kind": "make_aware",
+          "text": "Client D is the least satisfied of the four"
+        },
+        "insight": {
+          "important": "Client D is the least satisfied client"
+        },
+        "title": {
+          "text": "Client D Is the Least Satisfied",
+          "kind": "insight",
+          "descriptive": "Client satisfaction ratings, 2020"
+        },
+        "highlight": [
+          {
+            "targets": [
+              {
+                "category": "Client D"
+              }
+            ],
+            "method": "thickness"
+          }
+        ],
+        "source": {
+          "shows": "a bigger dot as the highlight: refused, since a bigger mark reads as a bigger value (R15-6, G8.10)"
+        }
+      },
+      "expect": {
+        "refused": [
+          "R15-6"
+        ]
+      }
+    }
+  ]
+}

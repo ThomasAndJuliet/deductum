@@ -1,0 +1,131 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p3-03-donations-all-others",
+    "job": {
+      "kind": "lookup",
+      "text": "Look up the share of donations from each of the largest donor countries"
+    },
+    "title": {
+      "text": "Donations by Country, 2022",
+      "kind": "descriptive"
+    },
+    "data": {
+      "x": {
+        "kind": "nominal",
+        "values": [
+          "Germany",
+          "France",
+          "Italy",
+          "Sweden",
+          "Norway",
+          "All others"
+        ],
+        "roles": {
+          "All others": "all_others"
+        }
+      },
+      "measure": {
+        "name": "share of donations",
+        "kind": "percent",
+        "zero": "meaningful",
+        "min": 0,
+        "unit": {
+          "what": "of total donations"
+        }
+      },
+      "series": [
+        {
+          "id": "share",
+          "name": "Share of donations",
+          "values": [
+            23.4,
+            16.8,
+            7.9,
+            7.5,
+            7.3,
+            37.1
+          ]
+        }
+      ],
+      "parts": {
+        "meaningful_total": true,
+        "all_parts": true,
+        "overlap": false
+      }
+    },
+    "facts": {
+      "message": "fraction_of_total"
+    },
+    "chart": {
+      "type": "pie"
+    },
+    "source": {
+      "book": "p. 249–250 (s. 0229–0230)",
+      "notes": "07 #3",
+      "shows": "fifteen countries brought under the part limit: the five largest named and the ten others lumped into All others, which goes last whatever its size, in its reserved grey (R7-17, G1.39, G4.15, G7.28)"
+    }
+  },
+  "variants": [
+    {
+      "name": "fifteen-slices",
+      "patch": {
+        "data": {
+          "x": {
+            "values": [
+              "Germany",
+              "France",
+              "Italy",
+              "Sweden",
+              "Norway",
+              "Ireland",
+              "Netherlands",
+              "Spain",
+              "Austria",
+              "Switzerland",
+              "Belgium",
+              "Denmark",
+              "Czechia",
+              "Hungary",
+              "Portugal"
+            ],
+            "roles": {
+              "All others": null
+            }
+          },
+          "series": [
+            {
+              "id": "share",
+              "name": "Share of donations",
+              "values": [
+                23.4,
+                16.8,
+                7.9,
+                7.5,
+                7.3,
+                6.9,
+                6.6,
+                6.5,
+                6.0,
+                2.8,
+                2.3,
+                1.5,
+                1.3,
+                0.8,
+                0.3
+              ]
+            }
+          ]
+        },
+        "source": {
+          "shows": "all fifteen countries in one pie (the book's busy version, s. 0225): drawn, with the chooser's guided finding that more than six or seven parts whose fractions matter want a treemap (R7-15, G1.39, D-23) and the lint's that fifteen colours are too many to tell apart, even labelled directly (R3-22); the small slices' labels lined up on leaders"
+        }
+      },
+      "expect": {
+        "findings": [
+          "R7-15"
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+# private sandbox: its own git repository, never committed here (see AGENTS.md)
+sandbox/
+# build products and local environments
+/target
+/.venv
+__pycache__/
+*.pyc
+/.pytest_cache
+/dist
+*.so
+*.egg-info/

@@ -1,0 +1,234 @@
+{
+ "key": "p3-73-car-models-radar",
+ "file": "p3-73-car-models-radar.json",
+ "variant": null,
+ "requested_type": "auto",
+ "report": {
+  "chart": "p3-73-car-models-radar",
+  "style": "plain",
+  "variant": null,
+  "type": "heatmap",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "R12-6",
+    "level": "guided",
+    "text": "type heatmap: items compared across several attributes, which is best and each one's strengths and weaknesses being the message (a radar's data): a heatmap table, the values printed in coloured cells (G7.36)",
+    "guide": []
+   },
+   {
+    "rule": "R12-6",
+    "level": "guided",
+    "text": "the summary rows last, a little apart: Overall Avg. (s. 0329)",
+    "guide": []
+   },
+   {
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "the columns in their given order",
+    "guide": []
+   },
+   {
+    "rule": "R5-26",
+    "level": "locked",
+    "text": "the title wraps onto two lines",
+    "guide": []
+   },
+   {
+    "rule": "R12-6",
+    "level": "guided",
+    "text": "each value printed in its cell; every value fits its cell: the numbers carry the values exactly and the colour shows the pattern (G7.36)",
+    "guide": []
+   },
+   {
+    "rule": "R12-6",
+    "level": "guided",
+    "text": "the cells strong: a heatmap, whose colour is the message: the steps at full strength, each value black or white, whichever reads better on its cell (owner, 1 Oct 2026)",
+    "guide": []
+   },
+   {
+    "rule": "R3-13",
+    "level": "guided",
+    "text": "the cells: a diverging palette; the audience sees a dividing value, 3: two ramps meeting at a neutral there (G4.11, G4.12)",
+    "guide": []
+   },
+   {
+    "rule": "G4.29",
+    "level": "guided",
+    "text": "the cells: the distances from 3 are fairly even (the fullest of seven equal steps would hold 29 % of them): equal steps on rounded values, the most honest cut",
+    "guide": []
+   },
+   {
+    "rule": "R4-9",
+    "level": "guided",
+    "text": "no key: every cell carries its value, which the colour only repeats (the book's heatmap table, s. 0329)",
+    "guide": []
+   },
+   {
+    "rule": "G4.34",
+    "level": "locked",
+    "text": "the lightest step #fbc2bb: OKLab ΔE 0.152 from the page and 0.153 from the missing grey",
+    "guide": []
+   },
+   {
+    "rule": "R3-9",
+    "level": "locked",
+    "text": "the cells coloured in classes, diverging about 3, equal steps of the distance from it, 4 classes a side, at 0.5, 1, 1.5, 2, higher is good, darker meaning further from the dividing value on each side (G4.12, G4.14)",
+    "guide": []
+   },
+   {
+    "rule": "R5-8",
+    "level": "locked",
+    "text": "values on strong cells: each value black or white, whichever has more contrast on its cell (owner, 1 Oct 2026); 22 dark, 2 light; the lowest contrast 5.72 : 1 (G6.5)",
+    "guide": []
+   },
+   {
+    "rule": "R3-20",
+    "level": "locked",
+    "text": "static output, in colour: one file, red for bad and green for good, plain, for every reader (D-18; owner, 1 Oct 2026); black and white (audience.bw_risk) adds the textures, and a style may choose the colour-blind-safe pair (--good-bad-mode: safe-pair)",
+    "guide": []
+   }
+  ],
+  "findings": [],
+  "overrides": [],
+  "expect": {},
+  "expect_met": true,
+  "source": {
+   "book": "p. 360–363 (s. 0328–0330)",
+   "notes": "08-12 #16",
+   "shows": "items compared across attributes, a radar's data, said by the message (profiles): the heatmap table the avoid-list gives in its place (R12-6, G7.36), from the facts rather than asked for (P3-50 asks for it)",
+   "status": "generated"
+  },
+  "summary": {
+   "orientation": "vertical",
+   "plot": [
+    60.64,
+    59.92,
+    218.36,
+    159.92
+   ],
+   "heatmap": {
+    "rows": [
+     "value",
+     "safety",
+     "performance",
+     "comfort",
+     "reliability",
+     "overall"
+    ],
+    "columns": [
+     "Exodus",
+     "T-300",
+     "Varga",
+     "Elora"
+    ],
+    "labelled": true,
+    "ramp": "diverging",
+    "cells": "strong",
+    "classing": "linear",
+    "breaks": [
+     "0.5",
+     "1",
+     "1.5"
+    ],
+    "domain": [
+     "0",
+     "2"
+    ],
+    "dividing": "3",
+    "key": null,
+    "pitch": 16.0,
+    "values": {
+     "mode": "contrast",
+     "tones": {
+      "dark": 22,
+      "light": 2
+     },
+     "plates": 0,
+     "min_contrast": 5.72
+    },
+    "censored": null
+   },
+   "width": 220.42,
+   "height": 160.92,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job answer: insight “Elora and Varga score best overall; Exodus is weakest, on value and comfort above all”",
+    "guide": [],
+    "group": "tables"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-1",
+    "level": "guided",
+    "text": "a graph, the values to be compared or a pattern seen (G1.11)",
+    "guide": [],
+    "group": "tables"
+   },
+   {
+    "step": 2,
+    "name": "variables",
+    "rule": "RP3-2",
+    "level": "guided",
+    "text": "one plot: categories along x and 6 series; a further variable would go to small multiples (data.dims, G1.18)",
+    "guide": [],
+    "group": "tables"
+   },
+   {
+    "step": 3,
+    "name": "location",
+    "rule": "R8-2",
+    "level": "guided",
+    "text": "not a map: where the values are is not the message (facts.location_matters; G1.24, G1.25)",
+    "guide": [],
+    "group": "tables"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-01",
+    "level": "guided",
+    "text": "not parts of a total (no data.parts, no breakdown message; G1.1)",
+    "guide": [],
+    "group": "tables"
+   },
+   {
+    "step": 7,
+    "name": "values across categories",
+    "rule": "R12-6",
+    "level": "guided",
+    "text": "group: tables. Items compared across several attributes, which is best and each one's strengths and weaknesses being the message (a radar's data): a heatmap table, the values printed in coloured cells (G7.36)",
+    "guide": [],
+    "group": "tables"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type, the series told apart by colour (G1.59)",
+    "guide": [],
+    "group": "tables"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "heatmaps are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "tables"
+   }
+  ],
+  "copies": []
+ },
+ "output_sha256": "0c2afd6b976f7c4cf508e3a8f69a8d2589e6d6284e289d51fc514a22febe1cc5"
+}

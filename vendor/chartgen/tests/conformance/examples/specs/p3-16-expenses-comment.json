@@ -1,0 +1,83 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p3-16-expenses-comment",
+    "job": {
+      "kind": "make_aware",
+      "text": "Make the reader aware that the West had the highest expenses"
+    },
+    "insight": {
+      "important": "The West had the highest expenses"
+    },
+    "title": {
+      "text": "Expenses by Region, 2022",
+      "kind": "descriptive"
+    },
+    "data": {
+      "x": {
+        "kind": "nominal",
+        "values": [
+          "West",
+          "South",
+          "Central",
+          "East",
+          "North"
+        ]
+      },
+      "measure": {
+        "name": "expenses",
+        "kind": "amount",
+        "zero": "meaningful",
+        "min": 0,
+        "unit": {
+          "prefix": "$",
+          "magnitude": 3,
+          "noun": "in expenses"
+        }
+      },
+      "series": [
+        {
+          "id": "expenses",
+          "name": "Expenses",
+          "values": [
+            728,
+            510,
+            306,
+            275,
+            248
+          ]
+        }
+      ],
+      "parts": {
+        "meaningful_total": true,
+        "all_parts": true,
+        "overlap": false
+      }
+    },
+    "facts": {
+      "message": "fraction_of_total"
+    },
+    "chart": {
+      "type": "pie"
+    },
+    "comments": [
+      {
+        "text": "The West had the highest expenses!",
+        "anchors": [
+          {
+            "category": "West"
+          }
+        ],
+        "answers": [
+          "important"
+        ]
+      }
+    ],
+    "source": {
+      "book": "p. 158 (s. 0148)",
+      "notes": "05 #9",
+      "shows": "the cheat sheet's pie: the insight stated in a comment beside the chart, in New Computer Modern italic in the reserved blue with a thin arrow into the West's slice, set apart from the labelling and outside its count of text styles (R5-5, G6.3, G8.7); the slices as any pie's, the values in thousands as one set (G7.27)"
+    }
+  },
+  "variants": []
+}

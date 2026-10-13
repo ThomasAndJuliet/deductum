@@ -1,0 +1,80 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p3-17-portfolio-risk-pie",
+    "job": {
+      "kind": "lookup",
+      "text": "Look up what share of the aggressive portfolio is at each level of risk"
+    },
+    "title": {
+      "text": "Aggressive Portfolio by Risk Level, Dec. 31, 2022",
+      "kind": "descriptive"
+    },
+    "data": {
+      "x": {
+        "kind": "ordinal",
+        "values": [
+          "Very high risk",
+          "High risk",
+          "Moderate risk",
+          "Low risk",
+          "Very low risk"
+        ]
+      },
+      "measure": {
+        "name": "share of portfolio",
+        "kind": "percent",
+        "zero": "meaningful",
+        "min": 0,
+        "max": 100,
+        "unit": {
+          "noun": "of portfolio"
+        }
+      },
+      "series": [
+        {
+          "id": "share",
+          "name": "Share of portfolio",
+          "values": [
+            23,
+            21,
+            38,
+            16,
+            2
+          ]
+        }
+      ],
+      "parts": {
+        "meaningful_total": true,
+        "all_parts": true,
+        "overlap": false
+      }
+    },
+    "facts": {
+      "message": "fraction_of_total"
+    },
+    "chart": {
+      "type": "auto"
+    },
+    "source": {
+      "notes": "00-01 F3; 13-15 F10 (the aggressive portfolio's data, s. 0020, 0368); 07 R7-35",
+      "shows": "ours, from the book's data, which it draws as 100 % stacks: one total of ordered parts as a pie, the risk levels in their own order from 12 o'clock rather than largest first (R7-35, G7.28), in steps of one hue, the first the darkest, rather than a hue each (G4.7, R3-8), as the book's good stacks (P3-34); Very low risk, under 8°, pointed to by a leader (G7.29)"
+    }
+  },
+  "variants": [
+    {
+      "name": "hues",
+      "patch": {
+        "data": {
+          "x": {
+            "kind": "nominal"
+          }
+        },
+        "source": {
+          "shows": "the risk levels taken as unordered parts: largest first, a hue each, the order of risk lost, as in the book's bad version (s. 0020) with its Office colours"
+        }
+      },
+      "expect": {}
+    }
+  ]
+}

@@ -1,0 +1,295 @@
+{
+ "key": "p3-23-net-donations-stack--drawn",
+ "file": "p3-23-net-donations-stack.json",
+ "variant": "drawn",
+ "requested_type": "stacked_bar",
+ "report": {
+  "chart": "p3-23-net-donations-stack",
+  "style": "plain",
+  "variant": "drawn",
+  "type": "stacked_bar",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "R2-30",
+    "level": "locked",
+    "text": "values on both sides of zero: room at both ends",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "scale −40–60 by 20",
+    "guide": []
+   },
+   {
+    "rule": "R7-08",
+    "level": "guided",
+    "text": "one total, Net donations, stacked from its 5 parts",
+    "guide": []
+   },
+   {
+    "rule": "R7-24",
+    "level": "guided",
+    "text": "stacking order from the base: East, West, South, North, Central (the largest at the base, where it is read precisely; G7.31, D-26 (b))",
+    "guide": []
+   },
+   {
+    "rule": "R7-24",
+    "level": "locked",
+    "text": "each part in one colour and one place in every total: East (slot 1), West (slot 2), South (slot 3), North (slot 4), Central (slot 5) (G4.22)",
+    "guide": []
+   },
+   {
+    "rule": "R9-10",
+    "level": "locked",
+    "text": "one total: one stack, standing upright (07 §5.4), its parts named beside it: vertical stacked bars",
+    "guide": []
+   },
+   {
+    "rule": "R2-32",
+    "level": "guided",
+    "text": "5 values against 6 scale labels: whichever puts fewer numbers on the chart (G2.18): the values labelled directly, the value scale and its gridlines removed, the zero line kept as the baseline",
+    "guide": []
+   },
+   {
+    "rule": "R5-17",
+    "level": "locked",
+    "text": "value labels as a set, one magnitude and one number of decimals, the prefix and suffix on each: $34K, −$17K, $9K, $8K, −$4K (G6.16, G7.4)",
+    "guide": []
+   },
+   {
+    "rule": "R2-32",
+    "level": "locked",
+    "text": "each value before its part's name beside the stack: the text grey does not read on the parts' colours at 4.5 : 1 inside them (G7.4, G6.5)",
+    "guide": []
+   },
+   {
+    "rule": "R2-07",
+    "level": "locked",
+    "text": "the unit's description on its own line above the plot: “net donations per region”; the labels carry its prefix, suffix and magnitude",
+    "guide": []
+   },
+   {
+    "rule": "R4-1",
+    "level": "guided",
+    "text": "each part named beside the stack, level with the middle of its segment, top to bottom as stacked: North, South, East, West, Central (their values before them) (G5.4, D-31 (c))",
+    "guide": []
+   },
+   {
+    "rule": "R5-26",
+    "level": "locked",
+    "text": "the title wraps onto two lines",
+    "guide": []
+   }
+  ],
+  "findings": [
+   {
+    "rule": "R7-04",
+    "severity": "overridden",
+    "message": "a stacked bar chart cannot show parts of mixed signs: areas cannot be negative, and a mixed stack shows neither the net total nor comparable parts",
+    "path": "chart.type",
+    "supply": "type auto (a bar chart, or a waterfall when running subtotals are the message)",
+    "reason": "the book's stack of mixed signs, rebuilt to show its four problems (s. 0236)",
+    "level": "locked",
+    "guide": [],
+    "title": "the sign check: no pie, treemap or stack of mixed signs"
+   },
+   {
+    "rule": "R2-27",
+    "severity": "warn",
+    "message": "27% of room at the bottom of the scale (5–25 % expected)",
+    "level": "locked",
+    "guide": [],
+    "title": "the upper limit leaves 10–20 % of room (the data never touch it)"
+   }
+  ],
+  "overrides": [
+   {
+    "rule": "R7-04",
+    "reason": "the book's stack of mixed signs, rebuilt to show its four problems (s. 0236)"
+   }
+  ],
+  "expect": {
+   "refused": [
+    "R7-04"
+   ]
+  },
+  "expect_met": true,
+  "source": {
+   "book": "p. 255–257 (s. 0235–0236)",
+   "notes": "07 #8",
+   "shows": "the same stack drawn through an override, as the book does: the gains stacked up from zero and the losses down, the net total nowhere, the zero line signed",
+   "status": "generated"
+  },
+  "summary": {
+   "scale": "−40–60 by 20",
+   "labels": [
+    "−40",
+    "−20",
+    "0",
+    "20",
+    "40",
+    "$60K"
+   ],
+   "top": "$60K in net donations",
+   "scale_title": null,
+   "orientation": "vertical",
+   "plot": [
+    0.0,
+    63.5,
+    98.2,
+    219.5
+   ],
+   "band": 98.2,
+   "series": [
+    "East",
+    "West",
+    "South",
+    "North",
+    "Central"
+   ],
+   "labelling": "direct",
+   "value_labels": true,
+   "table": false,
+   "bar": 54.6,
+   "stack": "stacked",
+   "parts": [
+    "East",
+    "West",
+    "South",
+    "North",
+    "Central"
+   ],
+   "percent": false,
+   "totals": [
+    "Net donations"
+   ],
+   "width": 260.0,
+   "height": 191.41,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job answer: insight “East's net donations were more than the whole net total”",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-1",
+    "level": "guided",
+    "text": "a graph, the values to be compared or a pattern seen (G1.11)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 2,
+    "name": "variables",
+    "rule": "RP3-2",
+    "level": "guided",
+    "text": "one plot: categories along x and 1 series; a further variable would go to small multiples (data.dims, G1.18)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 3,
+    "name": "location",
+    "rule": "R8-2",
+    "level": "guided",
+    "text": "not a map: where the values are is not the message (facts.location_matters; G1.24, G1.25)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "RP2-7",
+    "level": "guided",
+    "text": "group: breakdowns of totals. One total of 5 parts (07 §4.1, G1.8)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-02",
+    "level": "locked",
+    "text": "check, meaningful total: passes: the values add up to a total someone would quote (parts.meaningful_total)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-03",
+    "level": "locked",
+    "text": "check, all parts: passes: every part of the total is shown (parts.all_parts)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-05",
+    "level": "locked",
+    "text": "check, overlap: passes: no part contains or overlaps another (parts.overlap)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-04",
+    "level": "locked",
+    "text": "check, signs: fails: the parts mix positive and negative values: areas cannot be negative, and a mixed stack shows neither the net total nor comparable parts (G0.15)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-04",
+    "level": "guided",
+    "text": "the parts mix positive and negative values: a regular bar chart, closed by a grey Total bar when the net total is part of the message (G0.15, G1.38, D-43)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 7,
+    "name": "values across categories",
+    "rule": "R9-1",
+    "level": "guided",
+    "text": "on to the bar chart of step 7 (G1.9)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type (G1.59)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "bar charts are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   }
+  ],
+  "copies": []
+ },
+ "output_sha256": "cfa586256b470cb5f6f1d8a73aeb57db6b2e0a1d6d75bcbacb9753f2389f4c08"
+}

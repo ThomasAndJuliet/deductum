@@ -1,0 +1,12 @@
+{
+  "chartspec": 1,
+  "id": "headcount",
+  "purpose": "analysis",
+  "title": {"text": "Headcount by region"},
+  "data": {
+    "x": {"kind": "nominal", "values": ["East", "Central", "West"]},
+    "measure": {"name": "headcount", "kind": "count", "zero": "meaningful"},
+    "series": [{"id": "headcount", "name": "Headcount", "values": [48, 41, 29]}]
+  },
+  "chart": {"type": "bar", "orientation": "vertical", "value_labels": "off"}
+}

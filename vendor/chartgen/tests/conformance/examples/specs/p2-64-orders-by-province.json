@@ -1,0 +1,372 @@
+{
+ "base": {
+  "chartspec": 1,
+  "id": "p2-64-orders-by-province",
+  "job": {
+   "kind": "answer",
+   "text": "How do the provinces' and territories' monthly orders compare in size?"
+  },
+  "insight": {
+   "important": "Ontario took the most orders every month"
+  },
+  "title": {
+   "text": "Ontario Took the Most Orders Every Month",
+   "kind": "insight",
+   "descriptive": "Monthly Orders by Province or Territory, 2022 (synthetic data)"
+  },
+  "data": {
+   "x": {
+    "kind": "time",
+    "grid": "month",
+    "values": [
+     "2022-01",
+     "2022-02",
+     "2022-03",
+     "2022-04",
+     "2022-05",
+     "2022-06",
+     "2022-07",
+     "2022-08",
+     "2022-09",
+     "2022-10",
+     "2022-11",
+     "2022-12"
+    ]
+   },
+   "measure": {
+    "name": "orders",
+    "kind": "count",
+    "zero": "meaningful",
+    "min": 0,
+    "persistence": "summary",
+    "unit": {
+     "noun": "orders per month"
+    }
+   },
+   "dims": [
+    {
+     "id": "province",
+     "name": "province or territory",
+     "values": [
+      "Ontario",
+      "Quebec",
+      "B.C.",
+      "Alberta",
+      "Manitoba",
+      "Saskatchewan",
+      "Nova Scotia",
+      "New Brunswick",
+      "Newfoundland",
+      "P.E.I.",
+      "N.W.T. & Nunavut",
+      "Yukon"
+     ]
+    }
+   ],
+   "series": [
+    {
+     "id": "ontario",
+     "keys": {
+      "province": "Ontario"
+     },
+     "values": [
+      170,
+      176,
+      172,
+      171,
+      174,
+      170,
+      156,
+      150,
+      154,
+      155,
+      152,
+      156
+     ]
+    },
+    {
+     "id": "quebec",
+     "keys": {
+      "province": "Quebec"
+     },
+     "values": [
+      125,
+      111,
+      102,
+      85,
+      103,
+      134,
+      125,
+      111,
+      102,
+      85,
+      103,
+      134
+     ]
+    },
+    {
+     "id": "bc",
+     "keys": {
+      "province": "B.C."
+     },
+     "values": [
+      99,
+      87,
+      81,
+      94,
+      109,
+      110,
+      111,
+      123,
+      129,
+      116,
+      101,
+      100
+     ]
+    },
+    {
+     "id": "alberta",
+     "keys": {
+      "province": "Alberta"
+     },
+     "values": [
+      116,
+      102,
+      85,
+      82,
+      105,
+      115,
+      74,
+      88,
+      105,
+      108,
+      85,
+      75
+     ]
+    },
+    {
+     "id": "manitoba",
+     "keys": {
+      "province": "Manitoba"
+     },
+     "values": [
+      77,
+      72,
+      60,
+      65,
+      88,
+      88,
+      77,
+      72,
+      60,
+      65,
+      88,
+      88
+     ]
+    },
+    {
+     "id": "saskatchewan",
+     "keys": {
+      "province": "Saskatchewan"
+     },
+     "values": [
+      39,
+      43,
+      57,
+      64,
+      62,
+      65,
+      71,
+      67,
+      53,
+      46,
+      48,
+      45
+     ]
+    },
+    {
+     "id": "nova-scotia",
+     "keys": {
+      "province": "Nova Scotia"
+     },
+     "values": [
+      48,
+      41,
+      36,
+      51,
+      60,
+      52,
+      48,
+      41,
+      36,
+      51,
+      60,
+      52
+     ]
+    },
+    {
+     "id": "new-brunswick",
+     "keys": {
+      "province": "New Brunswick"
+     },
+     "values": [
+      53,
+      47,
+      45,
+      47,
+      41,
+      30,
+      27,
+      33,
+      35,
+      33,
+      39,
+      50
+     ]
+    },
+    {
+     "id": "newfoundland",
+     "keys": {
+      "province": "Newfoundland"
+     },
+     "values": [
+      24,
+      27,
+      40,
+      28,
+      25,
+      28,
+      36,
+      33,
+      20,
+      32,
+      35,
+      32
+     ]
+    },
+    {
+     "id": "pei",
+     "keys": {
+      "province": "P.E.I."
+     },
+     "values": [
+      21,
+      27,
+      22,
+      20,
+      17,
+      13,
+      21,
+      27,
+      22,
+      20,
+      17,
+      13
+     ]
+    },
+    {
+     "id": "nwt-nunavut",
+     "keys": {
+      "province": "N.W.T. & Nunavut"
+     },
+     "values": [
+      20,
+      20,
+      20,
+      15,
+      11,
+      12,
+      16,
+      16,
+      16,
+      21,
+      25,
+      24
+     ]
+    },
+    {
+     "id": "yukon",
+     "keys": {
+      "province": "Yukon"
+     },
+     "values": [
+      11,
+      17,
+      19,
+      16,
+      15,
+      12,
+      11,
+      17,
+      19,
+      16,
+      15,
+      12
+     ]
+    }
+   ]
+  },
+  "facts": {
+   "message": "pattern"
+  },
+  "source": {
+   "book": "p. 219–220 (s. 0202–0203)",
+   "notes": "06 T13",
+   "shows": "a stack of small line charts for series that cross too often for one chart (R6-36): twelve panels, more than fit across, so stacked in rows, one series each, on one shared scale that shows which province is larger (R6-37, G7.48); the names at the left, the months only under the last panel, light separators; synthetic data after the book's figure, which does not name its measure"
+  }
+ },
+ "variants": [
+  {
+   "name": "independent",
+   "patch": {
+    "job": {
+     "kind": "lookup",
+     "text": "Look up the shape of each province's monthly orders: its peaks, dips and cycles"
+    },
+    "insight": null,
+    "title": {
+     "text": "Monthly Orders by Province or Territory, 2022 (synthetic data)",
+     "kind": "descriptive",
+     "descriptive": null
+    },
+    "facts": {
+     "compare_shapes": true
+    },
+    "source": {
+     "shows": "the same stack with a scale per panel, because the message is the shape of each series, not its size (facts.compare_shapes; R6-37, G7.48): each panel its own scale, which need not start at zero, the shapes of the small territories visible where the shared scale crushes them; the sizes can no longer be compared across panels"
+    }
+   }
+  },
+  {
+   "name": "spaghetti",
+   "patch": {
+    "panels": {
+     "arrangement": {
+      "within": [
+       "province"
+      ]
+     }
+    },
+    "reasons": {
+     "panels.arrangement": "the book's spaghetti chart: every series in one chart"
+    },
+    "overrides": [
+     {
+      "rule": "R3-21",
+      "reason": "the book's spaghetti chart (s. 0202, right), rebuilt: twelve colours"
+     }
+    ],
+    "source": {
+     "book": "p. 219 (s. 0202)",
+     "shows": "the book's spaghetti chart, rebuilt: twelve lines that cross often in one chart, which the generator warns about (G1.20, D-28) and draws with a legend"
+    }
+   },
+   "expect": {
+    "findings": [
+     "RP3-5",
+     "R3-21"
+    ]
+   }
+  }
+ ]
+}

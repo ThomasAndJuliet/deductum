@@ -1,0 +1,11 @@
+[package]
+name = "chartgen-typst"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+chartgen-protocol = { path = "../chartgen-protocol" }

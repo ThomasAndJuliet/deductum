@@ -1,0 +1,45 @@
+{
+ "key": "p3-72-motor-vehicle-deaths--not-additive",
+ "file": "p3-72-motor-vehicle-deaths.json",
+ "variant": "not-additive",
+ "requested_type": "auto",
+ "report": {
+  "chart": "p3-72-motor-vehicle-deaths",
+  "style": "plain",
+  "variant": "not-additive",
+  "type": null,
+  "status": "refused",
+  "decisions": [],
+  "findings": [
+   {
+    "rule": "R2-43",
+    "severity": "error",
+    "message": "the bins are of unequal length (10 years, and 5): a shorter bin holds less and fakes a decline; they can be re-aggregated to 10 years only by adding their values, and whether the values add up is not stated",
+    "path": "data.measure.additive",
+    "supply": "data.measure.additive true (the values are totals over their bins), or bins of one length in the data",
+    "level": "locked",
+    "guide": [],
+    "title": "time bins of equal length"
+   }
+  ],
+  "overrides": [],
+  "expect": {
+   "refused": [
+    "R2-43"
+   ]
+  },
+  "expect_met": true,
+  "source": {
+   "book": "p. 110–111 (s. 0103–0104)",
+   "notes": "02 #20",
+   "shows": "the same bins without saying the values add up: re-aggregating would guess, so refused (R2-43, D-1)",
+   "status": "generated"
+  },
+  "summary": {
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [],
+  "copies": []
+ }
+}

@@ -1,0 +1,13 @@
+[package]
+name = "chartgen-geometry"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+figkit-geometry = { path = "../figkit-geometry" }
+serde.workspace = true
+
+[dev-dependencies]
+chartgen-model.workspace = true
+serde_json.workspace = true

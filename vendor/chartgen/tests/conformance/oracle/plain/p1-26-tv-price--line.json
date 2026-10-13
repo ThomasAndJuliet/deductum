@@ -1,0 +1,149 @@
+{
+ "key": "p1-26-tv-price--line",
+ "file": "p1-26-tv-price.json",
+ "variant": "line",
+ "requested_type": "line",
+ "report": {
+  "chart": "p1-26-tv-price",
+  "style": "plain",
+  "variant": "line",
+  "type": "line",
+  "status": "refused",
+  "decisions": [],
+  "findings": [
+   {
+    "rule": "R6-9",
+    "severity": "warn",
+    "message": "chart.type line departs from the procedure, which gives step (an irregular series of states, each holding until the next: a step chart, never a standard line (G1.53))",
+    "path": "chart.type",
+    "level": "guided",
+    "recommended": "step",
+    "guide": [],
+    "title": "irregular states: a step chart, never a standard line"
+   },
+   {
+    "rule": "R6-3",
+    "severity": "error",
+    "message": "a standard line joins one value per regular interval; across irregular states: the sloped segments suggest a gradual drift and values that never held (R6-9)",
+    "path": "chart.type",
+    "supply": "type auto (a step chart)",
+    "level": "locked",
+    "guide": [],
+    "title": "a standard line only for a regular series, one value per interval"
+   }
+  ],
+  "overrides": [],
+  "expect": {
+   "refused": [
+    "R6-3"
+   ],
+   "findings": [
+    "R6-9"
+   ]
+  },
+  "expect_met": true,
+  "source": {
+   "book": "p. 188–190 (s. 0176–0178)",
+   "notes": "06 T6",
+   "shows": "the book's bad version, a standard line through the price changes: refused, since its slopes invent prices that never held ($375 in mid-April when it was $400 all month)",
+   "status": "generated"
+  },
+  "summary": {
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job lookup: no insight stated (a descriptive title will do, D-55)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-1",
+    "level": "guided",
+    "text": "a graph, the values to be compared or a pattern seen (G1.11)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 2,
+    "name": "variables",
+    "rule": "RP3-2",
+    "level": "guided",
+    "text": "one plot: time along x and 1 series; a further variable would go to small multiples (data.dims, G1.18)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 3,
+    "name": "location",
+    "rule": "R8-2",
+    "level": "guided",
+    "text": "not a map: where the values are is not the message (facts.location_matters; G1.24, G1.25)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-01",
+    "level": "guided",
+    "text": "not parts of a total (no data.parts, no breakdown message; G1.1)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 6,
+    "name": "values over time",
+    "rule": "R6-13",
+    "level": "guided",
+    "text": "group: data over time. A series of more than two periods, not a breakdown and not tied to places (G1.48)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 6,
+    "name": "values over time",
+    "rule": "R6-9",
+    "level": "guided",
+    "text": "an irregular series (state): an irregular series of states, each holding until the next: a step chart, never a standard line (G1.53)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type (G1.59)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "step charts are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R6-18",
+    "level": "guided",
+    "text": "step charts may be new to a general audience: teach them (build the chart up, show first the familiar chart that fails, or add two or three callouts stating the obvious; G1.5), or state the insight in a sentence and keep the chart as backup (G1.6)",
+    "guide": [],
+    "group": "data over time"
+   }
+  ],
+  "copies": []
+ }
+}

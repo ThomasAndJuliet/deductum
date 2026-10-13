@@ -1,0 +1,204 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p1-21-daily-donations",
+    "job": {
+      "kind": "lookup",
+      "text": "Look up any region's donations on any day"
+    },
+    "title": {
+      "text": "Daily Donations by Region, Oct. 16 to Nov. 9, 2022",
+      "kind": "descriptive"
+    },
+    "data": {
+      "x": {
+        "kind": "time",
+        "grid": "day",
+        "values": [
+          "2022-10-16",
+          "2022-10-17",
+          "2022-10-18",
+          "2022-10-19",
+          "2022-10-20",
+          "2022-10-21",
+          "2022-10-22",
+          "2022-10-23",
+          "2022-10-24",
+          "2022-10-25",
+          "2022-10-26",
+          "2022-10-27",
+          "2022-10-28",
+          "2022-10-29",
+          "2022-10-30",
+          "2022-10-31",
+          "2022-11-01",
+          "2022-11-02",
+          "2022-11-03",
+          "2022-11-04",
+          "2022-11-05",
+          "2022-11-06",
+          "2022-11-07",
+          "2022-11-08",
+          "2022-11-09"
+        ]
+      },
+      "measure": {
+        "name": "donations",
+        "kind": "amount",
+        "zero": "meaningful",
+        "min": 0,
+        "persistence": "summary",
+        "unit": {
+          "prefix": "$",
+          "magnitude": 3,
+          "noun": "total donations per day"
+        }
+      },
+      "series": [
+        {
+          "id": "east",
+          "name": "East",
+          "values": [
+            85,
+            104,
+            91,
+            98.5,
+            97,
+            95,
+            93,
+            92,
+            78,
+            80,
+            80,
+            82.5,
+            90.5,
+            81.5,
+            80.5,
+            83,
+            94,
+            92,
+            96.5,
+            96.5,
+            114.5,
+            102,
+            102,
+            71,
+            75
+          ]
+        },
+        {
+          "id": "central",
+          "name": "Central",
+          "values": [
+            78,
+            73,
+            81,
+            89,
+            86,
+            67.5,
+            63.5,
+            62.5,
+            73.5,
+            78,
+            81,
+            72.5,
+            80.5,
+            76.5,
+            54,
+            50.5,
+            48,
+            48,
+            52.5,
+            53,
+            56.5,
+            58.5,
+            58.5,
+            67,
+            54.5
+          ]
+        },
+        {
+          "id": "north",
+          "name": "North",
+          "values": [
+            42,
+            46,
+            44,
+            44.5,
+            41.5,
+            49,
+            49.5,
+            48,
+            51,
+            46.5,
+            47,
+            45,
+            33.5,
+            37,
+            41,
+            48,
+            61.5,
+            57.5,
+            53,
+            51.5,
+            58,
+            60,
+            44,
+            48.5,
+            47.5
+          ]
+        },
+        {
+          "id": "south",
+          "name": "South",
+          "values": [
+            55,
+            50,
+            49,
+            50.5,
+            56.5,
+            58.5,
+            62.5,
+            63,
+            71,
+            63,
+            60,
+            60.5,
+            55.5,
+            55.5,
+            52.5,
+            50,
+            50,
+            39,
+            35,
+            40,
+            39,
+            35,
+            28.5,
+            28,
+            32.5
+          ]
+        }
+      ]
+    },
+    "source": {
+      "book": "p. 105–106 (s. 0099–0100)",
+      "notes": "02 #18",
+      "shows": "the canonical time axis: day numbers on row 1, “Oct. 2022” and “Nov. 2022” centred under their days on row 2, thin dividers at the month boundary and both ends; all horizontal"
+    }
+  },
+  "variants": [
+    {
+      "name": "narrow",
+      "patch": {
+        "layout": {
+          "width": 260
+        },
+        "source": {
+          "shows": "the same at 260 pt: every second day labelled, restarting at the first of each month (16, 18 … 30 | 1, 3 … 9), never rotated (the book's narrow version, s. 0100)"
+        }
+      },
+      "expect": {}
+    }
+  ]
+}

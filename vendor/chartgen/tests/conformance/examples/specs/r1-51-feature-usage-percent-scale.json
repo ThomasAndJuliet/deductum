@@ -1,0 +1,105 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "r1-51-feature-usage-percent-scale",
+    "purpose": "communication",
+    "job": {
+      "kind": "make_aware",
+      "text": "Show the all-hands which features customers use most, from the survey"
+    },
+    "insight": {
+      "important": "Invoicing is used by four in five respondents, well ahead of every other feature",
+      "targets": [
+        {
+          "category": "Invoicing"
+        }
+      ]
+    },
+    "title": {
+      "text": "Invoicing Is Used by Four in Five Respondents",
+      "kind": "insight",
+      "descriptive": "Respondents using each feature monthly (n = 640; could select more than one)"
+    },
+    "data": {
+      "x": {
+        "kind": "nominal",
+        "values": [
+          "Invoicing",
+          "Expense tracking",
+          "Bank reconciliation",
+          "Payroll",
+          "Inventory",
+          "Time tracking",
+          "Multi-currency",
+          "API / integrations"
+        ]
+      },
+      "measure": {
+        "name": "respondents using the feature",
+        "kind": "percent",
+        "zero": "meaningful",
+        "min": 0,
+        "max": 100,
+        "unit": {
+          "suffix": "%",
+          "what": "respondents using the feature"
+        }
+      },
+      "series": [
+        {
+          "id": "features",
+          "name": "Respondents",
+          "values": [
+            80.0,
+            67.3,
+            58.9,
+            30.9,
+            22.3,
+            18.9,
+            10.0,
+            8.1
+          ]
+        }
+      ]
+    },
+    "facts": {
+      "message": "compare"
+    },
+    "chart": {
+      "type": "bar"
+    },
+    "highlight": [
+      {
+        "targets": [
+          {
+            "category": "Invoicing"
+          }
+        ],
+        "method": "auto"
+      }
+    ],
+    "source": {
+      "notes": "eval B05 (sonnet-G)",
+      "shows": "a horizontal percentage scale: “%” on every label (0% … 100%) and its title without “(%)” (owner, 1 Oct 2026: G2.24 over G2.19); the variant's own title repeats “(%)”, which the SVG lint reports (R2-21)"
+    }
+  },
+  "variants": [
+    {
+      "name": "title-repeats",
+      "patch": {
+        "data": {
+          "measure": {
+            "unit": {
+              "scale_title": "Respondents using the feature (%)"
+            }
+          }
+        }
+      },
+      "expect": {
+        "findings": [
+          "R2-21"
+        ]
+      }
+    }
+  ]
+}

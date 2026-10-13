@@ -1,0 +1,109 @@
+{
+ "base": {
+  "chartspec": 1,
+  "id": "p3-77-donations-map",
+  "job": {
+   "kind": "make_aware",
+   "text": "Show where in the country the donations come from"
+  },
+  "insight": {
+   "important": "Donations cluster in the Midwest"
+  },
+  "title": {
+   "text": "Donations Cluster in the Midwest",
+   "kind": "insight",
+   "descriptive": "Donations by Region, 2022"
+  },
+  "data": {
+   "x": {
+    "kind": "nominal",
+    "values": [
+     "Midwest",
+     "Southeast",
+     "Mid-Atlantic",
+     "Southwest",
+     "West",
+     "New England"
+    ]
+   },
+   "measure": {
+    "name": "donations",
+    "kind": "amount",
+    "zero": "meaningful",
+    "min": 0,
+    "unit": {
+     "prefix": "$",
+     "magnitude": 3,
+     "noun": "in donations",
+     "fallback": "donations per region"
+    }
+   },
+   "series": [
+    {
+     "id": "donations",
+     "name": "Donations",
+     "values": [
+      294,
+      133,
+      116,
+      114,
+      105,
+      96
+     ]
+    }
+   ]
+  },
+  "facts": {
+   "location_matters": true
+  },
+  "source": {
+   "book": "p. 300–304 (s. 0274–0276)",
+   "notes": "08-12 #1",
+   "shows": "where the values are matters more than reading them (facts.location_matters): a map (08-12 DP-1, G1.25), coloured dots, bubbles or bars on regions; maps are phase 4"
+  }
+ },
+ "variants": [
+  {
+   "name": "bars",
+   "patch": {
+    "facts": {
+     "location_matters": false
+    },
+    "job": {
+     "kind": "answer",
+     "text": "Which region gave most?"
+    },
+    "insight": {
+     "important": "The Midwest gave more than twice as much as any other region",
+     "targets": [
+      {
+       "category": "Midwest"
+      }
+     ]
+    },
+    "title": {
+     "text": "The Midwest Gave Over Twice as Much as Any Other Region"
+    },
+    "source": {
+     "shows": "the same values when reading and comparing them is the point: a bar chart, not a map (G1.24, G1.25), the book's own answer"
+    }
+   }
+  },
+  {
+   "name": "choropleth",
+   "patch": {
+    "chart": {
+     "type": "choropleth"
+    },
+    "source": {
+     "shows": "a choropleth asked for: refused, large regions grabbing attention whatever their values (R8-5, G1.27 [L])"
+    }
+   },
+   "expect": {
+    "refused": [
+     "R8-5"
+    ]
+   }
+  }
+ ]
+}

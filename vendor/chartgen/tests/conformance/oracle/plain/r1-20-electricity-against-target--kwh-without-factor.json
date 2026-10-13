@@ -1,0 +1,54 @@
+{
+ "key": "r1-20-electricity-against-target--kwh-without-factor",
+ "file": "r1-20-electricity-against-target.json",
+ "variant": "kwh-without-factor",
+ "requested_type": "auto",
+ "report": {
+  "chart": "r1-20-electricity-against-target",
+  "style": "plain",
+  "variant": "kwh-without-factor",
+  "type": null,
+  "status": "refused",
+  "decisions": [],
+  "findings": [
+   {
+    "rule": "R2-13",
+    "severity": "error",
+    "message": "the 2025 target (target) is given in kWh, the measure in MWh: drawn on the measure's scale it would be read in the measure's unit (one unit per scale, G2.30)",
+    "path": "data.comparisons[0].factor",
+    "supply": "factor, the number each value is multiplied by to give the measure's unit (0.001 from kWh to MWh), or the values in the measure's unit",
+    "level": "locked",
+    "guide": [],
+    "title": "one unit per scale"
+   },
+   {
+    "rule": "R2-13",
+    "severity": "error",
+    "message": "the Board's threshold, 5% over target (threshold) is given in kWh, the measure in MWh: drawn on the measure's scale it would be read in the measure's unit (one unit per scale, G2.30)",
+    "path": "data.comparisons[1].factor",
+    "supply": "factor, the number each value is multiplied by to give the measure's unit (0.001 from kWh to MWh), or the values in the measure's unit",
+    "level": "locked",
+    "guide": [],
+    "title": "one unit per scale"
+   }
+  ],
+  "overrides": [],
+  "expect": {
+   "refused": [
+    "R2-13"
+   ]
+  },
+  "expect_met": true,
+  "source": {
+   "notes": "evaluation round 1, B09 (opus-G attempt 1)",
+   "shows": "two references on one chart: under a deviation from each building's target, the Board's threshold, given as 5 % over each target, is taken as a deviation too, +5 % for every building, and drawn as one line across the plot, labelled above it (SPEC §6.12.1, §6.12.2)",
+   "status": "generated"
+  },
+  "summary": {
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [],
+  "copies": []
+ }
+}

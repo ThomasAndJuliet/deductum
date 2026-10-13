@@ -1,0 +1,81 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p1-16-glycemic-index",
+    "job": {
+      "kind": "lookup",
+      "text": "Look up the glycemic index of common fruits"
+    },
+    "title": {
+      "text": "Glycemic Index of Fruits",
+      "kind": "descriptive"
+    },
+    "data": {
+      "x": {
+        "kind": "nominal",
+        "values": [
+          "Apple",
+          "Banana",
+          "Grapefruit",
+          "Grapes",
+          "Melon",
+          "Orange"
+        ]
+      },
+      "measure": {
+        "name": "glycemic index",
+        "kind": "score",
+        "zero": "meaningful",
+        "min": 0,
+        "unit": {
+          "noun": "glycemic index"
+        }
+      },
+      "series": [
+        {
+          "id": "gi",
+          "name": "Glycemic index",
+          "values": [
+            38,
+            61,
+            24,
+            59,
+            72,
+            39
+          ]
+        }
+      ]
+    },
+    "chart": {
+      "type": "bar"
+    },
+    "source": {
+      "book": "p. 54–55 (s. 0053–0054)",
+      "notes": "02 #1",
+      "shows": "nominal categories sorted by value, largest first, whatever order the data came in; no axis title where the names say what they are (R2-01, R2-03)"
+    }
+  },
+  "variants": [
+    {
+      "name": "alphabetical",
+      "patch": {
+        "chart": {
+          "sort": "given"
+        },
+        "data": {
+          "x": {
+            "title": "Type of fruit"
+          }
+        },
+        "source": {
+          "shows": "the book’s bad version: alphabetical order and a needless axis title"
+        }
+      },
+      "expect": {
+        "findings": [
+          "R2-01"
+        ]
+      }
+    }
+  ]
+}

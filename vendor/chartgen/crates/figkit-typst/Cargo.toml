@@ -1,0 +1,11 @@
+[package]
+name = "figkit-typst"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+figkit-protocol = { path = "../figkit-protocol" }

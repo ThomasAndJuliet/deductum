@@ -1,0 +1,127 @@
+{
+ "base": {
+  "chartspec": 1,
+  "id": "p3-41-units-produced-table",
+  "job": {
+   "kind": "lookup",
+   "text": "Look up the units each region produced in each month"
+  },
+  "title": {
+   "text": "Units Produced by Region, Jan–Apr 2022",
+   "kind": "descriptive"
+  },
+  "data": {
+   "x": {
+    "kind": "time",
+    "grid": "month",
+    "values": [
+     "2022-01",
+     "2022-02",
+     "2022-03",
+     "2022-04"
+    ]
+   },
+   "measure": {
+    "name": "units produced",
+    "kind": "count",
+    "zero": "meaningful",
+    "min": 0,
+    "persistence": "summary",
+    "unit": {
+     "noun": "units produced"
+    }
+   },
+   "series": [
+    {
+     "id": "east",
+     "name": "East",
+     "values": [
+      41427,
+      35936,
+      36949,
+      39016
+     ]
+    },
+    {
+     "id": "central",
+     "name": "Central",
+     "values": [
+      37284,
+      39005,
+      37185,
+      40915
+     ]
+    },
+    {
+     "id": "north",
+     "name": "North",
+     "values": [
+      22371,
+      17983,
+      17505,
+      15076
+     ]
+    },
+    {
+     "id": "west",
+     "name": "West",
+     "values": [
+      20134,
+      25130,
+      25598,
+      30776
+     ]
+    },
+    {
+     "id": "total",
+     "name": "Total",
+     "role": "total",
+     "values": [
+      121215,
+      118055,
+      117237,
+      125783
+     ]
+    }
+   ]
+  },
+  "facts": {
+   "message": "lookup_only"
+  },
+  "source": {
+   "book": "p. 50 (s. 0050)",
+   "notes": "00-01 F2",
+   "shows": "the book's lightened table: no fills, borders or stripes, the month headings right-aligned over their numbers, a thin rule under them and another above the totals, the rows well apart; the printed totals kept, although the January and February ones are one more than their rows add up to (D-54); the Total label kept in regular weight (D-52 (ii)), where the book's light version drops it"
+  }
+ },
+ "variants": [
+  {
+   "name": "heavy",
+   "patch": {
+    "table": {
+     "stripes": true,
+     "bold": [
+      "header",
+      "totals"
+     ]
+    },
+    "overrides": [
+     {
+      "rule": "R10-16",
+      "reason": "the book's heavy version: grey stripes (s. 0050)"
+     },
+     {
+      "rule": "R10-22",
+      "reason": "the book's heavy version: a bold header and totals (s. 0050)"
+     }
+    ]
+   },
+   "expect": {
+    "refused": [
+     "R10-16",
+     "R10-22"
+    ]
+   }
+  }
+ ]
+}

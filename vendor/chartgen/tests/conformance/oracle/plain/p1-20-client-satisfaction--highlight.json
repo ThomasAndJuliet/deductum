@@ -1,0 +1,212 @@
+{
+ "key": "p1-20-client-satisfaction--highlight",
+ "file": "p1-20-client-satisfaction.json",
+ "variant": "highlight",
+ "requested_type": "auto",
+ "report": {
+  "chart": "p1-20-client-satisfaction",
+  "style": "plain",
+  "variant": "highlight",
+  "type": "dot",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "R2-24",
+    "level": "guided",
+    "text": "type dot: a scale that should not start at zero wants dots, not bars (G1.57, D-30): zero is arbitrary here, not “none of it” (G2.10)",
+    "guide": []
+   },
+   {
+    "rule": "R2-24",
+    "level": "guided",
+    "text": "zero is arbitrary here, not “none of it” (G2.10): truncated, the lower limit 10–20 % of the spread below the lowest value (G2.11)",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "scale 7–9.5 by 0.5",
+    "guide": []
+   },
+   {
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "nominal categories sorted by value, descending",
+    "guide": []
+   },
+   {
+    "rule": "R15-5",
+    "level": "locked",
+    "text": "highlighting what the insight names",
+    "guide": []
+   },
+   {
+    "rule": "R2-21",
+    "level": "locked",
+    "text": "labels as a set, 1 decimals, bare numbers: 7.0, 7.5, 8.0, 8.5, 9.0, 9.5",
+    "guide": []
+   },
+   {
+    "rule": "R2-07",
+    "level": "locked",
+    "text": "a horizontal scale: bare numbers, and its title centred below with the unit in parentheses: “Satisfaction rating (on 10)”",
+    "guide": []
+   },
+   {
+    "rule": "R3-7",
+    "level": "locked",
+    "text": "highlighted in the strong shade of their colour: Client D; the others keep their colour",
+    "guide": []
+   }
+  ],
+  "findings": [
+   {
+    "rule": "R9-10",
+    "severity": "info",
+    "message": "chart.orientation horizontal departs from the procedure, which gives vertical (every name fits under its dot, neighbours at least 10 pt apart)",
+    "path": "chart.orientation",
+    "reason": "as the book draws it (p. 85): the clients read down a list, the rating scale runs along the bottom",
+    "level": "guided",
+    "recommended": "vertical",
+    "guide": [],
+    "title": "long category names: horizontal bars"
+   },
+   {
+    "rule": "R2-32",
+    "severity": "info",
+    "message": "4 values against 6 scale labels: labelling the values directly would put fewer numbers on the chart (phase 2)",
+    "level": "locked",
+    "guide": [],
+    "title": "fewer values than scale labels: label the values directly"
+   }
+  ],
+  "overrides": [],
+  "expect": {},
+  "expect_met": true,
+  "source": {
+   "book": "p. 85 (s. 0082)",
+   "notes": "02 #14",
+   "shows": "the insight's target highlighted: its dot in the strong shade of its own hue, the others unchanged (R3-7, D-9, 6.9); the title states the insight (G8.2)",
+   "status": "generated"
+  },
+  "summary": {
+   "scale": "7–9.5 by 0.5",
+   "labels": [
+    "7.0",
+    "7.5",
+    "8.0",
+    "8.5",
+    "9.0",
+    "9.5"
+   ],
+   "top": "9.5 on 10",
+   "scale_title": "Satisfaction rating (on 10)",
+   "orientation": "horizontal",
+   "plot": [
+    43.36,
+    36.07,
+    361.61,
+    116.07
+   ],
+   "band": 20.0,
+   "width": 368.0,
+   "height": 143.88,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job make_aware: insight “Client D is the least satisfied client”",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-1",
+    "level": "guided",
+    "text": "a graph, the values to be compared or a pattern seen (G1.11)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 2,
+    "name": "variables",
+    "rule": "RP3-2",
+    "level": "guided",
+    "text": "one plot: categories along x and 1 series; a further variable would go to small multiples (data.dims, G1.18)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 3,
+    "name": "location",
+    "rule": "R8-2",
+    "level": "guided",
+    "text": "not a map: where the values are is not the message (facts.location_matters; G1.24, G1.25)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-01",
+    "level": "guided",
+    "text": "not parts of a total (no data.parts, no breakdown message; G1.1)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 7,
+    "name": "values across categories",
+    "rule": "R9-1",
+    "level": "guided",
+    "text": "group: bar charts. Values compared across categories (G1.9)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 7,
+    "name": "values across categories",
+    "rule": "R2-24",
+    "level": "guided",
+    "text": "a scale that should not start at zero wants dots, not bars (G1.57, D-30): zero is arbitrary here, not “none of it” (G2.10)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type (G1.59)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "dot plots are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R6-18",
+    "level": "guided",
+    "text": "dot plots may be new to a general audience: teach them (build the chart up, show first the familiar chart that fails, or add two or three callouts stating the obvious; G1.5), or state the insight in a sentence and keep the chart as backup (G1.6)",
+    "guide": [],
+    "group": "bar charts"
+   }
+  ],
+  "copies": []
+ },
+ "output_sha256": "a7993285582789f7d12bc39a0ab760a275853493684ee22a60d455197f820c76"
+}

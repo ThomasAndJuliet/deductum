@@ -1,0 +1,104 @@
+{
+ "base": {
+  "chartspec": 1,
+  "id": "p3-20-donations-subtotal-stack",
+  "job": {
+   "kind": "answer",
+   "text": "Did Mrs. Smith and Mrs. Jones give more than $300K between them?"
+  },
+  "insight": {
+   "important": "Mrs. Smith and Mrs. Jones gave over $300K between them",
+   "targets": [
+    {
+     "category": "Mrs. Smith"
+    },
+    {
+     "category": "Mrs. Jones"
+    }
+   ]
+  },
+  "title": {
+   "text": "Mrs. Smith and Mrs. Jones Gave Over $300K",
+   "kind": "insight",
+   "descriptive": "Donations by Donor, 2022"
+  },
+  "data": {
+   "x": {
+    "kind": "nominal",
+    "values": [
+     "Mrs. Smith",
+     "Mrs. Jones",
+     "Mr. & Mrs. Perez",
+     "The Chetley Family",
+     "Ms. Flaherty"
+    ]
+   },
+   "measure": {
+    "name": "donations",
+    "kind": "amount",
+    "zero": "meaningful",
+    "min": 0,
+    "unit": {
+     "prefix": "$",
+     "magnitude": 3,
+     "noun": "in donations"
+    }
+   },
+   "series": [
+    {
+     "id": "donations",
+     "name": "Donations",
+     "values": [
+      165,
+      160,
+      135,
+      125,
+      100
+     ]
+    }
+   ],
+   "parts": {
+    "meaningful_total": true,
+    "all_parts": true,
+    "overlap": false
+   }
+  },
+  "facts": {
+   "message": "subtotal_amount"
+  },
+  "layout": {
+   "width": 260
+  },
+  "source": {
+   "book": "p. 242–244 (s. 0223)",
+   "notes": "07 #1",
+   "shows": "a subtotal as an amount: one stacked bar, the two parts it sums together at its base in their strong shades and the others paled, so that their top is read against the $300K gridline without adding in one's head (R7-08, R7-09, G1.37, D-9); the parts named beside the stack, each level with its segment (G5.4)"
+  }
+ },
+ "variants": [
+  {
+   "name": "precise",
+   "patch": {
+    "job": {
+     "text": "Did Mrs. Smith give more than Mrs. Jones?"
+    },
+    "insight": {
+     "important": "Mrs. Smith gave slightly more than Mrs. Jones"
+    },
+    "title": {
+     "text": "Mrs. Smith Gave Slightly More Than Mrs. Jones"
+    },
+    "facts": {
+     "message": "compare_parts_precisely"
+    },
+    "layout": {
+     "width": 368
+    },
+    "source": {
+     "book": "p. 236–237 (s. 0217–0218)",
+     "shows": "the same donors, two close parts compared precisely: a regular bar chart, whose bars share a baseline (R7-06, G1.35)"
+    }
+   }
+  }
+ ]
+}

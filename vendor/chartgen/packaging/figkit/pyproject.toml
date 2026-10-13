@@ -1,0 +1,17 @@
+[build-system]
+requires = ["maturin>=1.9,<2"]
+build-backend = "maturin"
+
+[project]
+name = "figkit"
+version = "0.1.0"
+description = "Independent measured figure core and host facade"
+requires-python = ">=3.10"
+
+[project.optional-dependencies]
+typst = ["typst>=0.13"]
+
+[tool.maturin]
+manifest-path = "crates/figkit-python/Cargo.toml"
+python-source = "python"
+module-name = "figkit._native"

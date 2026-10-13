@@ -1,0 +1,101 @@
+{
+ "base": {
+  "chartspec": 1,
+  "id": "p2-65-call-centres-merged",
+  "job": {
+   "kind": "lookup",
+   "text": "Look up each call centre's average caller satisfaction and average wait on hold"
+  },
+  "title": {
+   "text": "Caller Satisfaction and Wait Time on Hold by Call Centre, 2022",
+   "kind": "descriptive"
+  },
+  "data": {
+   "x": {
+    "kind": "nominal",
+    "values": [
+     "East Call Center",
+     "West Call Center",
+     "South Call Center",
+     "North Call Center"
+    ]
+   },
+   "measures": [
+    {
+     "id": "satisfaction",
+     "name": "avg. caller satisfaction",
+     "kind": "score",
+     "zero": "meaningful",
+     "min": 0,
+     "max": 10,
+     "unit": {
+      "noun": "on 10"
+     }
+    },
+    {
+     "id": "wait",
+     "name": "avg. wait time on hold",
+     "kind": "quantity",
+     "zero": "meaningful",
+     "min": 0,
+     "unit": {
+      "suffix": " mins"
+     }
+    }
+   ],
+   "series": [
+    {
+     "id": "satisfaction",
+     "name": "Satisfaction",
+     "measure": "satisfaction",
+     "values": [
+      9.1,
+      7.6,
+      5.3,
+      4.7
+     ]
+    },
+    {
+     "id": "wait",
+     "name": "Wait on hold",
+     "measure": "wait",
+     "values": [
+      7.4,
+      4.8,
+      6.8,
+      4.8
+     ]
+    }
+   ]
+  },
+  "source": {
+   "book": "p. 68 (s. 0066–0067)",
+   "notes": "02 #6",
+   "shows": "a merged bar chart: two measures in different units, so each its own panel and scale, side by side on the same rows, the names once at the left, horizontal bars in one colour, each scale from zero along the bottom and its title above the panel as its heading, as the book sets it (G2.30, G2.32, G7.6)"
+  }
+ },
+ "variants": [
+  {
+   "name": "one-scale",
+   "patch": {
+    "panels": {
+     "arrangement": {
+      "within": [
+       "measure"
+      ]
+     },
+     "scale": "shared"
+    },
+    "source": {
+     "book": "p. 67 (s. 0066)",
+     "shows": "the book's bad version: satisfaction out of 10 and minutes on hold as bars on one 0–10 scale, refused (G2.30)"
+    }
+   },
+   "expect": {
+    "refused": [
+     "R2-13"
+    ]
+   }
+  }
+ ]
+}

@@ -1,0 +1,72 @@
+{
+ "chartspec": 1,
+ "id": "p3-35-regional-donations-stack",
+ "job": {
+  "kind": "answer",
+  "text": "How much did each region give towards the year's donations?"
+ },
+ "insight": {
+  "important": "East, Central and South gave nearly all of the year's donations"
+ },
+ "title": {
+  "text": "East, Central and South Gave Nearly All Donations",
+  "kind": "insight",
+  "descriptive": "Donations by Region, 2022"
+ },
+ "data": {
+  "x": {
+   "kind": "nominal",
+   "values": [
+    "East",
+    "Central",
+    "South",
+    "Int'l",
+    "West",
+    "North"
+   ]
+  },
+  "measure": {
+   "name": "donations",
+   "kind": "amount",
+   "zero": "meaningful",
+   "min": 0,
+   "unit": {
+    "prefix": "$",
+    "magnitude": 3,
+    "noun": "in donations",
+    "fallback": "donations per region"
+   }
+  },
+  "series": [
+   {
+    "id": "donations",
+    "name": "Donations",
+    "values": [
+     133,
+     72,
+     60,
+     6,
+     4,
+     3
+    ]
+   }
+  ],
+  "parts": {
+   "meaningful_total": true,
+   "all_parts": true,
+   "overlap": false
+  }
+ },
+ "facts": {
+  "message": "subtotal_amount",
+  "small_values_matter": true
+ },
+ "layout": {
+  "width": 260
+ },
+ "source": {
+  "book": "p. 77 (s. 0077)",
+  "notes": "02 #10b",
+  "shows": "one stacked bar with three thin parts at its top, named beside it on thin leaders where they had to move (D-7); the book's inset on the top of the stack (G2.26) is a later stage for stacks: not drawn"
+ }
+}

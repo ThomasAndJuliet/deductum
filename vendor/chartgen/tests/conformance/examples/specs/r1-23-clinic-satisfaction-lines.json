@@ -1,0 +1,88 @@
+{
+  "chartspec": 1,
+  "id": "r1-23-clinic-satisfaction-lines",
+  "job": {
+    "kind": "answer",
+    "text": "Which clinics met the satisfaction target of 80?"
+  },
+  "insight": {
+    "important": "Only Clinics A and B met the satisfaction target of 80",
+    "targets": [
+      {
+        "category": "Clinic A"
+      },
+      {
+        "category": "Clinic B"
+      }
+    ]
+  },
+  "title": {
+    "text": "Only Clinics A and B Met the Satisfaction Target of 80",
+    "kind": "insight",
+    "descriptive": "Patient satisfaction score by clinic, 2022"
+  },
+  "data": {
+    "x": {
+      "kind": "nominal",
+      "values": [
+        "Clinic A",
+        "Clinic B",
+        "Clinic C",
+        "Clinic D",
+        "Clinic E",
+        "Clinic F"
+      ]
+    },
+    "measure": {
+      "name": "satisfaction",
+      "kind": "score",
+      "zero": "meaningful",
+      "min": 0,
+      "max": 100,
+      "unit": {
+        "noun": "out of 100",
+        "what": "patient satisfaction"
+      }
+    },
+    "series": [
+      {
+        "id": "score",
+        "name": "Satisfaction",
+        "values": [
+          86,
+          82,
+          79,
+          74,
+          71,
+          65
+        ]
+      }
+    ],
+    "comparisons": [
+      {
+        "id": "average",
+        "kind": "average",
+        "label": "Network average",
+        "compute": "mean"
+      },
+      {
+        "id": "target",
+        "kind": "target",
+        "label": "Target",
+        "values": [
+          80
+        ]
+      }
+    ]
+  },
+  "facts": {
+    "message": "compare"
+  },
+  "chart": {
+    "type": "auto"
+  },
+  "source": {
+    "notes": "evaluation round 1 (several references)",
+    "shows": "two values across the plot, the target dotted and the network average solid, both in the dark grey; the target labelled first (G0.19), each label clear of the other line and label (SPEC §6.12.2)"
+  }
+}

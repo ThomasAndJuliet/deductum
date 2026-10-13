@@ -1,0 +1,298 @@
+{
+ "key": "r1-60-library-loans-arrows",
+ "file": "r1-60-library-loans-arrows.json",
+ "variant": null,
+ "requested_type": "auto",
+ "report": {
+  "chart": "r1-60-library-loans-arrows",
+  "style": "plain",
+  "variant": null,
+  "type": "arrow",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "R6-15",
+    "level": "guided",
+    "text": "type arrow: two periods: the change between them is the point (06 DP6-3, G1.46): the default is an arrow chart, each category's change in units and in % side by side (G1.47), or a chart of the change itself (the % panel alone, facts.message relative_change; or the change as bars, a previous_period comparison with transform deviation); clustered bars of the two periods only where each period's own values, not the change, are what the request needs: facts.message periods, with the reason, grounded in the request, in reasons[\"facts.message\"]",
+    "guide": []
+   },
+   {
+    "rule": "R2-25",
+    "level": "locked",
+    "text": "the values are not far from zero compared with their spread",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "scale 0–400,000 by 100,000",
+    "guide": []
+   },
+   {
+    "rule": "R6-17",
+    "level": "locked",
+    "text": "two panels sharing the rows: the values, before to after; the change in %, from 0 % (G1.47, G7.21)",
+    "guide": []
+   },
+   {
+    "rule": "D-40",
+    "level": "guided",
+    "text": "rows by the change in %, largest first; last: Lowther Park (a value not known)",
+    "guide": []
+   },
+   {
+    "rule": "R3-17",
+    "level": "guided",
+    "text": "arrows in the good colour where the change is good and the bad colour where it is bad (higher is better; G7.22, D-40)",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "the % panel: −50–20 by 10, holding 0 %, where its arrows start",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "the % panel's labels would crowd in its width: −60–20 by 20",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "the % panel's labels would crowd in its width: −60–20 by 20",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "the % panel's labels would crowd in its width: −60–20 by 20",
+    "guide": []
+   },
+   {
+    "rule": "R6-15",
+    "level": "locked",
+    "text": "the values in the measure's unit, 0–400,000 by 100,000, each arrow from before to after; the scale's title below: “Loans (thousands of physical items issued)”",
+    "guide": []
+   },
+   {
+    "rule": "R6-17",
+    "level": "locked",
+    "text": "the change in %, −60–20 by 20, each arrow from 0 %; the scale's title below: “Change in loans”",
+    "guide": []
+   },
+   {
+    "rule": "R6-15",
+    "level": "locked",
+    "text": "an arrow chart (G7.21): a dot at the start, a shaft, a head whose tip sits exactly on the end value; one row per category, its name at the left",
+    "guide": []
+   },
+   {
+    "rule": "R6-15",
+    "level": "guided",
+    "text": "changes shorter than a full head with its start dot, their direction kept readable (--arrow-short-head: fit): the head over the start dot, haloed: St Mary's (values), Oakham (values), Northfield (values), Westbrook (values); the head shrunk to fit between the start dot and the end: Hartley Green (values), Riverside (values)",
+    "guide": []
+   },
+   {
+    "rule": "R6-15",
+    "level": "locked",
+    "text": "the key “2019” and “2025” beside the ends of Central's arrow, the longest, too short to hold both words over it (G7.21)",
+    "guide": []
+   },
+   {
+    "rule": "R5-26",
+    "level": "locked",
+    "text": "the title wraps onto two lines",
+    "guide": []
+   },
+   {
+    "rule": "R3-20",
+    "level": "locked",
+    "text": "static output, in colour: one file, red for bad and green for good, plain, for every reader (D-18; owner, 1 Oct 2026); black and white (audience.bw_risk) adds the textures, and a style may choose the colour-blind-safe pair (--good-bad-mode: safe-pair)",
+    "guide": []
+   },
+   {
+    "rule": "CG-8",
+    "level": "locked",
+    "text": "notes under the chart, below everything else, left-aligned and wrapped to its 368 pt: 1 plain note (marks in reading order)",
+    "guide": []
+   }
+  ],
+  "findings": [
+   {
+    "rule": "R15-7",
+    "severity": "info",
+    "message": "the values are read as good or bad, with no comparison value or dividing value: a target, budget or average would say how to feel about them (G8.12, G0.19)",
+    "path": "data.comparisons",
+    "level": "guided",
+    "guide": [],
+    "title": "comparison values where the audience lacks context: targets and budgets before averages, previous periods and peers"
+   },
+   {
+    "rule": "CG-3",
+    "severity": "info",
+    "message": "highlighting an arrow is a later stage",
+    "path": "highlight",
+    "level": "open",
+    "guide": [],
+    "title": "requested but not drawn in this stage of the generator"
+   },
+   {
+    "rule": "CG-8",
+    "severity": "info",
+    "message": "the note “opened Sept. 2021” of the value of lowther-park at 2019: nothing in the chart writes that value (a gap in a line has no text to mark), so the note stands under the chart without a mark",
+    "path": "data.series",
+    "level": "locked",
+    "guide": [],
+    "title": "notes under the chart: every mark with its note and every footnote with its mark, the notes below everything else, wrapped to the chart's width, never clipped or dropped (owner, 1 Oct 2026)"
+   }
+  ],
+  "overrides": [],
+  "expect": {},
+  "expect_met": true,
+  "source": {
+   "shows": "short changes in an arrow chart (eval round 1, B08): St Mary's and Oakham rose by under 3 pt of the scale, less than a head and its start dot; their heads must still say which way they changed (--arrow-short-head, review r1-arrows)",
+   "status": "generated"
+  },
+  "summary": {
+   "notes": [
+    {
+     "mark": null,
+     "text": "opened Sept. 2021"
+    }
+   ],
+   "scale": "0–400,000 by 100,000",
+   "labels": [
+    "0",
+    "100",
+    "200",
+    "300",
+    "400"
+   ],
+   "top": "400K physical items issued",
+   "scale_title": "Loans (thousands of physical items issued)",
+   "orientation": "horizontal",
+   "panels": [
+    "absolute",
+    "relative"
+   ],
+   "plot": [
+    68.35,
+    51.03,
+    354.94,
+    211.03
+   ],
+   "rows": [
+    "st-marys",
+    "oakham",
+    "northfield",
+    "central",
+    "hartley-green",
+    "riverside",
+    "westbrook",
+    "lowther-park"
+   ],
+   "colours": {
+    "st-marys": "good",
+    "oakham": "good",
+    "northfield": "bad",
+    "central": "bad",
+    "hartley-green": "bad",
+    "riverside": "bad",
+    "westbrook": "bad",
+    "lowther-park": null
+   },
+   "pct_scale": "−60–20 by 20",
+   "width": 368.0,
+   "height": 255.86,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job make_aware: insight “Central lost the most loans (61,400), but in proportion it fell less (−18 %) than Westbrook and Riverside (about −41 %) and Hartley Green (−25 %); St Mary's and Oakham grew”",
+    "guide": [],
+    "group": "change between two periods"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-1",
+    "level": "guided",
+    "text": "a graph, the values to be compared or a pattern seen (G1.11)",
+    "guide": [],
+    "group": "change between two periods"
+   },
+   {
+    "step": 2,
+    "name": "variables",
+    "rule": "RP3-2",
+    "level": "guided",
+    "text": "one plot: time along x and 8 series; more than 5 lines read well only if they rarely cross, else a stack of small line charts (panels by data.dims, G1.20); a further variable would go to small multiples (data.dims, G1.18)",
+    "guide": [],
+    "group": "change between two periods"
+   },
+   {
+    "step": 3,
+    "name": "location",
+    "rule": "R8-2",
+    "level": "guided",
+    "text": "not a map: where the values are is not the message (facts.location_matters; G1.24, G1.25)",
+    "guide": [],
+    "group": "change between two periods"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-01",
+    "level": "guided",
+    "text": "not parts of a total (no data.parts, no breakdown message; G1.1)",
+    "guide": [],
+    "group": "change between two periods"
+   },
+   {
+    "step": 5,
+    "name": "two periods",
+    "rule": "R6-15",
+    "level": "guided",
+    "text": "group: change between two periods. Two periods: the change between them is the point (06 DP6-3, G1.46): the default is an arrow chart, each category's change in units and in % side by side (G1.47), or a chart of the change itself (the % panel alone, facts.message relative_change; or the change as bars, a previous_period comparison with transform deviation); clustered bars of the two periods only where each period's own values, not the change, are what the request needs: facts.message periods, with the reason, grounded in the request, in reasons[\"facts.message\"]",
+    "guide": [],
+    "group": "change between two periods"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type, the series told apart by colour (G1.59)",
+    "guide": [],
+    "group": "change between two periods"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "arrow charts are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "change between two periods"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R6-18",
+    "level": "guided",
+    "text": "arrow charts may be new to a general audience: teach them (build the chart up, show first the familiar chart that fails, or add two or three callouts stating the obvious; G1.5), or state the insight in a sentence and keep the chart as backup (G1.6)",
+    "guide": [],
+    "group": "change between two periods"
+   }
+  ],
+  "copies": []
+ },
+ "output_sha256": "34a5e563144fc9f3e39f4ad5fb992fd4a754b4f5e36fe82cb1e65dd46de1c793"
+}

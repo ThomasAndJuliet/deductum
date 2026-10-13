@@ -1,0 +1,228 @@
+{
+ "key": "p2-06-donations-by-method",
+ "file": "p2-06-donations-by-method.json",
+ "variant": null,
+ "requested_type": "auto",
+ "report": {
+  "chart": "p2-06-donations-by-method",
+  "style": "plain",
+  "variant": null,
+  "type": "bar",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "type bar: categories compared by value",
+    "guide": []
+   },
+   {
+    "rule": "R9-11",
+    "level": "guided",
+    "text": "clustered bars: 6 series of one measure across categories (G1.56, R9-12)",
+    "guide": []
+   },
+   {
+    "rule": "R2-24",
+    "level": "locked",
+    "text": "bars start at zero",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "scale 0–100 by 20",
+    "guide": []
+   },
+   {
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "nominal categories sorted by value, descending (by series south)",
+    "guide": []
+   },
+   {
+    "rule": "R9-12",
+    "level": "locked",
+    "text": "6 series side by side in each cluster, the bars touching, in the same order in every cluster: South (slot 1), North (slot 2), Central (slot 3), West (slot 4), East (slot 5), Int'l (slot 6) (G7.5, G4.22)",
+    "guide": []
+   },
+   {
+    "rule": "R9-10",
+    "level": "locked",
+    "text": "every name fits under its bar, neighbours at least 10 pt apart: vertical bars",
+    "guide": []
+   },
+   {
+    "rule": "R2-21",
+    "level": "locked",
+    "text": "labels as a set, 0 decimals: 0, 20, 40, 60, 80, $100K",
+    "guide": []
+   },
+   {
+    "rule": "R5-10",
+    "level": "locked",
+    "text": "digits hidden: thousands, stated once on the top label (R2-05, D-3): “$100K in donations”",
+    "guide": []
+   },
+   {
+    "rule": "R2-07",
+    "level": "locked",
+    "text": "the unit phrase on the top label: “$100K in donations”; the top gridline starts after it",
+    "guide": []
+   },
+   {
+    "rule": "R4-6",
+    "level": "guided",
+    "text": "a legend above the plot, below the title, centred over the plot: labels beside the bars of a cluster would each need a leader (G5.7, G5.10, D-7)",
+    "guide": []
+   },
+   {
+    "rule": "R4-4",
+    "level": "locked",
+    "text": "legend entries in the order of the bars in each cluster, left to right: South, North, Central, West, East, Int'l (G5.8, G5.14: square keys)",
+    "guide": []
+   }
+  ],
+  "findings": [],
+  "overrides": [],
+  "expect": {},
+  "expect_met": true,
+  "source": {
+   "book": "p. 364 (s. 0331)",
+   "notes": "08-12 #17",
+   "shows": "the book's flat 2-D version of a 3-D chart (a 3-D chart cannot be asked for): six series per cluster, the clusters kept about two bar widths apart as the book's are (G7.5s), the legend in the order of the bars; the methods sorted by the first series (D-46)",
+   "status": "generated"
+  },
+  "summary": {
+   "scale": "0–100 by 20",
+   "labels": [
+    "0",
+    "20",
+    "40",
+    "60",
+    "80",
+    "$100K"
+   ],
+   "top": "$100K in donations",
+   "scale_title": null,
+   "orientation": "vertical",
+   "plot": [
+    29.0,
+    37.0,
+    368.0,
+    240.4
+   ],
+   "band": 84.75,
+   "series": [
+    "south",
+    "north",
+    "central",
+    "west",
+    "east",
+    "intl"
+   ],
+   "labelling": "legend",
+   "value_labels": false,
+   "table": false,
+   "bar": 10.09,
+   "width": 368.0,
+   "height": 256.45,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job lookup: no insight stated (a descriptive title will do, D-55)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-1",
+    "level": "guided",
+    "text": "a graph, the values to be compared or a pattern seen (G1.11)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 2,
+    "name": "variables",
+    "rule": "RP3-2",
+    "level": "guided",
+    "text": "one plot: categories along x and 6 series; a further variable would go to small multiples (data.dims, G1.18)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 3,
+    "name": "location",
+    "rule": "R8-2",
+    "level": "guided",
+    "text": "not a map: where the values are is not the message (facts.location_matters; G1.24, G1.25)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-01",
+    "level": "guided",
+    "text": "not parts of a total (no data.parts, no breakdown message; G1.1)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 7,
+    "name": "values across categories",
+    "rule": "R9-1",
+    "level": "guided",
+    "text": "group: bar charts. Values compared across categories (G1.9)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 7,
+    "name": "values across categories",
+    "rule": "R9-11",
+    "level": "guided",
+    "text": "6 series of one measure: clustered bars (G1.56); several measures would be a merged chart (data.measures), never a dual axis",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 7,
+    "name": "values across categories",
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "bars from zero (02 D1)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type, the series told apart by colour (G1.59)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "bar charts are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "bar charts"
+   }
+  ],
+  "copies": []
+ },
+ "output_sha256": "bc8431d8a2ef4ba3236969f1506db3cb7183961406de4aa812d55801339ee8b6"
+}

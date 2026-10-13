@@ -1,0 +1,16 @@
+[package]
+name = "figkit-style"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+# Pure: no filesystem. @import is resolved through a host-supplied StyleSource.
+[dependencies]
+figkit-model = { path = "../figkit-model" }
+figkit-colour = { path = "../figkit-colour" }
+regex = "1"
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

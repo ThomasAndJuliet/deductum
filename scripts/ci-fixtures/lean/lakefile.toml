@@ -1,0 +1,6 @@
+name = "deductum_ci"
+version = "0.1.0"
+defaultTargets = ["DSRV"]
+
+[[lean_lib]]
+name = "DSRV"

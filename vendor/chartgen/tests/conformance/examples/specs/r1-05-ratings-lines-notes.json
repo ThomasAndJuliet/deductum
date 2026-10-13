@@ -1,0 +1,137 @@
+{
+ "chartspec": 1,
+ "id": "r1-05-ratings-lines-notes",
+ "job": {
+  "kind": "make_aware",
+  "text": "Make the regional managers aware of North's steady rise in ratings"
+ },
+ "insight": {
+  "important": "North's rating rose every month, from the lowest to the second highest",
+  "targets": [
+   {
+    "series": "north"
+   }
+  ]
+ },
+ "title": {
+  "text": "North's Rating Rose Every Month",
+  "kind": "insight",
+  "descriptive": "Average Customer Rating by Region, Jan–May 2022"
+ },
+ "data": {
+  "x": {
+   "kind": "time",
+   "grid": "month",
+   "values": [
+    "2022-01",
+    "2022-02",
+    "2022-03",
+    "2022-04",
+    "2022-05"
+   ]
+  },
+  "measure": {
+   "name": "average customer rating",
+   "kind": "score",
+   "zero": "meaningful",
+   "min": 0,
+   "max": 10,
+   "persistence": "summary",
+   "unit": {
+    "what": "average rating out of 10"
+   }
+  },
+  "series": [
+   {
+    "id": "east",
+    "name": "East",
+    "values": [
+     7.8,
+     9.7,
+     8.4,
+     8.3,
+     9.5
+    ]
+   },
+   {
+    "id": "north",
+    "name": "North",
+    "values": [
+     6.1,
+     6.9,
+     7.3,
+     7.8,
+     9.2
+    ]
+   },
+   {
+    "id": "central",
+    "name": "Central",
+    "values": [
+     8.2,
+     8.0,
+     8.0,
+     7.9,
+     7.7
+    ]
+   },
+   {
+    "id": "west",
+    "name": "West",
+    "values": [
+     7.4,
+     6.4,
+     7.5,
+     7.0,
+     7.6
+    ]
+   }
+  ]
+ },
+ "facts": {
+  "message": "pattern"
+ },
+ "source": {
+  "book": "p. 404 (s. 0370)",
+  "notes": "p2-46-highlight-lines, with notes (owner, 1 Oct 2026: footnotes)",
+  "shows": "footnotes on an end label (room kept at the plot's right) and on a comment's last line, sharing one mark; on the unit phrase; a plain note"
+ },
+ "comments": [
+  {
+   "text": "A new manager started in North in January",
+   "anchors": [
+    {
+     "series": "north",
+     "x": "2022-01"
+    }
+   ],
+   "answers": [
+    "explain"
+   ]
+  }
+ ],
+ "notes": [
+  {
+   "text": "North's office reopened on Jan. 3, 2022, after a refit.",
+   "on": [
+    {
+     "series": "north"
+    },
+    {
+     "comment": 0
+    }
+   ]
+  },
+  {
+   "text": "Each month's ratings averaged over every survey returned.",
+   "on": [
+    {
+     "element": "unit"
+    }
+   ]
+  },
+  {
+   "text": "Survey of customers by the regional offices, Jan.–May 2022."
+  }
+ ]
+}

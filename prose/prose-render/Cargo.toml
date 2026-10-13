@@ -17,7 +17,7 @@ ratex-svg = { version = "=0.1.14", features = ["embed-fonts"] }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "gif"] }
 # The size of an SVG image, which iced draws with resvg
 usvg = { version = "0.45", default-features = false, features = ["text"] }
-chartgen = { path = "../../../chartgen-src/crates/chartgen" }
+chartgen = { path = "../../vendor/chartgen/crates/chartgen" }
 merman = { version = "0.8", default-features = false, features = [
     "svg",
     "layout-cytoscape",

@@ -1,0 +1,30 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p3-10-expenses-donut",
+    "job": {"kind": "lookup", "text": "Look up each region's share of the year's expenses"},
+    "title": {"text": "Total Expenses by Region, 2022", "kind": "descriptive"},
+    "data": {
+      "x": {"kind": "nominal", "values": ["Central", "North", "West", "South", "East"]},
+      "measure": {"name": "expenses", "kind": "amount", "zero": "meaningful", "min": 0,
+                  "unit": {"prefix": "$", "magnitude": 6, "noun": "in expenses"}},
+      "series": [{"id": "expenses", "name": "Expenses", "values": [12.6, 9.6, 8.8, 7.9, 7.7]}],
+      "parts": {"meaningful_total": true, "all_parts": true, "overlap": false}
+    },
+    "facts": {"message": "fraction_of_total"},
+    "chart": {"type": "pie"},
+    "source": {"book": "p. 295–297 (s. 0269–0271)", "notes": "07 #16",
+               "shows": "the book's donut drawn as the pie it prefers: the centre angles kept (R7-39); values from the donut's shares of $46.6 million, measured"}
+  },
+  "variants": [
+    {"name": "donut",
+     "patch": {"chart": {"type": "donut"},
+               "source": {"shows": "the donut asked for: refused, since a donut hides the centre angles and is read slightly worse than a pie (R7-39, G1.61)"}},
+     "expect": {"refused": ["R7-39"]}},
+    {"name": "donut-overridden",
+     "patch": {"chart": {"type": "donut"},
+               "overrides": [{"rule": "R7-39", "reason": "the book's donut, rebuilt for comparison (s. 0269)"}],
+               "source": {"shows": "the donut drawn through an override: a ring whose hole is 0.74 of its radius, the labels outside as on a pie; the book's total in the hole is words the generator does not write"}},
+     "expect": {"refused": ["R7-39"]}}
+  ]
+}

@@ -1,0 +1,12 @@
+[package]
+name = "figkit-placement"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+figkit-model = { path = "../figkit-model" }
+figkit-geometry = { path = "../figkit-geometry" }
+serde.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

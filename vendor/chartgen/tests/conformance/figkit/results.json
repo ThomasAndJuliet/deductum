@@ -1,0 +1,143 @@
+{
+ "fixtures": "fixtures.json",
+ "results": {
+  "facade": {
+   "escape": {
+    "verdict": "unavailable",
+    "cases": {},
+    "native_calls": 0,
+    "unavailable": "chartgen.figkit.typst: No module named 'chartgen.figkit'",
+    "first_failures": []
+   },
+   "colour": {
+    "verdict": "unavailable",
+    "cases": {},
+    "native_calls": 0,
+    "unavailable": "chartgen.figkit.style: No module named 'chartgen.figkit'",
+    "first_failures": []
+   },
+   "okhsl": {
+    "verdict": "unavailable",
+    "cases": {},
+    "native_calls": 0,
+    "unavailable": "chartgen.figkit.okhsl: No module named 'chartgen.figkit'",
+    "first_failures": []
+   },
+   "style": {
+    "verdict": "unavailable",
+    "cases": {},
+    "native_calls": 0,
+    "unavailable": "chartgen.figkit.style: No module named 'chartgen.figkit'",
+    "first_failures": []
+   },
+   "label_style": {
+    "verdict": "unavailable",
+    "cases": {},
+    "native_calls": 0,
+    "unavailable": "chartgen.figkit.style: No module named 'chartgen.figkit'",
+    "first_failures": []
+   },
+   "geometry": {
+    "verdict": "unavailable",
+    "cases": {},
+    "native_calls": 0,
+    "unavailable": "chartgen.figkit.model: No module named 'chartgen.figkit'",
+    "first_failures": []
+   },
+   "emit": {
+    "verdict": "unavailable",
+    "cases": {},
+    "native_calls": 0,
+    "unavailable": "chartgen.figkit.model: No module named 'chartgen.figkit'",
+    "first_failures": []
+   },
+   "measure": {
+    "verdict": "unavailable",
+    "cases": {},
+    "native_calls": 0,
+    "unavailable": "chartgen.figkit.measure: No module named 'chartgen.figkit'",
+    "first_failures": []
+   }
+  },
+  "host-copy": {
+   "escape": {
+    "verdict": "pass",
+    "cases": {
+     "pass": 92
+    },
+    "native_calls": 0,
+    "unavailable": null,
+    "first_failures": []
+   },
+   "colour": {
+    "verdict": "pass",
+    "cases": {
+     "pass": 452
+    },
+    "native_calls": 0,
+    "unavailable": null,
+    "first_failures": []
+   },
+   "okhsl": {
+    "verdict": "pass",
+    "cases": {
+     "pass": 120
+    },
+    "native_calls": 0,
+    "unavailable": null,
+    "first_failures": []
+   },
+   "style": {
+    "verdict": "pass",
+    "cases": {
+     "pass": 13
+    },
+    "native_calls": 0,
+    "unavailable": null,
+    "first_failures": []
+   },
+   "label_style": {
+    "verdict": "unavailable",
+    "cases": {},
+    "native_calls": 0,
+    "unavailable": "chartgen.style.label_style is absent",
+    "first_failures": []
+   },
+   "geometry": {
+    "verdict": "unavailable",
+    "cases": {},
+    "native_calls": 0,
+    "unavailable": "the rewrite has no model module in its host-copy",
+    "first_failures": []
+   },
+   "emit": {
+    "verdict": "unavailable",
+    "cases": {},
+    "native_calls": 0,
+    "unavailable": "the rewrite has no model module in its host-copy",
+    "first_failures": []
+   },
+   "measure": {
+    "verdict": "unavailable",
+    "cases": {},
+    "native_calls": 0,
+    "unavailable": "chartgen.measure.Measurer has no original batched measure(items) API",
+    "first_failures": []
+   }
+  }
+ },
+ "known_failures": [
+  "facade:escape",
+  "facade:colour",
+  "facade:okhsl",
+  "facade:style",
+  "facade:label_style",
+  "facade:geometry",
+  "facade:emit",
+  "facade:measure",
+  "host-copy:label_style",
+  "host-copy:geometry",
+  "host-copy:emit",
+  "host-copy:measure"
+ ]
+}

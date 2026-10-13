@@ -1,0 +1,290 @@
+{
+ "key": "r1-46-library-loans-two-period-series--periods-with-reason",
+ "file": "r1-46-library-loans-two-period-series.json",
+ "variant": "periods-with-reason",
+ "requested_type": "bar",
+ "report": {
+  "chart": "r1-46-library-loans-two-period-series",
+  "style": "plain",
+  "variant": "periods-with-reason",
+  "type": "bar",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "R9-11",
+    "level": "guided",
+    "text": "clustered bars: 2 series of one measure across categories (G1.56, R9-12)",
+    "guide": []
+   },
+   {
+    "rule": "R2-24",
+    "level": "locked",
+    "text": "bars start at zero",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "scale 0–400,000 by 100,000",
+    "guide": []
+   },
+   {
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "nominal categories sorted by value, descending (by series y2019)",
+    "guide": []
+   },
+   {
+    "rule": "R9-9",
+    "level": "locked",
+    "text": "last: Lowther Park (catch-all, missing, total, then values not known)",
+    "guide": []
+   },
+   {
+    "rule": "R9-12",
+    "level": "locked",
+    "text": "2 series side by side in each cluster, the bars touching, in the same order in every cluster: 2019 (slot 1), 2025 (slot 2) (G7.5, G4.22)",
+    "guide": []
+   },
+   {
+    "rule": "R9-10",
+    "level": "locked",
+    "text": "“Central” and “Northfield” come within 10 pt of each other under vertical bars, with every multi-word name wrapped: horizontal bars, names right-aligned at the left",
+    "guide": []
+   },
+   {
+    "rule": "R2-21",
+    "level": "locked",
+    "text": "labels as a set, 0 decimals, bare numbers: 0, 100, 200, 300, 400",
+    "guide": []
+   },
+   {
+    "rule": "R5-10",
+    "level": "locked",
+    "text": "digits hidden: thousands, stated in the scale's title (R2-05, D-3): “Loans (thousand items issued)”",
+    "guide": []
+   },
+   {
+    "rule": "R9-7",
+    "level": "locked",
+    "text": "empty slots say why: Lowther Park (opened 2021)",
+    "guide": []
+   },
+   {
+    "rule": "R2-07",
+    "level": "locked",
+    "text": "a horizontal scale: bare numbers, and its title centred below with the unit in parentheses: “Loans (thousand items issued)”",
+    "guide": []
+   },
+   {
+    "rule": "R4-1",
+    "level": "guided",
+    "text": "the colours of a cluster run top to bottom: each series named beside its bar of the last cluster, in the order of the bars (G5.1, D-31 (c))",
+    "guide": []
+   },
+   {
+    "rule": "RP3-7",
+    "level": "locked",
+    "text": "comment 1 (“Physical items issued only – renewals a…”) in empty space inside the plot, no arrow (a remark on the whole chart) (G8.7)",
+    "guide": []
+   },
+   {
+    "rule": "R5-5",
+    "level": "locked",
+    "text": "the maker's comments in New Computer Modern italic, in the reserved blue, set apart from the labelling and outside its count of text styles (G6.3, D-19)",
+    "guide": []
+   },
+   {
+    "rule": "R15-1",
+    "level": "open",
+    "text": "the four questions answered: what explains it: comment 1 (not answered: what matters, why care, what to do, which need be answered only where known) (G8.3)",
+    "guide": []
+   },
+   {
+    "rule": "CG-8",
+    "level": "locked",
+    "text": "notes under the chart, below everything else, left-aligned and wrapped to its 368 pt: a on “(opened 2021)” (marks in reading order)",
+    "guide": []
+   }
+  ],
+  "findings": [
+   {
+    "rule": "R6-15",
+    "severity": "info",
+    "message": "two periods (2019, 2025) with facts.message periods: bars of each period's values, by the guide's exception for individual periods (G1.51), where the procedure gives an arrow chart (G1.46)",
+    "path": "facts.message",
+    "reason": "the councillors asked to look up each branch's loans in each year, not the change",
+    "level": "guided",
+    "recommended": "arrow",
+    "guide": [],
+    "title": "two periods: an arrow chart"
+   }
+  ],
+  "overrides": [],
+  "expect": {
+   "findings": [
+    "R6-15"
+   ]
+  },
+  "expect_met": true,
+  "source": {
+   "notes": "eval B08 (sonnet-G)",
+   "shows": "two series that are two periods (2019, 2025) across the branches: clustered columns, the trap, refused (R6-17), saying how to give the data for an arrow chart; drawn as clustered bars only with facts.message periods and a reason grounded in the request, shown in the report (R6-15)",
+   "status": "generated"
+  },
+  "summary": {
+   "notes": [
+    {
+     "mark": "a",
+     "text": "Lowther Park opened September 2021",
+     "on": [
+      "(opened 2021)"
+     ]
+    }
+   ],
+   "scale": "0–400,000 by 100,000",
+   "labels": [
+    "0",
+    "100",
+    "200",
+    "300",
+    "400"
+   ],
+   "top": "400K items issued",
+   "scale_title": "Loans (thousand items issued)",
+   "orientation": "horizontal",
+   "plot": [
+    68.35,
+    21.0,
+    360.5,
+    287.88
+   ],
+   "band": 33.36,
+   "series": [
+    "y2019",
+    "y2025"
+   ],
+   "labelling": "direct",
+   "value_labels": false,
+   "table": false,
+   "bar": 11.12,
+   "annotations": {
+    "comments": [
+     [
+      278.0,
+      43.73,
+      340.51,
+      100.78
+     ]
+    ]
+   },
+   "width": 368.0,
+   "height": 332.7,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job lookup: no insight stated (a descriptive title will do, D-55)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-1",
+    "level": "guided",
+    "text": "a graph, the values to be compared or a pattern seen (G1.11)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 2,
+    "name": "variables",
+    "rule": "RP3-2",
+    "level": "guided",
+    "text": "one plot: categories along x and 2 series; a further variable would go to small multiples (data.dims, G1.18)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 3,
+    "name": "location",
+    "rule": "R8-2",
+    "level": "guided",
+    "text": "not a map: where the values are is not the message (facts.location_matters; G1.24, G1.25)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-01",
+    "level": "guided",
+    "text": "not parts of a total (no data.parts, no breakdown message; G1.1)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 5,
+    "name": "two periods",
+    "rule": "R6-15",
+    "level": "guided",
+    "text": "the two series are two periods (2019, 2025), but each period's own values are the message (facts.message periods), for the reason given: “the councillors asked to look up each branch's loans in each year, not the change” (G1.51's exception to G1.46): on to clustered bars",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 7,
+    "name": "values across categories",
+    "rule": "R9-1",
+    "level": "guided",
+    "text": "group: bar charts. Values compared across categories (G1.9)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 7,
+    "name": "values across categories",
+    "rule": "R9-11",
+    "level": "guided",
+    "text": "2 series of one measure: clustered bars (G1.56); several measures would be a merged chart (data.measures), never a dual axis",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 7,
+    "name": "values across categories",
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "bars from zero (02 D1)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type, the series told apart by colour (G1.59)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "bar charts are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "bar charts"
+   }
+  ],
+  "copies": []
+ },
+ "output_sha256": "716f5a72353a4e3b566c3b8dfe1de4a9fb9917a1b04776ce89ed8e9b1023b7fb"
+}

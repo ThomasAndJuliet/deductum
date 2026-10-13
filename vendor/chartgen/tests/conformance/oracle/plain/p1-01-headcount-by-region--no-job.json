@@ -1,0 +1,127 @@
+{
+ "key": "p1-01-headcount-by-region--no-job",
+ "file": "p1-01-headcount-by-region.json",
+ "variant": "no-job",
+ "requested_type": "bar",
+ "report": {
+  "chart": "p1-01-headcount-by-region",
+  "style": "plain",
+  "variant": "no-job",
+  "type": "bar",
+  "status": "refused",
+  "decisions": [],
+  "findings": [
+   {
+    "rule": "R0-07",
+    "severity": "error",
+    "message": "a communication chart needs its job: the question it answers, the problem it shows, the action it urges, or lookup",
+    "path": "job",
+    "supply": "{\"kind\": \"answer\", \"text\": \"…\"}",
+    "level": "locked",
+    "guide": [],
+    "title": "a communication chart states its job"
+   }
+  ],
+  "overrides": [],
+  "expect": {
+   "refused": [
+    "R0-07"
+   ]
+  },
+  "expect_met": true,
+  "source": {
+   "book": "p. 49 (s. 0049)",
+   "notes": "00-01 F1",
+   "shows": "a spec without its job is refused before anything is drawn",
+   "status": "generated"
+  },
+  "summary": {
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "no job: a communication chart states it (G0.10)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-1",
+    "level": "guided",
+    "text": "a graph, the values to be compared or a pattern seen (G1.11)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 2,
+    "name": "variables",
+    "rule": "RP3-2",
+    "level": "guided",
+    "text": "one plot: categories along x and 1 series; a further variable would go to small multiples (data.dims, G1.18)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 3,
+    "name": "location",
+    "rule": "R8-2",
+    "level": "guided",
+    "text": "not a map: where the values are is not the message (facts.location_matters; G1.24, G1.25)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-01",
+    "level": "guided",
+    "text": "not parts of a total (no data.parts, no breakdown message; G1.1)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 7,
+    "name": "values across categories",
+    "rule": "R9-1",
+    "level": "guided",
+    "text": "group: bar charts. Values compared across categories (G1.9)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 7,
+    "name": "values across categories",
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "one scale from zero: bars, sorted by value when the categories are nominal (02 D1)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type (G1.59)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "bar charts are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "bar charts"
+   }
+  ],
+  "copies": []
+ }
+}

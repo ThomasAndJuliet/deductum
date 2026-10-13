@@ -1,0 +1,224 @@
+{
+ "key": "r1-23-clinic-satisfaction-lines",
+ "file": "r1-23-clinic-satisfaction-lines.json",
+ "variant": null,
+ "requested_type": "auto",
+ "report": {
+  "chart": "r1-23-clinic-satisfaction-lines",
+  "style": "plain",
+  "variant": null,
+  "type": "bar",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "type bar: categories compared by value",
+    "guide": []
+   },
+   {
+    "rule": "R15-7",
+    "level": "locked",
+    "text": "the network average computed from the plotted data: the mean of the 6 values",
+    "guide": []
+   },
+   {
+    "rule": "R2-24",
+    "level": "locked",
+    "text": "bars start at zero",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "scale 0–100 by 20",
+    "guide": []
+   },
+   {
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "nominal categories sorted by value, descending",
+    "guide": []
+   },
+   {
+    "rule": "R15-5",
+    "level": "locked",
+    "text": "highlighting what the insight names",
+    "guide": []
+   },
+   {
+    "rule": "R9-10",
+    "level": "locked",
+    "text": "every name fits under its bar, neighbours at least 10 pt apart (wrapped: Clinic A, Clinic B, Clinic C, Clinic D, Clinic E, Clinic F): vertical bars",
+    "guide": []
+   },
+   {
+    "rule": "R2-21",
+    "level": "locked",
+    "text": "labels as a set, 0 decimals: 0, 20, 40, 60, 80, 100",
+    "guide": []
+   },
+   {
+    "rule": "R5-26",
+    "level": "locked",
+    "text": "wrapped onto two lines: Clinic A, Clinic B, Clinic C, Clinic D, Clinic E, Clinic F",
+    "guide": []
+   },
+   {
+    "rule": "R2-07",
+    "level": "locked",
+    "text": "the unit phrase on the top label: “100 out of 100 (patient satisfaction)”; the top gridline starts after it",
+    "guide": []
+   },
+   {
+    "rule": "R5-26",
+    "level": "locked",
+    "text": "the title wraps onto two lines",
+    "guide": []
+   },
+   {
+    "rule": "R3-7",
+    "level": "locked",
+    "text": "highlighted in the strong shade of their colour: Clinic A, Clinic B; the others keep their colour",
+    "guide": []
+   },
+   {
+    "rule": "R15-7",
+    "level": "locked",
+    "text": "Target (80) as a dotted line in the dark grey across the plot, labelled in bold beyond its right end, in a column the chart was narrowed to leave (no place along the lines held every label) (D-21 (c), G8.13, G7.16)",
+    "guide": []
+   },
+   {
+    "rule": "R15-7",
+    "level": "locked",
+    "text": "Network average (76.16666666666666666666666667) as a solid line in the average's dark grey across the plot, labelled in bold beyond its right end, in a column the chart was narrowed to leave (no place along the lines held every label) (D-21 (c), G8.13, G7.16)",
+    "guide": []
+   }
+  ],
+  "findings": [],
+  "overrides": [],
+  "expect": {},
+  "expect_met": true,
+  "source": {
+   "notes": "evaluation round 1 (several references)",
+   "shows": "two values across the plot, the target dotted and the network average solid, both in the dark grey; the target labelled first (G0.19), each label clear of the other line and label (SPEC §6.12.2)",
+   "status": "generated"
+  },
+  "summary": {
+   "scale": "0–100 by 20",
+   "labels": [
+    "0",
+    "20",
+    "40",
+    "60",
+    "80",
+    "100"
+   ],
+   "top": "100 out of 100 (patient satisfaction)",
+   "scale_title": null,
+   "orientation": "vertical",
+   "plot": [
+    24.0,
+    51.05,
+    276.56,
+    202.58
+   ],
+   "band": 42.09,
+   "annotations": {
+    "column": [
+     276.56,
+     368.0
+    ]
+   },
+   "width": 368.0,
+   "height": 231.13,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job answer: insight “Only Clinics A and B met the satisfaction target of 80”",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-1",
+    "level": "guided",
+    "text": "a graph, the values to be compared or a pattern seen (G1.11)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 2,
+    "name": "variables",
+    "rule": "RP3-2",
+    "level": "guided",
+    "text": "one plot: categories along x and 1 series; a further variable would go to small multiples (data.dims, G1.18)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 3,
+    "name": "location",
+    "rule": "R8-2",
+    "level": "guided",
+    "text": "not a map: where the values are is not the message (facts.location_matters; G1.24, G1.25)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-01",
+    "level": "guided",
+    "text": "not parts of a total (no data.parts, no breakdown message; G1.1)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 7,
+    "name": "values across categories",
+    "rule": "R9-1",
+    "level": "guided",
+    "text": "group: bar charts. Values compared across categories (G1.9)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 7,
+    "name": "values across categories",
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "one scale from zero: bars, sorted by value when the categories are nominal (02 D1)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type (G1.59)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "bar charts are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "bar charts"
+   }
+  ],
+  "copies": []
+ },
+ "output_sha256": "c948ba50335009a10b4acb9e0dffb3bf35cfa15defe91fa77449f54aa66fd8c9"
+}

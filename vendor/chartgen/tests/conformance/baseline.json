@@ -1,0 +1,3945 @@
+{
+ "note": "Per-run verdicts against tests/conformance/oracle; a ratchet, not a parity claim.",
+ "runs": {
+  "gen-01-days-in-each-month": {
+   "fields": [
+    "decisions",
+    "finding_paths",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p1-01-headcount-by-region": {
+   "fields": [
+    "decisions",
+    "finding_paths",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p1-01-headcount-by-region--as-answer": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p1-01-headcount-by-region--no-job": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p1-01-headcount-by-region--over-pruned": {
+   "fields": [
+    "decisions",
+    "finding_paths",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p1-02-population-by-region": {
+   "fields": [
+    "decisions",
+    "finding_paths",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p1-02-population-by-region--all-zeros": {
+   "fields": [
+    "decisions",
+    "finding_paths",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite"
+   ],
+   "verdict": "report-diff"
+  },
+  "p1-03-remote-employees": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra"
+   ],
+   "verdict": "report-diff"
+  },
+  "p1-03-remote-employees--past-limit": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p1-04-weight-of-products": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p1-05-weirdness-of-town-names": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite"
+   ],
+   "verdict": "report-diff"
+  },
+  "p1-05-weirdness-of-town-names--vertical": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p1-06-donations-missing": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite"
+   ],
+   "verdict": "report-diff"
+  },
+  "p1-06-donations-missing--wide": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p1-06-donations-missing--wide-horizontal": {
+   "fields": [
+    "decisions",
+    "expect_met",
+    "finding_paths",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite"
+   ],
+   "verdict": "report-diff"
+  },
+  "p1-07-transactions-outlier": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p1-08-donations-narrow-range": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p1-08-donations-narrow-range--truncated": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p1-08-donations-narrow-range--truncated-overridden": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p1-08-donations-narrow-range--wide": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p1-09-revenue-by-business-unit": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p1-09-revenue-by-business-unit--truncated": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p1-10-transactions-per-month": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p1-10-transactions-per-month--isolated": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p1-10-transactions-per-month--sparse": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p1-10-transactions-per-month--sparse-line": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p1-11-line-formatting": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p1-12-headcount-emphasis": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra"
+   ],
+   "verdict": "report-diff"
+  },
+  "p1-12-headcount-emphasis--greyed": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p1-12-headcount-emphasis--vertical": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p1-13-daily-expenses": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p1-13-daily-expenses--line": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p1-14-credit-scores": {
+   "fields": [
+    "decisions",
+    "strict:attributes",
+    "strict:figure",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p1-14-credit-scores--bars": {
+   "fields": [
+    "decisions",
+    "finding_paths",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p1-15-revenue-by-region-highlight": {
+   "fields": [
+    "decisions",
+    "finding_paths",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p1-15-revenue-by-region-highlight--bigger-bar": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p1-15-revenue-by-region-highlight--dim-others": {
+   "fields": [
+    "decisions",
+    "finding_paths",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p1-16-glycemic-index": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p1-16-glycemic-index--alphabetical": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p1-17-profit-by-region": {
+   "fields": [
+    "decisions",
+    "finding_paths",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p1-18-expenses-by-department": {
+   "fields": [
+    "decisions",
+    "finding_paths",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p1-19-transactions-per-day": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p1-20-client-satisfaction": {
+   "fields": [
+    "decisions",
+    "finding_paths",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p1-20-client-satisfaction--bigger-dot": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p1-20-client-satisfaction--highlight": {
+   "fields": [
+    "decisions",
+    "finding_paths",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p1-21-daily-donations": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p1-21-daily-donations--narrow": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p1-22-headcount-labels": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra"
+   ],
+   "verdict": "report-diff"
+  },
+  "p1-22-headcount-labels--converging": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra"
+   ],
+   "verdict": "report-diff"
+  },
+  "p1-22-headcount-labels--dynamic": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra"
+   ],
+   "verdict": "report-diff"
+  },
+  "p1-22-headcount-labels--legend": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p1-23-employee-satisfaction": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p1-24-students-by-school": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite"
+   ],
+   "verdict": "report-diff"
+  },
+  "p1-25-monthly-sales": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p1-25-monthly-sales--incomplete-july": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p1-26-tv-price": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p1-26-tv-price--from-zero": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p1-26-tv-price--line": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p1-26-tv-price--no-as-of": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p1-26-tv-price--no-persistence": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p1-27-sales-transactions": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p1-27-sales-transactions--line": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p1-27-sales-transactions--pattern": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p1-28-seniority-levels": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p1-28-seniority-levels--general-audience": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p1-29-department-expenses": {
+   "fields": [
+    "decisions",
+    "finding_paths",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p1-29-department-expenses--line": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p2-01-donations-table": {
+   "fields": [
+    "decisions",
+    "strict:attributes",
+    "strict:figure",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p2-01-donations-table--horizontal": {
+   "fields": [
+    "decisions",
+    "expect_met",
+    "finding_paths",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite"
+   ],
+   "verdict": "report-diff"
+  },
+  "p2-01-donations-table--horizontal-table": {
+   "fields": [
+    "decisions",
+    "expect_met",
+    "finding_paths",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p2-01-donations-table--labels-on-every-bar": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p2-01-donations-table--legend": {
+   "fields": [
+    "decisions",
+    "strict:attributes",
+    "strict:figure",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p2-01-donations-table--no-table": {
+   "fields": [
+    "decisions",
+    "strict:attributes",
+    "strict:figure",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p2-02-average-donation": {
+   "fields": [
+    "decisions",
+    "strict:attributes",
+    "strict:figure",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p2-02-average-donation--horizontal": {
+   "fields": [
+    "decisions",
+    "expect_met",
+    "finding_paths",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p2-02-average-donation--scale": {
+   "fields": [
+    "decisions",
+    "expect_met",
+    "finding_paths",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite"
+   ],
+   "verdict": "report-diff"
+  },
+  "p2-03-headcount-departments": {
+   "fields": [
+    "decisions",
+    "strict:attributes",
+    "strict:figure",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite"
+   ],
+   "verdict": "report-diff"
+  },
+  "p2-03-headcount-departments--direct": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p2-04-regional-expenses": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p2-04-regional-expenses--compare-totals": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p2-04-regional-expenses--top-3": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p2-05-sales-by-product-line": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite"
+   ],
+   "verdict": "report-diff"
+  },
+  "p2-05-sales-by-product-line--ten-colours": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p2-06-donations-by-method": {
+   "fields": [
+    "decisions",
+    "strict:attributes",
+    "strict:figure",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p2-07-expenses-budget-department": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p2-07-expenses-budget-department--clustered": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p2-08-expenses-budget-monthly": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p2-08-expenses-budget-monthly--clustered": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p2-08-expenses-budget-monthly--lines": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p2-09-credit-scores-two-years": {
+   "fields": [
+    "decisions",
+    "strict:attributes",
+    "strict:figure",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p2-09-credit-scores-two-years--horizontal": {
+   "fields": [
+    "decisions",
+    "expect_met",
+    "finding_paths",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite"
+   ],
+   "verdict": "report-diff"
+  },
+  "p2-09-credit-scores-two-years--legend": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p2-10-daily-expenses-two-regions": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p2-11-profit-labels": {
+   "fields": [
+    "decisions",
+    "strict:attributes",
+    "strict:figure",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p2-20-concert-attendance": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p2-20-concert-attendance--line": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p2-20-concert-attendance--totals": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p2-21-donations-ad-blitz": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p2-21-donations-ad-blitz--absolute-only": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p2-21-donations-ad-blitz--absolute-only-overridden": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p2-21-donations-ad-blitz--by-change": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p2-21-donations-ad-blitz--clustered": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p2-21-donations-ad-blitz--no-good-direction": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p2-22-headcount-black-and-white": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra"
+   ],
+   "verdict": "report-diff"
+  },
+  "p2-22-headcount-black-and-white--emphasis": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra"
+   ],
+   "verdict": "report-diff"
+  },
+  "p2-22-headcount-black-and-white--legend": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p2-23-monthly-expenses": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p2-23-monthly-expenses--bars": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p2-24-monthly-revenue-incomplete": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p2-24-monthly-revenue-incomplete--bars": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p2-24-monthly-revenue-incomplete--joined": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p2-24-monthly-revenue-incomplete--left-out": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p2-25-medal-ranks": {
+   "fields": [
+    "findings",
+    "strict:findings-with-paths"
+   ],
+   "verdict": "report-diff"
+  },
+  "p2-25-medal-ranks--line": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p2-25-medal-ranks--lookup": {
+   "fields": [
+    "findings",
+    "strict:findings-with-paths"
+   ],
+   "verdict": "report-diff"
+  },
+  "p2-26-atm-withdrawals": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p2-40-clinic-efficiency": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p2-40-clinic-efficiency--callout-only": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p2-40-clinic-efficiency--interpretation-free": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p2-40-clinic-efficiency--lookup": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra"
+   ],
+   "verdict": "report-diff"
+  },
+  "p2-40-clinic-efficiency--margin": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p2-41-clinic-b-parking": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p2-42-clinic-d-transit": {
+   "fields": [
+    "decisions",
+    "finding_paths",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p2-43-cash-lowest": {
+   "fields": [
+    "decisions",
+    "strict:attributes",
+    "strict:figure",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p2-43-cash-lowest--horizontal": {
+   "fields": [
+    "decisions",
+    "finding_paths",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p2-44-central-top-region": {
+   "fields": [
+    "decisions",
+    "finding_paths",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p2-45-highlight-bars": {
+   "fields": [
+    "decisions",
+    "finding_paths",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite"
+   ],
+   "verdict": "report-diff"
+  },
+  "p2-45-highlight-bars--background": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p2-45-highlight-bars--bold-label": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p2-45-highlight-bars--border": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p2-45-highlight-bars--glow": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p2-45-highlight-bars--glow-strong": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p2-45-highlight-bars--icon": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p2-45-highlight-bars--selective-label": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p2-45-highlight-bars--wider-bar": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p2-46-highlight-lines": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra"
+   ],
+   "verdict": "report-diff"
+  },
+  "p2-46-highlight-lines--bold-label": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p2-46-highlight-lines--glow": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p2-46-highlight-lines--icon": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p2-46-highlight-lines--selective-labels": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p2-47-headcount-glow": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p2-47-headcount-glow--background": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p2-47-headcount-glow--labels": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p2-48-donations-vs-target": {
+   "fields": [
+    "decisions",
+    "strict:attributes",
+    "strict:figure",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p2-48-donations-vs-target--bars-alone": {
+   "fields": [
+    "decisions",
+    "strict:attributes",
+    "strict:figure",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p2-48-donations-vs-target--red-green": {
+   "fields": [
+    "decisions",
+    "strict:attributes",
+    "strict:figure",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p2-49-deviation-from-target": {
+   "fields": [
+    "decisions",
+    "strict:attributes",
+    "strict:figure",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p2-49-deviation-from-target--raw": {
+   "fields": [
+    "decisions",
+    "strict:attributes",
+    "strict:figure",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p2-50-deviation-from-budget": {
+   "fields": [
+    "decisions",
+    "finding_paths",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p2-50-deviation-from-budget--bw": {
+   "fields": [
+    "decisions",
+    "finding_paths",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p2-51-accidents-per-hours": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p2-51-accidents-per-hours--raw": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p2-52-accident-rate-industry": {
+   "fields": [
+    "decisions",
+    "expect_met",
+    "finding_paths",
+    "findings",
+    "refusals",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite"
+   ],
+   "verdict": "report-diff"
+  },
+  "p2-53-stock-performance": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p2-53-stock-performance--raw": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p2-54-regions-vs-average": {
+   "fields": [
+    "decisions",
+    "expect_met",
+    "findings",
+    "refusals",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p2-55-budget-deviation-question": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p2-56-comparator-validity": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p2-56-comparator-validity--doubtful-drawn": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p2-56-comparator-validity--previous-only": {
+   "fields": [
+    "decisions",
+    "strict:attributes",
+    "strict:figure",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p2-57-sales-satisfaction-index": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p2-58-caller-satisfaction": {
+   "fields": [
+    "decisions",
+    "expect_met",
+    "findings",
+    "refusals",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite"
+   ],
+   "verdict": "report-diff"
+  },
+  "p2-58-caller-satisfaction--bw": {
+   "fields": [
+    "decisions",
+    "expect_met",
+    "findings",
+    "refusals",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite"
+   ],
+   "verdict": "report-diff"
+  },
+  "p2-59-regions-stable": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p2-60-donations-small-multiples": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p2-60-donations-small-multiples--spaghetti": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p2-61-donations-by-region": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p2-61-donations-by-region--one-series-per-panel": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p2-62-donations-by-method": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p2-63-donations-bar-grid": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p2-63-donations-bar-grid--book-arrangement": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p2-64-orders-by-province": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra"
+   ],
+   "verdict": "report-diff"
+  },
+  "p2-64-orders-by-province--independent": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p2-64-orders-by-province--spaghetti": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p2-65-call-centres-merged": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p2-65-call-centres-merged--one-scale": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p2-66-sales-and-satisfaction": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p2-66-sales-and-satisfaction--dual-axis": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p2-67-regional-expenses": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p2-67-regional-expenses--all-departments": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p2-68-donor-measures": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p2-68-donor-measures--one-scale": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p2-69-expenses-vs-budget": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p2-70-accidents-count-and-rate": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p3-01-donations-by-donor-pie": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-01-donations-by-donor-pie--legend": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-01-donations-by-donor-pie--legend-overridden": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-01-donations-by-donor-pie--percent": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-01-donations-by-donor-pie--treemap": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-02-donations-subtotal-pie": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-03-donations-all-others": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-03-donations-all-others--fifteen-slices": {
+   "fields": [
+    "findings",
+    "strict:findings-with-paths"
+   ],
+   "verdict": "report-diff"
+  },
+  "p3-04-donations-wrapped-bars": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-04-donations-wrapped-bars--text-width": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-05-donations-treemap": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-05-donations-treemap--values": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-06-donations-treemap-continents": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-07-vehicle-sales-overlaps": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-08-donations-by-region-pie": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-08-donations-by-region-pie--unsorted": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-09-donations-highlight-west": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-09-donations-highlight-west--border": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-09-donations-highlight-west--exploded": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-09-donations-highlight-west--exploded-overridden": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-10-expenses-donut": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-10-expenses-donut--donut": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-10-expenses-donut--donut-overridden": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-11-expenses-several-pies": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-11-expenses-several-pies--top-three": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-12-expenses-hidden-digits": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-13-headcount-percent": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-13-headcount-percent--legend": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-14-headcount-balanced": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-15-smith-quarter-border": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-15-smith-quarter-border--columns": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p3-16-expenses-comment": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-17-portfolio-risk-pie": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-17-portfolio-risk-pie--hues": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-18-donations-six-regions": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-20-donations-subtotal-stack": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p3-20-donations-subtotal-stack--precise": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p3-21-countries-all-others-stack": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p3-21-countries-all-others-stack--fifteen-parts": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p3-22-top-donors-stack": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-22-top-donors-stack--drawn": {
+   "fields": [
+    "decisions",
+    "strict:attributes",
+    "strict:figure",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p3-23-net-donations-stack": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-23-net-donations-stack--drawn": {
+   "fields": [
+    "decisions",
+    "strict:attributes",
+    "strict:figure",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p3-24-income-waterfall": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p3-24-income-waterfall--good-bad": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p3-24-income-waterfall--horizontal": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p3-24-income-waterfall--labelled": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p3-25-cash-flow-waterfall": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p3-25-cash-flow-waterfall--contradiction": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p3-26-vehicle-sales-separated-stack": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p3-26-vehicle-sales-separated-stack--overlapping": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-27-regional-expenses-stacks": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p3-27-regional-expenses-stacks--fractions": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p3-27-regional-expenses-stacks--legend": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p3-27-regional-expenses-stacks--missing": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p3-28-donations-part-lines": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p3-29-donations-total-panel": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p3-30-donations-stacked-area": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p3-30-donations-stacked-area--fixed": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p3-31-donations-stacked-bars": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p3-32-donations-100-area": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p3-33-donations-100-bars": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p3-33-donations-100-bars--west-first": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p3-34-portfolio-risk-stacks": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p3-34-portfolio-risk-stacks--hues": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p3-35-regional-donations-stack": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p3-36-donations-subtotal-fraction": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p3-37-cafe-cash-waterfall": {
+   "fields": [
+    "decisions",
+    "strict:attributes",
+    "strict:figure",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p3-37-cafe-cash-waterfall--bw": {
+   "fields": [
+    "decisions",
+    "strict:attributes",
+    "strict:figure",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p3-37-cafe-cash-waterfall--labelled": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p3-38-donations-area-missing": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p3-38-donations-area-missing--bars": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p3-39-crops-grouped-stacks": {
+   "fields": [
+    "decisions",
+    "finding_paths",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p3-39-crops-grouped-stacks--fixed": {
+   "fields": [
+    "decisions",
+    "finding_paths",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p3-39-crops-grouped-stacks--hues": {
+   "fields": [
+    "decisions",
+    "finding_paths",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p3-40-funds-raised-table": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-40-funds-raised-table--bold": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-40-funds-raised-table--stripes-refused": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-40-funds-raised-table--zebra": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-41-units-produced-table": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-41-units-produced-table--heavy": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-42-key-metrics": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-43-inhabitants": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-43-inhabitants--fr": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-44-stock-export": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-45-monthly-sales": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-45-monthly-sales--heat": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-46-monthly-revenue": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-46-monthly-revenue--line": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p3-47-funds-heat-table": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-48-funds-trend-table": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-49-funds-bars-table": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-49-funds-bars-table--dots": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-50-car-models-heatmap": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-50-car-models-heatmap--muted": {
+   "fields": [
+    "findings",
+    "strict:findings-with-paths"
+   ],
+   "verdict": "report-diff"
+  },
+  "p3-50-car-models-heatmap--no-dividing-value": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-50-car-models-heatmap--radar": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-50-car-models-heatmap--rainbow": {
+   "fields": [
+    "expect_met",
+    "findings",
+    "overrides",
+    "refusals",
+    "strict:attributes",
+    "strict:findings-with-paths",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:only_oracle",
+    "svg:only_rewrite"
+   ],
+   "verdict": "report-diff"
+  },
+  "p3-50-car-models-heatmap--sorted": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-51-measles-heatmap": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p3-51-measles-heatmap--extremes": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p3-51-measles-heatmap--natural": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p3-51-measles-heatmap--quantile": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p3-52-satisfaction-heatmap": {
+   "fields": [
+    "findings",
+    "strict:findings-with-paths"
+   ],
+   "verdict": "report-diff"
+  },
+  "p3-52-satisfaction-heatmap--no-dividing-value": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-52-satisfaction-heatmap--values": {
+   "fields": [
+    "findings",
+    "strict:findings-with-paths"
+   ],
+   "verdict": "report-diff"
+  },
+  "p3-53-station-temperatures": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p3-53-station-temperatures--diverging-about-the-middle": {
+   "fields": [
+    "decisions"
+   ],
+   "verdict": "report-diff"
+  },
+  "p3-53-station-temperatures--sequential": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p3-54-action-dots": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-54-action-dots--bullet": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-55-sales-funnel": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p3-55-sales-funnel--funnel": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-60-donations-by-donor-messages": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p3-60-donations-by-donor-messages--fraction": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-60-donations-by-donor-messages--no-message": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p3-60-donations-by-donor-messages--pie-averse": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p3-60-donations-by-donor-messages--subtotal": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p3-61-average-donations": {
+   "fields": [
+    "decisions",
+    "strict:attributes",
+    "strict:figure",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p3-61-average-donations--facts-missing": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-61-average-donations--pie": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-61-average-donations--stacked": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-62-top-three-donors": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p3-62-top-three-donors--pie": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-63-net-donations": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p3-63-net-donations--pie": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-64-income-waterfall": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p3-64-income-waterfall--compare": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p3-65-vehicle-sales-overlapping": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p3-65-vehicle-sales-overlapping--pie": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-66-donations-fifteen-countries": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-66-donations-fifteen-countries--compare": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite"
+   ],
+   "verdict": "report-diff"
+  },
+  "p3-66-donations-fifteen-countries--pie": {
+   "fields": [
+    "findings",
+    "strict:findings-with-paths"
+   ],
+   "verdict": "report-diff"
+  },
+  "p3-67-regional-expenses-totals": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p3-67-regional-expenses-totals--pie-averse": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p3-68-donations-over-time": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p3-68-donations-over-time--parts": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p3-68-donations-over-time--parts-and-total": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p3-68-donations-over-time--periods": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p3-68-donations-over-time--with-total": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p3-69-ad-blitz-rank": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p3-69-ad-blitz-rank--change": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-70-donations-lookup-table": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-71-weekly-sales-totals": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p3-71-weekly-sales-totals--iso-weeks": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-71-weekly-sales-totals--monday-weeks": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p3-72-motor-vehicle-deaths": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p3-72-motor-vehicle-deaths--not-additive": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-72-motor-vehicle-deaths--unequal": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p3-73-car-models-radar": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-73-car-models-radar--radar": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-74-word-counts": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite"
+   ],
+   "verdict": "report-diff"
+  },
+  "p3-74-word-counts--word-cloud": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-75-sales-funnel": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p3-75-sales-funnel--funnel": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-75-sales-funnel--pattern": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p3-75-sales-funnel--pattern-data-savvy": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "p3-76-units-by-plant": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-76-units-by-plant--bullet": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-77-donations-map": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-77-donations-map--bars": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p3-77-donations-map--choropleth": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-78-donations-3d": {
+   "fields": [
+    "decisions",
+    "strict:attributes",
+    "strict:figure",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "p3-78-donations-3d--3d": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "p3-79-top-donors-bubbles": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite"
+   ],
+   "verdict": "report-diff"
+  },
+  "p3-79-top-donors-bubbles--packed-bubbles": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "r1-01-instrument-charges-notes": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "r1-01-instrument-charges-notes--plain-note": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "r1-01-instrument-charges-notes--value-notes": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "r1-02-funds-raised-notes": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "r1-03-donations-region-notes": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite"
+   ],
+   "verdict": "report-diff"
+  },
+  "r1-04-expenses-department-notes": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "r1-05-ratings-lines-notes": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "r1-06-donations-pie-notes": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "r1-07-donations-treemap-notes": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "r1-08-donations-multiples-notes": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "r1-09-notes-not-drawn": {
+   "fields": [
+    "decisions",
+    "finding_paths",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "r1-09-notes-not-drawn--gap-in-line": {
+   "fields": [
+    "decisions",
+    "expect_met",
+    "finding_paths",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "r1-09-notes-not-drawn--unbreakable": {
+   "fields": [
+    "decisions",
+    "finding_paths",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite"
+   ],
+   "verdict": "report-diff"
+  },
+  "r1-20-electricity-against-target": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "r1-20-electricity-against-target--kwh-without-factor": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "r1-20-electricity-against-target--targets-in-kwh": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "r1-21-electricity-two-marks": {
+   "fields": [
+    "decisions",
+    "expect_met",
+    "finding_paths",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "r1-21-electricity-two-marks--three-marks": {
+   "fields": [
+    "decisions",
+    "expect_met",
+    "finding_paths",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "r1-22-donations-target-and-stretch": {
+   "fields": [
+    "decisions",
+    "finding_paths",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "r1-23-clinic-satisfaction-lines": {
+   "fields": [
+    "decisions",
+    "expect_met",
+    "findings",
+    "refusals",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "r1-24-board-ceiling-units": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "r1-24-board-ceiling-units--unit-stated": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "r1-25-fill-weight-inset-line": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "r1-25-fill-weight-inset-line--two-lines": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "r1-26-transactions-outlier-target": {
+   "fields": [
+    "decisions",
+    "expect_met",
+    "findings",
+    "refusals",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "r1-27-bike-share-merged-comments": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "r1-28-donations-panels-comment": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "r1-30-storm-spills-thin-bars": {
+   "fields": [
+    "finding_paths",
+    "findings",
+    "strict:findings-with-paths"
+   ],
+   "verdict": "report-diff"
+  },
+  "r1-30-storm-spills-thin-bars--default-note": {
+   "fields": [
+    "finding_paths",
+    "findings",
+    "strict:findings-with-paths"
+   ],
+   "verdict": "report-diff"
+  },
+  "r1-31-tv-price-marked-date": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "r1-31-tv-price-marked-date--outside-axis": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "r1-40-feature-usage-descriptive-wraps": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "r1-40-feature-usage-descriptive-wraps--markup": {
+   "fields": [
+    "decisions",
+    "expect_met",
+    "finding_paths",
+    "findings",
+    "refusals",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite"
+   ],
+   "verdict": "report-diff"
+  },
+  "r1-40-feature-usage-descriptive-wraps--too-long": {
+   "fields": [
+    "decisions",
+    "expect_met",
+    "finding_paths",
+    "findings",
+    "refusals",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite"
+   ],
+   "verdict": "report-diff"
+  },
+  "r1-41-garden-centre-sales-in-pounds": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "r1-41-garden-centre-sales-in-pounds--given-in-misread": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "r1-42-small-venue-visits-given-in": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite"
+   ],
+   "verdict": "report-diff"
+  },
+  "r1-42-small-venue-visits-given-in--word-too": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite"
+   ],
+   "verdict": "report-diff"
+  },
+  "r1-43-instrument-charges-pence": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "r1-44-average-fares-pence": {
+   "fields": [
+    "decisions",
+    "strict:attributes",
+    "strict:figure",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "r1-44-average-fares-pence--scale": {
+   "fields": [
+    "decisions",
+    "finding_paths",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "r1-45-bike-share-merged-headroom": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "r1-46-library-loans-two-period-series": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "r1-46-library-loans-two-period-series--periods-no-reason": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "r1-46-library-loans-two-period-series--periods-with-reason": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "r1-47-river-ecoli-below-limit": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "r1-48-river-ecoli-table-below-limit": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "r1-48-river-ecoli-table-below-limit--line": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "r1-49-library-loans-periods-message": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "r1-49-library-loans-periods-message--bars": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "r1-50-travel-to-school-no-answer": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "r1-50-travel-to-school-no-answer--bars": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite",
+    "svg:text_extra",
+    "svg:text_missing"
+   ],
+   "verdict": "report-diff"
+  },
+  "r1-51-feature-usage-percent-scale": {
+   "fields": [
+    "decisions",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite"
+   ],
+   "verdict": "report-diff"
+  },
+  "r1-51-feature-usage-percent-scale--title-repeats": {
+   "fields": [
+    "decisions",
+    "expect_met",
+    "findings",
+    "strict:attributes",
+    "strict:figure",
+    "strict:findings-with-paths",
+    "strict:order",
+    "strict:paint",
+    "strict:text-place",
+    "summary",
+    "svg:moved",
+    "svg:only_oracle",
+    "svg:only_rewrite"
+   ],
+   "verdict": "report-diff"
+  },
+  "r1-60-library-loans-arrows": {
+   "fields": [],
+   "verdict": "match"
+  },
+  "r1-61-studentships-long-names": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "r1-61-studentships-long-names--wide": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "r1-63-museum-visits-inset": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "r1-63-museum-visits-inset--ascending": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "r1-63-museum-visits-inset--wide": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "r1-64-garden-centres-change": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "r1-64-garden-centres-change--clash": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "r1-65-garden-centres-sales": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  },
+  "r1-66-garden-centres-furniture": {
+   "fields": [],
+   "verdict": "rewrite-error"
+  }
+ },
+ "verdicts": {
+  "match": 136,
+  "report-diff": 164,
+  "rewrite-error": 114
+ }
+}

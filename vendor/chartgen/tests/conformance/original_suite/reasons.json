@@ -1,0 +1,24 @@
+{
+ "_doc": "Manual inputs to classify.py. 'environment': tests the oracle control cannot pass in this environment, with the cause (checked against the control's own failure). 'public_api': original names that belong to the public surface (the SVG lint and style lint behind the CLI's lint and style commands, SPEC 3.6); a test using one the rewrite lacks is an applicable failure, not an inapplicable internal. 'public_api_attributes': failure texts that show a public class of the rewrite lacks an original method.",
+ "environment": {
+  "tests.test_chartspec_jl.Writer.test_generator_writes_a_spec_that_validates_and_renders": "needs Julia (tools/chartspec.jl, examples/gen/*.jl); julia is not installed, so the original skips it (skipped in both runs)",
+  "tests.test_chartspec_jl.Writer.test_refuses_what_is_not_json": "needs Julia (tools/chartspec.jl); julia is not installed, so the original skips it (skipped in both runs)",
+  "tests.test_chartspec_jl.Writer.test_values_round_trip": "needs Julia (tools/chartspec.jl); julia is not installed, so the original skips it (skipped in both runs)",
+  "tests.test_cli.Choose.test_refusal_names_rule_field_and_what_to_supply": "expects the guide rule G8.2 printed beside R0-10; guide citations come from charts/GUIDE.md, absent from the share (oracle control fails the same assertion)",
+  "tests.test_cli.Lint.test_findings_grouped_by_level": "expects a 'guided' findings group; guide levels come from charts/GUIDE.md, absent (oracle control: ValueError substring not found)",
+  "tests.test_notes.Drawn.test_eval_b12_spec_now_explains_poa_and_na": "reads charts/eval/runs/opus/G/B12-instrument-charges/source/table.json; charts/eval/ is absent from the share (oracle control: FileNotFoundError)",
+  "tests.test_rules.Levels.test_every_rule_resolves": "checks every rule's level against charts/GUIDE.md, absent (oracle control: 224 failing subtests); also uses the private rule tables",
+  "tests.test_rules.Levels.test_guide_is_read": "asserts more than 300 guide levels read from charts/GUIDE.md, absent (oracle control: 0 not greater than 300); also private",
+  "tests.test_rules.Levels.test_the_retagging": "asserts guide-derived levels (R2-04 guided) that need charts/GUIDE.md, absent (oracle control: locked != guided); also private",
+  "tests.test_svglint.Faults.test_too_many_colours": "asserts the guided level of G4.20 read from charts/GUIDE.md, absent (oracle control: locked != guided)",
+  "tests.test_svglint.Fixtures.test_every_finding_carries_rule_guide_level_and_elements": "asserts each finding's guide citation from charts/GUIDE.md, absent (oracle control: 29 failing subtests)"
+ },
+ "public_api": {
+  "chartgen.svglint.lint_svg": "the original SVG lint, SPEC 3.6, behind `python -m chartgen lint`; the rewrite has only the partial Rust lint_svg protocol operation (CG-SVG-PARTIAL), not this function",
+  "chartgen.style.lint_style": "the original style lint behind `python -m chartgen style`; the rewrite's CLI reports it unimplemented"
+ },
+ "public_api_attributes": {
+  "'Measurer' object has no attribute 'measure'": "chartgen.measure.Measurer.measure, the original batched measurement API; the rewrite's Measurer offers measure_requests only",
+  "'Measurer' object has no attribute 'one'": "chartgen.measure.Measurer.one, the original single-label measurement API; absent from the rewrite's Measurer"
+ }
+}

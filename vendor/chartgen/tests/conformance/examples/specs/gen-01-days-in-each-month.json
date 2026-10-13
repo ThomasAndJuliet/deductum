@@ -1,0 +1,42 @@
+{
+  "chartspec": 1,
+  "id": "gen-01-days-in-each-month",
+  "job": {
+    "kind": "lookup",
+    "text": "Look up how many days each month of 2026 has"
+  },
+  "title": {
+    "text": "Days in Each Month, 2026",
+    "kind": "descriptive"
+  },
+  "data": {
+    "x": {
+      "kind": "time",
+      "grid": "month",
+      "values": ["2026-01", "2026-02", "2026-03", "2026-04", "2026-05", "2026-06", "2026-07", "2026-08", "2026-09", "2026-10", "2026-11", "2026-12"]
+    },
+    "measure": {
+      "name": "days",
+      "kind": "count",
+      "zero": "meaningful",
+      "min": 0,
+      "persistence": "summary",
+      "unit": {
+        "noun": "days in the month"
+      }
+    },
+    "series": [
+      {
+        "id": "days",
+        "name": "Days",
+        "values": [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+      }
+    ]
+  },
+  "facts": {
+    "message": "periods"
+  },
+  "source": {
+    "shows": "a spec written by a Julia generator (examples/gen/days-in-each-month.jl, through tools/chartspec.jl): the data computed there, every decision about the chart left to chartgen"
+  }
+}

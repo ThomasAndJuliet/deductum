@@ -1,0 +1,276 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p2-45-highlight-bars",
+    "job": {
+      "kind": "make_aware",
+      "text": "Make the support manager aware of West's low number of closed tickets"
+    },
+    "insight": {
+      "important": "West closed the second-fewest tickets",
+      "targets": [
+        {
+          "category": "West"
+        }
+      ]
+    },
+    "title": {
+      "text": "West Closed the Second-Fewest Tickets",
+      "kind": "insight",
+      "descriptive": "Support Tickets Closed by Region, March 2022"
+    },
+    "data": {
+      "x": {
+        "kind": "nominal",
+        "values": [
+          "North",
+          "East",
+          "South",
+          "West",
+          "Central"
+        ]
+      },
+      "measure": {
+        "name": "tickets closed",
+        "kind": "count",
+        "zero": "meaningful",
+        "min": 0,
+        "unit": {
+          "noun": "support tickets closed"
+        }
+      },
+      "series": [
+        {
+          "id": "closed",
+          "name": "Tickets closed",
+          "values": [
+            86,
+            64,
+            64,
+            48,
+            45
+          ]
+        }
+      ]
+    },
+    "source": {
+      "book": "p. 404 (s. 0370)",
+      "notes": "13-15 F11",
+      "shows": "the book's catalogue of highlighting, on its five bars with the fourth as the target: here the default, the strong shade of the bar's own hue (D-9); the variants draw the other methods, each in place of it (R15-5, G8.11)"
+    },
+    "chart": {
+      "value_labels": "off"
+    },
+    "reasons": {
+      "chart.value_labels": "the book's catalogue draws its bars without value labels, so that each method is seen alone (s. 0370)"
+    }
+  },
+  "variants": [
+    {
+      "name": "border",
+      "patch": {
+        "highlight": [
+          {
+            "targets": [
+              {
+                "category": "West"
+              }
+            ],
+            "method": "border"
+          }
+        ],
+        "reasons": {
+          "highlight[0].method": "the book's catalogue of methods (s. 0370)"
+        },
+        "source": {
+          "shows": "a border in the strong shade, just inside the bar, which keeps its own colour and size"
+        }
+      },
+      "expect": {
+        "findings": [
+          "R15-5"
+        ]
+      }
+    },
+    {
+      "name": "glow",
+      "patch": {
+        "highlight": [
+          {
+            "targets": [
+              {
+                "category": "West"
+              }
+            ],
+            "method": "glow"
+          }
+        ],
+        "reasons": {
+          "highlight[0].method": "the book's catalogue of methods (s. 0370)"
+        },
+        "source": {
+          "shows": "a glow, drawn flat (the plain style has no blur), a pale tint of the bar's own hue (a normal emphasis), beneath the bar and the gridlines (D-9)"
+        }
+      },
+      "expect": {
+        "findings": [
+          "R15-5"
+        ]
+      }
+    },
+    {
+      "name": "glow-strong",
+      "patch": {
+        "highlight": [
+          {
+            "targets": [
+              {
+                "category": "West"
+              }
+            ],
+            "method": "glow",
+            "emphasis": "strong"
+          }
+        ],
+        "reasons": {
+          "highlight[0].method": "the book's catalogue of methods (s. 0370)"
+        },
+        "source": {
+          "shows": "the glow asked for with a strong emphasis: one colour in the chart and no legend, so it takes the complement of the bar's blue, its hue turned 180° in OKLCH at the same pale lightness, the light orange of the book's figure (s. 0370)"
+        }
+      },
+      "expect": {
+        "findings": [
+          "R15-5"
+        ]
+      }
+    },
+    {
+      "name": "background",
+      "patch": {
+        "highlight": [
+          {
+            "targets": [
+              {
+                "category": "West"
+              }
+            ],
+            "method": "background"
+          }
+        ],
+        "reasons": {
+          "highlight[0].method": "the book's catalogue of methods (s. 0370)"
+        },
+        "source": {
+          "shows": "a tinted band behind the bar's category"
+        }
+      },
+      "expect": {
+        "findings": [
+          "R15-5"
+        ]
+      }
+    },
+    {
+      "name": "icon",
+      "patch": {
+        "highlight": [
+          {
+            "targets": [
+              {
+                "category": "West"
+              }
+            ],
+            "method": "icon"
+          }
+        ],
+        "reasons": {
+          "highlight[0].method": "the book's catalogue of methods (s. 0370)"
+        },
+        "source": {
+          "shows": "a small marker pointing down at the bar's end, in the book's red"
+        }
+      },
+      "expect": {
+        "findings": [
+          "R15-5"
+        ]
+      }
+    },
+    {
+      "name": "selective-label",
+      "patch": {
+        "highlight": [
+          {
+            "targets": [
+              {
+                "category": "West"
+              }
+            ],
+            "method": "selective_label"
+          }
+        ],
+        "reasons": {
+          "highlight[0].method": "the book's catalogue of methods (s. 0370)"
+        },
+        "source": {
+          "shows": "the target's value labelled, the only value labelled"
+        }
+      },
+      "expect": {
+        "findings": [
+          "R15-5"
+        ]
+      }
+    },
+    {
+      "name": "bold-label",
+      "patch": {
+        "highlight": [
+          {
+            "targets": [
+              {
+                "category": "West"
+              }
+            ],
+            "method": "bold_label"
+          }
+        ],
+        "reasons": {
+          "highlight[0].method": "the book's catalogue of methods (s. 0370)"
+        },
+        "source": {
+          "shows": "the target's name in bold (drawn by the bar layout)"
+        }
+      },
+      "expect": {
+        "findings": [
+          "R15-5"
+        ]
+      }
+    },
+    {
+      "name": "wider-bar",
+      "patch": {
+        "highlight": [
+          {
+            "targets": [
+              {
+                "category": "West"
+              }
+            ],
+            "method": "thickness"
+          }
+        ],
+        "source": {
+          "shows": "the book's rejected method: a wider bar reads as a bigger value, so it is refused (R15-6, G8.10)"
+        }
+      },
+      "expect": {
+        "refused": [
+          "R15-6"
+        ]
+      }
+    }
+  ]
+}

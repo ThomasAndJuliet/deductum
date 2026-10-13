@@ -1,0 +1,238 @@
+{
+ "key": "p3-52-satisfaction-heatmap--values",
+ "file": "p3-52-satisfaction-heatmap.json",
+ "variant": "values",
+ "requested_type": "auto",
+ "report": {
+  "chart": "p3-52-satisfaction-heatmap",
+  "style": "plain",
+  "variant": "values",
+  "type": "heatmap",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "R12-6",
+    "level": "guided",
+    "text": "type heatmap: items compared across several attributes, which is best and each one's strengths and weaknesses being the message (a radar's data): a heatmap table, the values printed in coloured cells (G7.36)",
+    "guide": []
+   },
+   {
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "the columns in their given order",
+    "guide": []
+   },
+   {
+    "rule": "R12-6",
+    "level": "guided",
+    "text": "each value printed in its cell; every value fits its cell: the numbers carry the values exactly and the colour shows the pattern (G7.36)",
+    "guide": []
+   },
+   {
+    "rule": "R12-6",
+    "level": "guided",
+    "text": "the cells strong: a heatmap, whose colour is the message: the steps at full strength, each value black or white, whichever reads better on its cell (owner, 1 Oct 2026)",
+    "guide": []
+   },
+   {
+    "rule": "R3-13",
+    "level": "guided",
+    "text": "the cells: a diverging palette; the audience sees a dividing value, 7: two ramps meeting at a neutral there (G4.11, G4.12)",
+    "guide": []
+   },
+   {
+    "rule": "G4.29",
+    "level": "guided",
+    "text": "the cells: the distances from 7 are fairly even (the fullest of seven equal steps would hold 29 % of them): equal steps on rounded values, the most honest cut",
+    "guide": []
+   },
+   {
+    "rule": "R4-9",
+    "level": "guided",
+    "text": "no key: every cell carries its value, which the colour only repeats (the book's heatmap table, s. 0329)",
+    "guide": []
+   },
+   {
+    "rule": "G4.34",
+    "level": "locked",
+    "text": "the lightest step #fbc2bb: OKLab ΔE 0.152 from the page and 0.153 from the missing grey",
+    "guide": []
+   },
+   {
+    "rule": "R3-9",
+    "level": "locked",
+    "text": "the cells coloured in classes, diverging about 7, equal steps of the distance from it, 3 classes a side, at 1, 2, 3, higher is good, darker meaning further from the dividing value on each side (G4.12, G4.14)",
+    "guide": []
+   },
+   {
+    "rule": "R5-8",
+    "level": "locked",
+    "text": "values on strong cells: each value black or white, whichever has more contrast on its cell (owner, 1 Oct 2026); 43 dark, 5 light; the lowest contrast 5.39 : 1 (G6.5)",
+    "guide": []
+   },
+   {
+    "rule": "R3-20",
+    "level": "locked",
+    "text": "static output, in colour: one file, red for bad and green for good, plain, for every reader (D-18; owner, 1 Oct 2026); black and white (audience.bw_risk) adds the textures, and a style may choose the colour-blind-safe pair (--good-bad-mode: safe-pair)",
+    "guide": []
+   }
+  ],
+  "findings": [
+   {
+    "rule": "R3-19",
+    "severity": "info",
+    "message": "good #317248 and bad #be2343 are 0.051 apart under deuteranopia (at least 0.06): semantic colours for every reader (D-18, owner 1 Oct 2026); the black-and-white version (audience.bw_risk) tells them apart without colour (G4.18)",
+    "elements": [
+     "rect.cell[data-series=bakery][data-x=Leeds]",
+     "rect.cell[data-series=deli][data-x=Ripon]"
+    ],
+    "level": "locked",
+    "guide": [],
+    "title": "colours that must be told apart survive colour-vision deficiency"
+   }
+  ],
+  "overrides": [],
+  "expect": {},
+  "expect_met": true,
+  "source": {
+   "book": "p. 126–128 (s. 0118)",
+   "notes": "03-04 #9",
+   "shows": "a diverging ramp whose dividing value is the audience's, 7 on a 10-point rating, not the middle of the scale (R3-13, G4.11): two ramps meeting at a light grey at 7, intensity growing with the distance from it, symmetric about 7 and cut at the scale's maximum, so that the key's tick at 7 stands right of its middle (R3-14, R4-9); the values left out so that the key is read (a guided departure, with its reason); red below 7 and green above (D-18); synthetic ratings (the book shows only keys)",
+   "status": "generated"
+  },
+  "summary": {
+   "orientation": "vertical",
+   "plot": [
+    50.34,
+    44.95,
+    318.82,
+    140.95
+   ],
+   "heatmap": {
+    "rows": [
+     "grocery",
+     "bakery",
+     "deli",
+     "produce",
+     "pharmacy",
+     "checkout"
+    ],
+    "columns": [
+     "Leeds",
+     "York",
+     "Bath",
+     "Derby",
+     "Hull",
+     "Ely",
+     "Wells",
+     "Ripon"
+    ],
+    "labelled": true,
+    "ramp": "diverging",
+    "cells": "strong",
+    "classing": "linear",
+    "breaks": [
+     "1",
+     "2"
+    ],
+    "domain": [
+     "0",
+     "3"
+    ],
+    "dividing": "7",
+    "key": null,
+    "pitch": 16.0,
+    "values": {
+     "mode": "contrast",
+     "tones": {
+      "dark": 43,
+      "light": 5
+     },
+     "plates": 0,
+     "min_contrast": 5.39
+    },
+    "censored": null
+   },
+   "width": 340.91,
+   "height": 141.95,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job make_aware: insight “Wells and Ripon fell short of a satisfied 7 in every department; checkout was the weakest almost everywhere”",
+    "guide": [],
+    "group": "tables"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-1",
+    "level": "guided",
+    "text": "a graph, the values to be compared or a pattern seen (G1.11)",
+    "guide": [],
+    "group": "tables"
+   },
+   {
+    "step": 2,
+    "name": "variables",
+    "rule": "RP3-2",
+    "level": "guided",
+    "text": "one plot: categories along x and 6 series; a further variable would go to small multiples (data.dims, G1.18)",
+    "guide": [],
+    "group": "tables"
+   },
+   {
+    "step": 3,
+    "name": "location",
+    "rule": "R8-2",
+    "level": "guided",
+    "text": "not a map: where the values are is not the message (facts.location_matters; G1.24, G1.25)",
+    "guide": [],
+    "group": "tables"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-01",
+    "level": "guided",
+    "text": "not parts of a total (no data.parts, no breakdown message; G1.1)",
+    "guide": [],
+    "group": "tables"
+   },
+   {
+    "step": 7,
+    "name": "values across categories",
+    "rule": "R12-6",
+    "level": "guided",
+    "text": "group: tables. Items compared across several attributes, which is best and each one's strengths and weaknesses being the message (a radar's data): a heatmap table, the values printed in coloured cells (G7.36)",
+    "guide": [],
+    "group": "tables"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type, the series told apart by colour (G1.59)",
+    "guide": [],
+    "group": "tables"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "heatmaps are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "tables"
+   }
+  ],
+  "copies": []
+ },
+ "output_sha256": "6058543339e699016d16bceb88f0b327d73f33c99289577f707564ef203e44b4"
+}

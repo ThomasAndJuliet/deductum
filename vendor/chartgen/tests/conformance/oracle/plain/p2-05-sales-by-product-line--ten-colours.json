@@ -1,0 +1,276 @@
+{
+ "key": "p2-05-sales-by-product-line--ten-colours",
+ "file": "p2-05-sales-by-product-line.json",
+ "variant": "ten-colours",
+ "requested_type": "auto",
+ "report": {
+  "chart": "p2-05-sales-by-product-line",
+  "style": "plain",
+  "variant": "ten-colours",
+  "type": "bar",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "type bar: categories compared by value",
+    "guide": []
+   },
+   {
+    "rule": "R9-11",
+    "level": "guided",
+    "text": "clustered bars: 10 series of one measure across categories (G1.56, R9-12)",
+    "guide": []
+   },
+   {
+    "rule": "R2-24",
+    "level": "locked",
+    "text": "bars start at zero",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "scale 0–3,000 by 500",
+    "guide": []
+   },
+   {
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "nominal categories sorted by value, descending (by series p0)",
+    "guide": []
+   },
+   {
+    "rule": "R9-12",
+    "level": "locked",
+    "text": "10 series side by side in each cluster, the bars touching, in the same order in every cluster: Guitars (slot 1), Drums (slot 2), Woodwinds (slot 3), Brass (slot 4), Amps & Speakers (slot 5), Other Strings (slot 6), Pianos/Organs (slot 7), Keyboards (slot 8), Microphones (slot 9), Accessories (slot 10) (G7.5, G4.22)",
+    "guide": []
+   },
+   {
+    "rule": "R9-10",
+    "level": "locked",
+    "text": "every name fits under its bar, neighbours at least 10 pt apart: vertical bars",
+    "guide": []
+   },
+   {
+    "rule": "R2-21",
+    "level": "locked",
+    "text": "labels as a set, 1 decimals: 0.0, 0.5, 1.0, 1.5, 2.0, 2.5, $3.0",
+    "guide": []
+   },
+   {
+    "rule": "R5-10",
+    "level": "locked",
+    "text": "digits hidden: millions, stated once on the top label (R2-05, D-3): “$3.0 million in sales”",
+    "guide": []
+   },
+   {
+    "rule": "R2-07",
+    "level": "locked",
+    "text": "the unit phrase on the top label: “$3.0 million in sales”; the top gridline starts after it",
+    "guide": []
+   },
+   {
+    "rule": "R4-6",
+    "level": "guided",
+    "text": "a legend above the plot, below the title, centred over the plot: labels beside the bars of a cluster would each need a leader (G5.7, G5.10, D-7)",
+    "guide": []
+   },
+   {
+    "rule": "R4-4",
+    "level": "locked",
+    "text": "legend entries in the order of the bars in each cluster, left to right, in 3 rows filled row by row: Guitars, Drums, Woodwinds, Brass, Amps & Speakers, Other Strings, Pianos/Organs, Keyboards, Microphones, Accessories (G5.8, G5.14: square keys)",
+    "guide": []
+   }
+  ],
+  "findings": [
+   {
+    "rule": "R3-21",
+    "severity": "overridden",
+    "message": "10 regular colours: beyond eight they cannot be told apart; drop, group or merge categories, or label every series directly (G4.19, G4.21, D-14)",
+    "elements": [
+     "rect.bar[data-series=p0][data-x=Domestic]",
+     "rect.bar[data-series=p1][data-x=Domestic]",
+     "rect.bar[data-series=p2][data-x=Domestic]",
+     "rect.bar[data-series=p3][data-x=Domestic]",
+     "rect.bar[data-series=p4][data-x=Domestic]",
+     "rect.bar[data-series=p5][data-x=Domestic]",
+     "rect.bar[data-series=p6][data-x=Domestic]",
+     "rect.bar[data-series=p7][data-x=Domestic]",
+     "rect.bar[data-series=p8][data-x=Domestic]",
+     "rect.bar[data-series=p9][data-x=Domestic]"
+    ],
+    "reason": "the book's version (p. 136), rebuilt to show why",
+    "level": "locked",
+    "guide": [],
+    "title": "at most eight regular colours"
+   },
+   {
+    "rule": "R3-19",
+    "severity": "warn",
+    "message": "#558bb9 and #9a77b7 are 0.018 apart under deuteranopia (at least 0.06): readers with colour-vision deficiency may not tell them apart (G4.18, D-34)",
+    "elements": [
+     "rect.bar[data-series=p6][data-x=Domestic]",
+     "rect.bar[data-series=p5][data-x=Domestic]"
+    ],
+    "level": "locked",
+    "guide": [],
+    "title": "colours that must be told apart survive colour-vision deficiency"
+   }
+  ],
+  "overrides": [
+   {
+    "rule": "R3-21",
+    "reason": "the book's version (p. 136), rebuilt to show why"
+   }
+  ],
+  "expect": {
+   "refused": [
+    "R3-21"
+   ]
+  },
+  "expect_met": true,
+  "source": {
+   "book": "p. 136 (s. 0126)",
+   "notes": "03-04 #12",
+   "shows": "the book's version: the two markets as clusters and ten product lines as series, keyed by a legend of ten colours that start to look alike; the colour count refuses it (G4.19: at most eight), and it is drawn here through an override",
+   "status": "generated"
+  },
+  "summary": {
+   "scale": "0–3,000 by 500",
+   "labels": [
+    "0.0",
+    "0.5",
+    "1.0",
+    "1.5",
+    "2.0",
+    "2.5",
+    "$3.0"
+   ],
+   "top": "$3.0 million in sales",
+   "scale_title": null,
+   "orientation": "vertical",
+   "plot": [
+    26.78,
+    62.03,
+    368.0,
+    266.77
+   ],
+   "band": 170.61,
+   "series": [
+    "p0",
+    "p1",
+    "p2",
+    "p3",
+    "p4",
+    "p5",
+    "p6",
+    "p7",
+    "p8",
+    "p9"
+   ],
+   "labelling": "legend",
+   "value_labels": false,
+   "table": false,
+   "bar": 12.18,
+   "width": 368.0,
+   "height": 282.71,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job lookup: no insight stated (a descriptive title will do, D-55)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-1",
+    "level": "guided",
+    "text": "a graph, the values to be compared or a pattern seen (G1.11)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 2,
+    "name": "variables",
+    "rule": "RP3-2",
+    "level": "guided",
+    "text": "one plot: categories along x and 10 series; a further variable would go to small multiples (data.dims, G1.18)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 3,
+    "name": "location",
+    "rule": "R8-2",
+    "level": "guided",
+    "text": "not a map: where the values are is not the message (facts.location_matters; G1.24, G1.25)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-01",
+    "level": "guided",
+    "text": "not parts of a total (no data.parts, no breakdown message; G1.1)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 7,
+    "name": "values across categories",
+    "rule": "R9-1",
+    "level": "guided",
+    "text": "group: bar charts. Values compared across categories (G1.9)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 7,
+    "name": "values across categories",
+    "rule": "R9-11",
+    "level": "guided",
+    "text": "10 series of one measure: clustered bars (G1.56); several measures would be a merged chart (data.measures), never a dual axis",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 7,
+    "name": "values across categories",
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "bars from zero (02 D1)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type, the series told apart by colour (G1.59)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "bar charts are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "bar charts"
+   }
+  ],
+  "copies": []
+ },
+ "output_sha256": "30fdc1f439c91471388117cd1adb6369aa682fe9ed4ff2bccf07441333a71790"
+}

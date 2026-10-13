@@ -1,0 +1,100 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "r1-24-board-ceiling-units",
+    "job": {
+      "kind": "lookup",
+      "text": "Look up the five largest buildings' 2025 electricity use against the Board's ceiling for any one building"
+    },
+    "title": {
+      "text": "Electricity Use of the Five Largest Buildings, 2025",
+      "kind": "descriptive"
+    },
+    "data": {
+      "x": {
+        "kind": "nominal",
+        "values": [
+          "Data Centre",
+          "Chemistry",
+          "Medical Sciences",
+          "Sports Centre",
+          "Library"
+        ]
+      },
+      "measure": {
+        "name": "electricity use",
+        "kind": "amount",
+        "zero": "meaningful",
+        "min": 0,
+        "unit": {
+          "suffix": " MWh",
+          "what": "electricity used in 2025"
+        }
+      },
+      "series": [
+        {
+          "id": "use",
+          "name": "2025 use",
+          "values": [
+            3412,
+            2236,
+            1905,
+            1577,
+            1284
+          ]
+        }
+      ],
+      "comparisons": [
+        {
+          "id": "ceiling",
+          "kind": "target",
+          "label": "Board's ceiling",
+          "values": [
+            3000000
+          ],
+          "reason": "the Board's ceiling per building, as its paper gives it, in kWh"
+        }
+      ]
+    },
+    "chart": {
+      "type": "auto"
+    },
+    "source": {
+      "notes": "evaluation round 1, B09 (opus-G: a reference in other units)",
+      "shows": "a comparison given in kWh against data in MWh, its unit not stated: drawn, the scale stretched to millions, with a warning naming units as the likely cause (R2-13)"
+    }
+  },
+  "expect": {
+    "findings": [
+      "R2-13"
+    ]
+  },
+  "variants": [
+    {
+      "name": "unit-stated",
+      "patch": {
+        "data": {
+          "comparisons": [
+            {
+              "id": "ceiling",
+              "kind": "target",
+              "label": "Board's ceiling",
+              "values": [
+                3000000
+              ],
+              "unit": {
+                "suffix": " kWh"
+              },
+              "factor": 0.001,
+              "reason": "the Board's ceiling per building, in kWh"
+            }
+          ]
+        },
+        "source": {
+          "shows": "the same comparison with its unit and factor: converted to 3,000 MWh, a decision names the conversion (R2-13), and the line sits among the bars"
+        }
+      },
+      "expect": {}
+    }
+  ]
+}

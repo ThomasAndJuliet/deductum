@@ -1,0 +1,11 @@
+[package]
+name = "chartgen-grammar"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+chartgen-model.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

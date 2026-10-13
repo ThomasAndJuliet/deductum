@@ -1,0 +1,212 @@
+{
+ "key": "p2-24-monthly-revenue-incomplete--bars",
+ "file": "p2-24-monthly-revenue-incomplete.json",
+ "variant": "bars",
+ "requested_type": "auto",
+ "report": {
+  "chart": "p2-24-monthly-revenue-incomplete",
+  "style": "plain",
+  "variant": "bars",
+  "type": "bar",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "R6-5",
+    "level": "guided",
+    "text": "type bar: the periods are the point",
+    "guide": []
+   },
+   {
+    "rule": "R2-24",
+    "level": "locked",
+    "text": "bars start at zero",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "scale 0–2.5 by 0.5",
+    "guide": []
+   },
+   {
+    "rule": "R2-02",
+    "level": "locked",
+    "text": "periods in their given order",
+    "guide": []
+   },
+   {
+    "rule": "R2-42",
+    "level": "locked",
+    "text": "incomplete period drawn apart: Dec. 2022 (the data run to Dec. 10, 2022); no bar, a dotted level mark as wide as a bar at its value, and the note “As of Dec. 10” beside it (G2.40, 02 D10)",
+    "guide": []
+   },
+   {
+    "rule": "R2-37",
+    "level": "locked",
+    "text": "time runs left to right: vertical bars",
+    "guide": []
+   },
+   {
+    "rule": "R2-21",
+    "level": "locked",
+    "text": "labels as a set, 1 decimals: 0.0, 0.5, 1.0, 1.5, 2.0, €2.5",
+    "guide": []
+   },
+   {
+    "rule": "R5-10",
+    "level": "locked",
+    "text": "digits hidden: millions, stated once on the top label (R2-05, D-3): “€2.5 million (total revenue per month)”",
+    "guide": []
+   },
+   {
+    "rule": "R2-40",
+    "level": "locked",
+    "text": "time axis: row 1 narrow",
+    "guide": []
+   },
+   {
+    "rule": "R2-37",
+    "level": "locked",
+    "text": "time axis: row 2 (“2022”) left out, the title gives it (G2.37)",
+    "guide": []
+   },
+   {
+    "rule": "R2-07",
+    "level": "locked",
+    "text": "the unit phrase on the top label: “€2.5 million (total revenue per month)”; the top gridline starts after it",
+    "guide": []
+   }
+  ],
+  "findings": [],
+  "overrides": [],
+  "expect": {
+   "findings": []
+  },
+  "expect_met": true,
+  "source": {
+   "book": "p. 107–108 (s. 0101–0102)",
+   "notes": "02 #19",
+   "shows": "the same months as bars: December's partial value a dotted level mark as wide as a bar, with its note to the right (02 D10)",
+   "status": "generated"
+  },
+  "summary": {
+   "scale": "0–2.5 by 0.5",
+   "labels": [
+    "0.0",
+    "0.5",
+    "1.0",
+    "1.5",
+    "2.0",
+    "€2.5"
+   ],
+   "top": "€2.5 million (total revenue per month)",
+   "scale_title": null,
+   "orientation": "vertical",
+   "plot": [
+    28.05,
+    21.0,
+    317.43,
+    194.63
+   ],
+   "band": 24.12,
+   "width": 368.0,
+   "height": 210.68,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job lookup: no insight stated (a descriptive title will do, D-55)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-1",
+    "level": "guided",
+    "text": "a graph, the values to be compared or a pattern seen (G1.11)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 2,
+    "name": "variables",
+    "rule": "RP3-2",
+    "level": "guided",
+    "text": "one plot: time along x and 1 series; a further variable would go to small multiples (data.dims, G1.18)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 3,
+    "name": "location",
+    "rule": "R8-2",
+    "level": "guided",
+    "text": "not a map: where the values are is not the message (facts.location_matters; G1.24, G1.25)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-01",
+    "level": "guided",
+    "text": "not parts of a total (no data.parts, no breakdown message; G1.1)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 6,
+    "name": "values over time",
+    "rule": "R6-13",
+    "level": "guided",
+    "text": "group: data over time. A series of more than two periods, not a breakdown and not tied to places (G1.48)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 6,
+    "name": "values over time",
+    "rule": "R6-3",
+    "level": "locked",
+    "text": "a regular series, enough values known (06 DP6-2)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 6,
+    "name": "values over time",
+    "rule": "R6-5",
+    "level": "guided",
+    "text": "the periods are the point",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type (G1.59)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "bar charts are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "data over time"
+   }
+  ],
+  "copies": []
+ },
+ "output_sha256": "cc568c20c81b907103c6856097381c277918eb4326d6a5dedaa2c636d386be23"
+}

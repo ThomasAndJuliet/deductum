@@ -1,0 +1,219 @@
+{
+ "key": "r1-06-donations-pie-notes",
+ "file": "r1-06-donations-pie-notes.json",
+ "variant": null,
+ "requested_type": "pie",
+ "report": {
+  "chart": "r1-06-donations-pie-notes",
+  "style": "plain",
+  "variant": null,
+  "type": "pie",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "R7-35",
+    "level": "guided",
+    "text": "slices largest first, clockwise from 12 o'clock: Mrs. Smith, Mrs. Jones, Mr. & Mrs. Perez, The Chetley Family, Ms. Flaherty",
+    "guide": []
+   },
+   {
+    "rule": "R7-32",
+    "level": "locked",
+    "text": "each slice its own colour, handed out in slice order (D-22 (a)): Mrs. Smith series-1, Mrs. Jones series-2, Mr. & Mrs. Perez series-3, The Chetley Family series-4, Ms. Flaherty series-5",
+    "guide": []
+   },
+   {
+    "rule": "R15-5",
+    "level": "locked",
+    "text": "highlighting what the insight names",
+    "guide": []
+   },
+   {
+    "rule": "R7-34",
+    "level": "locked",
+    "text": "each slice named outside it, its value under the name, formatted as one set (G7.27, D-51 (ii)): $165K, $160K, $135K, $125K, $100K",
+    "guide": []
+   },
+   {
+    "rule": "R7-33",
+    "level": "locked",
+    "text": "no outlines: true gaps 1.0 pt wide between the slices (G7.26s: 0.7 % of the diameter)",
+    "guide": []
+   },
+   {
+    "rule": "R3-7",
+    "level": "locked",
+    "text": "highlighted by the strong shade of their colour: Mrs. Smith; the others keep their colour",
+    "guide": []
+   },
+   {
+    "rule": "CG-8",
+    "level": "locked",
+    "text": "notes under the chart, below everything else, left-aligned and wrapped to its 368 pt: a on “Mrs. Smith”; b on “$160K” (marks in reading order)",
+    "guide": []
+   }
+  ],
+  "findings": [],
+  "overrides": [],
+  "expect": {},
+  "expect_met": true,
+  "source": {
+   "book": "p. 238–241 (s. 0219–0222)",
+   "notes": "p3-01-donations-by-donor-pie, with notes (owner, 1 Oct 2026: footnotes)",
+   "shows": "footnotes on a slice's name and on a slice's value (the line under its name)",
+   "status": "generated"
+  },
+  "summary": {
+   "notes": [
+    {
+     "mark": "a",
+     "text": "Including a bequest received in March.",
+     "on": [
+      "Mrs. Smith"
+     ]
+    },
+    {
+     "mark": "b",
+     "text": "Pledged; $40K had been received by Dec. 31.",
+     "on": [
+      "$160K"
+     ]
+    }
+   ],
+   "kind": "pie",
+   "pies": 1,
+   "radius": 73.6,
+   "centres": [
+    [
+     184.0,
+     134.38
+    ]
+   ],
+   "order": [
+    "Mrs. Smith",
+    "Mrs. Jones",
+    "Mr. & Mrs. Perez",
+    "The Chetley Family",
+    "Ms. Flaherty"
+   ],
+   "labels": "value",
+   "leaders": [],
+   "width": 368.0,
+   "height": 273.89,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job answer: insight “Mrs. Smith contributed almost a quarter of all donations”",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-1",
+    "level": "guided",
+    "text": "a graph, the values to be compared or a pattern seen (G1.11)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 2,
+    "name": "variables",
+    "rule": "RP3-2",
+    "level": "guided",
+    "text": "one plot: categories along x and 1 series; a further variable would go to small multiples (data.dims, G1.18)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 3,
+    "name": "location",
+    "rule": "R8-2",
+    "level": "guided",
+    "text": "not a map: where the values are is not the message (facts.location_matters; G1.24, G1.25)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "RP2-7",
+    "level": "guided",
+    "text": "group: breakdowns of totals. One total of 5 parts (07 §4.1, G1.8)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-02",
+    "level": "locked",
+    "text": "check, meaningful total: passes: the values add up to a total someone would quote (parts.meaningful_total)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-03",
+    "level": "locked",
+    "text": "check, all parts: passes: every part of the total is shown (parts.all_parts)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-05",
+    "level": "locked",
+    "text": "check, overlap: passes: no part contains or overlaps another (parts.overlap)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-04",
+    "level": "locked",
+    "text": "check, signs: passes: the parts are all of one sign",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-07",
+    "level": "guided",
+    "text": "fractions of the total are the message: a pie, which shows ½, ⅓ and ¼ at a glance and announces the whole (G1.36)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type (G1.59)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "pies are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   }
+  ],
+  "copies": []
+ },
+ "output_sha256": "46c432aad3c2327ead8afe4872c00423d6e49b9500593d9dc614686fff70d8cf"
+}

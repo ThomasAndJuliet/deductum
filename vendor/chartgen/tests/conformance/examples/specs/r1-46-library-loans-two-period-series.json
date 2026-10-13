@@ -1,0 +1,135 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "r1-46-library-loans-two-period-series",
+    "purpose": "communication",
+    "job": {
+      "kind": "lookup",
+      "text": "Show councillors the full, fair picture of physical loans by branch, 2019 against 2025"
+    },
+    "title": {
+      "text": "Physical Loans by Branch, 2019 and 2025",
+      "kind": "descriptive"
+    },
+    "data": {
+      "x": {
+        "kind": "nominal",
+        "values": [
+          "Central",
+          "Northfield",
+          "Hartley Green",
+          "St Mary's",
+          "Riverside",
+          "Oakham",
+          "Westbrook",
+          "Lowther Park"
+        ]
+      },
+      "measure": {
+        "name": "loans",
+        "kind": "count",
+        "zero": "meaningful",
+        "min": 0,
+        "unit": {
+          "noun": "items issued"
+        }
+      },
+      "series": [
+        {
+          "id": "y2019",
+          "name": "2019",
+          "values": [
+            341200,
+            118600,
+            96400,
+            64800,
+            52300,
+            41700,
+            22100,
+            {
+              "status": "missing",
+              "note": "Lowther Park opened September 2021"
+            }
+          ]
+        },
+        {
+          "id": "y2025",
+          "name": "2025",
+          "values": [
+            279800,
+            104300,
+            71900,
+            69700,
+            30900,
+            44800,
+            12900,
+            38600
+          ]
+        }
+      ]
+    },
+    "facts": {
+      "message": "compare"
+    },
+    "chart": {
+      "type": "bar"
+    },
+    "labels": {
+      "notes": {
+        "missing": "(opened 2021)"
+      }
+    },
+    "comments": [
+      {
+        "text": "Physical items issued only – renewals and e-books are not included",
+        "anchors": [],
+        "answers": [
+          "explain"
+        ]
+      }
+    ],
+    "source": {
+      "notes": "eval B08 (sonnet-G)",
+      "shows": "two series that are two periods (2019, 2025) across the branches: clustered columns, the trap, refused (R6-17), saying how to give the data for an arrow chart; drawn as clustered bars only with facts.message periods and a reason grounded in the request, shown in the report (R6-15)"
+    }
+  },
+  "expect": {
+    "refused": [
+      "R6-17"
+    ]
+  },
+  "variants": [
+    {
+      "name": "periods-with-reason",
+      "patch": {
+        "facts": {
+          "message": "periods"
+        },
+        "reasons": {
+          "facts.message": "the councillors asked to look up each branch's loans in each year, not the change"
+        }
+      },
+      "expect": {
+        "findings": [
+          "R6-15"
+        ]
+      }
+    },
+    {
+      "name": "periods-no-reason",
+      "patch": {
+        "facts": {
+          "message": "periods"
+        }
+      },
+      "expect": {
+        "refused": [
+          "R6-17"
+        ],
+        "findings": [
+          "R6-15"
+        ]
+      }
+    }
+  ]
+}

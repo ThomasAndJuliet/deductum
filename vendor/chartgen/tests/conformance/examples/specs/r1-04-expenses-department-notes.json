@@ -1,0 +1,80 @@
+{
+ "chartspec": 1,
+ "id": "r1-04-expenses-department-notes",
+ "job": {
+  "kind": "lookup",
+  "text": "Look up each department's expenses in 2022"
+ },
+ "title": {
+  "text": "Expenses by Department, 2022",
+  "kind": "descriptive"
+ },
+ "data": {
+  "x": {
+   "kind": "nominal",
+   "values": [
+    "Finance & Admin",
+    "Research",
+    "New England Sales",
+    "Marketing",
+    "Legal"
+   ]
+  },
+  "measure": {
+   "name": "expenses",
+   "kind": "amount",
+   "zero": "meaningful",
+   "min": 0,
+   "unit": {
+    "prefix": "$",
+    "noun": "in expenses",
+    "magnitude": 3
+   }
+  },
+  "series": [
+   {
+    "id": "exp",
+    "name": "Expenses",
+    "values": [
+     480,
+     410,
+     300,
+     {
+      "value": 220,
+      "note": "Estimate: December's invoices had not all arrived."
+     },
+     120
+    ]
+   }
+  ]
+ },
+ "chart": {
+  "type": "bar",
+  "orientation": "vertical"
+ },
+ "reasons": {
+  "chart.orientation": "the same order and orientation as the department's other charts"
+ },
+ "notes": [
+  {
+   "text": "New England's sales team only; the other regions' sales staff are counted under Marketing.",
+   "on": [
+    {
+     "category": "New England Sales"
+    }
+   ]
+  },
+  {
+   "text": "Operating expenses, salaries included.",
+   "on": [
+    {
+     "element": "unit"
+    }
+   ]
+  }
+ ],
+ "source": {
+  "notes": "owner 1 Oct 2026 (footnotes)",
+  "shows": "footnotes on a name wrapped under its bar (the mark on its last line, centred with it), on the unit line, and on one value label (a value's own note)"
+ }
+}

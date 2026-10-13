@@ -1,0 +1,14 @@
+[package]
+name = "chartgen-protocol"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+chartgen.workspace = true
+chartgen-model.workspace = true
+chartgen-geometry.workspace = true
+chartgen-style.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+figkit-protocol = { path = "../figkit-protocol" }

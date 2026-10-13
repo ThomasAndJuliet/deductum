@@ -1,0 +1,130 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p1-13-daily-expenses",
+    "job": {
+      "kind": "lookup",
+      "text": "Look up what was spent on the days of May 2022 whose expenses are known"
+    },
+    "title": {
+      "text": "Daily Expenses, May 2022",
+      "kind": "descriptive"
+    },
+    "data": {
+      "x": {
+        "kind": "time",
+        "grid": "day",
+        "values": [
+          "2022-05-01",
+          "2022-05-02",
+          "2022-05-03",
+          "2022-05-04",
+          "2022-05-05",
+          "2022-05-06",
+          "2022-05-07",
+          "2022-05-08",
+          "2022-05-09",
+          "2022-05-10",
+          "2022-05-11",
+          "2022-05-12",
+          "2022-05-13",
+          "2022-05-14",
+          "2022-05-15",
+          "2022-05-16",
+          "2022-05-17",
+          "2022-05-18",
+          "2022-05-19",
+          "2022-05-20",
+          "2022-05-21",
+          "2022-05-22",
+          "2022-05-23",
+          "2022-05-24",
+          "2022-05-25",
+          "2022-05-26",
+          "2022-05-27",
+          "2022-05-28",
+          "2022-05-29",
+          "2022-05-30",
+          "2022-05-31"
+        ]
+      },
+      "measure": {
+        "name": "expenses",
+        "kind": "amount",
+        "zero": "meaningful",
+        "min": 0,
+        "persistence": "summary",
+        "unit": {
+          "prefix": "$",
+          "noun": "expenses per day",
+          "magnitude": 3
+        }
+      },
+      "series": [
+        {
+          "id": "expenses",
+          "name": "Expenses",
+          "values": [
+            null,
+            null,
+            325,
+            null,
+            null,
+            null,
+            null,
+            424,
+            null,
+            null,
+            null,
+            197,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            704,
+            368,
+            null,
+            null,
+            null,
+            null,
+            null,
+            499,
+            null,
+            null
+          ]
+        }
+      ]
+    },
+    "chart": {
+      "type": "auto"
+    },
+    "source": {
+      "book": "p. 172–174 (s. 0161–0163); p. 20 (s. 0021)",
+      "notes": "06 T1; 00-01 F6",
+      "shows": "a sparse series (6 of 31 days known) as a dot plot, chosen by the procedure (R6-2, G1.49, D-27): the known values as dots with no line, on an axis over the whole month so the empty days show; “$800K expenses per day” on the top label (D-3, D-4); the day numbers thinned from day 1, and “May 2022” left out under them because the title gives it (G2.37)"
+    }
+  },
+  "variants": [
+    {
+      "name": "line",
+      "patch": {
+        "chart": {
+          "type": "line"
+        },
+        "source": {
+          "shows": "the book’s bad version, the six known days joined by a line (s. 0161): refused, since a line through so few values invents a pattern of change that many different series could have had (R6-2, G1.49)"
+        }
+      },
+      "expect": {
+        "refused": [
+          "R6-2"
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,97 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "r1-50-travel-to-school-no-answer",
+    "purpose": "communication",
+    "job": {
+      "kind": "make_aware",
+      "text": "Show parents how students usually get to school, to introduce the piece on walking, cycling and car-sharing"
+    },
+    "insight": {
+      "important": "Car or taxi is the most common way to school, used by more than a third of students"
+    },
+    "title": {
+      "text": "Car or Taxi Is the Most Common Way to School",
+      "kind": "insight",
+      "descriptive": "How students usually travel to school, survey of all students, September 2026"
+    },
+    "audience": {
+      "bw_risk": true
+    },
+    "data": {
+      "x": {
+        "kind": "nominal",
+        "values": [
+          "Car or taxi",
+          "Walk",
+          "Bus (school or public)",
+          "Cycle",
+          "No answer",
+          "Train and other (scooter, skateboard, etc.)"
+        ],
+        "roles": {
+          "Train and other (scooter, skateboard, etc.)": "all_others",
+          "No answer": "missing"
+        }
+      },
+      "measure": {
+        "name": "students",
+        "kind": "count",
+        "zero": "meaningful",
+        "min": 0,
+        "unit": {
+          "noun": "students"
+        }
+      },
+      "parts": {
+        "meaningful_total": true,
+        "all_parts": true,
+        "overlap": false,
+        "total": 812
+      },
+      "series": [
+        {
+          "id": "travel",
+          "name": "Students",
+          "values": [
+            287,
+            221,
+            148,
+            53,
+            34,
+            69
+          ]
+        }
+      ]
+    },
+    "facts": {
+      "message": "fraction_of_total"
+    },
+    "chart": {
+      "type": "auto"
+    },
+    "labels": {
+      "parts": "percent"
+    },
+    "source": {
+      "notes": "eval B04 (sonnet-G)",
+      "shows": "“No answer” marked by its role, missing: the missing grey, last after “All others”, never a palette colour (G0.18, G2.1, G4.15); the variant as bars"
+    }
+  },
+  "variants": [
+    {
+      "name": "bars",
+      "patch": {
+        "chart": {
+          "type": "bar"
+        },
+        "facts": {
+          "message": "compare_parts_precisely"
+        },
+        "labels": {
+          "parts": null
+        }
+      }
+    }
+  ]
+}

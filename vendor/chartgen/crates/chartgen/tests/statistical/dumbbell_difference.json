@@ -1,0 +1,80 @@
+{
+ "chartspec": 1,
+ "purpose": "analysis",
+ "id": "ablation-difference",
+ "title": {
+  "text": "Unversioned monitoring detects fewer fault classes"
+ },
+ "data": {
+  "x": {
+   "kind": "nominal",
+   "values": [
+    "Candidate correspondence",
+    "Equal-valued writes",
+    "Retained model",
+    "Historical read"
+   ]
+  },
+  "measure": {
+   "name": "detection rate",
+   "kind": "percent",
+   "unit": {
+    "suffix": "%",
+    "noun": "of fault cases detected"
+   },
+   "zero": "meaningful",
+   "good": "higher",
+   "min": 0,
+   "max": 100
+  },
+  "series": [
+   {
+    "id": "f",
+    "name": "Full (F)",
+    "values": [
+     97,
+     93,
+     90,
+     87
+    ]
+   },
+   {
+    "id": "u",
+    "name": "Unversioned (U)",
+    "values": [
+     60,
+     10,
+     83,
+     40
+    ]
+   }
+  ],
+  "difference_intervals": [
+   {
+    "lo": 30,
+    "hi": 44
+   },
+   {
+    "lo": 75,
+    "hi": 90
+   },
+   {
+    "lo": 0,
+    "hi": 14
+   },
+   {
+    "lo": 35,
+    "hi": 58
+   }
+  ]
+ },
+ "chart": {
+  "type": "dumbbell",
+  "view": "difference",
+  "difference": "first_minus_second",
+  "interval": {
+   "kind": "bound",
+   "basis": "Bounds from the lower and upper detection counts on the common completed subset."
+  }
+ }
+}

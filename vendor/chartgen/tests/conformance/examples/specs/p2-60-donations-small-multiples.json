@@ -1,0 +1,442 @@
+{
+ "base": {
+  "chartspec": 1,
+  "id": "p2-60-donations-small-multiples",
+  "job": {
+   "kind": "lookup",
+   "text": "Look up how any payment method's monthly donations ran in any region in 2022"
+  },
+  "title": {
+   "text": "Donations by Payment Method, Region and Month, 2022",
+   "kind": "descriptive"
+  },
+  "data": {
+   "x": {
+    "kind": "time",
+    "grid": "month",
+    "values": [
+     "2022-01",
+     "2022-02",
+     "2022-03",
+     "2022-04",
+     "2022-05",
+     "2022-06",
+     "2022-07",
+     "2022-08",
+     "2022-09",
+     "2022-10",
+     "2022-11",
+     "2022-12"
+    ]
+   },
+   "measure": {
+    "name": "donations",
+    "kind": "amount",
+    "zero": "meaningful",
+    "min": 0,
+    "persistence": "summary",
+    "unit": {
+     "prefix": "$",
+     "noun": "in donations",
+     "magnitude": 3
+    }
+   },
+   "dims": [
+    {
+     "id": "method",
+     "name": "payment method",
+     "values": [
+      "Credit card",
+      "Check",
+      "Cash"
+     ]
+    },
+    {
+     "id": "region",
+     "name": "region",
+     "values": [
+      "Central",
+      "West",
+      "North",
+      "East",
+      "Int'l"
+     ]
+    }
+   ],
+   "series": [
+    {
+     "id": "credit-card-central",
+     "name": "Credit card, Central",
+     "keys": {
+      "method": "Credit card",
+      "region": "Central"
+     },
+     "values": [
+      49.8,
+      50.5,
+      50.8,
+      49.6,
+      52.7,
+      49.2,
+      54.7,
+      52.2,
+      50.2,
+      51.4,
+      49.1,
+      52.5
+     ]
+    },
+    {
+     "id": "credit-card-east",
+     "name": "Credit card, East",
+     "keys": {
+      "method": "Credit card",
+      "region": "East"
+     },
+     "values": [
+      17.1,
+      15.8,
+      19.2,
+      16.3,
+      16.2,
+      16.8,
+      17.7,
+      17.5,
+      18.9,
+      16.0,
+      16.8,
+      16.7
+     ]
+    },
+    {
+     "id": "credit-card-intl",
+     "name": "Credit card, Int'l",
+     "keys": {
+      "method": "Credit card",
+      "region": "Int'l"
+     },
+     "values": [
+      6.3,
+      6.0,
+      6.1,
+      6.9,
+      6.4,
+      5.7,
+      7.0,
+      6.1,
+      6.5,
+      6.6,
+      6.2,
+      6.6
+     ]
+    },
+    {
+     "id": "credit-card-north",
+     "name": "Credit card, North",
+     "keys": {
+      "method": "Credit card",
+      "region": "North"
+     },
+     "values": [
+      20.7,
+      18.9,
+      21.8,
+      18.0,
+      22.2,
+      20.4,
+      19.1,
+      22.0,
+      21.7,
+      21.5,
+      19.7,
+      23.2
+     ]
+    },
+    {
+     "id": "credit-card-west",
+     "name": "Credit card, West",
+     "keys": {
+      "method": "Credit card",
+      "region": "West"
+     },
+     "values": [
+      33.7,
+      30.6,
+      35.7,
+      32.9,
+      34.5,
+      34.6,
+      35.9,
+      34.2,
+      33.9,
+      34.6,
+      31.2,
+      35.0
+     ]
+    },
+    {
+     "id": "check-central",
+     "name": "Check, Central",
+     "keys": {
+      "method": "Check",
+      "region": "Central"
+     },
+     "values": [
+      49.3,
+      40.0,
+      48.1,
+      47.1,
+      45.6,
+      42.7,
+      50.3,
+      48.3,
+      43.2,
+      48.8,
+      43.9,
+      46.7
+     ]
+    },
+    {
+     "id": "check-east",
+     "name": "Check, East",
+     "keys": {
+      "method": "Check",
+      "region": "East"
+     },
+     "values": [
+      16.3,
+      14.8,
+      14.9,
+      14.2,
+      12.8,
+      13.7,
+      13.9,
+      15.8,
+      14.0,
+      14.9,
+      15.6,
+      17.2
+     ]
+    },
+    {
+     "id": "check-intl",
+     "name": "Check, Int'l",
+     "keys": {
+      "method": "Check",
+      "region": "Int'l"
+     },
+     "values": [
+      6.3,
+      4.3,
+      4.9,
+      6.9,
+      5.3,
+      5.6,
+      7.3,
+      5.9,
+      6.0,
+      4.4,
+      5.4,
+      6.0
+     ]
+    },
+    {
+     "id": "check-north",
+     "name": "Check, North",
+     "keys": {
+      "method": "Check",
+      "region": "North"
+     },
+     "values": [
+      17.6,
+      15.6,
+      17.5,
+      18.9,
+      20.3,
+      16.0,
+      20.9,
+      19.3,
+      18.4,
+      18.4,
+      18.7,
+      19.1
+     ]
+    },
+    {
+     "id": "check-west",
+     "name": "Check, West",
+     "keys": {
+      "method": "Check",
+      "region": "West"
+     },
+     "values": [
+      29.7,
+      29.1,
+      28.7,
+      31.2,
+      35.0,
+      31.9,
+      32.6,
+      28.1,
+      28.2,
+      30.2,
+      26.7,
+      30.4
+     ]
+    },
+    {
+     "id": "cash-central",
+     "name": "Cash, Central",
+     "keys": {
+      "method": "Cash",
+      "region": "Central"
+     },
+     "values": [
+      28.9,
+      26.7,
+      28.8,
+      29.0,
+      30.8,
+      27.9,
+      28.3,
+      30.0,
+      29.4,
+      30.0,
+      27.6,
+      30.3
+     ]
+    },
+    {
+     "id": "cash-east",
+     "name": "Cash, East",
+     "keys": {
+      "method": "Cash",
+      "region": "East"
+     },
+     "values": [
+      10.0,
+      8.9,
+      9.7,
+      9.3,
+      9.8,
+      9.9,
+      10.4,
+      9.7,
+      9.7,
+      9.3,
+      9.4,
+      9.4
+     ]
+    },
+    {
+     "id": "cash-intl",
+     "name": "Cash, Int'l",
+     "keys": {
+      "method": "Cash",
+      "region": "Int'l"
+     },
+     "values": [
+      3.8,
+      3.6,
+      3.8,
+      3.2,
+      4.0,
+      3.9,
+      3.7,
+      4.0,
+      3.7,
+      3.7,
+      3.8,
+      3.1
+     ]
+    },
+    {
+     "id": "cash-north",
+     "name": "Cash, North",
+     "keys": {
+      "method": "Cash",
+      "region": "North"
+     },
+     "values": [
+      12.2,
+      10.1,
+      12.5,
+      11.8,
+      11.7,
+      12.0,
+      12.3,
+      12.3,
+      10.8,
+      12.8,
+      12.0,
+      11.0
+     ]
+    },
+    {
+     "id": "cash-west",
+     "name": "Cash, West",
+     "keys": {
+      "method": "Cash",
+      "region": "West"
+     },
+     "values": [
+      19.0,
+      17.8,
+      19.5,
+      19.2,
+      19.2,
+      18.3,
+      20.5,
+      19.0,
+      17.7,
+      19.5,
+      19.0,
+      18.2
+     ]
+    }
+   ]
+  },
+  "facts": {
+   "message": "pattern"
+  },
+  "source": {
+   "book": "p. 371 (s. 0337); p. 369 (s. 0335)",
+   "notes": "13-15 F1",
+   "shows": "small multiples, one series per panel: three payment methods by five regions, fifteen line panels on one shared scale; the scale labels only left of the first column, the unit once on the first row's top label, the months only under the bottom row, headers once, light separators between the panels, one colour for every line (G7.48–G7.51); the book's callouts are the message layer's"
+  }
+ },
+ "variants": [
+  {
+   "name": "spaghetti",
+   "patch": {
+    "panels": {
+     "arrangement": {
+      "within": [
+       "method",
+       "region"
+      ]
+     }
+    },
+    "reasons": {
+     "panels.arrangement": "the book's rejected version: every series in one chart"
+    },
+    "overrides": [
+     {
+      "rule": "R3-21",
+      "reason": "the book's rejected spaghetti chart (s. 0338), rebuilt: fifteen colours with a legend"
+     }
+    ],
+    "source": {
+     "book": "p. 372 (s. 0338)",
+     "shows": "the other end of the book's spectrum, rebuilt: all fifteen series in one chart, told apart only by a legend of fifteen colours; the generator warns that five lines in a plot are usually enough (G1.20) and lets the colours through only by an override"
+    }
+   },
+   "expect": {
+    "findings": [
+     "RP3-5",
+     "R3-21"
+    ]
+   }
+  }
+ ]
+}

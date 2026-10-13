@@ -1,0 +1,116 @@
+{
+ "base": {
+  "chartspec": 1,
+  "id": "p3-74-word-counts",
+  "job": {
+   "kind": "lookup",
+   "text": "Look up how often President Kennedy's moon speech used each of its commonest words"
+  },
+  "title": {
+   "text": "Commonest Words in President Kennedy's Moon Speech",
+   "kind": "descriptive"
+  },
+  "data": {
+   "x": {
+    "kind": "nominal",
+    "values": [
+     "will",
+     "new",
+     "space",
+     "man",
+     "years",
+     "knowledge",
+     "first",
+     "moon",
+     "ago",
+     "decade",
+     "great",
+     "made",
+     "now",
+     "one",
+     "science",
+     "behind",
+     "can",
+     "done",
+     "history",
+     "United",
+     "shall",
+     "States",
+     "stay",
+     "think",
+     "times",
+     "well",
+     "year"
+    ]
+   },
+   "measure": {
+    "name": "occurrences",
+    "kind": "count",
+    "zero": "meaningful",
+    "min": 0,
+    "unit": {
+     "noun": "occurrences",
+     "scale_title": "Number of times word occurs"
+    }
+   },
+   "series": [
+    {
+     "id": "count",
+     "name": "Occurrences",
+     "values": [
+      24,
+      22,
+      19,
+      10,
+      10,
+      9,
+      8,
+      7,
+      6,
+      6,
+      6,
+      6,
+      6,
+      6,
+      6,
+      5,
+      5,
+      5,
+      5,
+      5,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4
+     ]
+    }
+   ]
+  },
+  "source": {
+   "book": "p. 356–357 (s. 0324–0325)",
+   "notes": "08-12 #12",
+   "shows": "word counts: bars sorted by count, largest first, turned for the words to read across (R12-2), ties in their given order"
+  }
+ },
+ "variants": [
+  {
+   "name": "word-cloud",
+   "patch": {
+    "chart": {
+     "type": "word_cloud"
+    },
+    "source": {
+     "shows": "a word cloud asked for: refused, its font sizes not comparable (R12-2, G1.61 [L])"
+    }
+   },
+   "expect": {
+    "refused": [
+     "R12-2"
+    ]
+   }
+  }
+ ]
+}

@@ -1,0 +1,144 @@
+{
+  "chartspec": 1,
+  "id": "p2-10-daily-expenses-two-regions",
+  "job": {
+    "kind": "lookup",
+    "text": "Look up the days with expenses in each region in May"
+  },
+  "title": {
+    "text": "Daily Expenses by Region, May 2022",
+    "kind": "descriptive"
+  },
+  "data": {
+    "x": {
+      "kind": "time",
+      "grid": "day",
+      "values": [
+        "2022-05-01",
+        "2022-05-02",
+        "2022-05-03",
+        "2022-05-04",
+        "2022-05-05",
+        "2022-05-06",
+        "2022-05-07",
+        "2022-05-08",
+        "2022-05-09",
+        "2022-05-10",
+        "2022-05-11",
+        "2022-05-12",
+        "2022-05-13",
+        "2022-05-14",
+        "2022-05-15",
+        "2022-05-16",
+        "2022-05-17",
+        "2022-05-18",
+        "2022-05-19",
+        "2022-05-20",
+        "2022-05-21",
+        "2022-05-22",
+        "2022-05-23",
+        "2022-05-24",
+        "2022-05-25",
+        "2022-05-26",
+        "2022-05-27",
+        "2022-05-28",
+        "2022-05-29",
+        "2022-05-30",
+        "2022-05-31"
+      ]
+    },
+    "measure": {
+      "name": "expenses",
+      "kind": "amount",
+      "zero": "meaningful",
+      "min": 0,
+      "persistence": "summary",
+      "unit": {
+        "prefix": "$",
+        "magnitude": 3,
+        "noun": "expenses per day"
+      }
+    },
+    "series": [
+      {
+        "id": "east",
+        "name": "East",
+        "values": [
+          null,
+          null,
+          325,
+          null,
+          null,
+          null,
+          null,
+          424,
+          null,
+          null,
+          null,
+          197,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          704,
+          368,
+          null,
+          null,
+          null,
+          null,
+          null,
+          499,
+          null,
+          null
+        ]
+      },
+      {
+        "id": "west",
+        "name": "West",
+        "values": [
+          null,
+          null,
+          null,
+          null,
+          280,
+          null,
+          null,
+          null,
+          350,
+          null,
+          null,
+          null,
+          null,
+          null,
+          410,
+          null,
+          null,
+          null,
+          260,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          330,
+          null,
+          null,
+          null,
+          null,
+          null
+        ]
+      }
+    ]
+  },
+  "source": {
+    "book": "p. 172–174 (s. 0161–0163), with a second region of ours",
+    "notes": "06 T1 (synthetic West)",
+    "shows": "two sparse series as dots, no lines: filled dots in two colours on one time axis over the whole month; keyed by a legend at the right, beside the latest values, in the order of each series' last known value (G5.9, G5.11)"
+  }
+}

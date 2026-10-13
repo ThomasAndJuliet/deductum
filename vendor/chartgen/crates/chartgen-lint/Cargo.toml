@@ -1,0 +1,16 @@
+[package]
+name = "chartgen-lint"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+figkit-model = { path = "../figkit-model" }
+figkit-scene = { path = "../figkit-scene" }
+chartgen-model.workspace = true
+chartgen-colour-space = { path = "../chartgen-colour-space" }
+chartgen-geometry = { path = "../chartgen-geometry" }
+chartgen-scales = { path = "../chartgen-scales" }
+chartgen-format = { path = "../chartgen-format" }
+serde_json.workspace = true
+

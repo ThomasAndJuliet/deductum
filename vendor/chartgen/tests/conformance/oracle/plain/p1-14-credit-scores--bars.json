@@ -1,0 +1,206 @@
+{
+ "key": "p1-14-credit-scores--bars",
+ "file": "p1-14-credit-scores.json",
+ "variant": "bars",
+ "requested_type": "bar",
+ "report": {
+  "chart": "p1-14-credit-scores",
+  "style": "plain",
+  "variant": "bars",
+  "type": "bar",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "R2-24",
+    "level": "locked",
+    "text": "bars start at zero",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "scale 0–500 by 100",
+    "guide": []
+   },
+   {
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "nominal categories sorted by value, descending",
+    "guide": []
+   },
+   {
+    "rule": "R9-10",
+    "level": "locked",
+    "text": "every name fits under its bar, neighbours at least 10 pt apart: vertical bars",
+    "guide": []
+   },
+   {
+    "rule": "R2-21",
+    "level": "locked",
+    "text": "labels as a set, 0 decimals: 0, 100, 200, 300, 400, 500",
+    "guide": []
+   },
+   {
+    "rule": "R2-07",
+    "level": "locked",
+    "text": "the unit phrase on the top label: “500 (credit score)”; the top gridline starts after it",
+    "guide": []
+   }
+  ],
+  "findings": [
+   {
+    "rule": "R2-24",
+    "severity": "warn",
+    "message": "chart.type bar departs from the procedure, which gives dot (a scale that should not start at zero wants dots, not bars (G1.57, D-30): the theoretical minimum 300 lies just below the data)",
+    "path": "chart.type",
+    "level": "guided",
+    "recommended": "dot",
+    "guide": [],
+    "title": "bars start at zero; truncation only for lines and dots"
+   },
+   {
+    "rule": "R2-32",
+    "severity": "info",
+    "message": "chart.value_labels off departs from the procedure, which gives on (5 values against 6 scale labels: whichever puts fewer numbers on the chart (G2.18))",
+    "path": "chart.value_labels",
+    "reason": "the bad version's point is its scale from zero (p. 89), which value labels would take away",
+    "level": "guided",
+    "recommended": "on",
+    "guide": [],
+    "title": "fewer values than scale labels: label the values directly"
+   }
+  ],
+  "overrides": [],
+  "expect": {
+   "findings": [
+    "R2-24"
+   ]
+  },
+  "expect_met": true,
+  "source": {
+   "book": "p. 89 (s. 0085)",
+   "notes": "02 #15",
+   "shows": "the same spec as bars: bars start at zero, never at the theoretical minimum, so the scale shows scores no one can have, and the differences shrink; the procedure gives dots (G1.57, D-30), a guided finding",
+   "status": "generated"
+  },
+  "summary": {
+   "scale": "0–500 by 100",
+   "labels": [
+    "0",
+    "100",
+    "200",
+    "300",
+    "400",
+    "500"
+   ],
+   "top": "500 (credit score)",
+   "scale_title": null,
+   "orientation": "vertical",
+   "plot": [
+    24.0,
+    21.03,
+    368.0,
+    227.43
+   ],
+   "band": 68.8,
+   "width": 368.0,
+   "height": 245.31,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job lookup: no insight stated (a descriptive title will do, D-55)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-1",
+    "level": "guided",
+    "text": "a graph, the values to be compared or a pattern seen (G1.11)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 2,
+    "name": "variables",
+    "rule": "RP3-2",
+    "level": "guided",
+    "text": "one plot: categories along x and 1 series; a further variable would go to small multiples (data.dims, G1.18)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 3,
+    "name": "location",
+    "rule": "R8-2",
+    "level": "guided",
+    "text": "not a map: where the values are is not the message (facts.location_matters; G1.24, G1.25)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-01",
+    "level": "guided",
+    "text": "not parts of a total (no data.parts, no breakdown message; G1.1)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 7,
+    "name": "values across categories",
+    "rule": "R9-1",
+    "level": "guided",
+    "text": "group: bar charts. Values compared across categories (G1.9)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 7,
+    "name": "values across categories",
+    "rule": "R2-24",
+    "level": "guided",
+    "text": "a scale that should not start at zero wants dots, not bars (G1.57, D-30): the theoretical minimum 300 lies just below the data",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type (G1.59)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "dot plots are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R6-18",
+    "level": "guided",
+    "text": "dot plots may be new to a general audience: teach them (build the chart up, show first the familiar chart that fails, or add two or three callouts stating the obvious; G1.5), or state the insight in a sentence and keep the chart as backup (G1.6)",
+    "guide": [],
+    "group": "bar charts"
+   }
+  ],
+  "copies": []
+ },
+ "output_sha256": "baa4472d229e971a27bc1b99ec4727185714902ecf35ff3993bfe1fcb93ebfa2"
+}

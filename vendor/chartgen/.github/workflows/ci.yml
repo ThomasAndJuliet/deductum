@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    name: Rust tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install TeX for the PGF compilation regression
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends texlive-latex-base texlive-pictures
+      - run: cargo test --workspace --locked
+
+  sandbox-guard:
+    name: Sandbox guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Nothing from sandbox/ is committed
+        run: |
+          if git ls-files | grep -q '^sandbox/'; then
+            echo "::error::Files under sandbox/ are committed; the sandbox is a private, separate repository (AGENTS.md)."
+            git ls-files | grep '^sandbox/'
+            exit 1
+          fi
+      - name: Nothing depends on sandbox/
+        run: |
+          if grep -rnE --include='*.toml' --include='*.rs' --include='*.py' --include='*.typ' --include='*.sh' \
+               '(\.\./)+sandbox\b|"sandbox/' crates experimental python packages examples Cargo.toml; then
+            echo "::error::Shared code refers to sandbox/; graduated work never depends on the sandbox (AGENTS.md)."
+            exit 1
+          fi

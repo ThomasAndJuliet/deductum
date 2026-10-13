@@ -1,0 +1,187 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p2-26-atm-withdrawals",
+    "job": {
+      "kind": "lookup",
+      "text": "Look up the amount and time of each withdrawal from the ATM yesterday"
+    },
+    "title": {
+      "text": "ATM Withdrawals, Aug. 14, 2022",
+      "kind": "descriptive"
+    },
+    "data": {
+      "x": {
+        "kind": "time",
+        "grid": "none",
+        "values": [
+          "2022-08-14T00",
+          "2022-08-15T00"
+        ]
+      },
+      "measure": {
+        "name": "withdrawal",
+        "kind": "amount",
+        "zero": "meaningful",
+        "min": 0,
+        "persistence": "event",
+        "unit": {
+          "prefix": "$",
+          "what": "amount withdrawn"
+        }
+      },
+      "series": [
+        {
+          "id": "withdrawals",
+          "name": "Withdrawals",
+          "points": [
+            [
+              "2022-08-14T05:20",
+              200
+            ],
+            [
+              "2022-08-14T05:50",
+              80
+            ],
+            [
+              "2022-08-14T06:20",
+              140
+            ],
+            [
+              "2022-08-14T06:45",
+              100
+            ],
+            [
+              "2022-08-14T06:45",
+              160
+            ],
+            [
+              "2022-08-14T06:50",
+              100
+            ],
+            [
+              "2022-08-14T06:55",
+              40
+            ],
+            [
+              "2022-08-14T07:10",
+              40
+            ],
+            [
+              "2022-08-14T08:00",
+              40
+            ],
+            [
+              "2022-08-14T09:30",
+              100
+            ],
+            [
+              "2022-08-14T10:25",
+              100
+            ],
+            [
+              "2022-08-14T11:20",
+              40
+            ],
+            [
+              "2022-08-14T11:35",
+              20
+            ],
+            [
+              "2022-08-14T11:55",
+              60
+            ],
+            [
+              "2022-08-14T13:00",
+              500
+            ],
+            [
+              "2022-08-14T13:10",
+              120
+            ],
+            [
+              "2022-08-14T13:20",
+              40
+            ],
+            [
+              "2022-08-14T13:50",
+              300
+            ],
+            [
+              "2022-08-14T14:30",
+              160
+            ],
+            [
+              "2022-08-14T14:45",
+              200
+            ],
+            [
+              "2022-08-14T16:20",
+              40
+            ],
+            [
+              "2022-08-14T16:45",
+              120
+            ],
+            [
+              "2022-08-14T16:50",
+              140
+            ],
+            [
+              "2022-08-14T17:15",
+              300
+            ],
+            [
+              "2022-08-14T17:40",
+              60
+            ],
+            [
+              "2022-08-14T18:45",
+              160
+            ],
+            [
+              "2022-08-14T18:50",
+              120
+            ],
+            [
+              "2022-08-14T20:05",
+              140
+            ],
+            [
+              "2022-08-14T20:40",
+              100
+            ],
+            [
+              "2022-08-14T20:50",
+              140
+            ],
+            [
+              "2022-08-14T21:05",
+              140
+            ],
+            [
+              "2022-08-14T21:15",
+              120
+            ],
+            [
+              "2022-08-14T21:20",
+              120
+            ],
+            [
+              "2022-08-14T22:50",
+              200
+            ]
+          ]
+        }
+      ]
+    },
+    "facts": {
+      "message": "individual_values"
+    },
+    "source": {
+      "book": "p. 194 (s. 0181)",
+      "notes": "06 §5.3 (synthetic data)",
+      "shows": "events over one day on a true time axis: hours at their instants every third, the day under them, a tick at each hour (D-45); withdrawals at the same minute stacked (D-42). The amounts and times are synthetic, after the book's third thin-bar example"
+    }
+  }
+}

@@ -1,0 +1,223 @@
+{
+ "key": "r1-09-notes-not-drawn--unbreakable",
+ "file": "r1-09-notes-not-drawn.json",
+ "variant": "unbreakable",
+ "requested_type": "bar",
+ "report": {
+  "chart": "r1-09-notes-not-drawn",
+  "style": "plain",
+  "variant": "unbreakable",
+  "type": "bar",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "R2-24",
+    "level": "locked",
+    "text": "bars start at zero",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "scale 0–25,000,000 by 5,000,000",
+    "guide": []
+   },
+   {
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "nominal categories sorted by value, descending",
+    "guide": []
+   },
+   {
+    "rule": "R9-10",
+    "level": "locked",
+    "text": "“Central” and “Coast” come within 10 pt of each other under vertical bars, with every multi-word name wrapped: horizontal bars, names right-aligned at the left",
+    "guide": []
+   },
+   {
+    "rule": "R2-21",
+    "level": "locked",
+    "text": "labels as a set, 0 decimals, bare numbers: 0, 5, 10, 15, 20, 25",
+    "guide": []
+   },
+   {
+    "rule": "R5-10",
+    "level": "locked",
+    "text": "digits hidden: millions, stated in the scale's title (R2-05, D-3): “Population (million inhabitants)”",
+    "guide": []
+   },
+   {
+    "rule": "R2-07",
+    "level": "locked",
+    "text": "a horizontal scale: bare numbers, and its title centred below with the unit in parentheses: “Population (million inhabitants)”",
+    "guide": []
+   },
+   {
+    "rule": "CG-8",
+    "level": "locked",
+    "text": "notes under the chart, below everything else, left-aligned and wrapped to its 291 pt: 1 plain note (marks in reading order)",
+    "guide": []
+   }
+  ],
+  "findings": [
+   {
+    "rule": "R2-32",
+    "severity": "info",
+    "message": "chart.value_labels off departs from the procedure, which gives on (5 values against 6 scale labels: whichever puts fewer numbers on the chart (G2.18))",
+    "path": "chart.value_labels",
+    "reason": "the book's figure keeps its scale (p. 61): this example shows the magnitude stated once, on the top label",
+    "level": "guided",
+    "recommended": "on",
+    "guide": [],
+    "title": "fewer values than scale labels: label the values directly"
+   },
+   {
+    "rule": "CG-8",
+    "severity": "error",
+    "message": "note 1 cannot be wrapped to the chart's 200 pt: “https://statistics.example.org/population/regio…” is 290 pt wide; the figure is widened to keep it (shorten the word, or give the note as plain text to wrap)",
+    "path": "notes[0].text",
+    "level": "locked",
+    "guide": [],
+    "title": "notes under the chart: every mark with its note and every footnote with its mark, the notes below everything else, wrapped to the chart's width, never clipped or dropped (owner, 1 Oct 2026)"
+   },
+   {
+    "rule": "R2-11",
+    "severity": "info",
+    "message": "the unit phrase “inhabitants” is one word; say what is counted, which subset and per what period",
+    "path": "data.measure.unit.noun",
+    "level": "locked",
+    "guide": [],
+    "title": "a unit phrase specific enough for one reading"
+   }
+  ],
+  "overrides": [],
+  "expect": {
+   "refused": [
+    "CG-8"
+   ]
+  },
+  "expect_met": true,
+  "source": {
+   "book": "p. 59–61 (s. 0058–0061)",
+   "notes": "p1-02-population-by-region, with notes (owner, 1 Oct 2026: footnotes)",
+   "shows": "a note whose mark has no place: the series' name is not drawn (one series, no legend), so the note stands under the chart without a mark and the report says so (CG-8, warn)",
+   "status": "generated"
+  },
+  "summary": {
+   "notes": [
+    {
+     "mark": null,
+     "text": "Source: https://statistics.example.org/population/regional-estimates/2022/mid-year/table-4"
+    }
+   ],
+   "scale": "0–25,000,000 by 5,000,000",
+   "labels": [
+    "0",
+    "5",
+    "10",
+    "15",
+    "20",
+    "25"
+   ],
+   "top": "25 million inhabitants",
+   "scale_title": "Population (million inhabitants)",
+   "orientation": "horizontal",
+   "plot": [
+    38.53,
+    21.0,
+    195.0,
+    121.0
+   ],
+   "band": 20.0,
+   "width": 290.56,
+   "height": 176.27,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job lookup: no insight stated (a descriptive title will do, D-55)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-1",
+    "level": "guided",
+    "text": "a graph, the values to be compared or a pattern seen (G1.11)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 2,
+    "name": "variables",
+    "rule": "RP3-2",
+    "level": "guided",
+    "text": "one plot: categories along x and 1 series; a further variable would go to small multiples (data.dims, G1.18)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 3,
+    "name": "location",
+    "rule": "R8-2",
+    "level": "guided",
+    "text": "not a map: where the values are is not the message (facts.location_matters; G1.24, G1.25)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-01",
+    "level": "guided",
+    "text": "not parts of a total (no data.parts, no breakdown message; G1.1)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 7,
+    "name": "values across categories",
+    "rule": "R9-1",
+    "level": "guided",
+    "text": "group: bar charts. Values compared across categories (G1.9)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 7,
+    "name": "values across categories",
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "one scale from zero: bars, sorted by value when the categories are nominal (02 D1)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type (G1.59)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "bar charts are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "bar charts"
+   }
+  ],
+  "copies": []
+ },
+ "output_sha256": "59c63daf01ef6290ca8fc7d5fc4fdd7212654fef2fe53539aafc61b35020d509"
+}

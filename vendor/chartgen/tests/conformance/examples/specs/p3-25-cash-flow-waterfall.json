@@ -1,0 +1,108 @@
+{
+ "base": {
+  "chartspec": 1,
+  "id": "p3-25-cash-flow-waterfall",
+  "job": {
+   "kind": "explain",
+   "text": "How did the year's cash flows move the balance from opening to closing?"
+  },
+  "title": {
+   "text": "Cash Flow, 2022",
+   "kind": "descriptive"
+  },
+  "data": {
+   "x": {
+    "kind": "nominal",
+    "values": [
+     "Opening cash",
+     "Sales receipts",
+     "Payroll",
+     "Supplies",
+     "Operating cash",
+     "Equipment",
+     "Loan",
+     "Closing cash"
+    ],
+    "roles": {
+     "Opening cash": "total",
+     "Operating cash": "total",
+     "Closing cash": "total"
+    }
+   },
+   "measure": {
+    "name": "cash",
+    "kind": "amount",
+    "zero": "meaningful",
+    "unit": {
+     "prefix": "$",
+     "magnitude": 6,
+     "what": "cash"
+    }
+   },
+   "series": [
+    {
+     "id": "cash",
+     "name": "Cash",
+     "values": [
+      2.4,
+      5.1,
+      -2.9,
+      -1.1,
+      3.5,
+      -1.6,
+      0.8,
+      2.7
+     ]
+    }
+   ],
+   "parts": {
+    "meaningful_total": true,
+    "all_parts": true,
+    "overlap": false
+   }
+  },
+  "facts": {
+   "message": "cumulative_subtotals"
+  },
+  "source": {
+   "notes": "07 §5.5; D-43",
+   "shows": "our figures: a start balance, a subtotal and the end balance as full grey bars from zero, each the running total where it stands, the steps between them floating (D-43: totals at declared positions, the process's own order); eight steps at 480 pt, where their names fit under the bars, every multi-word name wrapped (R9-10; a waterfall stands upright, D-43, so at the text width, where they would meet, it is refused, R2-08)"
+  },
+  "layout": {
+   "width": 480
+  }
+ },
+ "variants": [
+  {
+   "name": "contradiction",
+   "patch": {
+    "data": {
+     "series": [
+      {
+       "id": "cash",
+       "name": "Cash",
+       "values": [
+        2.4,
+        5.1,
+        -2.9,
+        -1.1,
+        3.5,
+        -1.6,
+        0.8,
+        3.0
+       ]
+      }
+     ]
+    },
+    "source": {
+     "shows": "the closing balance given as $3.0M where the steps add up to $2.7M: warned (the data contradict themselves, D-54), drawn at the value given"
+    }
+   },
+   "expect": {
+    "findings": [
+     "R7-11"
+    ]
+   }
+  }
+ ]
+}

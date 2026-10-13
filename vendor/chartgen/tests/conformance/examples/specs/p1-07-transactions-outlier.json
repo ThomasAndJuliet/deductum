@@ -1,0 +1,68 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p1-07-transactions-outlier",
+    "job": {
+      "kind": "lookup",
+      "text": "Look up each region's successful transactions, the small counts included"
+    },
+    "title": {
+      "text": "Successful Transactions by Region, 2022",
+      "kind": "descriptive"
+    },
+    "data": {
+      "x": {
+        "kind": "nominal",
+        "values": [
+          "East",
+          "Central",
+          "South",
+          "West",
+          "North",
+          "Others"
+        ],
+        "roles": {
+          "Others": "all_others"
+        }
+      },
+      "measure": {
+        "name": "transactions",
+        "kind": "count",
+        "zero": "meaningful",
+        "min": 0,
+        "unit": {
+          "noun": "successful transactions"
+        }
+      },
+      "series": [
+        {
+          "id": "tx",
+          "name": "Transactions",
+          "values": [
+            451,
+            16,
+            15,
+            7,
+            5,
+            4
+          ]
+        }
+      ]
+    },
+    "facts": {
+      "small_values_matter": true
+    },
+    "chart": {
+      "type": "bar"
+    },
+    "inset": {
+      "kind": "auto",
+      "position": "auto"
+    },
+    "source": {
+      "book": "p. 76 (s. 0076); p. 334 (s. 0304)",
+      "notes": "02 #9; 08-12 #4",
+      "shows": "the outlier inset: the main chart keeps its full linear scale from zero (“500 successful transactions”), the catch-all last in its reserved grey (R3-16, R9-9); the five small regions re-plotted on their own scale from zero in the largest empty area of the plot, above them and right of East, 0–20 by 5 where the book stops at 15 with a bar of 16 (no bar passes the top gridline); a frame round the small bars at the baseline, two links forming a widening cone (G2.26, G2.27, G2.29)"
+    }
+  }
+}

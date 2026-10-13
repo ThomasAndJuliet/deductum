@@ -1,0 +1,194 @@
+{
+ "key": "r1-42-small-venue-visits-given-in--word-too",
+ "file": "r1-42-small-venue-visits-given-in.json",
+ "variant": "word-too",
+ "requested_type": "auto",
+ "report": {
+  "chart": "r1-42-small-venue-visits-given-in",
+  "style": "plain",
+  "variant": "word-too",
+  "type": "bar",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "type bar: categories compared by value",
+    "guide": []
+   },
+   {
+    "rule": "R2-24",
+    "level": "locked",
+    "text": "bars start at zero",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "scale 0–150 by 50",
+    "guide": []
+   },
+   {
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "nominal categories sorted by value, descending",
+    "guide": []
+   },
+   {
+    "rule": "R9-10",
+    "level": "locked",
+    "text": "“Harbour Maritime Museum” and “Castle Keep & Grounds” come within 10 pt of each other under vertical bars, with every multi-word name wrapped: horizontal bars, names right-aligned at the left",
+    "guide": []
+   },
+   {
+    "rule": "R2-21",
+    "level": "locked",
+    "text": "labels as a set, 0 decimals, bare numbers: 0, 50, 100, 150",
+    "guide": []
+   },
+   {
+    "rule": "R5-10",
+    "level": "locked",
+    "text": "digits hidden: thousands, stated in the scale's title (R2-05, D-3): “Visits (thousand thousand door-count visits)”",
+    "guide": []
+   },
+   {
+    "rule": "R2-07",
+    "level": "locked",
+    "text": "a horizontal scale: bare numbers, and its title centred below with the unit in parentheses: “Visits (thousand thousand door-count visits)”",
+    "guide": []
+   }
+  ],
+  "findings": [
+   {
+    "rule": "R5-11",
+    "severity": "warn",
+    "message": "the unit's words say “thousand” and given_in says the values are in thousands: the magnitude would be stated twice, and the generator writes it itself from the values; take the word out of the unit",
+    "path": "data.measure.unit.given_in",
+    "level": "locked",
+    "guide": [],
+    "title": "hidden digits never mistaken: the unit the data are written in (unit.given_in) agrees with the values"
+   }
+  ],
+  "overrides": [],
+  "expect": {
+   "findings": [
+    "R5-11"
+   ]
+  },
+  "expect_met": true,
+  "source": {
+   "notes": "eval B06 (the trust's figures, in thousands)",
+   "shows": "values written in thousands in the source (142.3 for 142,300), said by unit.given_in: the scale reads “150K door-count visits”; the variant also writes “thousand” in the unit's words, the magnitude stated twice (R5-11)",
+   "status": "generated"
+  },
+  "summary": {
+   "scale": "0–150 by 50",
+   "labels": [
+    "0",
+    "50",
+    "100",
+    "150"
+   ],
+   "top": "150K thousand door-count visits",
+   "scale_title": "Visits (thousand thousand door-count visits)",
+   "orientation": "horizontal",
+   "plot": [
+    142.83,
+    21.03,
+    360.5,
+    201.03
+   ],
+   "band": 20.0,
+   "width": 368.0,
+   "height": 228.84,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job lookup: no insight stated (a descriptive title will do, D-55)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-1",
+    "level": "guided",
+    "text": "a graph, the values to be compared or a pattern seen (G1.11)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 2,
+    "name": "variables",
+    "rule": "RP3-2",
+    "level": "guided",
+    "text": "one plot: categories along x and 1 series; a further variable would go to small multiples (data.dims, G1.18)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 3,
+    "name": "location",
+    "rule": "R8-2",
+    "level": "guided",
+    "text": "not a map: where the values are is not the message (facts.location_matters; G1.24, G1.25)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-01",
+    "level": "guided",
+    "text": "not parts of a total (no data.parts, no breakdown message; G1.1)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 7,
+    "name": "values across categories",
+    "rule": "R9-1",
+    "level": "guided",
+    "text": "group: bar charts. Values compared across categories (G1.9)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 7,
+    "name": "values across categories",
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "one scale from zero: bars, sorted by value when the categories are nominal (02 D1)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type (G1.59)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "bar charts are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "bar charts"
+   }
+  ],
+  "copies": []
+ },
+ "output_sha256": "deec6872f8bfaa6d6e31c64b72a4db2f52bb69082c0f79519b236bb36fc61ef5"
+}

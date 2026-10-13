@@ -1,0 +1,116 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "r1-40-feature-usage-descriptive-wraps",
+    "purpose": "communication",
+    "job": {
+      "kind": "make_aware",
+      "text": "Show the all-hands which features customers use most, from the survey"
+    },
+    "insight": {
+      "important": "Invoicing is used by four in five respondents, well ahead of every other feature",
+      "targets": [
+        {
+          "category": "Invoicing"
+        }
+      ]
+    },
+    "title": {
+      "text": "Invoicing Is Used by Four in Five Respondents",
+      "kind": "insight",
+      "descriptive": "Share of the 640 survey respondents who said they use each feature at least once a month (they could select more than one), March 2026"
+    },
+    "data": {
+      "x": {
+        "kind": "nominal",
+        "values": [
+          "Invoicing",
+          "Expense tracking",
+          "Bank reconciliation",
+          "Payroll",
+          "Inventory",
+          "Time tracking",
+          "Multi-currency",
+          "API / integrations"
+        ]
+      },
+      "measure": {
+        "name": "respondents using the feature",
+        "kind": "percent",
+        "zero": "meaningful",
+        "min": 0,
+        "max": 100,
+        "unit": {
+          "suffix": "%",
+          "what": "respondents using the feature"
+        }
+      },
+      "series": [
+        {
+          "id": "features",
+          "name": "Respondents",
+          "values": [
+            80.0,
+            67.3,
+            58.9,
+            30.9,
+            22.3,
+            18.9,
+            10.0,
+            8.1
+          ]
+        }
+      ]
+    },
+    "facts": {
+      "message": "compare"
+    },
+    "chart": {
+      "type": "bar"
+    },
+    "highlight": [
+      {
+        "targets": [
+          {
+            "category": "Invoicing"
+          }
+        ],
+        "method": "auto"
+      }
+    ],
+    "source": {
+      "notes": "eval B05 (sonnet-G)",
+      "shows": "an overlong descriptive line wrapped onto two lines like the title (G6.7, G6.9), never left running off the canvas; one that two lines cannot hold, or Typst markup, which is not wrapped, is an error (CG-1)"
+    }
+  },
+  "variants": [
+    {
+      "name": "too-long",
+      "patch": {
+        "title": {
+          "descriptive": "Share of the 640 survey respondents who said that they use each feature at least once a month in their daily work, having been told that they could select more than one feature from the list, March 2026"
+        }
+      },
+      "expect": {
+        "refused": [
+          "CG-1"
+        ]
+      }
+    },
+    {
+      "name": "markup",
+      "patch": {
+        "title": {
+          "descriptive": {
+            "typst": "Share of the 640 survey respondents who said they use each feature at least once a month (they could select more than one), March 2026"
+          }
+        }
+      },
+      "expect": {
+        "refused": [
+          "CG-1"
+        ]
+      }
+    }
+  ]
+}

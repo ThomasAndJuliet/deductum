@@ -1,0 +1,185 @@
+{
+ "key": "p2-66-sales-and-satisfaction",
+ "file": "p2-66-sales-and-satisfaction.json",
+ "variant": null,
+ "requested_type": "auto",
+ "report": {
+  "chart": "p2-66-sales-and-satisfaction",
+  "style": "plain",
+  "variant": null,
+  "type": "merged of line",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "RP3-3",
+    "level": "guided",
+    "text": "arranged: rows by measure: series in different measures: one panel per measure, stacked on one time axis drawn at the foot, each with its own scale (G2.31, G2.32)",
+    "guide": []
+   },
+   {
+    "rule": "R3-3",
+    "level": "locked",
+    "text": "one colour for every mark: each panel holds one measure, and the panels tell them apart (G7.6)",
+    "guide": []
+   },
+   {
+    "rule": "R6-4",
+    "level": "guided",
+    "text": "Gross sales: type line: a regular series whose pattern of change is the point (06 DP6-1, G1.51)",
+    "guide": []
+   },
+   {
+    "rule": "R6-4",
+    "level": "guided",
+    "text": "Avg. customer satisfaction: type line: a regular series whose pattern of change is the point (06 DP6-1, G1.51)",
+    "guide": []
+   },
+   {
+    "rule": "R2-22",
+    "level": "locked",
+    "text": "Gross sales: zero included (a narrow range far from zero wants an inset)",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "Gross sales: the step 1 would leave 27% room above the data; 0.5 gives 0–3.5, 7 intervals, 11% room",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "Gross sales: scale 0–3.5 by 0.5",
+    "guide": []
+   },
+   {
+    "rule": "R2-24",
+    "level": "guided",
+    "text": "Avg. customer satisfaction: zero is arbitrary here, not “none of it” (G2.10): truncated, the lower limit 10–20 % of the spread below the lowest value (G2.11)",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "Avg. customer satisfaction: scale 6.5–8 by 0.5",
+    "guide": []
+   },
+   {
+    "rule": "R6-27",
+    "level": "locked",
+    "text": "Gross sales: no point markers: no value is isolated and no straight run hides one",
+    "guide": []
+   },
+   {
+    "rule": "R2-07",
+    "level": "locked",
+    "text": "Gross sales: the unit phrase on the top label: “$3.5 million (gross sales)”; the top gridline starts after it",
+    "guide": []
+   },
+   {
+    "rule": "R2-21",
+    "level": "locked",
+    "text": "Gross sales: labels as a set, 1 decimals: 0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, $3.5",
+    "guide": []
+   },
+   {
+    "rule": "R5-10",
+    "level": "locked",
+    "text": "Gross sales: digits hidden: millions, stated once on the top label (R2-05, D-3): “$3.5 million (gross sales)”",
+    "guide": []
+   },
+   {
+    "rule": "R6-27",
+    "level": "locked",
+    "text": "Avg. customer satisfaction: no point markers: no value is isolated and no straight run hides one",
+    "guide": []
+   },
+   {
+    "rule": "R2-07",
+    "level": "locked",
+    "text": "Avg. customer satisfaction: the unit phrase on the top label: “8.0 avg. customer satisfaction (on 10)”; the top gridline starts after it",
+    "guide": []
+   },
+   {
+    "rule": "R2-21",
+    "level": "locked",
+    "text": "Avg. customer satisfaction: labels as a set, 1 decimals: 6.5, 7.0, 7.5, 8.0",
+    "guide": []
+   },
+   {
+    "rule": "R2-40",
+    "level": "locked",
+    "text": "Avg. customer satisfaction: time axis: row 1 full",
+    "guide": []
+   },
+   {
+    "rule": "R2-39",
+    "level": "locked",
+    "text": "Avg. customer satisfaction: time axis: row 2 (“2022”) left out, the title gives it (G2.37)",
+    "guide": []
+   },
+   {
+    "rule": "R2-16",
+    "level": "locked",
+    "text": "a merged chart: 2 panels stacked on one time axis, drawn once at the foot; each its own scale with its unit phrase on the top label (G2.32)",
+    "guide": []
+   }
+  ],
+  "findings": [],
+  "overrides": [],
+  "expect": {},
+  "expect_met": true,
+  "source": {
+   "book": "p. 70 (s. 0069); p. 69 (s. 0068)",
+   "notes": "02 #7",
+   "shows": "a merged chart instead of a dual axis: two lines in different units stacked on one time axis, drawn once at the foot, each panel its own scale with its unit phrase on its top label (G2.31, G2.32); the rating's zero is an anchor, so its line need not start at zero (G2.10); both lines in the single-line colour, since the panels already tell them apart (R3-3), where the book keeps the dual axis's orange and blue",
+   "status": "generated"
+  },
+  "summary": {
+   "arrangement": "rows by measure",
+   "kind": "merged",
+   "rows": 2,
+   "columns": 1,
+   "panels": 2,
+   "scale_mode": "per_measure",
+   "scale": "0–3.5 by 0.5",
+   "labels": [
+    "0.0",
+    "0.5",
+    "1.0",
+    "1.5",
+    "2.0",
+    "2.5",
+    "3.0",
+    "$3.5"
+   ],
+   "top": "$3.5 million (gross sales)",
+   "orientation": "vertical",
+   "scales": {
+    "Gross sales": "0–3.5 by 0.5",
+    "Avg. customer satisfaction": "6.5–8 by 0.5"
+   },
+   "plots": {
+    "Gross sales": [
+     26.78,
+     36.07,
+     368.0,
+     138.44
+    ],
+    "Avg. customer satisfaction": [
+     26.78,
+     154.26,
+     368.0,
+     256.62
+    ]
+   },
+   "width": 368.0,
+   "height": 274.51,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [],
+  "copies": []
+ },
+ "output_sha256": "f76fd2fa869729b95e948470a0253dd68c17e5b11b17b2fca26ddd597a6b7100"
+}

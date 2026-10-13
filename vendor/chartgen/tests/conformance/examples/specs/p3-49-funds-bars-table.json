@@ -1,0 +1,146 @@
+{
+ "base": {
+  "chartspec": 1,
+  "id": "p3-49-funds-bars-table",
+  "job": {
+   "kind": "lookup",
+   "text": "Look up what each region raised in each month"
+  },
+  "title": {
+   "text": "Funds Raised (US$) by Region, Jan–May 2022",
+   "kind": "descriptive"
+  },
+  "data": {
+   "x": {
+    "kind": "nominal",
+    "values": [
+     "Jan",
+     "Feb",
+     "Mar",
+     "Apr",
+     "May",
+     "Total"
+    ],
+    "roles": {
+     "Total": "total"
+    }
+   },
+   "measure": {
+    "name": "funds raised",
+    "kind": "amount",
+    "zero": "meaningful",
+    "precision": 1,
+    "unit": {
+     "prefix": "$",
+     "what": "funds raised"
+    }
+   },
+   "series": [
+    {
+     "id": "north",
+     "name": "North",
+     "values": [
+      87011,
+      95531,
+      136690,
+      143532,
+      108022,
+      570786
+     ]
+    },
+    {
+     "id": "south",
+     "name": "South",
+     "values": [
+      73330,
+      80571,
+      91027,
+      124161,
+      140023,
+      509112
+     ]
+    },
+    {
+     "id": "central",
+     "name": "Central",
+     "values": [
+      81661,
+      91057,
+      103358,
+      90896,
+      137051,
+      504023
+     ]
+    },
+    {
+     "id": "east",
+     "name": "East",
+     "values": [
+      84501,
+      112564,
+      73939,
+      133213,
+      85240,
+      489458
+     ]
+    },
+    {
+     "id": "west",
+     "name": "West",
+     "values": [
+      76578,
+      59710,
+      52355,
+      124864,
+      76939,
+      390447
+     ]
+    },
+    {
+     "id": "total",
+     "name": "Total",
+     "role": "total",
+     "values": [
+      403081,
+      439434,
+      457369,
+      616666,
+      547275,
+      2463825
+     ]
+    }
+   ]
+  },
+  "facts": {
+   "message": "lookup_only"
+  },
+  "table": {
+   "graphics": "bars"
+  },
+  "layout": {
+   "width": 440
+  },
+  "reasons": {
+   "table.graphics": "the audience refuses graphs (G1.16, G7.47)"
+  },
+  "source": {
+   "book": "p. 339 (s. 0309)",
+   "notes": "08-12 #9 (c)",
+   "shows": "bars built into the cells (R10-9): a pale bar under each number, from the cell's left edge, on one scale from zero for each column, the Total column on its own as the book has it, pale enough for the text grey; the totals row without; variant dots (not the book's), a dot in a strip beside each number on one scale per column, at 560 pt; at 440 pt"
+  }
+ },
+ "variants": [
+  {
+   "name": "dots",
+   "patch": {
+    "table": {
+     "graphics": "dots"
+    },
+    "layout": {
+     "width": 560
+    }
+   },
+   "expect": {}
+  }
+ ]
+}

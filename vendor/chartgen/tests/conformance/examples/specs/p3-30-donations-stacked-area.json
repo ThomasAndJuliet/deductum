@@ -1,0 +1,158 @@
+{
+ "base": {
+  "chartspec": 1,
+  "id": "p3-30-donations-stacked-area",
+  "job": {
+   "kind": "answer",
+   "text": "How did the total and each region's share of it change during the year?"
+  },
+  "insight": {
+   "important": "Total donations decreased toward the end of the year, and the West now accounts for a much smaller fraction"
+  },
+  "title": {
+   "text": "Donations Fell Late in the Year, the West's Share Most",
+   "kind": "insight",
+   "descriptive": "Donations by Region, 2022"
+  },
+  "data": {
+   "x": {
+    "kind": "time",
+    "grid": "month",
+    "values": [
+     "2022-01",
+     "2022-02",
+     "2022-03",
+     "2022-04",
+     "2022-05",
+     "2022-06",
+     "2022-07",
+     "2022-08",
+     "2022-09",
+     "2022-10",
+     "2022-11",
+     "2022-12"
+    ]
+   },
+   "measure": {
+    "name": "donations",
+    "kind": "amount",
+    "zero": "meaningful",
+    "min": 0,
+    "persistence": "summary",
+    "unit": {
+     "prefix": "$",
+     "magnitude": 3,
+     "noun": "in donations"
+    }
+   },
+   "series": [
+    {
+     "id": "east",
+     "name": "East",
+     "values": [
+      14.0,
+      20.0,
+      19.8,
+      14.9,
+      14.0,
+      19.6,
+      24.2,
+      25.6,
+      25.7,
+      23.8,
+      26.3,
+      22.4
+     ],
+     "slot": 1
+    },
+    {
+     "id": "west",
+     "name": "West",
+     "values": [
+      12.0,
+      17.3,
+      18.8,
+      10.5,
+      10.0,
+      13.6,
+      26.5,
+      25.5,
+      27.8,
+      8.0,
+      3.2,
+      4.6
+     ],
+     "slot": 2
+    },
+    {
+     "id": "north",
+     "name": "North",
+     "values": [
+      7.4,
+      8.3,
+      7.0,
+      8.7,
+      6.0,
+      7.1,
+      7.0,
+      6.7,
+      11.2,
+      7.3,
+      9.2,
+      7.9
+     ],
+     "slot": 3
+    },
+    {
+     "id": "south",
+     "name": "South",
+     "values": [
+      10.0,
+      8.8,
+      12.8,
+      5.1,
+      5.3,
+      7.9,
+      9.6,
+      14.6,
+      22.4,
+      1.0,
+      10.3,
+      6.0
+     ],
+     "slot": 4
+    }
+   ],
+   "parts": {
+    "meaningful_total": true,
+    "all_parts": true,
+    "overlap": false
+   }
+  },
+  "facts": {
+   "message": "fraction_of_total",
+   "total_matters": true,
+   "focus": "pattern"
+  },
+  "source": {
+   "book": "p. 282–283 (s. 0258)",
+   "notes": "07 #14",
+   "shows": "fractions over time with the total's change, the pattern the point: stacked areas (R7-29, R7-28, G1.44, G1.45), the bands touching, the largest part at the base (D-26 (b)), the parts named beside the last month, level with their bands (G5.4); only the base band can be read precisely (R7-29); each region in the colour it has in all six charts of 07 #14 (fixed slots, the book's: East blue, West orange, North olive, South gold; R3-24, G4.22, D-22 (a))"
+  }
+ },
+ "variants": [
+  {
+   "name": "fixed",
+   "patch": {
+    "data": {
+     "parts": {
+      "order": "fixed"
+     }
+    },
+    "source": {
+     "shows": "the regions' order fixed by the data (data.parts.order: fixed; owner, 1 Oct 2026), as in the table the book's six charts share: East, West, North, South from the base, the book's stack, North below the larger South (s. 0258)"
+    }
+   }
+  }
+ ]
+}

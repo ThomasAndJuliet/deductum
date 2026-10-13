@@ -1,0 +1,249 @@
+{
+ "key": "p3-25-cash-flow-waterfall--contradiction",
+ "file": "p3-25-cash-flow-waterfall.json",
+ "variant": "contradiction",
+ "requested_type": "auto",
+ "report": {
+  "chart": "p3-25-cash-flow-waterfall",
+  "style": "plain",
+  "variant": "contradiction",
+  "type": "waterfall",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "R7-11",
+    "level": "guided",
+    "text": "type waterfall: the parts mix positive and negative values and running subtotals are the message: a waterfall, each bar starting where the last ended (G1.38)",
+    "guide": []
+   },
+   {
+    "rule": "R2-24",
+    "level": "locked",
+    "text": "bars start at zero",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "scale 0–8 by 2",
+    "guide": []
+   },
+   {
+    "rule": "R7-11",
+    "level": "guided",
+    "text": "the steps in the process's own order, as given; a waterfall is never sorted (D-43)",
+    "guide": []
+   },
+   {
+    "rule": "R7-11",
+    "level": "locked",
+    "text": "each step a bar from the running total before it to the one after it: rises Sales receipts, Loan, falls Payroll, Supplies, Equipment, the rises in slot 1 and the falls in slot 2 (G7.33: green and red only for a good/bad reading); Opening cash, Operating cash, Closing cash full bars from zero in the reserved grey (G4.15), each equal to the running total there (G7.33)",
+    "guide": []
+   },
+   {
+    "rule": "R2-21",
+    "level": "locked",
+    "text": "labels as a set, 0 decimals: 0, 2, 4, 6, $8",
+    "guide": []
+   },
+   {
+    "rule": "R5-10",
+    "level": "locked",
+    "text": "digits hidden: millions, stated once on the top label (R2-05, D-3): “$8 million (cash)”",
+    "guide": []
+   },
+   {
+    "rule": "R5-26",
+    "level": "locked",
+    "text": "wrapped onto two lines: Opening cash, Sales receipts, Operating cash, Closing cash",
+    "guide": []
+   },
+   {
+    "rule": "R2-07",
+    "level": "locked",
+    "text": "the unit phrase on the top label: “$8 million (cash)”; the top gridline starts after it",
+    "guide": []
+   },
+   {
+    "rule": "R7-11",
+    "level": "locked",
+    "text": "a hairline connector at each running total, from one bar to the next (s. 0237)",
+    "guide": []
+   }
+  ],
+  "findings": [
+   {
+    "rule": "R7-11",
+    "severity": "warn",
+    "message": "Closing cash is given as 3, but the steps before it add up to 2.7: the data contradict themselves (D-54); the bar is drawn at the value given, and the next step starts from it",
+    "path": "data.series[0].values",
+    "level": "locked",
+    "guide": [],
+    "title": "mixed signs and running subtotals: a waterfall"
+   }
+  ],
+  "overrides": [],
+  "expect": {
+   "findings": [
+    "R7-11"
+   ]
+  },
+  "expect_met": true,
+  "source": {
+   "notes": "07 §5.5; D-43",
+   "shows": "the closing balance given as $3.0M where the steps add up to $2.7M: warned (the data contradict themselves, D-54), drawn at the value given",
+   "status": "generated"
+  },
+  "summary": {
+   "scale": "0–8 by 2",
+   "labels": [
+    "0",
+    "2",
+    "4",
+    "6",
+    "$8"
+   ],
+   "top": "$8 million (cash)",
+   "scale_title": null,
+   "orientation": "vertical",
+   "plot": [
+    19.0,
+    21.03,
+    480.0,
+    297.63
+   ],
+   "band": 57.62,
+   "stack": "waterfall",
+   "parts": [
+    "cash"
+   ],
+   "percent": false,
+   "totals": [
+    "Opening cash",
+    "Sales receipts",
+    "Payroll",
+    "Supplies",
+    "Operating cash",
+    "Equipment",
+    "Loan",
+    "Closing cash"
+   ],
+   "width": 480.0,
+   "height": 327.9,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job explain: no insight stated (a descriptive title will do, D-55)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-1",
+    "level": "guided",
+    "text": "a graph, the values to be compared or a pattern seen (G1.11)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 2,
+    "name": "variables",
+    "rule": "RP3-2",
+    "level": "guided",
+    "text": "one plot: categories along x and 1 series; a further variable would go to small multiples (data.dims, G1.18)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 3,
+    "name": "location",
+    "rule": "R8-2",
+    "level": "guided",
+    "text": "not a map: where the values are is not the message (facts.location_matters; G1.24, G1.25)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "RP2-7",
+    "level": "guided",
+    "text": "group: breakdowns of totals. One total of 5 parts (07 §4.1, G1.8)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-02",
+    "level": "locked",
+    "text": "check, meaningful total: passes: the values add up to a total someone would quote (parts.meaningful_total)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-03",
+    "level": "locked",
+    "text": "check, all parts: passes: every part of the total is shown (parts.all_parts)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-05",
+    "level": "locked",
+    "text": "check, overlap: passes: no part contains or overlaps another (parts.overlap)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-04",
+    "level": "locked",
+    "text": "check, signs: fails: the parts mix positive and negative values: areas cannot be negative, and a mixed stack shows neither the net total nor comparable parts (G0.15)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-11",
+    "level": "guided",
+    "text": "the parts mix positive and negative values and running subtotals are the message: a waterfall, each bar starting where the last ended (G1.38)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type (G1.59)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "waterfall charts are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   }
+  ],
+  "copies": []
+ },
+ "output_sha256": "5d0c9d92aaefcafdbd2fd2824a969e5d2bd0451fac05216716c1e085c81c4b11"
+}

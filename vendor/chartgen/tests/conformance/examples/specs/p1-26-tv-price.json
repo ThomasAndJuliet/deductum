@@ -1,0 +1,169 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p1-26-tv-price",
+    "job": {
+      "kind": "lookup",
+      "text": "Look up the TV's price on any day from April to June"
+    },
+    "title": {
+      "text": "Price of the XLCD65 TV, Apr–Jun 2022",
+      "kind": "descriptive"
+    },
+    "data": {
+      "x": {
+        "kind": "time",
+        "grid": "none"
+      },
+      "as_of": "2022-06-30",
+      "measure": {
+        "name": "price",
+        "kind": "amount",
+        "zero": "meaningful",
+        "min": 0,
+        "persistence": "state",
+        "unit": {
+          "prefix": "$",
+          "what": "price of the TV"
+        }
+      },
+      "series": [
+        {
+          "id": "price",
+          "name": "Price",
+          "points": [
+            [
+              "2022-04-01",
+              400
+            ],
+            [
+              "2022-04-27",
+              350
+            ],
+            [
+              "2022-04-30",
+              375
+            ],
+            [
+              "2022-05-02",
+              350
+            ],
+            [
+              "2022-05-03",
+              275
+            ],
+            [
+              "2022-05-05",
+              360
+            ],
+            [
+              "2022-05-06",
+              325
+            ],
+            [
+              "2022-05-23",
+              300
+            ],
+            [
+              "2022-05-26",
+              380
+            ],
+            [
+              "2022-06-08",
+              350
+            ],
+            [
+              "2022-06-18",
+              330
+            ],
+            [
+              "2022-06-25",
+              300
+            ],
+            [
+              "2022-06-30",
+              250
+            ]
+          ]
+        }
+      ]
+    },
+    "source": {
+      "book": "p. 188–190 (s. 0176–0178)",
+      "notes": "06 T6",
+      "shows": "a price holds until it changes: a step chart, level from each change to the next and then straight up or down, the last price running to the as-of date (G7.19, D-42), on a true time axis with a tick at each day (D-45); to look a price up, how far it stands from zero does not matter, so the scale may leave zero out, as the book's does (G2.8)"
+    },
+    "facts": {
+      "distance_to_zero_irrelevant": true
+    }
+  },
+  "variants": [
+    {
+      "name": "line",
+      "patch": {
+        "chart": {
+          "type": "line"
+        },
+        "source": {
+          "shows": "the book's bad version, a standard line through the price changes: refused, since its slopes invent prices that never held ($375 in mid-April when it was $400 all month)"
+        }
+      },
+      "expect": {
+        "refused": [
+          "R6-3"
+        ],
+        "findings": [
+          "R6-9"
+        ]
+      }
+    },
+    {
+      "name": "no-persistence",
+      "patch": {
+        "data": {
+          "measure": {
+            "persistence": null
+          }
+        },
+        "source": {
+          "shows": "an irregular series that does not say whether it holds states or events: refused, since the type depends on it and the numbers cannot tell"
+        }
+      },
+      "expect": {
+        "refused": [
+          "R6-1"
+        ]
+      }
+    },
+    {
+      "name": "no-as-of",
+      "patch": {
+        "data": {
+          "as_of": null
+        },
+        "source": {
+          "shows": "the same changes without the date the series is known to: refused, since where the last price ends cannot be read from the changes (G7.19)"
+        }
+      },
+      "expect": {
+        "refused": [
+          "R6-8"
+        ]
+      }
+    },
+    {
+      "name": "from-zero",
+      "patch": {
+        "facts": {
+          "distance_to_zero_irrelevant": false
+        },
+        "source": {
+          "shows": "the same step chart when the distance to zero is not declared irrelevant: the scale keeps zero (D-10 (a)), and the changes look smaller"
+        }
+      },
+      "expect": {
+        "findings": []
+      }
+    }
+  ]
+}

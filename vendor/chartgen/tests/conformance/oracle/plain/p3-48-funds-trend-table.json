@@ -1,0 +1,144 @@
+{
+ "key": "p3-48-funds-trend-table",
+ "file": "p3-48-funds-trend-table.json",
+ "variant": null,
+ "requested_type": "auto",
+ "report": {
+  "chart": "p3-48-funds-trend-table",
+  "style": "plain",
+  "variant": null,
+  "type": "table",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "R10-11",
+    "level": "guided",
+    "text": "type table: a table alone: its sole use is looking up individual values (facts.message lookup_only; G1.12)",
+    "guide": []
+   },
+   {
+    "rule": "R10-13",
+    "level": "locked",
+    "text": "a table alone, formatted in the book's order: the digits the purpose needs, two thin rules, space between rows and columns, the numbers right-aligned to be compared, nothing bold but the title, the unit once in the title (08-12 DP-4, G7.37–G7.45)",
+    "guide": []
+   },
+   {
+    "rule": "R10-12",
+    "level": "locked",
+    "text": "digits: to the measure's precision, 1, one number of decimals down each column (G7.37, G6.16)",
+    "guide": []
+   },
+   {
+    "rule": "R10-22",
+    "level": "locked",
+    "text": "the totals last under the darker rule, named in the names' column, in regular weight (D-52 (ii)); the printed totals are the data's, never recomputed",
+    "guide": []
+   },
+   {
+    "rule": "R10-14",
+    "level": "locked",
+    "text": "Total: a total column, set apart by a wider gutter (30 pt against 15 pt; G7.39s)",
+    "guide": []
+   },
+   {
+    "rule": "R10-9",
+    "level": "guided",
+    "text": "a Trend column: each row's values as a sparkline scaled to the row's own extent, before the Total (s. 0309); built into the table for an audience that will not take a graph (G1.16, G7.47)",
+    "guide": []
+   },
+   {
+    "rule": "R10-25",
+    "level": "locked",
+    "text": "the unit once, in the title; the cells bare numbers (G7.45)",
+    "guide": []
+   }
+  ],
+  "findings": [],
+  "overrides": [],
+  "expect": {},
+  "expect_met": true,
+  "source": {
+   "book": "p. 339 (s. 0309)",
+   "notes": "08-12 #9 (b)",
+   "shows": "a Trend column (R10-9): each region's months as a sparkline, scaled to its own values, before the Total, the totals row's too; the months are columns of a table, so the year is in the title; at 440 pt",
+   "status": "generated"
+  },
+  "summary": {
+   "orientation": "vertical",
+   "plot": [
+    0.0,
+    31.0,
+    396.99,
+    160.0
+   ],
+   "table": {
+    "rows": [
+     "north",
+     "south",
+     "central",
+     "east",
+     "west",
+     "total"
+    ],
+    "columns": [
+     "Jan",
+     "Feb",
+     "Mar",
+     "Apr",
+     "May",
+     "Total"
+    ],
+    "comparable": true,
+    "pitch": 21.5,
+    "width": 396.99,
+    "graphics": "trend",
+    "highlighted": [],
+    "values": null
+   },
+   "width": 396.99,
+   "height": 161.0,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job lookup: no insight stated (a descriptive title will do, D-55)",
+    "guide": [],
+    "group": "tables"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-11",
+    "level": "guided",
+    "text": "group: tables. A table alone: its sole use is looking up individual values (facts.message lookup_only; G1.12)",
+    "guide": [],
+    "group": "tables"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type, the series told apart by colour (G1.59)",
+    "guide": [],
+    "group": "tables"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "tables are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "tables"
+   }
+  ],
+  "copies": []
+ },
+ "output_sha256": "aa7f376d05072dec0e887533f69194fa81b233c8e128265e392112590f23b0f6"
+}

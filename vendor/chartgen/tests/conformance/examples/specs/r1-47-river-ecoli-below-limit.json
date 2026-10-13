@@ -1,0 +1,672 @@
+{
+  "chartspec": 1,
+  "id": "r1-47-river-ecoli-below-limit",
+  "purpose": "analysis",
+  "job": {
+    "kind": "other",
+    "text": "Look for patterns in where and when E. coli counts are high across the catchment, before deciding what goes in the annual report"
+  },
+  "title": {
+    "text": "E. coli by Site and Month, 2025 Catchment Monitoring",
+    "kind": "descriptive"
+  },
+  "data": {
+    "x": {
+      "kind": "time",
+      "grid": "month",
+      "values": [
+        "2025-01",
+        "2025-02",
+        "2025-03",
+        "2025-04",
+        "2025-05",
+        "2025-06",
+        "2025-07",
+        "2025-08",
+        "2025-09",
+        "2025-10",
+        "2025-11",
+        "2025-12"
+      ],
+      "title": null
+    },
+    "measure": {
+      "name": "E. coli count",
+      "kind": "count",
+      "zero": "meaningful",
+      "min": 0,
+      "persistence": "summary",
+      "unit": {
+        "suffix": " cfu/100 mL"
+      }
+    },
+    "series": [
+      {
+        "id": "w01",
+        "name": "W01 Wend Head spring",
+        "values": [
+          7,
+          1,
+          {
+            "below": 1
+          },
+          {
+            "below": 1
+          },
+          {
+            "below": 1
+          },
+          6,
+          5,
+          11,
+          3,
+          3,
+          17,
+          3
+        ]
+      },
+      {
+        "id": "w02",
+        "name": "W02 Crowsfoot Bridge",
+        "values": [
+          18,
+          14,
+          14,
+          21,
+          8,
+          23,
+          23,
+          30,
+          18,
+          17,
+          13,
+          14
+        ]
+      },
+      {
+        "id": "w03",
+        "name": "W03 Holme Farm ford",
+        "values": [
+          250,
+          {
+            "status": "missing"
+          },
+          130,
+          50,
+          190,
+          160,
+          120,
+          280,
+          110,
+          400,
+          700,
+          30
+        ]
+      },
+      {
+        "id": "w04",
+        "name": "W04 Ellerby footbridge",
+        "values": [
+          290,
+          97,
+          110,
+          68,
+          54,
+          120,
+          170,
+          630,
+          78,
+          73,
+          430,
+          270
+        ]
+      },
+      {
+        "id": "w05",
+        "name": "W05 Ashby Weir",
+        "values": [
+          130,
+          22,
+          93,
+          38,
+          51,
+          110,
+          180,
+          120,
+          61,
+          91,
+          260,
+          92
+        ]
+      },
+      {
+        "id": "w06",
+        "name": "W06 Ashby STW upstream",
+        "values": [
+          570,
+          370,
+          170,
+          87,
+          44,
+          71,
+          160,
+          310,
+          240,
+          240,
+          550,
+          260
+        ]
+      },
+      {
+        "id": "w07",
+        "name": "W07 Ashby STW outfall +200 m",
+        "values": [
+          12500,
+          11300,
+          4400,
+          2600,
+          3500,
+          4800,
+          3500,
+          33000,
+          5600,
+          8200,
+          53800,
+          4600
+        ]
+      },
+      {
+        "id": "w08",
+        "name": "W08 Mill Lane",
+        "values": [
+          4100,
+          2500,
+          2400,
+          580,
+          4200,
+          1400,
+          5300,
+          14500,
+          1500,
+          3500,
+          15800,
+          5200
+        ]
+      },
+      {
+        "id": "w09",
+        "name": "W09 Pennington Footbridge",
+        "values": [
+          4100,
+          1700,
+          1400,
+          500,
+          440,
+          1600,
+          1400,
+          12300,
+          740,
+          770,
+          5900,
+          780
+        ]
+      },
+      {
+        "id": "w10",
+        "name": "W10 Kettle Pool",
+        "values": [
+          730,
+          1200,
+          2200,
+          290,
+          {
+            "status": "missing"
+          },
+          1600,
+          1000,
+          1300,
+          1500,
+          2300,
+          1700,
+          1400
+        ]
+      },
+      {
+        "id": "w11",
+        "name": "W11 Brindle confluence (below)",
+        "values": [
+          730,
+          810,
+          1300,
+          900,
+          590,
+          1700,
+          820,
+          2600,
+          520,
+          2700,
+          2600,
+          1600
+        ]
+      },
+      {
+        "id": "w12",
+        "name": "W12 Thornbury Road bridge",
+        "values": [
+          1300,
+          240,
+          860,
+          120,
+          490,
+          240,
+          2000,
+          3900,
+          540,
+          780,
+          1100,
+          950
+        ]
+      },
+      {
+        "id": "w13",
+        "name": "W13 Thornbury STW upstream",
+        "values": [
+          490,
+          410,
+          310,
+          650,
+          460,
+          390,
+          680,
+          1500,
+          750,
+          1100,
+          1100,
+          1000
+        ]
+      },
+      {
+        "id": "w14",
+        "name": "W14 Thornbury STW outfall +300 m",
+        "values": [
+          24800,
+          4600,
+          1600,
+          1600,
+          1500,
+          2200,
+          2900,
+          22200,
+          9100,
+          3400,
+          9600,
+          9000
+        ]
+      },
+      {
+        "id": "w15",
+        "name": "W15 Harrow Meadows",
+        "values": [
+          4000,
+          1100,
+          1700,
+          310,
+          1000,
+          1500,
+          2400,
+          3500,
+          1300,
+          5300,
+          3400,
+          1700
+        ]
+      },
+      {
+        "id": "w16",
+        "name": "W16 Cold Ashby lock",
+        "values": [
+          4400,
+          1100,
+          980,
+          680,
+          510,
+          830,
+          660,
+          3700,
+          500,
+          600,
+          2900,
+          700
+        ]
+      },
+      {
+        "id": "w17",
+        "name": "W17 Saltings Lock",
+        "values": [
+          1200,
+          420,
+          720,
+          1600,
+          1300,
+          520,
+          {
+            "status": "missing"
+          },
+          3500,
+          830,
+          2000,
+          3400,
+          1100
+        ]
+      },
+      {
+        "id": "w18",
+        "name": "W18 Priory Park steps",
+        "values": [
+          1600,
+          630,
+          370,
+          490,
+          190,
+          440,
+          1200,
+          4300,
+          330,
+          330,
+          6200,
+          2000
+        ]
+      },
+      {
+        "id": "w19",
+        "name": "W19 Wend Quay",
+        "values": [
+          840,
+          730,
+          370,
+          250,
+          610,
+          1300,
+          1500,
+          1400,
+          400,
+          1400,
+          2000,
+          1400
+        ]
+      },
+      {
+        "id": "w20",
+        "name": "W20 Tidal limit (Wend Sluice)",
+        "values": [
+          700,
+          610,
+          310,
+          84,
+          150,
+          310,
+          550,
+          1800,
+          210,
+          {
+            "status": "missing"
+          },
+          680,
+          240
+        ]
+      },
+      {
+        "id": "l01",
+        "name": "L01 Lyd Head",
+        "values": [
+          4,
+          {
+            "below": 1
+          },
+          {
+            "below": 1
+          },
+          {
+            "below": 1
+          },
+          {
+            "below": 1
+          },
+          2,
+          2,
+          8,
+          3,
+          3,
+          3,
+          2
+        ]
+      },
+      {
+        "id": "l02",
+        "name": "L02 Lydgate Farm",
+        "values": [
+          63,
+          23,
+          7,
+          35,
+          33,
+          56,
+          40,
+          150,
+          51,
+          42,
+          280,
+          110
+        ]
+      },
+      {
+        "id": "l03",
+        "name": "L03 Lyd Bridge (A614)",
+        "values": [
+          91,
+          {
+            "status": "missing"
+          },
+          55,
+          69,
+          25,
+          69,
+          89,
+          130,
+          39,
+          59,
+          150,
+          90
+        ]
+      },
+      {
+        "id": "l04",
+        "name": "L04 Lydbrook village",
+        "values": [
+          540,
+          {
+            "status": "missing"
+          },
+          110,
+          100,
+          150,
+          49,
+          260,
+          250,
+          180,
+          190,
+          350,
+          410
+        ]
+      },
+      {
+        "id": "l05",
+        "name": "L05 Lydbrook CSO (below)",
+        "values": [
+          4700,
+          3600,
+          410,
+          1300,
+          890,
+          5400,
+          810,
+          2000,
+          2800,
+          1600,
+          5600,
+          2000
+        ]
+      },
+      {
+        "id": "l06",
+        "name": "L06 Lyd mouth",
+        "values": [
+          3100,
+          750,
+          390,
+          360,
+          1300,
+          890,
+          1400,
+          2800,
+          270,
+          2600,
+          1300,
+          {
+            "status": "missing"
+          }
+        ]
+      },
+      {
+        "id": "b01",
+        "name": "B01 Brindle Moss",
+        "values": [
+          3,
+          {
+            "below": 1
+          },
+          {
+            "below": 1
+          },
+          {
+            "below": 1
+          },
+          {
+            "below": 1
+          },
+          2,
+          3,
+          1,
+          1,
+          1,
+          8,
+          {
+            "below": 1
+          }
+        ]
+      },
+      {
+        "id": "b02",
+        "name": "B02 High Brindle",
+        "values": [
+          78,
+          52,
+          14,
+          8,
+          18,
+          36,
+          40,
+          150,
+          43,
+          20,
+          60,
+          36
+        ]
+      },
+      {
+        "id": "b03",
+        "name": "B03 Brindle Mill",
+        "values": [
+          110,
+          48,
+          46,
+          16,
+          60,
+          150,
+          110,
+          150,
+          36,
+          96,
+          120,
+          150
+        ]
+      },
+      {
+        "id": "b04",
+        "name": "B04 Brindle caravan park",
+        "values": [
+          1700,
+          850,
+          330,
+          260,
+          180,
+          850,
+          140,
+          {
+            "status": "missing"
+          },
+          540,
+          310,
+          890,
+          600
+        ]
+      },
+      {
+        "id": "b05",
+        "name": "B05 Lower Brindle",
+        "values": [
+          510,
+          170,
+          320,
+          210,
+          230,
+          640,
+          450,
+          780,
+          150,
+          370,
+          1200,
+          240
+        ]
+      },
+      {
+        "id": "b06",
+        "name": "B06 Brindle mouth",
+        "values": [
+          880,
+          330,
+          130,
+          140,
+          76,
+          330,
+          270,
+          360,
+          160,
+          600,
+          910,
+          440
+        ]
+      }
+    ]
+  },
+  "facts": {
+    "ramp_focus": "pattern"
+  },
+  "chart": {
+    "type": "auto"
+  },
+  "source": {
+    "notes": "eval B10 (sonnet-G)",
+    "shows": "twelve results below the detection limit (<1) as a state of their own: a step of the ramp below its lowest class, “<1” in the key, apart from the eight samples not taken or lost (grey); the treatment is the style's (--censored-cells), the owner's to choose (examples/review/r1-below-limit)"
+  }
+}

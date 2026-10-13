@@ -1,0 +1,224 @@
+{
+ "key": "p3-72-motor-vehicle-deaths",
+ "file": "p3-72-motor-vehicle-deaths.json",
+ "variant": null,
+ "requested_type": "auto",
+ "report": {
+  "chart": "p3-72-motor-vehicle-deaths",
+  "style": "plain",
+  "variant": null,
+  "type": "line",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "R2-43",
+    "level": "locked",
+    "text": "unequal bins re-aggregated to the common larger bin of 10 years, their values added (measure.additive): 2000–2004 + 2005–2009 → 2000–2009; 2010–2014 + 2015–2019 → 2010–2019 (G2.41, 02 §5.4 (f))",
+    "guide": []
+   },
+   {
+    "rule": "R6-4",
+    "level": "guided",
+    "text": "type line: a regular series whose pattern of change is the point (06 DP6-1, G1.51)",
+    "guide": []
+   },
+   {
+    "rule": "R2-22",
+    "level": "locked",
+    "text": "zero included (a narrow range far from zero wants an inset)",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "scale 0–600 by 100",
+    "guide": []
+   },
+   {
+    "rule": "R6-27",
+    "level": "locked",
+    "text": "no point markers: no value is isolated and no straight run hides one",
+    "guide": []
+   },
+   {
+    "rule": "R2-07",
+    "level": "locked",
+    "text": "the unit phrase on the top label: “600K deaths”; the top gridline starts after it",
+    "guide": []
+   },
+   {
+    "rule": "R2-21",
+    "level": "locked",
+    "text": "labels as a set, 0 decimals: 0, 100, 200, 300, 400, 500, 600K",
+    "guide": []
+   },
+   {
+    "rule": "R5-10",
+    "level": "locked",
+    "text": "digits hidden: thousands, stated once on the top label (R2-05, D-3): “600K deaths”",
+    "guide": []
+   },
+   {
+    "rule": "R2-40",
+    "level": "locked",
+    "text": "time axis: row 1 full",
+    "guide": []
+   }
+  ],
+  "findings": [
+   {
+    "rule": "R2-32",
+    "severity": "info",
+    "message": "6 values against 7 scale labels: labelling the values directly would put fewer numbers on the chart (phase 2)",
+    "level": "locked",
+    "guide": [],
+    "title": "fewer values than scale labels: label the values directly"
+   },
+   {
+    "rule": "R2-11",
+    "severity": "info",
+    "message": "the unit phrase “deaths” is one word; say what is counted, which subset and per what period",
+    "path": "data.measure.unit.noun",
+    "level": "locked",
+    "guide": [],
+    "title": "a unit phrase specific enough for one reading"
+   }
+  ],
+  "overrides": [],
+  "expect": {},
+  "expect_met": true,
+  "source": {
+   "book": "p. 110–111 (s. 0103–0104)",
+   "notes": "02 #20",
+   "shows": "decades followed by half-decades: unequal bins, which fake a plunge (R2-43, G2.41 [L]); the deaths add up, so the half-decades are re-aggregated to decades, 2000–2009 and 2010–2019 (02 §5.4 (f)), and the true pattern shows",
+   "status": "generated"
+  },
+  "summary": {
+   "scale": "0–600 by 100",
+   "labels": [
+    "0",
+    "100",
+    "200",
+    "300",
+    "400",
+    "500",
+    "600K"
+   ],
+   "top": "600K deaths",
+   "scale_title": null,
+   "orientation": "vertical",
+   "plot": [
+    24.0,
+    36.07,
+    368.0,
+    242.47
+   ],
+   "slot": 57.33,
+   "labelling": "none",
+   "label_shifts": {},
+   "leaders": [],
+   "markers": [],
+   "colours": {
+    "deaths": "single"
+   },
+   "width": 368.0,
+   "height": 258.52,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job answer: insight “Deaths declined after the 1970s, but gently, not in a plunge”",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-1",
+    "level": "guided",
+    "text": "a graph, the values to be compared or a pattern seen (G1.11)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 2,
+    "name": "variables",
+    "rule": "RP3-2",
+    "level": "guided",
+    "text": "one plot: time along x and 1 series; a further variable would go to small multiples (data.dims, G1.18)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 3,
+    "name": "location",
+    "rule": "R8-2",
+    "level": "guided",
+    "text": "not a map: where the values are is not the message (facts.location_matters; G1.24, G1.25)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-01",
+    "level": "guided",
+    "text": "not parts of a total (no data.parts, no breakdown message; G1.1)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 6,
+    "name": "values over time",
+    "rule": "R6-13",
+    "level": "guided",
+    "text": "group: data over time. A series of more than two periods, not a breakdown and not tied to places (G1.48)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 6,
+    "name": "values over time",
+    "rule": "R6-3",
+    "level": "locked",
+    "text": "a regular series, enough values known (06 DP6-2)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 6,
+    "name": "values over time",
+    "rule": "R6-4",
+    "level": "guided",
+    "text": "a regular series whose pattern of change is the point (06 DP6-1, G1.51)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type (G1.59)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "line charts are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "data over time"
+   }
+  ],
+  "copies": []
+ },
+ "output_sha256": "5a25bcaf99c7bbc37e87e87180fb912fb78abfcefd90a8953e3cf696d95f5e6b"
+}

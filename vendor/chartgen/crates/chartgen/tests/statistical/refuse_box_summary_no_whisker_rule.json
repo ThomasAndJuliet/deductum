@@ -1,0 +1,77 @@
+{
+ "chartspec": 1,
+ "purpose": "analysis",
+ "id": "refuse-box-summary-no-whisker-rule",
+ "title": {
+  "text": "Detection latency by witness at two input rates"
+ },
+ "data": {
+  "x": {
+   "kind": "nominal",
+   "values": [
+    "W1 stale read",
+    "W2 equal-valued write",
+    "W3 redirected read",
+    "W4 obsolete ref"
+   ]
+  },
+  "measure": {
+   "name": "latency",
+   "kind": "quantity",
+   "unit": {
+    "suffix": " ms"
+   },
+   "zero": "meaningful"
+  },
+  "series": [
+   {
+    "id": "s",
+    "name": "s",
+    "summaries": [
+     {
+      "n": 10,
+      "q1": 1,
+      "median": 2,
+      "q3": 3,
+      "lower_whisker": 0,
+      "upper_whisker": 4,
+      "outliers": "none"
+     },
+     {
+      "n": 10,
+      "q1": 1,
+      "median": 2,
+      "q3": 3,
+      "lower_whisker": 0,
+      "upper_whisker": 4,
+      "outliers": "none"
+     },
+     {
+      "n": 10,
+      "q1": 1,
+      "median": 2,
+      "q3": 3,
+      "lower_whisker": 0,
+      "upper_whisker": 4,
+      "outliers": "none"
+     },
+     {
+      "n": 10,
+      "q1": 1,
+      "median": 2,
+      "q3": 3,
+      "lower_whisker": 0,
+      "upper_whisker": 4,
+      "outliers": "none"
+     }
+    ]
+   }
+  ]
+ },
+ "chart": {
+  "type": "box",
+  "quantiles": "linear",
+  "show_points": "outliers",
+  "mean": "marker"
+ }
+}

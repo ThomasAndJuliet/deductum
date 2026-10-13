@@ -1,0 +1,142 @@
+{
+ "base": {
+  "chartspec": 1,
+  "id": "r1-66-garden-centres-furniture",
+  "job": {
+   "kind": "answer",
+   "text": "For Claire and the regional managers: has Elstead Park lost sales since the big garden store opened nearby in March 2026, in which categories, and is it only Elstead?"
+  },
+  "insight": {
+   "important": "Since the new store opened in March 2026, Elstead Park's garden furniture & BBQ sales have run about 40 % below the same months of 2025, while the other three centres' rose",
+   "targets": [
+    {
+     "series": "elstead-park"
+    }
+   ]
+  },
+  "title": {
+   "text": "Elstead Park's Furniture & BBQ Sales Have Run About 40 % Below 2025 Since the New Store Opened",
+   "kind": "insight",
+   "descriptive": "Garden furniture & BBQ sales, change on the same month of 2025, by centre, Jan–Sep 2026"
+  },
+  "data": {
+   "x": {
+    "kind": "time",
+    "grid": "month",
+    "values": [
+     "2026-01",
+     "2026-02",
+     "2026-03",
+     "2026-04",
+     "2026-05",
+     "2026-06",
+     "2026-07",
+     "2026-08",
+     "2026-09"
+    ],
+    "events": [
+     {
+      "at": "2026-03",
+      "label": "New store opens"
+     }
+    ]
+   },
+   "dims": [],
+   "measure": {
+    "name": "change in sales",
+    "kind": "change",
+    "zero": "meaningful",
+    "persistence": "summary",
+    "unit": {
+     "suffix": "%",
+     "noun": "on 2025",
+     "fallback": "Change in sales on the same month of 2025"
+    }
+   },
+   "series": [
+    {
+     "id": "elstead-park",
+     "name": "Elstead Park",
+     "values": [
+      0.8,
+      0.5,
+      -21.4,
+      -42.0,
+      -36.5,
+      -38.6,
+      -36.5,
+      -36.5,
+      -42.8
+     ]
+    },
+    {
+     "id": "brackley-hill",
+     "name": "Brackley Hill",
+     "values": [
+      11.1,
+      3.3,
+      6.4,
+      12.7,
+      12.0,
+      12.8,
+      6.5,
+      2.7,
+      -2.2
+     ]
+    },
+    {
+     "id": "corwen-road",
+     "name": "Corwen Road",
+     "values": [
+      2.7,
+      6.0,
+      -2.1,
+      3.6,
+      6.9,
+      -1.3,
+      12.0,
+      6.4,
+      2.0
+     ]
+    },
+    {
+     "id": "dunmore",
+     "name": "Dunmore",
+     "values": [
+      1.5,
+      -1.0,
+      4.8,
+      0.2,
+      8.3,
+      3.3,
+      9.6,
+      11.9,
+      3.9
+     ]
+    }
+   ]
+  },
+  "facts": {
+   "message": "pattern"
+  },
+  "chart": {
+   "type": "auto"
+  },
+  "scale": {
+   "step": 10
+  },
+  "reasons": {
+   "scale.step": "steps of 20 ran the scale to −60 %, leaving 30 % of it empty below the lowest value (R2-27)"
+  },
+  "colours": {
+   "registry": "../registry.json"
+  },
+  "layout": {
+   "width": 368
+  },
+  "source": {
+   "shows": "the third chart of the set (eval round 1, B11): one category, a line per centre, each centre in the colour the document's registry gives it, as in R1-64 and R1-65; the competitor's opening marked on a single line chart, its label beside the line's top",
+   "status": "generated"
+  }
+ }
+}

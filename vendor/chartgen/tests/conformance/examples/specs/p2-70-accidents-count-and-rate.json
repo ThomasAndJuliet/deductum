@@ -1,0 +1,83 @@
+{
+ "chartspec": 1,
+ "id": "p2-70-accidents-count-and-rate",
+ "job": {
+  "kind": "answer",
+  "text": "Which factory is the least safe?"
+ },
+ "insight": {
+  "important": "Factory A had the highest accident rate, though Factory D had the most accidents",
+  "targets": [
+   {
+    "category": "Factory A"
+   }
+  ]
+ },
+ "title": {
+  "text": "Factory A Had the Highest Accident Rate, Though D Had the Most Accidents",
+  "kind": "insight",
+  "descriptive": "Accidents and Accidents per 100,000 Work Hours by Factory, 2021"
+ },
+ "data": {
+  "x": {
+   "kind": "nominal",
+   "values": [
+    "Factory A",
+    "Factory B",
+    "Factory C",
+    "Factory D"
+   ]
+  },
+  "measures": [
+   {
+    "id": "accidents",
+    "name": "accidents",
+    "kind": "count",
+    "zero": "meaningful",
+    "min": 0,
+    "unit": {
+     "noun": "accidents in the year",
+     "scale_title": "Accidents"
+    }
+   },
+   {
+    "id": "rate",
+    "name": "accident rate",
+    "kind": "quantity",
+    "zero": "meaningful",
+    "min": 0,
+    "unit": {
+     "noun": "accidents per 100,000 work hours",
+     "scale_title": "Accidents per 100,000 work hours"
+    }
+   }
+  ],
+  "series": [
+   {
+    "id": "accidents",
+    "measure": "accidents",
+    "values": [
+     47,
+     28,
+     44,
+     62
+    ]
+   },
+   {
+    "id": "rate",
+    "measure": "rate",
+    "values": [
+     5.1,
+     2.7,
+     1.7,
+     3.2
+    ]
+   }
+  ]
+ },
+ "source": {
+  "book": "p. 413 (s. 0379); p. 417 (s. 0382)",
+  "notes": "13-15 F15",
+  "shows": "raw and calculated values side by side as panels of a merged chart (G8.19): the count and the rate, each its own scale, the rows in the order of the counts; the factory the insight names in the strong shade in both panels"
+ }
+}

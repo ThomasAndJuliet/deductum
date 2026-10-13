@@ -1,0 +1,162 @@
+{
+ "key": "p3-47-funds-heat-table",
+ "file": "p3-47-funds-heat-table.json",
+ "variant": null,
+ "requested_type": "auto",
+ "report": {
+  "chart": "p3-47-funds-heat-table",
+  "style": "plain",
+  "variant": null,
+  "type": "table",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "R10-11",
+    "level": "guided",
+    "text": "type table: a table alone: its sole use is looking up individual values (facts.message lookup_only; G1.12)",
+    "guide": []
+   },
+   {
+    "rule": "R10-13",
+    "level": "locked",
+    "text": "a table alone, formatted in the book's order: the digits the purpose needs, two thin rules, space between rows and columns, the numbers right-aligned to be compared, nothing bold but the title, the unit once in the title (08-12 DP-4, G7.37–G7.45)",
+    "guide": []
+   },
+   {
+    "rule": "R10-12",
+    "level": "locked",
+    "text": "digits: to the measure's precision, 1, one number of decimals down each column (G7.37, G6.16)",
+    "guide": []
+   },
+   {
+    "rule": "R10-24",
+    "level": "locked",
+    "text": "dates written with day, month and year of fixed width (05-Jan-2021), so that their parts line up down the column (G6.21, D-32 columns (a))",
+    "guide": []
+   },
+   {
+    "rule": "R10-22",
+    "level": "locked",
+    "text": "the totals last under the darker rule, named in the names' column, in regular weight (D-52 (ii)); the printed totals are the data's, never recomputed",
+    "guide": []
+   },
+   {
+    "rule": "R10-14",
+    "level": "locked",
+    "text": "Total: a total column, set apart by a wider gutter (30 pt against 15 pt; G7.39s)",
+    "guide": []
+   },
+   {
+    "rule": "R10-9",
+    "level": "guided",
+    "text": "the cells shaded by value, the body, the Total column and the totals row each on its own ramp from its lowest to its highest value, the grand total unshaded (s. 0309); pale, so that the numbers stay legible (G6.5); built into the table for an audience that will not take a graph (G1.16, G7.47)",
+    "guide": []
+   },
+   {
+    "rule": "R10-9",
+    "level": "guided",
+    "text": "the cells muted: a table whose colour only hints at sizes: the steps paled, the numbers in the text grey (G7.47) (owner, 1 Oct 2026)",
+    "guide": []
+   },
+   {
+    "rule": "R3-12",
+    "level": "guided",
+    "text": "the body's cells: a sequential palette; no dividing value the audience sees: one ramp, darker meaning more, never diverging about the middle of the data (G4.10, D-37 (a))",
+    "guide": []
+   },
+   {
+    "rule": "R10-25",
+    "level": "locked",
+    "text": "the unit once, in the title; the cells bare numbers (G7.45)",
+    "guide": []
+   }
+  ],
+  "findings": [],
+  "overrides": [],
+  "expect": {},
+  "expect_met": true,
+  "source": {
+   "book": "p. 339 (s. 0309)",
+   "notes": "08-12 #9 (a)",
+   "shows": "graphics built into a table for an audience that refuses graphs (R10-9): the cells shaded by value, the body, the Total column and the totals row each on its own ramp, the grand total unshaded, the shades pale enough for the text grey (the book's greens are darker and fail 4.5 : 1); the 5K Walk total 415,519 is one more than its row, as printed; at 440 pt",
+   "status": "generated"
+  },
+  "summary": {
+   "orientation": "vertical",
+   "plot": [
+    0.0,
+    31.0,
+    419.84,
+    143.0
+   ],
+   "table": {
+    "rows": [
+     "e0",
+     "e1",
+     "e2",
+     "e3",
+     "e4",
+     "e5",
+     "total"
+    ],
+    "columns": [
+     "South",
+     "West",
+     "East",
+     "Central",
+     "Total"
+    ],
+    "comparable": true,
+    "pitch": 16.0,
+    "width": 419.84,
+    "graphics": "heat",
+    "highlighted": [],
+    "values": null
+   },
+   "width": 419.84,
+   "height": 144.0,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job lookup: no insight stated (a descriptive title will do, D-55)",
+    "guide": [],
+    "group": "tables"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-11",
+    "level": "guided",
+    "text": "group: tables. A table alone: its sole use is looking up individual values (facts.message lookup_only; G1.12)",
+    "guide": [],
+    "group": "tables"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type, the series told apart by colour (G1.59)",
+    "guide": [],
+    "group": "tables"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "tables are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "tables"
+   }
+  ],
+  "copies": []
+ },
+ "output_sha256": "d3dd086f8314a2b3d96d6c83bf280c2854c43731983e16fa6ecbaa3185804ba3"
+}

@@ -1,0 +1,1252 @@
+{
+ "styles": [
+  {
+   "case": "import-syntaxes",
+   "files": {
+    "main.css": "@import \"a b.css\";\n@import 'single.css';\n@import url(bare.css);\n@import url(\"q q.css\") ;\n@import url( 'sp.css' );\n:root { --m: 1; }\n",
+    "a b.css": ":root { --a: 1; }\n",
+    "single.css": ":root { --s: 2; }\n",
+    "bare.css": ":root { --b: 3; }\n",
+    "q q.css": ":root { --q: 4; }\n",
+    "sp.css": ":root { --sp: 5; }\n"
+   },
+   "entry": "main.css",
+   "expect": {
+    "name": "main",
+    "tokens": [
+     [
+      "--a",
+      "1"
+     ],
+     [
+      "--s",
+      "2"
+     ],
+     [
+      "--b",
+      "3"
+     ],
+     [
+      "--q",
+      "4"
+     ],
+     [
+      "--sp",
+      "5"
+     ],
+     [
+      "--m",
+      "1"
+     ]
+    ],
+    "css": "/* Flattened by figkit from the main stylesheet: literal values only */\n:root {\n  --a: 1;\n  --s: 2;\n  --b: 3;\n  --q: 4;\n  --sp: 5;\n  --m: 1;\n}\n",
+    "rules": [],
+    "defs": null,
+    "metric": {
+     "--a": 1.0,
+     "--s": 2.0,
+     "--b": 3.0,
+     "--q": 4.0,
+     "--sp": 5.0,
+     "--m": 1.0
+    }
+   }
+  },
+  {
+   "case": "import-cycle-and-repeat",
+   "files": {
+    "main.css": "@import \"b.css\";\n@import \"b.css\";\n:root { --main: 1; }\n",
+    "b.css": "@import \"main.css\";\n@import \"sub/c.css\";\n:root { --b: 2; }\n",
+    "sub/c.css": "@import \"../b.css\";\n/* @import \"d.css\"; */\n:root { --c: 3; }\n.c { fill: var(--d); }\n",
+    "sub/d.css": ":root { --d: #123; }\n"
+   },
+   "entry": "main.css",
+   "error": {
+    "type": "ValueError",
+    "message": "style main: undefined token --d"
+   }
+  },
+  {
+   "case": "import-cycle-ok",
+   "files": {
+    "main.css": "@import \"b.css\";\n:root { --main: 1; }\n",
+    "b.css": "@import \"main.css\";\n@import \"sub/c.css\";\n@import \"./b.css\";\n:root { --b: 2; }\n",
+    "sub/c.css": "@import \"../b.css\";\n@import \"../main.css\";\n:root { --c: 3; }\n"
+   },
+   "entry": "main.css",
+   "expect": {
+    "name": "main",
+    "tokens": [
+     [
+      "--c",
+      "3"
+     ],
+     [
+      "--b",
+      "2"
+     ],
+     [
+      "--main",
+      "1"
+     ]
+    ],
+    "css": "/* Flattened by figkit from the main stylesheet: literal values only */\n:root {\n  --c: 3;\n  --b: 2;\n  --main: 1;\n}\n",
+    "rules": [],
+    "defs": null,
+    "metric": {
+     "--c": 3.0,
+     "--b": 2.0,
+     "--main": 1.0
+    }
+   }
+  },
+  {
+   "case": "defs-own-wins",
+   "files": {
+    "main.css": "@import \"x.css\";\n/* @defs own.svg */\n",
+    "x.css": "/* @defs x.svg */\n"
+   },
+   "entry": "main.css",
+   "expect": {
+    "name": "main",
+    "tokens": [],
+    "css": "/* Flattened by figkit from the main stylesheet: literal values only */\n:root {\n}\n",
+    "rules": [],
+    "defs": "own.svg",
+    "metric": {}
+   }
+  },
+  {
+   "case": "defs-first-import",
+   "files": {
+    "main.css": "@import \"x.css\";\n@import \"y.css\";\n",
+    "x.css": ":root{--x:1}\n",
+    "y.css": "/*   @defs   sub/y-defs.svg   */\n"
+   },
+   "entry": "main.css",
+   "expect": {
+    "name": "main",
+    "tokens": [
+     [
+      "--x",
+      "1"
+     ]
+    ],
+    "css": "/* Flattened by figkit from the main stylesheet: literal values only */\n:root {\n  --x: 1;\n}\n",
+    "rules": [],
+    "defs": "sub/y-defs.svg",
+    "metric": {
+     "--x": 1.0
+    }
+   }
+  },
+  {
+   "case": "token-order-and-roots",
+   "files": {
+    "main.css": ":root { --a: var(--c) var(--b); --b: 2; color: red; }\n.x { stroke: var(--b); }\n:root { --a: var(--b); --c: 3; --d: var(--c); }\n.y {}\n.z { nocolon; fill : #fff ; ; }\np , .q\n  { background: url(a:b) ; }\n"
+   },
+   "entry": "main.css",
+   "expect": {
+    "name": "main",
+    "tokens": [
+     [
+      "--b",
+      "2"
+     ],
+     [
+      "--a",
+      "2"
+     ],
+     [
+      "--c",
+      "3"
+     ],
+     [
+      "--d",
+      "3"
+     ]
+    ],
+    "css": "/* Flattened by figkit from the main stylesheet: literal values only */\n:root {\n  --b: 2;\n  --a: 2;\n  --c: 3;\n  --d: 3;\n}\n.x { stroke: 2; }\n.y {  }\n.z { fill: #fff; }\np , .q { background: url(a:b); }\n",
+    "rules": [
+     [
+      ".x",
+      [
+       [
+        "stroke",
+        "2"
+       ]
+      ]
+     ],
+     [
+      ".y",
+      []
+     ],
+     [
+      ".z",
+      [
+       [
+        "fill",
+        "#fff"
+       ]
+      ]
+     ],
+     [
+      "p , .q",
+      [
+       [
+        "background",
+        "url(a:b)"
+       ]
+      ]
+     ]
+    ],
+    "defs": null,
+    "metric": {
+     "--b": 2.0,
+     "--a": 2.0,
+     "--c": 3.0,
+     "--d": 3.0
+    }
+   }
+  },
+  {
+   "case": "fallbacks",
+   "files": {
+    "main.css": ":root { --a: var( --none , 12px ); --b: var(--none, var(--a)); --c: var(--none,); --d: var(--none, mix(#000000, #ffffff, 0.5)); --e: [var(--a)] [var(--none, x y)]; }\n"
+   },
+   "entry": "main.css",
+   "expect": {
+    "name": "main",
+    "tokens": [
+     [
+      "--a",
+      "12px"
+     ],
+     [
+      "--b",
+      "12px"
+     ],
+     [
+      "--c",
+      ""
+     ],
+     [
+      "--d",
+      "var(--none, #808080)"
+     ],
+     [
+      "--e",
+      "[12px] [x y]"
+     ]
+    ],
+    "css": "/* Flattened by figkit from the main stylesheet: literal values only */\n:root {\n  --a: 12px;\n  --b: 12px;\n  --c: ;\n  --d: var(--none, #808080);\n  --e: [12px] [x y];\n}\n",
+    "rules": [],
+    "defs": null,
+    "metric": {
+     "--a": 12.0,
+     "--b": 12.0,
+     "--c": {
+      "error": "style main: token --c = '' is not a number"
+     },
+     "--d": {
+      "error": "style main: token --d = 'var(--none, #808080)' is not a number"
+     },
+     "--e": {
+      "error": "style main: token --e = '[12px] [x y]' is not a number"
+     }
+    }
+   }
+  },
+  {
+   "case": "em-boundaries",
+   "files": {
+    "main.css": ":root { --label-size: 8px; --a: 1em 1.5em -2em .5em; --b: #1em a1em x-1em 1emx 1em-x; --c: calc(2em + 3em); --d: 0.03125em 0.09375em 0.00005em 1.000049em; --e: 1.em 1..5em; --f: 2em2em 3em; }\n.t { font-size: 1.25em; margin: 1em; }\n"
+   },
+   "entry": "main.css",
+   "expect": {
+    "name": "main",
+    "tokens": [
+     [
+      "--label-size",
+      "8px"
+     ],
+     [
+      "--a",
+      "8 12 -16 4"
+     ],
+     [
+      "--b",
+      "#1em a1em x-1em 1emx 8-x"
+     ],
+     [
+      "--c",
+      "calc(16 + 24)"
+     ],
+     [
+      "--d",
+      "0.25 0.75 0.0004 8.0004"
+     ],
+     [
+      "--e",
+      "1.em 1.4"
+     ],
+     [
+      "--f",
+      "2em2em 24"
+     ]
+    ],
+    "css": "/* Flattened by figkit from the main stylesheet: literal values only */\n:root {\n  --label-size: 8px;\n  --a: 8 12 -16 4;\n  --b: #1em a1em x-1em 1emx 8-x;\n  --c: calc(16 + 24);\n  --d: 0.25 0.75 0.0004 8.0004;\n  --e: 1.em 1.4;\n  --f: 2em2em 24;\n}\n.t { font-size: 10px; margin: 8; }\n",
+    "rules": [
+     [
+      ".t",
+      [
+       [
+        "font-size",
+        "10px"
+       ],
+       [
+        "margin",
+        "8"
+       ]
+      ]
+     ]
+    ],
+    "defs": null,
+    "metric": {
+     "--label-size": 8.0,
+     "--a": 8.0,
+     "--b": {
+      "error": "style main: token --b = '#1em a1em x-1em 1emx 8-x' is not a number"
+     },
+     "--c": {
+      "error": "style main: token --c = 'calc(16 + 24)' is not a number"
+     },
+     "--d": 0.25,
+     "--e": 1.0,
+     "--f": 2.0
+    }
+   }
+  },
+  {
+   "case": "em-label-size-from-var",
+   "files": {
+    "main.css": ":root { --base: 12; --label-size: var(--base); --x: 2em; }\n"
+   },
+   "entry": "main.css",
+   "expect": {
+    "name": "main",
+    "tokens": [
+     [
+      "--base",
+      "12"
+     ],
+     [
+      "--label-size",
+      "12"
+     ],
+     [
+      "--x",
+      "24"
+     ]
+    ],
+    "css": "/* Flattened by figkit from the main stylesheet: literal values only */\n:root {\n  --base: 12;\n  --label-size: 12;\n  --x: 24;\n}\n",
+    "rules": [],
+    "defs": null,
+    "metric": {
+     "--base": 12.0,
+     "--label-size": 12.0,
+     "--x": 24.0
+    }
+   }
+  },
+  {
+   "case": "em-label-size-empty",
+   "files": {
+    "main.css": ":root { --label-size: ; --x: 2em; }\n"
+   },
+   "entry": "main.css",
+   "expect": {
+    "name": "main",
+    "tokens": [
+     [
+      "--label-size",
+      ""
+     ],
+     [
+      "--x",
+      "20"
+     ]
+    ],
+    "css": "/* Flattened by figkit from the main stylesheet: literal values only */\n:root {\n  --label-size: ;\n  --x: 20;\n}\n",
+    "rules": [],
+    "defs": null,
+    "metric": {
+     "--label-size": {
+      "error": "style main: token --label-size = '' is not a number"
+     },
+     "--x": 20.0
+    }
+   }
+  },
+  {
+   "case": "em-label-size-not-number",
+   "files": {
+    "main.css": ":root { --label-size: big; --x: 2em; }\n"
+   },
+   "entry": "main.css",
+   "error": {
+    "type": "AttributeError",
+    "message": "'NoneType' object has no attribute 'group'"
+   }
+  },
+  {
+   "case": "em-label-size-self",
+   "files": {
+    "main.css": ":root { --label-size: 2em; }\n"
+   },
+   "entry": "main.css",
+   "error": {
+    "type": "ValueError",
+    "message": "style main: token --label-size refers to itself (--label-size)"
+   }
+  },
+  {
+   "case": "em-in-rule-without-label-size",
+   "files": {
+    "main.css": ".t { font-size: 1.2em; }\n"
+   },
+   "entry": "main.css",
+   "expect": {
+    "name": "main",
+    "tokens": [],
+    "css": "/* Flattened by figkit from the main stylesheet: literal values only */\n:root {\n}\n.t { font-size: 12px; }\n",
+    "rules": [
+     [
+      ".t",
+      [
+       [
+        "font-size",
+        "12px"
+       ]
+      ]
+     ]
+    ],
+    "defs": null,
+    "metric": {}
+   }
+  },
+  {
+   "case": "functions",
+   "files": {
+    "main.css": ":root { --a: remix(#ffffff, #000000, 0.25); --b: mix(#fff,#000,1e-1); --c: oklch-light(#336699, 2); --d: oklch-shift(#336699, -1, -1); --e: mix(  #FFF , #000 , .5 , extra ); --f: oklch-light(#336699, 0.5, 0); --g: mix(##fff, #000, 0.5); }\n"
+   },
+   "entry": "main.css",
+   "expect": {
+    "name": "main",
+    "tokens": [
+     [
+      "--a",
+      "re#bfbfbf"
+     ],
+     [
+      "--b",
+      "#e6e6e6"
+     ],
+     [
+      "--c",
+      "#f9ffff"
+     ],
+     [
+      "--d",
+      "#000000"
+     ],
+     [
+      "--e",
+      "#808080"
+     ],
+     [
+      "--f",
+      "#636363"
+     ],
+     [
+      "--g",
+      "#808080"
+     ]
+    ],
+    "css": "/* Flattened by figkit from the main stylesheet: literal values only */\n:root {\n  --a: re#bfbfbf;\n  --b: #e6e6e6;\n  --c: #f9ffff;\n  --d: #000000;\n  --e: #808080;\n  --f: #636363;\n  --g: #808080;\n}\n",
+    "rules": [],
+    "defs": null,
+    "metric": {
+     "--a": {
+      "error": "style main: token --a = 're#bfbfbf' is not a number"
+     },
+     "--b": {
+      "error": "style main: token --b = '#e6e6e6' is not a number"
+     },
+     "--c": {
+      "error": "style main: token --c = '#f9ffff' is not a number"
+     },
+     "--d": {
+      "error": "style main: token --d = '#000000' is not a number"
+     },
+     "--e": {
+      "error": "style main: token --e = '#808080' is not a number"
+     },
+     "--f": {
+      "error": "style main: token --f = '#636363' is not a number"
+     },
+     "--g": {
+      "error": "style main: token --g = '#808080' is not a number"
+     }
+    }
+   }
+  },
+  {
+   "case": "mix-too-few",
+   "files": {
+    "main.css": ":root { --a: mix(#fff, #000); }\n"
+   },
+   "entry": "main.css",
+   "error": {
+    "type": "IndexError",
+    "message": "list index out of range"
+   }
+  },
+  {
+   "case": "mix-bad-colour",
+   "files": {
+    "main.css": ":root { --a: mix(red, #000, 0.5); }\n"
+   },
+   "entry": "main.css",
+   "error": {
+    "type": "ValueError",
+    "message": "invalid literal for int() with base 16: 'rr'"
+   }
+  },
+  {
+   "case": "mix-bad-second",
+   "files": {
+    "main.css": ":root { --a: mix(#000, #12, 0.5); }\n"
+   },
+   "entry": "main.css",
+   "error": {
+    "type": "ValueError",
+    "message": "invalid literal for int() with base 16: ''"
+   }
+  },
+  {
+   "case": "mix-bad-number",
+   "files": {
+    "main.css": ":root { --a: mix(#fff, #000, half); }\n"
+   },
+   "entry": "main.css",
+   "error": {
+    "type": "ValueError",
+    "message": "could not convert string to float: 'half'"
+   }
+  },
+  {
+   "case": "light-too-few",
+   "files": {
+    "main.css": ":root { --a: oklch-light(#fff); }\n"
+   },
+   "entry": "main.css",
+   "error": {
+    "type": "IndexError",
+    "message": "list index out of range"
+   }
+  },
+  {
+   "case": "shift-bad",
+   "files": {
+    "main.css": ":root { --a: oklch-shift(#fff, 0.1, x); }\n"
+   },
+   "entry": "main.css",
+   "error": {
+    "type": "ValueError",
+    "message": "could not convert string to float: 'x'"
+   }
+  },
+  {
+   "case": "font-size-px",
+   "files": {
+    "main.css": ":root { --s: 12; }\n.a { font-size: var(--s); }\n.b { font-size: 12.5; }\n.c { font-size: 12px; }\n.d { font-size: -.5; }\n.e { font-size: 1e3; }\n.f { FONT-SIZE: 9; }\n"
+   },
+   "entry": "main.css",
+   "expect": {
+    "name": "main",
+    "tokens": [
+     [
+      "--s",
+      "12"
+     ]
+    ],
+    "css": "/* Flattened by figkit from the main stylesheet: literal values only */\n:root {\n  --s: 12;\n}\n.a { font-size: 12px; }\n.b { font-size: 12.5px; }\n.c { font-size: 12px; }\n.d { font-size: -.5px; }\n.e { font-size: 1e3; }\n.f { FONT-SIZE: 9; }\n",
+    "rules": [
+     [
+      ".a",
+      [
+       [
+        "font-size",
+        "12px"
+       ]
+      ]
+     ],
+     [
+      ".b",
+      [
+       [
+        "font-size",
+        "12.5px"
+       ]
+      ]
+     ],
+     [
+      ".c",
+      [
+       [
+        "font-size",
+        "12px"
+       ]
+      ]
+     ],
+     [
+      ".d",
+      [
+       [
+        "font-size",
+        "-.5px"
+       ]
+      ]
+     ],
+     [
+      ".e",
+      [
+       [
+        "font-size",
+        "1e3"
+       ]
+      ]
+     ],
+     [
+      ".f",
+      [
+       [
+        "FONT-SIZE",
+        "9"
+       ]
+      ]
+     ]
+    ],
+    "defs": null,
+    "metric": {
+     "--s": 12.0
+    }
+   }
+  },
+  {
+   "case": "metrics",
+   "files": {
+    "main.css": ":root { --a: 12px; --b:  -3.5pt; --c: .25; --d: 1e3; --e: abc; --f: 'q'; --g: \"x'y\"; --h: -; --i: 1_000; }\n"
+   },
+   "entry": "main.css",
+   "expect": {
+    "name": "main",
+    "tokens": [
+     [
+      "--a",
+      "12px"
+     ],
+     [
+      "--b",
+      "-3.5pt"
+     ],
+     [
+      "--c",
+      ".25"
+     ],
+     [
+      "--d",
+      "1e3"
+     ],
+     [
+      "--e",
+      "abc"
+     ],
+     [
+      "--f",
+      "'q'"
+     ],
+     [
+      "--g",
+      "\"x'y\""
+     ],
+     [
+      "--h",
+      "-"
+     ],
+     [
+      "--i",
+      "1_000"
+     ]
+    ],
+    "css": "/* Flattened by figkit from the main stylesheet: literal values only */\n:root {\n  --a: 12px;\n  --b: -3.5pt;\n  --c: .25;\n  --d: 1e3;\n  --e: abc;\n  --f: 'q';\n  --g: \"x'y\";\n  --h: -;\n  --i: 1_000;\n}\n",
+    "rules": [],
+    "defs": null,
+    "metric": {
+     "--a": 12.0,
+     "--b": -3.5,
+     "--c": 0.25,
+     "--d": 1.0,
+     "--e": {
+      "error": "style main: token --e = 'abc' is not a number"
+     },
+     "--f": {
+      "error": "style main: token --f = \"'q'\" is not a number"
+     },
+     "--g": {
+      "error": "style main: token --g = '\"x\\'y\"' is not a number"
+     },
+     "--h": {
+      "error": "style main: token --h = '-' is not a number"
+     },
+     "--i": 1.0
+    }
+   }
+  },
+  {
+   "case": "whitespace",
+   "files": {
+    "main.css": ":root {\n  --a: two  words\u001c;\n\t--b :\n x \n y ;\n}\n.r\n.s\t{ fill:  #000 ; }\n"
+   },
+   "entry": "main.css",
+   "expect": {
+    "name": "main",
+    "tokens": [
+     [
+      "--a",
+      "two words"
+     ],
+     [
+      "--b",
+      "x y"
+     ]
+    ],
+    "css": "/* Flattened by figkit from the main stylesheet: literal values only */\n:root {\n  --a: two words;\n  --b: x y;\n}\n.r .s { fill: #000; }\n",
+    "rules": [
+     [
+      ".r .s",
+      [
+       [
+        "fill",
+        "#000"
+       ]
+      ]
+     ]
+    ],
+    "defs": null,
+    "metric": {
+     "--a": {
+      "error": "style main: token --a = 'two words' is not a number"
+     },
+     "--b": {
+      "error": "style main: token --b = 'x y' is not a number"
+     }
+    }
+   }
+  },
+  {
+   "case": "self-direct",
+   "files": {
+    "main.css": ":root { --a: var(--a); }\n"
+   },
+   "entry": "main.css",
+   "error": {
+    "type": "ValueError",
+    "message": "style main: token --a refers to itself (--a)"
+   }
+  },
+  {
+   "case": "self-long",
+   "files": {
+    "main.css": ":root { --x: 1; --a: var(--b); --b: var(--c, 2); --c: var(--a); }\n"
+   },
+   "entry": "main.css",
+   "error": {
+    "type": "ValueError",
+    "message": "style main: token --a refers to itself (--a → --b → --c)"
+   }
+  }
+ ],
+ "label_css": "/* first line .title */\n:root { --x: 1; }\n.title, .big { font-size: 14px; fill: #ABC; font-weight: bold; }\n.title { font-size: 99; font-style: italic; }\n.zero { font-size: 0; fill: none; font-weight: 400; font-style: normal; }\n.pt { font-size: 9pt; fill: #123456; font-weight: 700; }\n.light { font-weight: lighter; font-style: OBLIQUE; }\n.bolder { font-weight: Bolder; }\n.prose { font-size: 10px; fill: #595959; }\n.math { font-size: 11px; fill: #000000; }\n.title-x { font-size: 50; }\n.dashed { stroke-fill: #ff0000; my-font-size: 3; fill:#0f0 }\n.empty { fill: ; font-size:  ; }\n.bad { font-size: large; }\n.badnum { font-size: 1e; }\n.sign { font-size: +12; }\n.weird { font-weight: 950; font-style: italic oblique; }\n",
+ "label_style": [
+  {
+   "classes": [
+    "prose",
+    "title"
+   ],
+   "own": null,
+   "value": [
+    14.0,
+    "#aabbcc",
+    "bold",
+    "italic"
+   ]
+  },
+  {
+   "classes": [
+    "title",
+    "prose"
+   ],
+   "own": null,
+   "value": [
+    14.0,
+    "#aabbcc",
+    "bold",
+    "italic"
+   ]
+  },
+  {
+   "classes": [
+    "math",
+    "title"
+   ],
+   "own": null,
+   "value": [
+    14.0,
+    "#aabbcc",
+    "bold",
+    "italic"
+   ]
+  },
+  {
+   "classes": [
+    "prose"
+   ],
+   "own": null,
+   "value": [
+    10.0,
+    "#595959",
+    null,
+    null
+   ]
+  },
+  {
+   "classes": [
+    "math"
+   ],
+   "own": null,
+   "value": [
+    11.0,
+    "#000000",
+    null,
+    null
+   ]
+  },
+  {
+   "classes": [],
+   "own": null,
+   "value": [
+    10,
+    "#000000",
+    null,
+    null
+   ]
+  },
+  {
+   "classes": [
+    "unknown"
+   ],
+   "own": null,
+   "value": [
+    10,
+    "#000000",
+    null,
+    null
+   ]
+  },
+  {
+   "classes": [
+    "prose",
+    "zero"
+   ],
+   "own": null,
+   "value": [
+    10.0,
+    "#595959",
+    null,
+    null
+   ]
+  },
+  {
+   "classes": [
+    "prose",
+    "pt"
+   ],
+   "own": null,
+   "value": [
+    12.0,
+    "#123456",
+    700,
+    null
+   ]
+  },
+  {
+   "classes": [
+    "prose",
+    "light"
+   ],
+   "own": null,
+   "value": [
+    10.0,
+    "#595959",
+    "light",
+    "oblique"
+   ]
+  },
+  {
+   "classes": [
+    "prose",
+    "bolder"
+   ],
+   "own": null,
+   "value": [
+    10.0,
+    "#595959",
+    "bold",
+    null
+   ]
+  },
+  {
+   "classes": [
+    "prose",
+    "title-x"
+   ],
+   "own": null,
+   "value": [
+    50.0,
+    "#595959",
+    null,
+    null
+   ]
+  },
+  {
+   "classes": [
+    "prose",
+    "dashed"
+   ],
+   "own": null,
+   "value": [
+    10.0,
+    "#00ff00",
+    null,
+    null
+   ]
+  },
+  {
+   "classes": [
+    "prose",
+    "empty"
+   ],
+   "own": null,
+   "value": [
+    10.0,
+    "#595959",
+    null,
+    null
+   ]
+  },
+  {
+   "classes": [
+    "prose",
+    "big",
+    "pt"
+   ],
+   "own": null,
+   "value": [
+    14.0,
+    "#aabbcc",
+    "bold",
+    null
+   ]
+  },
+  {
+   "classes": [
+    "prose",
+    "sign"
+   ],
+   "own": null,
+   "value": [
+    12.0,
+    "#595959",
+    null,
+    null
+   ]
+  },
+  {
+   "classes": [
+    "prose",
+    "weird"
+   ],
+   "own": null,
+   "value": [
+    10.0,
+    "#595959",
+    null,
+    null
+   ]
+  },
+  {
+   "classes": [
+    "prose",
+    "math"
+   ],
+   "own": null,
+   "value": [
+    10.0,
+    "#595959",
+    null,
+    null
+   ]
+  },
+  {
+   "classes": [
+    "prose",
+    "title",
+    "bad"
+   ],
+   "own": null,
+   "value": [
+    14.0,
+    "#aabbcc",
+    "bold",
+    "italic"
+   ]
+  },
+  {
+   "classes": [
+    "prose",
+    "bad"
+   ],
+   "own": null,
+   "error": {
+    "type": "AttributeError",
+    "message": "'NoneType' object has no attribute 'group'"
+   }
+  },
+  {
+   "classes": [
+    "prose",
+    "badnum"
+   ],
+   "own": null,
+   "error": {
+    "type": "ValueError",
+    "message": "could not convert string to float: '1e'"
+   }
+  },
+  {
+   "classes": [
+    "prose",
+    "title"
+   ],
+   "own": {
+    "font-size": "7",
+    "fill": "#fff",
+    "font-weight": "600",
+    "font-style": "italic"
+   },
+   "value": [
+    7.0,
+    "#ffffff",
+    600,
+    "italic"
+   ]
+  },
+  {
+   "classes": [
+    "prose",
+    "title"
+   ],
+   "own": {
+    "font-size": "0",
+    "fill": "red",
+    "font-weight": "normal"
+   },
+   "value": [
+    14.0,
+    "#aabbcc",
+    "bold",
+    "italic"
+   ]
+  },
+  {
+   "classes": [
+    "prose",
+    "bad"
+   ],
+   "own": {
+    "font-size": "8"
+   },
+   "value": [
+    8.0,
+    "#595959",
+    null,
+    null
+   ]
+  },
+  {
+   "classes": [
+    "prose"
+   ],
+   "own": {
+    "font-size": "6pt",
+    "fill": " #ABCDEF "
+   },
+   "value": [
+    8.0,
+    "#abcdef",
+    null,
+    null
+   ]
+  }
+ ],
+ "num": [
+  [
+   0,
+   "0"
+  ],
+  [
+   -0.0,
+   "0"
+  ],
+  [
+   1,
+   "1"
+  ],
+  [
+   0.5,
+   "0.5"
+  ],
+  [
+   0.3333333333333333,
+   "0.3333"
+  ],
+  [
+   -0.6666666666666666,
+   "-0.6667"
+  ],
+  [
+   5e-05,
+   "0.0001"
+  ],
+  [
+   0.00015,
+   "0.0001"
+  ],
+  [
+   0.03125,
+   "0.0312"
+  ],
+  [
+   0.09375,
+   "0.0938"
+  ],
+  [
+   1e-09,
+   "0"
+  ],
+  [
+   -1e-09,
+   "0"
+  ],
+  [
+   123456.78905,
+   "123456.7891"
+  ],
+  [
+   12.0,
+   "12"
+  ],
+  [
+   1e+16,
+   "10000000000000000"
+  ],
+  [
+   "inf",
+   "inf"
+  ],
+  [
+   "-inf",
+   "-inf"
+  ]
+ ],
+ "strip_comments": [
+  [
+   "a /* x */ b /* y\n z */ c",
+   "a  b  c"
+  ],
+  [
+   "/* unterminated",
+   "/* unterminated"
+  ],
+  [
+   "/**/x/***/",
+   "x"
+  ],
+  [
+   ".a{b:c}\n.d { e : f g ; h }\n:root{--x:1;--y : 2 }",
+   ".a{b:c}\n.d { e : f g ; h }\n:root{--x:1;--y : 2 }"
+  ]
+ ],
+ "parse": [
+  [
+   "a  b  c",
+   []
+  ],
+  [
+   "/* unterminated",
+   []
+  ],
+  [
+   "x",
+   []
+  ],
+  [
+   ".a{b:c}\n.d { e : f g ; h }\n:root{--x:1;--y : 2 }",
+   [
+    [
+     ".a",
+     [
+      [
+       "b",
+       "c"
+      ]
+     ]
+    ],
+    [
+     ".d",
+     [
+      [
+       "e",
+       "f g"
+      ]
+     ]
+    ],
+    [
+     ":root",
+     [
+      [
+       "--x",
+       "1"
+      ],
+      [
+       "--y",
+       "2"
+      ]
+     ]
+    ]
+   ]
+  ]
+ ]
+}

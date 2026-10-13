@@ -1,0 +1,275 @@
+{
+ "key": "p3-27-regional-expenses-stacks",
+ "file": "p3-27-regional-expenses-stacks.json",
+ "variant": null,
+ "requested_type": "auto",
+ "report": {
+  "chart": "p3-27-regional-expenses-stacks",
+  "style": "plain",
+  "variant": null,
+  "type": "stacked_bar",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "R7-20",
+    "level": "guided",
+    "text": "type stacked_bar: the totals compared, and roughly which parts dominate each: multiple stacked bars (G1.41)",
+    "guide": []
+   },
+   {
+    "rule": "R2-24",
+    "level": "locked",
+    "text": "bars start at zero",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "the step 1,000 would leave 29% room above the data; 500 gives 0–3,500, 7 intervals, 13% room",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "scale 0–3,500 by 500",
+    "guide": []
+   },
+   {
+    "rule": "02 D1",
+    "level": "guided",
+    "text": "the totals sorted by their size, descending (R7-20, G2.1)",
+    "guide": []
+   },
+   {
+    "rule": "R7-24",
+    "level": "guided",
+    "text": "stacking order from the base: Operations, HR, Finance, Outreach, PR, Development (the largest at the base, where it is read precisely; G7.31, D-26 (b))",
+    "guide": []
+   },
+   {
+    "rule": "R7-24",
+    "level": "locked",
+    "text": "each part in one colour and one place in every total: Operations (slot 1), HR (slot 2), Finance (slot 3), Outreach (slot 4), PR (slot 5), Development (slot 6) (G4.22, G7.31)",
+    "guide": []
+   },
+   {
+    "rule": "R9-10",
+    "level": "locked",
+    "text": "every name fits under its stacked bar, neighbours at least 10 pt apart: vertical stacked bars",
+    "guide": []
+   },
+   {
+    "rule": "R2-21",
+    "level": "locked",
+    "text": "labels as a set, 1 decimals: 0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, $3.5",
+    "guide": []
+   },
+   {
+    "rule": "R5-10",
+    "level": "locked",
+    "text": "digits hidden: millions, stated once on the top label (R2-05, D-3): “$3.5 million in expenses”",
+    "guide": []
+   },
+   {
+    "rule": "R7-20",
+    "level": "guided",
+    "text": "each stack's total labelled at its end, the totals being the message: East 3.1, Central 2.6, West 2.5, in the scale's magnitude and form, its top label giving the unit (G1.41, G7.4; owner, 1 Oct 2026)",
+    "guide": []
+   },
+   {
+    "rule": "R2-07",
+    "level": "locked",
+    "text": "the unit phrase on the top label: “$3.5 million in expenses”; the top gridline starts after it",
+    "guide": []
+   },
+   {
+    "rule": "R4-1",
+    "level": "guided",
+    "text": "each part named beside the last stack, level with the middle of its segment, top to bottom as stacked: Development, PR, Outreach, Finance, HR, Operations; thin leaders to Development, moved off their segments to clear the others (G5.4, D-31 (c))",
+    "guide": []
+   },
+   {
+    "rule": "R5-26",
+    "level": "locked",
+    "text": "the title wraps onto two lines",
+    "guide": []
+   }
+  ],
+  "findings": [],
+  "overrides": [],
+  "expect": {},
+  "expect_met": true,
+  "source": {
+   "book": "p. 268–269 (s. 0246–0247)",
+   "notes": "07 #12",
+   "shows": "several totals compared, and roughly which parts dominate each: multiple stacked bars (R7-20, G1.41), the regions by their totals, largest first, each total labelled at its stack's end, the departments in one order and colour in every stack (R7-24, G7.31, D-26 (b)), named beside the last stack, packed (D-31 (c); the book's legend at the right is the variant)",
+   "status": "generated"
+  },
+  "summary": {
+   "scale": "0–3,500 by 500",
+   "labels": [
+    "0.0",
+    "0.5",
+    "1.0",
+    "1.5",
+    "2.0",
+    "2.5",
+    "3.0",
+    "$3.5"
+   ],
+   "top": "$3.5 million in expenses",
+   "scale_title": null,
+   "orientation": "vertical",
+   "plot": [
+    26.78,
+    51.03,
+    306.2,
+    218.69
+   ],
+   "band": 93.14,
+   "series": [
+    "ops",
+    "hr",
+    "fin",
+    "out",
+    "pr",
+    "dev"
+   ],
+   "labelling": "direct",
+   "value_labels": false,
+   "table": false,
+   "bar": 51.79,
+   "stack": "stacked",
+   "parts": [
+    "ops",
+    "hr",
+    "fin",
+    "out",
+    "pr",
+    "dev"
+   ],
+   "percent": false,
+   "totals": [
+    "East",
+    "Central",
+    "West"
+   ],
+   "width": 368.0,
+   "height": 234.74,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job answer: insight “East spent the most, and Operations and HR were the big spenders in every region”",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-1",
+    "level": "guided",
+    "text": "a graph, the values to be compared or a pattern seen (G1.11)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 2,
+    "name": "variables",
+    "rule": "RP3-2",
+    "level": "guided",
+    "text": "one plot: categories along x and 6 series; a further variable would go to small multiples (data.dims, G1.18)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 3,
+    "name": "location",
+    "rule": "R8-2",
+    "level": "guided",
+    "text": "not a map: where the values are is not the message (facts.location_matters; G1.24, G1.25)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "RP2-7",
+    "level": "guided",
+    "text": "group: breakdowns of totals. 3 totals of 6 parts each, the parts as series (07 §4.2, G1.8)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-02",
+    "level": "locked",
+    "text": "check, meaningful total: passes: the values add up to a total someone would quote (parts.meaningful_total)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-03",
+    "level": "locked",
+    "text": "check, all parts: passes: every part of the total is shown (parts.all_parts)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-05",
+    "level": "locked",
+    "text": "check, overlap: passes: no part contains or overlaps another (parts.overlap)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-04",
+    "level": "locked",
+    "text": "check, signs: passes: the parts are all of one sign",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-20",
+    "level": "guided",
+    "text": "the totals compared, and roughly which parts dominate each: multiple stacked bars (G1.41)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type, the series told apart by colour (G1.59)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "stacked bar charts are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "breakdowns of totals"
+   }
+  ],
+  "copies": []
+ },
+ "output_sha256": "989a2f4e914e86acfcaaeebdc416b46b3ab9975d0f7eddbb49e59f212ee58ae9"
+}

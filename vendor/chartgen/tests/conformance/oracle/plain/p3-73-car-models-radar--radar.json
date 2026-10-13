@@ -1,0 +1,126 @@
+{
+ "key": "p3-73-car-models-radar--radar",
+ "file": "p3-73-car-models-radar.json",
+ "variant": "radar",
+ "requested_type": "radar",
+ "report": {
+  "chart": "p3-73-car-models-radar",
+  "style": "plain",
+  "variant": "radar",
+  "type": null,
+  "status": "refused",
+  "decisions": [],
+  "findings": [
+   {
+    "rule": "R12-6",
+    "severity": "error",
+    "message": "radar charts are on the avoid-list: a radar's shapes do not show which item is best or what each item's strengths and weaknesses are",
+    "path": "chart.type",
+    "supply": "type heatmap (a heatmap table: items as columns, attributes as rows, the values in coloured cells); circular data such as wind directions excepted, through an override",
+    "level": "locked",
+    "guide": [],
+    "title": "no radar: a heatmap table"
+   }
+  ],
+  "overrides": [],
+  "expect": {
+   "refused": [
+    "R12-6"
+   ]
+  },
+  "expect_met": true,
+  "source": {
+   "book": "p. 360–363 (s. 0328–0330)",
+   "notes": "08-12 #16",
+   "shows": "the radar asked for: refused, with the heatmap table as its replacement (R12-6, G1.61 [L])",
+   "status": "generated"
+  },
+  "summary": {
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job answer: insight “Elora and Varga score best overall; Exodus is weakest, on value and comfort above all”",
+    "guide": [],
+    "group": "tables"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-1",
+    "level": "guided",
+    "text": "a graph, the values to be compared or a pattern seen (G1.11)",
+    "guide": [],
+    "group": "tables"
+   },
+   {
+    "step": 2,
+    "name": "variables",
+    "rule": "RP3-2",
+    "level": "guided",
+    "text": "one plot: categories along x and 6 series; a further variable would go to small multiples (data.dims, G1.18)",
+    "guide": [],
+    "group": "tables"
+   },
+   {
+    "step": 3,
+    "name": "location",
+    "rule": "R8-2",
+    "level": "guided",
+    "text": "not a map: where the values are is not the message (facts.location_matters; G1.24, G1.25)",
+    "guide": [],
+    "group": "tables"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-01",
+    "level": "guided",
+    "text": "not parts of a total (no data.parts, no breakdown message; G1.1)",
+    "guide": [],
+    "group": "tables"
+   },
+   {
+    "step": 7,
+    "name": "values across categories",
+    "rule": "R12-6",
+    "level": "guided",
+    "text": "group: tables. Items compared across several attributes, which is best and each one's strengths and weaknesses being the message (a radar's data): a heatmap table, the values printed in coloured cells (G7.36)",
+    "guide": [],
+    "group": "tables"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type, the series told apart by colour (G1.59)",
+    "guide": [],
+    "group": "tables"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "heatmaps are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "tables"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-6",
+    "level": "locked",
+    "guide": [],
+    "text": "chart.type radar is on the avoid-list: a radar's shapes do not show which item is best or what each item's strengths and weaknesses are; instead, type heatmap (a heatmap table: items as columns, attributes as rows, the values in coloured cells); circular data such as wind directions excepted, through an override (G1.61)"
+   }
+  ],
+  "copies": []
+ }
+}

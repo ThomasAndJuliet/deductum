@@ -1,0 +1,242 @@
+{
+ "key": "p2-57-sales-satisfaction-index",
+ "file": "p2-57-sales-satisfaction-index.json",
+ "variant": null,
+ "requested_type": "auto",
+ "report": {
+  "chart": "p2-57-sales-satisfaction-index",
+  "style": "plain",
+  "variant": null,
+  "type": "line",
+  "status": "drawn",
+  "decisions": [
+   {
+    "rule": "R15-16",
+    "level": "locked",
+    "text": "every series rebased: % change since Jan. 2022, so that their patterns of change compare on one scale; the actual values are no longer shown (G8.18)",
+    "guide": []
+   },
+   {
+    "rule": "R2-17",
+    "level": "locked",
+    "text": "an index chart: series in different units on one scale of change, instead of two value axes (R2-14, G2.31)",
+    "guide": []
+   },
+   {
+    "rule": "R15-13",
+    "level": "locked",
+    "text": "a calculated value in place of the raw one: the index (G8.15)",
+    "guide": []
+   },
+   {
+    "rule": "R6-4",
+    "level": "guided",
+    "text": "type line: a regular series whose pattern of change is the point (06 DP6-1, G1.51)",
+    "guide": []
+   },
+   {
+    "rule": "R2-30",
+    "level": "locked",
+    "text": "values on both sides of zero: room at both ends",
+    "guide": []
+   },
+   {
+    "rule": "02 D5",
+    "level": "guided",
+    "text": "scale −20–80 by 20",
+    "guide": []
+   },
+   {
+    "rule": "R6-28",
+    "level": "locked",
+    "text": "each line its own colour, handed out top to bottom by the line ends: Gross sales slot 1, Satisfaction slot 2",
+    "guide": []
+   },
+   {
+    "rule": "R6-32",
+    "level": "locked",
+    "text": "each line labelled at its end, in the text grey, none moved",
+    "guide": []
+   },
+   {
+    "rule": "R6-27",
+    "level": "locked",
+    "text": "no point markers: no value is isolated and no straight run hides one",
+    "guide": []
+   },
+   {
+    "rule": "R2-07",
+    "level": "locked",
+    "text": "the unit phrase on the top label: “+80% (change since Jan. 2022)”; the top gridline starts after it",
+    "guide": []
+   },
+   {
+    "rule": "R2-21",
+    "level": "locked",
+    "text": "labels as a set, 0 decimals: −20%, 0%, +20%, +40%, +60%, +80%",
+    "guide": []
+   },
+   {
+    "rule": "R2-40",
+    "level": "locked",
+    "text": "time axis: row 1 narrow",
+    "guide": []
+   },
+   {
+    "rule": "R2-39",
+    "level": "locked",
+    "text": "time axis: row 2 (“2022”) left out, the title gives it (G2.37)",
+    "guide": []
+   }
+  ],
+  "findings": [
+   {
+    "rule": "R2-27",
+    "severity": "warn",
+    "message": "29% of room at the top of the scale (5–25 % expected)",
+    "level": "locked",
+    "guide": [],
+    "title": "the upper limit leaves 10–20 % of room (the data never touch it)"
+   }
+  ],
+  "overrides": [],
+  "expect": {},
+  "expect_met": true,
+  "source": {
+   "book": "p. 70–72 (s. 0068–0070)",
+   "notes": "02 #7",
+   "shows": "an index chart instead of two value axes: sales and satisfaction, in different units, each as its % change since January on one scale (R2-14, R2-17, G2.31, G8.18)",
+   "status": "generated"
+  },
+  "summary": {
+   "scale": "−20–80 by 20",
+   "labels": [
+    "−20%",
+    "0%",
+    "+20%",
+    "+40%",
+    "+60%",
+    "+80%"
+   ],
+   "top": "+80% (change since Jan. 2022)",
+   "scale_title": null,
+   "orientation": "vertical",
+   "plot": [
+    35.11,
+    36.07,
+    314.6,
+    203.76
+   ],
+   "slot": 24.09,
+   "labelling": "direct",
+   "label_shifts": {
+    "sales": 0.0,
+    "satisfaction": 0.0
+   },
+   "leaders": [],
+   "markers": [],
+   "colours": {
+    "sales": "series-1",
+    "satisfaction": "series-2"
+   },
+   "width": 368.0,
+   "height": 219.81,
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job answer: insight “Sales rose far more than satisfaction, and less steadily”",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-1",
+    "level": "guided",
+    "text": "a graph, the values to be compared or a pattern seen (G1.11)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 2,
+    "name": "variables",
+    "rule": "RP3-2",
+    "level": "guided",
+    "text": "one plot: time along x and 2 series; a further variable would go to small multiples (data.dims, G1.18)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 3,
+    "name": "location",
+    "rule": "R8-2",
+    "level": "guided",
+    "text": "not a map: where the values are is not the message (facts.location_matters; G1.24, G1.25)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-01",
+    "level": "guided",
+    "text": "not parts of a total (no data.parts, no breakdown message; G1.1)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 6,
+    "name": "values over time",
+    "rule": "R6-13",
+    "level": "guided",
+    "text": "group: data over time. A series of more than two periods, not a breakdown and not tied to places (G1.48)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 6,
+    "name": "values over time",
+    "rule": "R6-3",
+    "level": "locked",
+    "text": "a regular series, enough values known (06 DP6-2)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 6,
+    "name": "values over time",
+    "rule": "R6-4",
+    "level": "guided",
+    "text": "a regular series whose pattern of change is the point (06 DP6-1, G1.51)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type, the series told apart by colour (G1.59)",
+    "guide": [],
+    "group": "data over time"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "line charts are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "data over time"
+   }
+  ],
+  "copies": []
+ },
+ "output_sha256": "18ffd38a97f383fcb0e3023e6fb6e019fd4275e4958dc6c9410bfebfee827eb1"
+}

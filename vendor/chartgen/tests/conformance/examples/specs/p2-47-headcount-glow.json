@@ -1,0 +1,219 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "p2-47-headcount-glow",
+    "job": {
+      "kind": "make_aware",
+      "text": "Make management aware of Central's drop in headcount this spring"
+    },
+    "insight": {
+      "important": "Central's headcount fell by a quarter from March to May",
+      "targets": [
+        {
+          "series": "central"
+        }
+      ]
+    },
+    "title": {
+      "text": "Central's Headcount Fell by a Quarter from March to May",
+      "kind": "insight",
+      "descriptive": "Headcount by Region, Jan–Jul 2019"
+    },
+    "data": {
+      "x": {
+        "kind": "time",
+        "grid": "month",
+        "values": [
+          "2019-01",
+          "2019-02",
+          "2019-03",
+          "2019-04",
+          "2019-05",
+          "2019-06",
+          "2019-07"
+        ]
+      },
+      "measure": {
+        "name": "headcount",
+        "kind": "count",
+        "zero": "meaningful",
+        "min": 0,
+        "persistence": "summary",
+        "unit": {
+          "noun": "employees"
+        }
+      },
+      "series": [
+        {
+          "id": "east",
+          "name": "East",
+          "values": [
+            100,
+            110,
+            109,
+            88,
+            107,
+            96,
+            100
+          ]
+        },
+        {
+          "id": "central",
+          "name": "Central",
+          "values": [
+            90,
+            96,
+            106,
+            82,
+            78,
+            78,
+            90
+          ]
+        },
+        {
+          "id": "north",
+          "name": "North",
+          "values": [
+            60,
+            47,
+            62,
+            53,
+            55,
+            47,
+            62
+          ]
+        },
+        {
+          "id": "west",
+          "name": "West",
+          "values": [
+            40,
+            32,
+            38,
+            42,
+            42,
+            47,
+            45
+          ]
+        },
+        {
+          "id": "south",
+          "name": "South",
+          "values": [
+            30,
+            31,
+            31,
+            29,
+            33,
+            32,
+            30
+          ]
+        },
+        {
+          "id": "intl",
+          "name": "Int'l",
+          "values": [
+            20,
+            18,
+            19,
+            20,
+            18,
+            17,
+            20
+          ]
+        }
+      ]
+    },
+    "highlight": [
+      {
+        "targets": [
+          {
+            "series": "central"
+          }
+        ],
+        "method": "auto"
+      },
+      {
+        "targets": [
+          {
+            "series": "central",
+            "x": [
+              "2019-03",
+              "2019-05"
+            ]
+          }
+        ],
+        "method": "glow",
+        "emphasis": "strong"
+      }
+    ],
+    "source": {
+      "book": "p. 212–214 (s. 0196–0198); p. 400 (s. 0366)",
+      "notes": "06 T11; 13-15 §5.4",
+      "shows": "P1-12's emphasis with the book's glow on the stretch the insight is about (s. 0366): Central twice as thick, the fall from March to May glowing beneath it; every other line keeps its colour"
+    }
+  },
+  "variants": [
+    {
+      "name": "background",
+      "patch": {
+        "highlight": [
+          {
+            "targets": [
+              {
+                "series": "central"
+              }
+            ],
+            "method": "auto"
+          },
+          {
+            "targets": [
+              {
+                "series": "central",
+                "x": [
+                  "2019-03",
+                  "2019-05"
+                ]
+              }
+            ],
+            "method": "background"
+          }
+        ],
+        "source": {
+          "shows": "a tinted band behind the months of the fall instead of the glow"
+        }
+      }
+    },
+    {
+      "name": "labels",
+      "patch": {
+        "highlight": [
+          {
+            "targets": [
+              {
+                "series": "central"
+              }
+            ],
+            "method": "auto"
+          },
+          {
+            "targets": [
+              {
+                "series": "central",
+                "x": "2019-03"
+              },
+              {
+                "series": "central",
+                "x": "2019-05"
+              }
+            ],
+            "method": "selective_label"
+          }
+        ],
+        "source": {
+          "shows": "the two values of the fall labelled, 106 and 78, with the thicker line"
+        }
+      }
+    }
+  ]
+}

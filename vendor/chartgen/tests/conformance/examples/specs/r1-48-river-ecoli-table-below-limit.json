@@ -1,0 +1,183 @@
+{
+  "base": {
+    "chartspec": 1,
+    "id": "r1-48-river-ecoli-table-below-limit",
+    "job": {
+      "kind": "lookup",
+      "text": "Look up the E. coli count at each upstream site in the first half of 2025"
+    },
+    "title": {
+      "text": "E. coli at Upstream Sites (cfu/100 mL), Jan–Jun 2025",
+      "kind": "descriptive"
+    },
+    "data": {
+      "x": {
+        "kind": "time",
+        "grid": "month",
+        "values": [
+          "2025-01",
+          "2025-02",
+          "2025-03",
+          "2025-04",
+          "2025-05",
+          "2025-06"
+        ]
+      },
+      "measure": {
+        "name": "E. coli count",
+        "kind": "count",
+        "zero": "meaningful",
+        "min": 0,
+        "persistence": "summary",
+        "unit": {
+          "suffix": " cfu/100 mL"
+        }
+      },
+      "series": [
+        {
+          "id": "w01",
+          "name": "W01 Wend Head spring",
+          "values": [
+            7,
+            1,
+            {
+              "below": 1
+            },
+            {
+              "below": 1
+            },
+            {
+              "below": 1
+            },
+            6
+          ]
+        },
+        {
+          "id": "w02",
+          "name": "W02 Crowsfoot Bridge",
+          "values": [
+            18,
+            14,
+            14,
+            21,
+            8,
+            23
+          ]
+        },
+        {
+          "id": "w03",
+          "name": "W03 Holme Farm ford",
+          "values": [
+            250,
+            {
+              "status": "missing"
+            },
+            130,
+            50,
+            190,
+            160
+          ]
+        },
+        {
+          "id": "l01",
+          "name": "L01 Lyd Head",
+          "values": [
+            4,
+            {
+              "below": 1
+            },
+            {
+              "below": 1
+            },
+            {
+              "below": 1
+            },
+            {
+              "below": 1
+            },
+            2
+          ]
+        },
+        {
+          "id": "l02",
+          "name": "L02 Lydgate Farm",
+          "values": [
+            63,
+            23,
+            7,
+            35,
+            33,
+            56
+          ]
+        },
+        {
+          "id": "b01",
+          "name": "B01 Brindle Moss",
+          "values": [
+            3,
+            {
+              "below": 1
+            },
+            {
+              "below": 1
+            },
+            {
+              "below": 1
+            },
+            {
+              "below": 1
+            },
+            2
+          ]
+        },
+        {
+          "id": "b02",
+          "name": "B02 High Brindle",
+          "values": [
+            78,
+            52,
+            14,
+            8,
+            18,
+            36
+          ]
+        }
+      ]
+    },
+    "facts": {
+      "message": "lookup_only"
+    },
+    "chart": {
+      "type": "table"
+    },
+    "layout": {
+      "width": 480
+    },
+    "source": {
+      "notes": "eval B10",
+      "shows": "results below the detection limit written “<1” in their cells, aligned as numbers, apart from “(missing)”; the variant, a line chart, is refused: it would draw them as gaps or zero (R0-12)"
+    }
+  },
+  "variants": [
+    {
+      "name": "line",
+      "patch": {
+        "chart": {
+          "type": "line"
+        },
+        "facts": {
+          "message": "pattern"
+        },
+        "job": {
+          "kind": "lookup",
+          "text": "Look up the pattern at each upstream site"
+        }
+      },
+      "expect": {
+        "refused": [
+          "R0-12"
+        ]
+      }
+    }
+  ]
+}

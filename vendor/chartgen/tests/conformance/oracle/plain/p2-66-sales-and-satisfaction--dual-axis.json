@@ -1,0 +1,55 @@
+{
+ "key": "p2-66-sales-and-satisfaction--dual-axis",
+ "file": "p2-66-sales-and-satisfaction.json",
+ "variant": "dual-axis",
+ "requested_type": "auto",
+ "report": {
+  "chart": "p2-66-sales-and-satisfaction",
+  "style": "plain",
+  "variant": "dual-axis",
+  "type": null,
+  "status": "refused",
+  "decisions": [],
+  "findings": [
+   {
+    "rule": "RP3-3",
+    "severity": "warn",
+    "message": "panels.arrangement series in each panel by measure departs from the procedure, which gives rows by measure (series in different measures: one panel per measure, stacked on one time axis drawn at the foot, each with its own scale (G2.31, G2.32))",
+    "path": "panels.arrangement",
+    "level": "guided",
+    "recommended": "rows by measure",
+    "guide": [],
+    "title": "the arrangement of small multiples chosen for the insight, from the range of candidates"
+   },
+   {
+    "rule": "R2-14",
+    "severity": "error",
+    "message": "two variables against two value axes in one plot suggest false conclusions: similar volatility, one line overtaking or rising faster than the other",
+    "path": "panels.arrangement",
+    "supply": "arrangement auto: a merged chart, one panel per measure on a shared axis (actual values); or an index chart (patterns of change)",
+    "level": "locked",
+    "guide": [],
+    "title": "no dual axis for two different variables: a merged chart, or an index chart"
+   }
+  ],
+  "overrides": [],
+  "expect": {
+   "refused": [
+    "R2-14"
+   ]
+  },
+  "expect_met": true,
+  "source": {
+   "book": "p. 69 (s. 0068)",
+   "notes": "02 #7",
+   "shows": "the book's dual-axis chart, refused: two variables against two value axes in one plot suggest false crossings and similar volatility (G2.31)",
+   "status": "generated"
+  },
+  "summary": {
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [],
+  "copies": []
+ }
+}

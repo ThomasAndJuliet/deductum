@@ -1,0 +1,90 @@
+{
+ "base": {
+  "chartspec": 1,
+  "id": "p3-76-units-by-plant",
+  "job": {
+   "kind": "make_aware",
+   "text": "Show which plants' output needs action this month"
+  },
+  "insight": {
+   "important": "Charlotte and Albuquerque need attention; Indianapolis and Pittsburgh did well"
+  },
+  "title": {
+   "text": "Charlotte and Albuquerque Need Attention",
+   "kind": "insight",
+   "descriptive": "Units Produced by Plant, Dec. 2022"
+  },
+  "data": {
+   "x": {
+    "kind": "nominal",
+    "values": [
+     "Indianapolis",
+     "Detroit",
+     "Fresno",
+     "Albuquerque",
+     "Plano",
+     "Savannah",
+     "Charlotte",
+     "Pittsburgh"
+    ]
+   },
+   "measure": {
+    "name": "units produced",
+    "kind": "count",
+    "zero": "meaningful",
+    "min": 0,
+    "unit": {
+     "noun": "units produced"
+    }
+   },
+   "series": [
+    {
+     "id": "units",
+     "name": "Units produced",
+     "values": [
+      4723,
+      4129,
+      3441,
+      3120,
+      2185,
+      1988,
+      1699,
+      897
+     ]
+    }
+   ],
+   "actions": {
+    "Indianapolis": "good_strong",
+    "Albuquerque": "bad",
+    "Charlotte": "bad_strong",
+    "Pittsburgh": "good"
+   }
+  },
+  "facts": {
+   "message": "action_needed"
+  },
+  "source": {
+   "book": "p. 358–359 (s. 0326–0327)",
+   "notes": "08-12 #14",
+   "shows": "which items need action, the status given with the data (D-1): action dots (R12-4, G7.58)"
+  }
+ },
+ "variants": [
+  {
+   "name": "bullet",
+   "patch": {
+    "chart": {
+     "type": "bullet"
+    },
+    "source": {
+     "shows": "bullet graphs asked for: refused, the metrics needing action hard to spot among them (R12-4, G1.61 [L])"
+    }
+   },
+   "expect": {
+    "refused": [
+     "R12-4"
+    ]
+   }
+  }
+ ]
+}

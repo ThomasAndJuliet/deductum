@@ -1,0 +1,135 @@
+{
+ "key": "p3-76-units-by-plant--bullet",
+ "file": "p3-76-units-by-plant.json",
+ "variant": "bullet",
+ "requested_type": "bullet",
+ "report": {
+  "chart": "p3-76-units-by-plant",
+  "style": "plain",
+  "variant": "bullet",
+  "type": null,
+  "status": "refused",
+  "decisions": [],
+  "findings": [
+   {
+    "rule": "R12-4",
+    "severity": "error",
+    "message": "bullet charts are on the avoid-list: on a dashboard of bullet graphs the metrics needing action are hard to spot",
+    "path": "chart.type",
+    "supply": "type auto with facts.message action_needed (action dots)",
+    "level": "locked",
+    "guide": [],
+    "title": "no bullet graphs: action dots"
+   }
+  ],
+  "overrides": [],
+  "expect": {
+   "refused": [
+    "R12-4"
+   ]
+  },
+  "expect_met": true,
+  "source": {
+   "book": "p. 358–359 (s. 0326–0327)",
+   "notes": "08-12 #14",
+   "shows": "bullet graphs asked for: refused, the metrics needing action hard to spot among them (R12-4, G1.61 [L])",
+   "status": "generated"
+  },
+  "summary": {
+   "expect_missing": [],
+   "unexpected_errors": []
+  },
+  "path": [
+   {
+    "step": 0,
+    "name": "brief",
+    "rule": "R0-07",
+    "level": "open",
+    "text": "job make_aware: insight “Charlotte and Albuquerque need attention; Indianapolis and Pittsburgh did well”",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 1,
+    "name": "table or graph",
+    "rule": "R10-1",
+    "level": "guided",
+    "text": "a graph, the values to be compared or a pattern seen (G1.11)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 2,
+    "name": "variables",
+    "rule": "RP3-2",
+    "level": "guided",
+    "text": "one plot: categories along x and 1 series; a further variable would go to small multiples (data.dims, G1.18)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 3,
+    "name": "location",
+    "rule": "R8-2",
+    "level": "guided",
+    "text": "not a map: where the values are is not the message (facts.location_matters; G1.24, G1.25)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 4,
+    "name": "parts of a total",
+    "rule": "R7-01",
+    "level": "guided",
+    "text": "not parts of a total (no data.parts, no breakdown message; G1.1)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 7,
+    "name": "values across categories",
+    "rule": "R9-1",
+    "level": "guided",
+    "text": "group: bar charts. Values compared across categories (G1.9)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 7,
+    "name": "values across categories",
+    "rule": "R12-4",
+    "level": "guided",
+    "text": "which items need action is the message: action dots, a sorted list with thin bars and a coloured dot only where action is needed, its status given with the data (G7.58, D-1)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 8,
+    "name": "combos",
+    "rule": "R11-2",
+    "level": "locked",
+    "text": "one mark type (G1.59)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-1",
+    "level": "locked",
+    "text": "action dots are not on the avoid-list (G1.61)",
+    "guide": [],
+    "group": "bar charts"
+   },
+   {
+    "step": 9,
+    "name": "avoid-list",
+    "rule": "R12-4",
+    "level": "locked",
+    "guide": [],
+    "text": "chart.type bullet is on the avoid-list: on a dashboard of bullet graphs the metrics needing action are hard to spot; instead, type auto with facts.message action_needed (action dots) (G1.61)"
+   }
+  ],
+  "copies": []
+ }
+}

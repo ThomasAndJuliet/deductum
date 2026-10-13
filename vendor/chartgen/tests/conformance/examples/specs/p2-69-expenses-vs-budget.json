@@ -1,0 +1,105 @@
+{
+ "chartspec": 1,
+ "id": "p2-69-expenses-vs-budget",
+ "job": {
+  "kind": "other",
+  "text": "Show three views of spending against budget, each answering a question the managers are likely to ask (a set of views when their need is not known)"
+ },
+ "title": {
+  "text": "Expenses vs. Budget by Department, 2021",
+  "kind": "descriptive"
+ },
+ "data": {
+  "x": {
+   "kind": "nominal",
+   "values": [
+    "Operations",
+    "Marketing",
+    "Finance & Admin",
+    "IT",
+    "R&D"
+   ]
+  },
+  "measures": [
+   {
+    "id": "expenses",
+    "name": "expenses",
+    "kind": "amount",
+    "zero": "meaningful",
+    "min": 0,
+    "unit": {
+     "prefix": "$",
+     "magnitude": 3,
+     "scale_title": "Expenses ($K)",
+     "what": "expenses"
+    },
+    "heading": "How much did each dept. spend?"
+   },
+   {
+    "id": "pct",
+    "name": "deviation from budget",
+    "kind": "change",
+    "zero": "meaningful",
+    "unit": {
+     "suffix": "%",
+     "scale_title": "Below/above budget",
+     "what": "below or above budget"
+    },
+    "heading": "How well did each dept. stick to its budget?"
+   },
+   {
+    "id": "dollars",
+    "name": "deviation from budget",
+    "kind": "change",
+    "zero": "meaningful",
+    "unit": {
+     "prefix": "$",
+     "magnitude": 3,
+     "scale_title": "Below/above budget ($K)",
+     "what": "below or above budget"
+    },
+    "heading": "How much above or below budget was each dept.?"
+   }
+  ],
+  "series": [
+   {
+    "id": "expenses",
+    "measure": "expenses",
+    "values": [
+     562,
+     317,
+     308,
+     244,
+     89
+    ]
+   },
+   {
+    "id": "pct",
+    "measure": "pct",
+    "values": [
+     6.3,
+     11,
+     -3,
+     2,
+     14
+    ]
+   },
+   {
+    "id": "dollars",
+    "measure": "dollars",
+    "values": [
+     35.6,
+     35,
+     -9.2,
+     5,
+     12.2
+    ]
+   }
+  ]
+ },
+ "source": {
+  "book": "p. 397 (s. 0363)",
+  "notes": "13-15 F9",
+  "shows": "a set of views merged: three panels on the same rows, each headed by the question it answers (RP5-6), each with its own scale and its title below; the deviations signed, their zero line darker; one colour, where the book colours over and under budget red and green (good and bad colours are the message layer's)"
+ }
+}
