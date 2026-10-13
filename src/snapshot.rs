@@ -2222,7 +2222,10 @@ fn the_insert_bar_sits_above_the_isabelle_goal() {
     let _ = cosmic::Application::update(&mut app, super::Message::PopOut);
     assert!(app.popout.is_some());
     caret_in_block(&mut app, "apply", 0);
-    draw_element(super::view::proof_window(&app), "bar-isabelle-proof-window", Size::new(1000.0, 600.0));
+    // As with the Lean proof window, the view's insertion state belongs to this
+    // UI turn through the assertion that reads it.
+    let _proof_turn = ui_turn();
+    render(super::view::proof_window(&app), "bar-isabelle-proof-window", Size::new(1000.0, 600.0));
     assert_eq!(ctx(&app), Some(InsertContext::Proof), "the proof window's block, in the source view");
 }
 

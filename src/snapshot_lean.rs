@@ -875,7 +875,10 @@ fn the_insert_bar_sits_above_the_lean_goal() {
     update(&mut app, super::Message::PopOut);
     assert!(app.popout.is_some());
     caret_in_block(&mut app, "constructor", 0);
-    super::snapshot::draw_element(super::view::proof_window(&app), "bar-lean-proof-window", Size::new(1000.0, 600.0));
+    // Layout publishes process-wide insertion state. Keep the UI turn until the
+    // assertion reads it, so another test cannot replace this proof's context.
+    let _proof_turn = super::snapshot::ui_turn();
+    super::snapshot::render(super::view::proof_window(&app), "bar-lean-proof-window", Size::new(1000.0, 600.0));
     assert_eq!(ctx(&app), Some(InsertContext::Proof), "the proof window: a tactic's start");
 }
 
