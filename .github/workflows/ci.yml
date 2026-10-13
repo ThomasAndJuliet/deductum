@@ -11,9 +11,23 @@ concurrency:
     ${{ github.workflow }}-${{ github.event_name }}-${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.run_id || github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name != 'push' || github.ref != 'refs/heads/main' }}
 jobs:
+  already-validated:
+    name: Already validated?
+    # A fast-forward merge brings a commit this workflow already passed on its
+    # branch: the other jobs then skip their work.
+    runs-on: ${{ vars.CI_RUNNER == 'hosted' && 'ubuntu-24.04' || 'neo-ubuntu' }}
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      run: ${{ steps.check.outputs.run }}
+    steps:
+      - id: check
+        uses: ThomasAndJuliet/neo-infrastructure/.github/actions/already-validated@2e9a991f7224fb1a00ab591e83fffbff2dd90667
   flatpak:
+    needs: [already-validated]
+    if: ${{ !cancelled() && (needs.already-validated.outputs.run == '' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && (vars.CI_RUNNER == 'hosted') }}
     name: Deductum workspace tests and Flatpak
-    if: vars.CI_RUNNER == 'hosted'
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     # A disposable build runner needs nested Flatpak sandboxes. Production
@@ -72,13 +86,16 @@ jobs:
   # services/ci-runners), the default. Set the CI_RUNNER variable to
   # hosted to use GitHub-hosted runners instead.
   flatpak-neo:
+    needs: [already-validated]
+    if: ${{ !cancelled() && (needs.already-validated.outputs.run == '' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && (vars.CI_RUNNER != 'hosted') }}
     name: Deductum workspace tests and Flatpak on neo
-    if: vars.CI_RUNNER != 'hosted'
     runs-on: [self-hosted, neo]
     timeout-minutes: 120
     steps: *flatpak-steps
 
   provers:
+    needs: [already-validated]
+    if: ${{ !cancelled() && needs.already-validated.outputs.run == '' }}
     name: Real Isabelle and Lean backend integrations
     # Neo's Ubuntu runner by default; CI_RUNNER=hosted uses GitHub's image.
     runs-on: ${{ vars.CI_RUNNER == 'hosted' && 'ubuntu-24.04' || 'neo-ubuntu' }}
