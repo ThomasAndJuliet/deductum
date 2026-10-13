@@ -47,4 +47,4 @@ sdk-extensions:
 build-options:
   append-path: /usr/lib/sdk/rust-stable/bin
   env:
-    CARGO_HOME: /run/build/cosmic-term/cargo
+    CARGO_HOME: /run/build/deductum/cargo

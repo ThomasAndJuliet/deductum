@@ -8,7 +8,7 @@ assert text.count(needle) == 1
 checks = ('  - cargo --offline --locked check --workspace --all-targets --all-features\n'
           '  - cargo --offline --locked test --workspace --all-targets --all-features\n'
           '  - python3 -m unittest discover -s deductum/host/tests -p "test_*.py"\n')
-env_needle = '    CARGO_HOME: /run/build/cosmic-term/cargo\n'
+env_needle = '    CARGO_HOME: /run/build/deductum/cargo\n'
 assert text.count(env_needle) == 1
 ci_env = (env_needle + '    CARGO_PROFILE_DEV_DEBUG: "0"\n'
           '    CARGO_PROFILE_TEST_DEBUG: "0"\n'
