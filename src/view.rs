@@ -935,7 +935,10 @@ pub fn pop_out_inset() -> f32 {
 /// Pop out: the proof in a window of its own, a small icon button floating over the code (in
 /// both views)
 fn pop_out_button<'a>() -> Element<'a, Message> {
-    let button = widget::button::custom(widget::icon::from_name("window-pop-out-symbolic").size(z(16.0).round() as u16).icon())
+    let button = widget::button::custom(widget::icon::from_svg_bytes(include_bytes!("../../../res/icons/window-pop-out-symbolic.svg").as_slice())
+        .symbolic(true)
+        .icon()
+        .size(z(16.0).round() as u16))
         .padding(z(2.0))
         .width(Length::Fixed(pop_out_size()))
         .height(Length::Fixed(pop_out_size()))
