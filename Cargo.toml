@@ -126,3 +126,8 @@ opt-level = 3
 
 [profile.dev.package.blake2]
 opt-level = 3
+
+# Household fork: winit's Wayland backend with a fix for a panic when the
+# seat loses its pointer while events for it are queued (patches/README.md).
+[patch."https://github.com/pop-os/winit.git"]
+winit-wayland = { path = "patches/winit-wayland" }

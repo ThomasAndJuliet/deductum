@@ -11794,24 +11794,6 @@
     {
         "type": "shell",
         "commands": [
-            "cp -r --reflink=auto \"flatpak-cargo/git/winit-9567503/winit-wayland\" \"cargo/vendor/winit-wayland\""
-        ]
-    },
-    {
-        "type": "inline",
-        "contents": "[package]\ndescription = \"Winit's Wayland backend\"\ndocumentation = \"https://docs.rs/winit-wayland\"\nedition = \"2024\"\nlicense = \"Apache-2.0\"\nname = \"winit-wayland\"\nrepository = \"https://github.com/rust-windowing/winit\"\nrust-version = \"1.85\"\nversion = \"0.31.0-beta.2\"\n\n[package.metadata.docs.rs]\nfeatures = [\"dlopen\", \"serde\", \"csd-adwaita\"]\n\n[features]\ndefault = [\"dlopen\", \"csd-adwaita\"]\ncsd-adwaita = [\"sctk-adwaita\", \"sctk-adwaita/ab_glyph\"]\ncsd-adwaita-crossfont = [\"sctk-adwaita\", \"sctk-adwaita/crossfont\"]\ncsd-adwaita-notitle = [\"sctk-adwaita\"]\ncsd-adwaita-notitlebar = [\"csd-adwaita-notitle\"]\ndlopen = [\"wayland-backend/dlopen\"]\nserde = [\"dep:serde\", \"bitflags/serde\", \"smol_str/serde\", \"dpi/serde\"]\n\n[dependencies]\nbitflags = \"2\"\ncursor-icon = \"1.1.0\"\nsmol_str = \"0.3\"\ncalloop = \"0.14.3\"\nlibc = \"0.2.64\"\nmemmap2 = \"0.9.0\"\nwayland-client = \"0.31.10\"\n\n[dependencies.dpi]\nversion = \"0.1.2\"\npath = \"dpi\"\n\n[dependencies.rwh_06]\npackage = \"raw-window-handle\"\nversion = \"0.6\"\nfeatures = [\"std\"]\n\n[dependencies.serde]\noptional = true\nversion = \"1\"\nfeatures = [\"serde_derive\"]\n\n[dependencies.tracing]\nversion = \"0.1.40\"\ndefault-features = false\n\n[dependencies.winit-core]\nversion = \"=0.31.0-beta.2\"\npath = \"winit-core\"\n\n[dependencies.ahash]\nversion = \"0.8.7\"\nfeatures = [\"no-rng\"]\n\n[dependencies.rustix]\nfeatures = [\"std\", \"system\", \"thread\", \"process\", \"event\", \"pipe\"]\nversion = \"1.0.7\"\ndefault-features = false\n\n[dependencies.sctk]\npackage = \"smithay-client-toolkit\"\nversion = \"0.20.0\"\ndefault-features = false\nfeatures = [\"calloop\"]\n\n[dependencies.sctk-adwaita]\nversion = \"0.11.0\"\ndefault-features = false\noptional = true\n\n[dependencies.wayland-backend]\nversion = \"0.3.10\"\ndefault-features = false\nfeatures = [\"client_system\"]\n\n[dependencies.wayland-protocols]\nversion = \"0.32.8\"\nfeatures = [\"staging\"]\n\n[dependencies.wayland-protocols-plasma]\nversion = \"0.3.8\"\nfeatures = [\"client\"]\n\n[dependencies.winit-common]\nfeatures = [\"xkb\", \"wayland\"]\nversion = \"=0.31.0-beta.2\"\npath = \"winit-common\"\n",
-        "dest": "cargo/vendor/winit-wayland",
-        "dest-filename": "Cargo.toml"
-    },
-    {
-        "type": "inline",
-        "contents": "{\"package\": null, \"files\": {}}",
-        "dest": "cargo/vendor/winit-wayland",
-        "dest-filename": ".cargo-checksum.json"
-    },
-    {
-        "type": "shell",
-        "commands": [
             "cp -r --reflink=auto \"flatpak-cargo/git/winit-9567503/winit-web\" \"cargo/vendor/winit-web\""
         ]
     },
