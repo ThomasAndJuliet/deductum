@@ -5,7 +5,10 @@ on:
     types: [completed]
     branches: [main]
   schedule:
+    # Hourly recovery on Neo; publish-flatpak.yml skips the second
+    # schedule on GitHub-hosted runners.
     - cron: '17 */12 * * *'
+    - cron: '17 1-11,13-23 * * *'
   workflow_dispatch:
 permissions:
   contents: read
