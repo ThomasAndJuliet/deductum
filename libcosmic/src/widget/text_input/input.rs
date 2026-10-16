@@ -2239,6 +2239,9 @@ pub fn update<'a, Message: Clone + 'static>(
                         if let Some(on_unfocus) = on_unfocus {
                             shell.publish(on_unfocus.clone());
                         }
+
+                        shell.request_redraw();
+                        return;
                     }
 
                     keyboard::Key::Named(keyboard::key::Named::Tab) => {

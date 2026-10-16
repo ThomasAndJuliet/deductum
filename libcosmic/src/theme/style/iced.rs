@@ -485,21 +485,7 @@ impl iced_container::Catalog for Theme {
         let window_corner_radius = cosmic.radius_s().map(|x| if x < 4.0 { x } else { x + 4.0 });
 
         match class {
-            Container::Transparent => {
-                let component = &self.current_container().component;
-
-                iced_container::Style {
-                    icon_color: Some(component.on.into()),
-                    text_color: Some(component.on.into()),
-                    background: None,
-                    border: Border {
-                        radius: 0.into(),
-                        ..Default::default()
-                    },
-                    shadow: Shadow::default(),
-                    snap: true,
-                }
-            }
+            Container::Transparent => iced_container::Style::default(),
 
             Container::Custom(f) => f(self),
 
@@ -944,7 +930,11 @@ impl toggler::Catalog for Theme {
         let neutral_10 = cosmic.palette.neutral_10.with_alpha(0.1);
 
         let mut active = toggler::Style {
-            background: if matches!(status, toggler::Status::Active { is_toggled: true }) {
+            background: if matches!(
+                status,
+                toggler::Status::Active { is_toggled: true }
+                    | toggler::Status::Disabled { is_toggled: true }
+            ) {
                 cosmic.accent.base.into()
             } else if cosmic.is_dark {
                 cosmic.palette.neutral_6.into()
