@@ -175,7 +175,7 @@ the backend jar with the runtime's `isabelle scala_build`.
 - **A renderer fix.** In libcosmic's tiny-skia backend, raw text, fills and
   strokes reused the clip mask left behind by whatever was drawn before them.
   Rich text below a text editor therefore lost its glyphs. The fix is in
-  `libcosmic/iced/tiny_skia/src/engine.rs`.
+  `iced/tiny_skia/src/engine.rs` of the household libcosmic fork.
 
 ## Added after trying the preview (C15)
 
