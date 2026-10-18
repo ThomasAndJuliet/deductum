@@ -344,10 +344,10 @@ in the other window and detaching here. Zellij keeps the scrollback.
   the desktop. The tab bar is always shown, so that a window's only tab can
   be dragged.
 - **libcosmic change.** libcosmic's tab bar offered only a fixed payload and
-  did not say which tab was dragged. libcosmic is therefore vendored as a
-  squashed git subtree in `libcosmic/`, with its `iced` and `cosmic-icons`
-  submodules as nested subtrees. `Cargo.toml` patches it in, and the tab bar
-  gains `tab_drag_data` and `on_tab_drag_start`.
+  did not say which tab was dragged. The household libcosmic fork
+  (ThomasAndJuliet/libcosmic, branch `household`; see its `HOUSEHOLD.md`)
+  adds `tab_drag_data` and `on_tab_drag_start` to the tab bar, and
+  `Cargo.toml` patches the fork in.
 
 ## Opening remote files locally
 
