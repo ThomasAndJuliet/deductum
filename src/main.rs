@@ -1,6 +1,13 @@
 // Copyright 2023 System76 <info@system76.com>
 // SPDX-License-Identifier: GPL-3.0-only
 
+// jemalloc, not glibc's malloc: libcosmic calls malloc_trim after every
+// update and view, which with glibc scans the whole fragmented heap on the UI
+// thread; with jemalloc it only scans glibc's own small heap
+#[cfg(unix)]
+#[global_allocator]
+static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
+
 use alacritty_terminal::{event::Event as TermEvent, term, term::color::Colors as TermColors, tty};
 use cosmic::iced::clipboard::dnd::DndAction;
 use cosmic::iced::core::keyboard::key::Named;
@@ -539,6 +546,11 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // Set settings
     let mut settings = Settings::default();
+    // glibc's mmap threshold is not jemalloc's concern
+    #[cfg(unix)]
+    {
+        settings = settings.default_mmap_threshold(None);
+    }
     settings = settings.theme(config.app_theme.theme());
     settings = settings.size_limits(Limits::NONE.min_width(360.0).min_height(180.0));
 

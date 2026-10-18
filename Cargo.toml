@@ -78,6 +78,11 @@ features = [
 
 [target.'cfg(unix)'.dependencies]
 fork = "0.4"
+# The global allocator of the GUI binaries (src/main.rs, src/bin/deductum):
+# libcosmic's malloc_trim after each update and view then has only glibc's
+# small heap to scan. Background threads return freed memory from jemalloc's
+# own thread, so an idle window gives memory back too.
+tikv-jemallocator = { version = "0.7", features = ["background_threads"] }
 
 [build-dependencies]
 xdgen = "0.1"

@@ -10128,6 +10128,32 @@
     {
         "type": "archive",
         "archive-type": "tar-gzip",
+        "url": "https://static.crates.io/crates/tikv-jemalloc-sys/tikv-jemalloc-sys-0.7.1+5.3.1-0-g81034ce1f1373e37dc865038e1bc8eeecf559ce8.crate",
+        "sha256": "1a2825c78386b4ae0314074867860ba9577875de945f05992c38815cbec327f0",
+        "dest": "cargo/vendor/tikv-jemalloc-sys-0.7.1+5.3.1-0-g81034ce1f1373e37dc865038e1bc8eeecf559ce8"
+    },
+    {
+        "type": "inline",
+        "contents": "{\"package\": \"1a2825c78386b4ae0314074867860ba9577875de945f05992c38815cbec327f0\", \"files\": {}}",
+        "dest": "cargo/vendor/tikv-jemalloc-sys-0.7.1+5.3.1-0-g81034ce1f1373e37dc865038e1bc8eeecf559ce8",
+        "dest-filename": ".cargo-checksum.json"
+    },
+    {
+        "type": "archive",
+        "archive-type": "tar-gzip",
+        "url": "https://static.crates.io/crates/tikv-jemallocator/tikv-jemallocator-0.7.0.crate",
+        "sha256": "249f09e49ab1609436f34c776e84231bead18d6a955f119f939bdc1d847561bd",
+        "dest": "cargo/vendor/tikv-jemallocator-0.7.0"
+    },
+    {
+        "type": "inline",
+        "contents": "{\"package\": \"249f09e49ab1609436f34c776e84231bead18d6a955f119f939bdc1d847561bd\", \"files\": {}}",
+        "dest": "cargo/vendor/tikv-jemallocator-0.7.0",
+        "dest-filename": ".cargo-checksum.json"
+    },
+    {
+        "type": "archive",
+        "archive-type": "tar-gzip",
         "url": "https://static.crates.io/crates/time/time-0.3.55.crate",
         "sha256": "cdb87b95ec50ddfa440816d227a17b2ccbdda963a316a727fda0fc4334f7d134",
         "dest": "cargo/vendor/time-0.3.55"
