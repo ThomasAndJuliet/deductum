@@ -11,6 +11,13 @@
 //! `prover`: a profile per backend, and the capabilities each session's host
 //! reports, which decide what the UI offers.
 
+// jemalloc, not glibc's malloc: libcosmic calls malloc_trim after every
+// update and view, which with glibc scans the whole fragmented heap on the UI
+// thread; with jemalloc it only scans glibc's own small heap
+#[cfg(unix)]
+#[global_allocator]
+static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
+
 mod cli;
 mod codec;
 mod editor;
@@ -94,9 +101,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     {
         return Ok(());
     }
-    let settings = Settings::default()
+    let mut settings = Settings::default()
         .size(Size::new(1400.0, 900.0))
         .size_limits(Limits::NONE.min_width(640.0).min_height(400.0));
+    // glibc's mmap threshold is not jemalloc's concern
+    #[cfg(unix)]
+    {
+        settings = settings.default_mmap_threshold(None);
+    }
     cosmic::app::run::<App>(settings, Flags { request })?;
     Ok(())
 }
