@@ -451,33 +451,22 @@ fn session_script(session: &Session, launch: Option<(PaneCommand, &str)>) -> Str
     script
 }
 
-fn base64(bytes: &[u8]) -> String {
-    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
-    for chunk in bytes.chunks(3) {
-        let n = chunk
-            .iter()
-            .enumerate()
-            .fold(0u32, |n, (i, b)| n | u32::from(*b) << (16 - 8 * i));
-        for i in 0..4 {
-            if i <= chunk.len() {
-                out.push(ALPHABET[(n >> (18 - 6 * i) & 63) as usize] as char);
-            } else {
-                out.push('=');
-            }
+/// Wrap a `sh` script as one `sh -c '…'` argument that any remote login shell
+/// (fish, bash, zsh, sh) parses identically. ssh hands the command to the
+/// login shell, and fish treats `\'` and `\\` as escapes inside single quotes
+/// where POSIX shells do not, so each `'` becomes `'"'"'` and each `\` becomes
+/// `'"\\"'`: double-quoted, those mean the same in every shell. The script
+/// stays readable in `ps` and logs, and ssh's stdin stays free for the caller
+fn remote_command(script: &str) -> String {
+    let mut quoted = String::with_capacity(script.len() + 8);
+    for c in script.chars() {
+        match c {
+            '\'' => quoted.push_str("'\"'\"'"),
+            '\\' => quoted.push_str("'\"\\\\\"'"),
+            c => quoted.push(c),
         }
     }
-    out
-}
-
-/// Wrap a `sh` script so that any remote login shell (fish, bash, zsh…) runs
-/// it unchanged: the only characters it sees are inside single quotes and
-/// none of them are special there
-fn remote_command(script: &str) -> String {
-    format!(
-        "sh -c 'eval \"$(echo {} | base64 -d)\"'",
-        base64(script.as_bytes())
-    )
+    format!("sh -c '{quoted}'")
 }
 
 /// ssh options shared by every connection to a host, so later tabs and
@@ -1900,23 +1889,42 @@ mod tests {
         let _ = std::fs::remove_dir_all(&local_dir);
     }
 
-    #[test]
-    fn base64_matches_rfc_4648() {
-        assert_eq!(base64(b""), "");
-        assert_eq!(base64(b"f"), "Zg==");
-        assert_eq!(base64(b"fo"), "Zm8=");
-        assert_eq!(base64(b"foo"), "Zm9v");
-        assert_eq!(base64(b"foobar"), "Zm9vYmFy");
+    /// The scripts that must survive every remote login shell's quoting
+    const AWKWARD_SCRIPTS: &[&str] = &[
+        "printf '%s' plain",
+        "printf '%s\\n' 'it'\\''s' \"$HOME\" `echo tick` \\n \\\\ \\' \\\"",
+        "echo \"multi\nline\"\n  echo '$x' \"\\$y\"\n",
+        "printf '%s' 'naïve – 日本語 ✓'",
+        "printf '%s' '\\' '\\\\' \"'\" '\"'",
+    ];
+
+    fn run_under(shell: &str, command: &str) -> Option<std::process::Output> {
+        std::process::Command::new(shell)
+            .args(["-c", command])
+            .output()
+            .ok()
     }
 
     #[test]
-    fn remote_command_has_no_characters_special_inside_single_quotes() {
-        let command = remote_command("echo 'it''s' \\ \"$HOME\"\n");
-        let inner = command
-            .strip_prefix("sh -c '")
-            .and_then(|c| c.strip_suffix('\''))
-            .unwrap();
-        assert!(!inner.contains('\'') && !inner.contains('\\'));
+    fn remote_command_is_one_readable_argument() {
+        let command = remote_command("echo 'a'\\\n");
+        assert_eq!(command, "sh -c 'echo '\"'\"'a'\"'\"''\"\\\\\"'\n'");
+        assert!(!command.contains("base64"));
+    }
+
+    #[test]
+    fn remote_command_runs_the_script_under_sh_and_fish() {
+        for shell in ["sh", "fish"] {
+            for script in AWKWARD_SCRIPTS {
+                let direct = run_under("sh", script).unwrap();
+                let Some(wrapped) = run_under(shell, &remote_command(script)) else {
+                    eprintln!("{shell} is not installed, skipping");
+                    break;
+                };
+                assert_eq!(wrapped.stdout, direct.stdout, "{shell}: {script:?}");
+                assert_eq!(wrapped.status.code(), direct.status.code(), "{shell}: {script:?}");
+            }
+        }
     }
 
     #[test]
@@ -2167,18 +2175,17 @@ mod tests {
     }
 
     #[test]
-    fn remote_command_decodes_to_the_script() {
-        let script = launch_script(&["a b"], "/srv");
-        let command = remote_command(&script);
-        let encoded = command
-            .strip_prefix("sh -c 'eval \"$(echo ")
-            .and_then(|c| c.strip_suffix(" | base64 -d)\"'"))
-            .unwrap();
-        let output = std::process::Command::new("sh")
-            .args(["-c", &format!("echo {encoded} | base64 -d")])
-            .output()
-            .unwrap();
-        assert_eq!(String::from_utf8(output.stdout).unwrap(), script);
+    fn launch_script_reaches_the_remote_shell_unchanged() {
+        // Print the real bootstrap script through a heredoc instead of
+        // running it, so the bytes that arrive can be compared
+        let script = launch_script(&["a b", "it's"], "/srv");
+        let command = remote_command(&format!("cat <<'CT_END'\n{script}CT_END\n"));
+        for shell in ["sh", "fish"] {
+            let Some(output) = run_under(shell, &command) else {
+                continue;
+            };
+            assert_eq!(String::from_utf8_lossy(&output.stdout), script, "{shell}");
+        }
     }
 
     #[test]

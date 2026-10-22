@@ -185,12 +185,15 @@ client() {
     [ -n "$c" ] && echo "$c"
 }
 
+# Whether a machine has a local desktop session in use. The script goes to
+# its sh on standard input, so it is plain text to the remote login shell,
+# which may be fish, and in the remote process list
 has_desktop_on() {
-    script='for s in $(loginctl list-sessions --no-legend 2>/dev/null | awk "{print \$1}"); do
-        loginctl show-session "$s" -p Type -p Remote -p State 2>/dev/null | tr "\n" " "; echo
-    done | grep -E "Type=(wayland|x11)" | grep "Remote=no" | grep -q "State=active"'
-    timeout 5 ssh -o BatchMode=yes -o ConnectTimeout=3 "$1" \
-        "sh -c 'eval \"\$(echo $(printf '%s' "$script" | base64 | tr -d '\n') | base64 -d)\"'" </dev/null >/dev/null 2>&1
+    timeout 5 ssh -o BatchMode=yes -o ConnectTimeout=3 "$1" sh -s >/dev/null 2>&1 <<'SCRIPT'
+for s in $(loginctl list-sessions --no-legend 2>/dev/null | awk "{print \$1}"); do
+    loginctl show-session "$s" -p Type -p Remote -p State 2>/dev/null | tr "\n" " "; echo
+done | grep -E "Type=(wayland|x11)" | grep "Remote=no" | grep -q "State=active"
+SCRIPT
 }
 
 where() {
@@ -202,13 +205,25 @@ where() {
     fi
 }
 
-# Run a script on a machine with sh, whatever its login shell is
+# A script as one word that any login shell reads as the same text: in
+# single quotes, with each ' as '"'"' and each \ as '"\\"'. The usual '\''
+# is not safe, since fish, a login shell here, treats \' and \\ inside single
+# quotes as escapes, where it and POSIX sh agree on the double-quoted forms.
+# The quote goes first, since the backslash's replacement has quotes in it
+shell_quote() {
+    printf "'"
+    printf '%s\n' "$1" | sed -e "s/'/'\"'\"'/g" -e 's/\\/'"'"'"\\\\"'"'"'/g'
+    printf "'"
+}
+
+# Run a script on a machine with sh, whatever its login shell is. The script
+# is the command's text, readable in the remote process list, and standard
+# input stays the caller's
 on() {
     dest=$1
     script=$2
     shift 2
-    ssh -o BatchMode=yes -o ConnectTimeout=10 "$dest" \
-        "sh -c 'eval \"\$(echo $(printf '%s' "$script" | base64 | tr -d '\n') | base64 -d)\"'" "$@"
+    ssh -o BatchMode=yes -o ConnectTimeout=10 "$dest" "sh -c $(shell_quote "$script")" "$@"
 }
 
 # Have a machine mount this one, and print where

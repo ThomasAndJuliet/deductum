@@ -20,7 +20,6 @@
 #
 # Runs on every machine, so it uses only the standard library.
 
-import base64
 import json
 import os
 import shlex
@@ -74,6 +73,18 @@ def walk(value, change):
     return value
 
 
+def remote_command(script):
+    """script as one `sh -c '...'` argument that any login shell parses alike
+
+    ssh hands the command to the remote login shell, which may be fish. Fish
+    treats \\' and \\\\ as escapes inside single quotes, which POSIX shells do
+    not, so ' becomes '"'"' and \\ becomes '"\\\\"': double-quoted, those mean
+    the same everywhere. (ssh's stdin carries the MCP stream, so the script
+    cannot be piped to `sh -s`.)"""
+    quoted = "".join({"'": "'\"'\"'", "\\": "'\"\\\\\"'"}.get(c, c) for c in script)
+    return f"sh -c '{quoted}'"
+
+
 def main():
     name = sys.argv[1] if len(sys.argv) > 1 else ""
     server = SERVERS.get(name)
@@ -103,8 +114,7 @@ def main():
         + server["start"]
         + '\nexec flock "$lease" "$@"\n'
     )
-    encoded = base64.b64encode(script.encode()).decode()
-    remote = f"sh -c 'eval \"$(echo {encoded} | base64 -d)\"'"
+    remote = remote_command(script)
     proc = subprocess.Popen(
         ["ssh", "-T", "-o", "BatchMode=yes", "-o", "ServerAliveInterval=15", dest, remote],
         stdin=subprocess.PIPE,

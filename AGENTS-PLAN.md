@@ -68,8 +68,10 @@ Zellij is missing, the script runs the command directly, and the tab cannot
 be reattached or moved.
 
 The bootstrap command is a POSIX `sh` script. For a remote session it is
-base64-encoded so that the remote login shell (fish on neo) parses
-only `sh -c 'eval "$(echo … | base64 -d)"'`. The script:
+passed as one quoted argument, `sh -c '<script>'`, so that every remote login
+shell (fish on neo included) parses it alike: each `'` in the script becomes
+`'"'"'` and each `\` becomes `'"\\"'`, because fish reads `\'` and `\\`
+inside single quotes as escapes. The script stays readable in `ps`. The script:
 
 1. writes `~/.config/cosmic-term-agents/config.kdl` and
    `layouts/default.kdl`. A session created with a command ignores
