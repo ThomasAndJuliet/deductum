@@ -307,7 +307,7 @@ fn the_tool_panel_in_each_state() {
 
 fn update(app: &mut App, h: &mut Harness, m: Message) {
     let task = cosmic::Application::update(app, m);
-    h.run_task(app, task);
+    h.run_task_with_updates(app, task);
 }
 
 fn alt(h: &mut Harness, app: &App, key: cosmic::iced::keyboard::key::Named) -> Vec<Message> {
@@ -410,6 +410,33 @@ fn esc_stops_a_running_tool_before_it_closes_the_block() {
         update(&mut app, &mut h, m);
     }
     assert!(theory(&app).block_editor.is_none(), "the block is finished");
+}
+
+#[test]
+fn escape_stops_work_while_editor_input_waits_for_a_continuation() {
+    use cosmic::iced::keyboard::{Key, Modifiers, key::{Named, NativeCode, Physical}};
+    use cosmic::widget::text_editor::{Action, Edit, KeyPress, Status};
+    let press = KeyPress {
+        key: Key::Named(Named::Escape), modified_key: Key::Named(Named::Escape),
+        physical_key: Physical::Unidentified(NativeCode::Unidentified),
+        modifiers: Modifiers::empty(), text: None,
+        status: Status::Focused { is_hovered: false },
+    };
+    for escape in [Message::Escape, Message::RawVim(super::EditorTarget::Block, press.clone()), Message::WindowKey(press)] {
+        let mut app = ToolScene::isabelle("sledgehammer", "running", sledgehammer_running()).app(1400.0);
+        app.vim_enabled = false;
+        let scope = theory(&app).page_scope;
+        let source = theory(&app).local.clone();
+        app.nav_generation = 17;
+        app.nav_waiting = Some((scope, 17));
+        app.nav_queue.push_back(Message::BlockAction(Action::Edit(Edit::Insert('q'))));
+        let _ = cosmic::Application::update(&mut app, escape);
+        assert!(app.workspace.as_ref().unwrap().tools_stopping, "Escape must stop work before the editor continuation");
+        assert_eq!(app.nav_waiting, Some((scope, 17)));
+        assert_eq!(app.nav_queue.len(), 1, "stopping must preserve the ordered editor input");
+        assert_eq!(theory(&app).local, source);
+        assert!(theory(&app).block_editor.is_some());
+    }
 }
 
 /// Lean's Try this and a `claude` line's proofs are taken the same way

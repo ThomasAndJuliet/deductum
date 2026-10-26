@@ -33,6 +33,7 @@ pub const VERSION: u32 = 1;
 pub struct Settings {
     pub version: u32,
     pub appearance: Appearance,
+    pub display: Display,
     pub layout: Layout,
     pub editing: Editing,
     pub proof_state: ProofState,
@@ -48,6 +49,112 @@ pub struct Appearance {
     pub zoom: f32,
     /// The goal beside the text when the window has room (else under the proof, the page centred)
     pub goal_beside: bool,
+}
+
+/// Reading controls shared in vocabulary with Cerea and Terminal's threads.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Display {
+    pub font: TextFont,
+    pub text_size: f32,
+    pub line_height: f32,
+    /// Maximum reading width in ems; zero keeps the automatic proof layout.
+    pub measure: f32,
+    pub paragraph_spacing: f32,
+    pub math_scale: f32,
+    pub justify: bool,
+    pub centred: bool,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum TextFont {
+    Libertinus,
+    Serif,
+    Sans,
+    #[default]
+    #[serde(other)]
+    NewComputerModern,
+}
+
+impl TextFont {
+    pub const ALL: [Self; 4] = [Self::Libertinus, Self::NewComputerModern, Self::Serif, Self::Sans];
+
+    pub fn family(self) -> &'static str {
+        match self {
+            Self::NewComputerModern => "NewComputerModern",
+            Self::Libertinus => "Libertinus Serif",
+            Self::Serif => "serif",
+            Self::Sans => "",
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::NewComputerModern => "New Computer Modern",
+            Self::Libertinus => "Libertinus Serif",
+            Self::Serif => "System serif",
+            Self::Sans => "Interface sans-serif",
+        }
+    }
+
+    pub fn editor_font(self) -> cosmic::iced::Font {
+        use cosmic::iced::font::Family;
+        cosmic::iced::Font {
+            family: match self {
+                Self::Sans => Family::SansSerif,
+                Self::Serif => Family::Serif,
+                _ => Family::Name(self.family()),
+            },
+            ..cosmic::font::default()
+        }
+    }
+}
+
+impl Default for Display {
+    fn default() -> Self {
+        Self { font: TextFont::default(), text_size: 17.0, line_height: 1.5,
+            measure: 0.0, paragraph_spacing: 0.7, math_scale: 1.1,
+            justify: false, centred: true }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum DisplayChange {
+    Font(TextFont),
+    TextSize(f32),
+    LineHeight(f32),
+    Measure(f32),
+    ParagraphSpacing(f32),
+    MathScale(f32),
+    Justify(bool),
+    Centred(bool),
+}
+
+impl Display {
+    pub fn update(&mut self, change: DisplayChange) {
+        match change {
+            DisplayChange::Font(v) => self.font = v,
+            DisplayChange::TextSize(v) => self.text_size = v,
+            DisplayChange::LineHeight(v) => self.line_height = v,
+            DisplayChange::Measure(v) => self.measure = v,
+            DisplayChange::ParagraphSpacing(v) => self.paragraph_spacing = v,
+            DisplayChange::MathScale(v) => self.math_scale = v,
+            DisplayChange::Justify(v) => self.justify = v,
+            DisplayChange::Centred(v) => self.centred = v,
+        }
+        self.clamp();
+    }
+
+    fn clamp(&mut self) {
+        fn finite(value: f32, fallback: f32, min: f32, max: f32) -> f32 {
+            if value.is_finite() { value.clamp(min, max) } else { fallback }
+        }
+        self.text_size = finite(self.text_size, 17.0, 10.0, 36.0);
+        self.line_height = finite(self.line_height, 1.5, 1.0, 2.5);
+        self.measure = if self.measure == 0.0 { 0.0 } else { finite(self.measure, 0.0, 24.0, 200.0) };
+        self.paragraph_spacing = finite(self.paragraph_spacing, 0.7, 0.2, 2.0);
+        self.math_scale = finite(self.math_scale, 1.1, 0.75, 2.0);
+    }
 }
 
 /// Where the sidebars were left
@@ -187,6 +294,7 @@ impl Default for Settings {
         Self {
             version: VERSION,
             appearance: Appearance::default(),
+            display: Display::default(),
             layout: Layout::default(),
             editing: Editing::default(),
             proof_state: ProofState::default(),
@@ -243,6 +351,7 @@ impl Settings {
                     v.get(key).and_then(|x| serde_json::from_value(x.clone()).ok()).unwrap_or_default()
                 }
                 s.appearance = part(&v, "appearance");
+                s.display = part(&v, "display");
                 s.layout = part(&v, "layout");
                 s.editing = part(&v, "editing");
                 s.proof_state = part(&v, "proof_state");
@@ -256,6 +365,7 @@ impl Settings {
 
     /// Values a hand-edited file may have put out of range
     fn clamp(&mut self) {
+        self.display.clamp();
         self.appearance.zoom = if self.appearance.zoom.is_finite() { self.appearance.zoom.clamp(0.5, 3.0) } else { 1.0 };
         self.editing.indent_width = self.editing.indent_width.clamp(1, 8);
         self.editing.keyword_pause_ms = self.editing.keyword_pause_ms.clamp(250, 30_000);
@@ -375,6 +485,10 @@ pub fn show_changes() -> bool {
     read(|s| s.proof_state.show_changes)
 }
 
+pub fn display() -> Display {
+    read(|s| s.display.clone())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -434,5 +548,39 @@ mod tests {
         assert_eq!(h["models"]["codex"], "astra");
         assert_eq!(h["keywords"], false);
         assert_eq!(h["loogle"], "public");
+    }
+
+    #[test]
+    fn display_choices_round_trip_and_old_settings_keep_the_existing_look() {
+        let old = Settings::from_json(&json!({"version": 1, "appearance": {"zoom": 1.2}}));
+        assert_eq!(old.display, Display::default());
+        for font in TextFont::ALL {
+            let mut settings = old.clone();
+            settings.display = Display { font, text_size: 20.0, line_height: 1.6,
+                measure: 40.0, paragraph_spacing: 0.9, math_scale: 1.3,
+                justify: true, centred: false };
+            assert_eq!(Settings::from_json(&serde_json::to_value(&settings).unwrap()), settings);
+        }
+        assert_eq!(TextFont::Sans.family(), "", "Terminal's normal threads use the generic sans family");
+        assert_eq!(TextFont::Sans.editor_font().family, cosmic::iced::font::Family::SansSerif);
+        assert_eq!(TextFont::Serif.editor_font().family, cosmic::iced::font::Family::Serif);
+    }
+
+    #[test]
+    fn display_updates_preserve_other_choices_and_bound_layout_values() {
+        let mut display = Display::default();
+        display.update(DisplayChange::Font(TextFont::Sans));
+        display.update(DisplayChange::TextSize(1000.0));
+        display.update(DisplayChange::LineHeight(f32::NAN));
+        display.update(DisplayChange::Measure(40.0));
+        display.update(DisplayChange::Justify(true));
+        assert_eq!(display.font, TextFont::Sans);
+        assert_eq!((display.text_size, display.line_height, display.measure), (36.0, 1.5, 40.0));
+        assert!(display.justify);
+        let future = Settings::from_json(&json!({"version": 1,
+            "appearance": {"zoom": 1.2}, "display": {"font": "FutureFamily", "line_height": 1.6}}));
+        assert_eq!(future.display.font, TextFont::default());
+        assert_eq!(future.display.line_height, 1.6);
+        assert_eq!(future.appearance.zoom, 1.2);
     }
 }

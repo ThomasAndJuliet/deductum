@@ -23,6 +23,7 @@ use cosmic::prelude::*;
 use cosmic::widget::{self, button, settings};
 use cosmic::{iced, theme};
 use serde_json::{Value, json};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use super::shell::{self, Msg, backend_mark, sp};
 use super::{App, Message};
@@ -47,9 +48,27 @@ pub struct NewSession {
     pub error: Option<String>,
     /// Why the page opened, when a document of a backend without a session was opened
     pub reason: Option<String>,
+    /// Changes on every folder edit or navigation, including across form instances.
+    pub generation: u64,
 }
 
 impl NewSession {
+    pub fn invalidate_folder(&mut self) {
+        static NEXT: AtomicU64 = AtomicU64::new(1);
+        self.generation = NEXT.fetch_add(1, Ordering::Relaxed);
+        self.listing = None;
+        self.detections = None;
+        self.backend = None;
+        self.toolchain = None;
+        self.suggestion = None;
+        self.logic.clear();
+        self.dirs.clear();
+        self.error = None;
+    }
+
+    pub fn ready(&self) -> bool {
+        !self.folder.is_empty() && self.listing.is_some() && self.detections.is_some() && self.backend.is_some()
+    }
     /// The detection of a backend, if it recognised the folder
     pub fn detection(&self, backend: &str) -> Option<&Value> {
         self.detections.as_ref()?.iter().find(|d| d["backend"].as_str() == Some(backend))
@@ -185,11 +204,12 @@ impl App {
             return self.update(Message::OpenSession(machine, sid));
         }
         let folder = std::path::Path::new(&path).parent().map(|p| p.display().to_string()).unwrap_or_default();
+        let task = self.update(Message::NewBrowse(folder));
         if let Some(ns) = &mut self.new_session {
             ns.backend = backend.clone();
             ns.reason = backend.map(|b| format!("{} is a {} document, and no session holds it: start one for its folder", super::file_name(&path), shell::backend_label(&b)));
         }
-        self.update(Message::NewBrowse(folder))
+        task
     }
 }
 
@@ -246,7 +266,7 @@ pub fn page<'a>(app: &'a App, ns: &'a NewSession) -> Element<'a, Message> {
         col = col.push(note(err.clone(), true));
     }
     // (a backend picked: by the human, or as the only one found)
-    let ready = !ns.folder.is_empty() && ns.backend.is_some();
+    let ready = ns.ready();
     col = col.push(
         widget::row::with_capacity(3)
             .spacing(s.space_s)

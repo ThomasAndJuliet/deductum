@@ -64,16 +64,30 @@ pub enum Select {
     Range(Pos, Pos),
 }
 
+/// A font family to use for a range of Unicode characters.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct FontOverride {
+    /// Inclusive Unicode range whose characters use this family.
+    pub start: char,
+    pub end: char,
+    pub family: String,
+}
+
 /// How text is set: fonts, sizes and colours
 #[derive(Clone, Debug, PartialEq)]
 pub struct Typography {
     /// The body font's family, or empty for the theme's sans-serif
     pub body: String,
     pub mono: String,
+    /// Optional font families for particular characters. The first matching range wins;
+    /// overriding a font does not change the text or its offsets.
+    pub font_overrides: Vec<FontOverride>,
     /// Pixels per em of body text
     pub size: f32,
     /// Line height, as a multiple of the size
     pub line_height: f32,
+    /// Space between prose blocks, in ems.
+    pub paragraph_spacing: f32,
     /// Formulas' size against the text's
     pub math_scale: f32,
     pub justify: bool,
@@ -98,8 +112,8 @@ pub struct Typography {
 impl Typography {
     fn key(&self) -> u64 {
         let mut hasher = std::hash::DefaultHasher::new();
-        (&self.body, &self.mono, self.justify, self.italic).hash(&mut hasher);
-        for value in [self.size, self.line_height, self.math_scale, self.image_width] {
+        (&self.body, &self.mono, &self.font_overrides, self.justify, self.italic).hash(&mut hasher);
+        for value in [self.size, self.line_height, self.paragraph_spacing, self.math_scale, self.image_width] {
             value.to_bits().hash(&mut hasher);
         }
         for color in [
@@ -140,7 +154,7 @@ impl Typography {
     }
 
     fn family(&self) -> Family<'_> {
-        if self.body.is_empty() { Family::SansSerif } else { Family::Name(&self.body) }
+        match self.body.as_str() { "" | "sans-serif" => Family::SansSerif, "serif" => Family::Serif, "monospace" => Family::Monospace, _ => Family::Name(&self.body) }
     }
 
     fn mono_family(&self) -> Family<'_> {
@@ -983,7 +997,7 @@ impl<'a, Message> RichText<'a, Message> {
                     (previous, block),
                     (Block::Text(a), Block::Text(b)) if a.marker.is_some() && b.marker.is_some() && a.indent == b.indent
                 );
-                offset += if tight { size * 0.25 } else { size * 0.7 };
+                offset += if tight { size * 0.25 } else { size * t.paragraph_spacing };
                 if let Block::Text(text) = block
                     && matches!(text.kind, TextKind::Heading(_))
                 {
@@ -1460,71 +1474,85 @@ fn shape(
         .style(if t.italic { FontStyle::Italic } else { FontStyle::Normal })
         .color(ct_color(color));
     let mut formulas_set: Vec<Option<Arc<math::Formula>>> = Vec::new();
-    let spans: Vec<(&str, Attrs)> = cell
-        .spans
-        .iter()
-        .map(|span| {
-            let text = &cell.text[span.range.clone()];
-            match &span.kind {
-                SpanKind::Text { style, link, tone } => {
-                    let mut attrs = base.clone();
-                    if style.code {
-                        attrs = attrs.family(t.mono_family()).color(ct_color(t.code));
-                        if size == t.size {
-                            attrs = attrs.metrics(Metrics::new(size * 0.92, line_height));
+    let mut spans: Vec<(&str, Attrs)> = Vec::with_capacity(cell.spans.len());
+    for span in &cell.spans {
+        let text = &cell.text[span.range.clone()];
+        match &span.kind {
+            SpanKind::Text { style, link, tone } => {
+                let mut attrs = base.clone();
+                if style.code {
+                    attrs = attrs.family(t.mono_family()).color(ct_color(t.code));
+                    if size == t.size {
+                        attrs = attrs.metrics(Metrics::new(size * 0.92, line_height));
+                    }
+                }
+                if style.bold || bold {
+                    attrs = attrs.weight(Weight::BOLD);
+                }
+                if style.italic != t.italic {
+                    attrs = attrs.style(FontStyle::Italic);
+                }
+                if link.is_some() {
+                    attrs = attrs.color(ct_color(t.link));
+                }
+                match tone {
+                    Tone::Added => attrs = attrs.color(ct_color(t.added)),
+                    Tone::Removed => attrs = attrs.color(ct_color(t.removed)),
+                    Tone::Muted => attrs = attrs.color(ct_color(t.muted)),
+                    Tone::Code(class) => {
+                        attrs = attrs.color(ct_color(crate::highlight::color(*class, t)));
+                        if crate::highlight::italic(*class) {
+                            attrs = attrs.style(FontStyle::Italic);
                         }
                     }
-                    if style.bold || bold {
-                        attrs = attrs.weight(Weight::BOLD);
-                    }
-                    if style.italic != t.italic {
-                        attrs = attrs.style(FontStyle::Italic);
-                    }
-                    if link.is_some() {
-                        attrs = attrs.color(ct_color(t.link));
-                    }
-                    match tone {
-                        Tone::Added => attrs = attrs.color(ct_color(t.added)),
-                        Tone::Removed => attrs = attrs.color(ct_color(t.removed)),
-                        Tone::Muted => attrs = attrs.color(ct_color(t.muted)),
-                        Tone::Code(class) => {
-                            attrs = attrs.color(ct_color(crate::highlight::color(*class, t)));
-                            if crate::highlight::italic(*class) {
-                                attrs = attrs.style(FontStyle::Italic);
-                            }
+                    Tone::Normal => {}
+                }
+                if t.font_overrides.is_empty() || text.is_empty() {
+                    spans.push((text, attrs));
+                    continue;
+                }
+                let mut start = 0;
+                let mut family: Option<&str> = None;
+                for (offset, ch) in text.char_indices() {
+                    let next = t.font_overrides.iter().find(|f| f.start <= ch && ch <= f.end).map(|f| f.family.as_str());
+                    if next != family {
+                        if offset > start {
+                            spans.push((&text[start..offset], family.map_or_else(|| attrs.clone(), |f| attrs.clone().family(Family::Name(f)))));
                         }
-                        Tone::Normal => {}
+                        start = offset;
+                        family = next;
                     }
-                    (text, attrs)
                 }
-                // Its source, as it could not be set
-                SpanKind::Math(_) if text != PLACEHOLDER => {
-                    (text, base.clone().family(t.mono_family()).color(ct_color(t.error)))
-                }
-                SpanKind::Math(latex) => {
-                    let formula = math::render(latex, false, size * t.math_scale, rgb(color)).ok();
-                    let placeholder = placeholder_width(font_system, &t.body, bold, t.italic, size);
-                    let attrs = match &formula {
-                        Some(formula) => {
-                            // Room for the formula: its width, and a line tall
-                            // enough to hold it about the text's baseline
-                            let above = formula.baseline - size * 0.8;
-                            let below = (formula.height - formula.baseline) - size * 0.25;
-                            let extra = 2.0 * above.max(below).max(0.0);
-                            base.clone()
-                                .color(cosmic_text::Color::rgba(0, 0, 0, 0))
-                                .letter_spacing((formula.width - placeholder) / size)
-                                .metrics(Metrics::new(size, line_height + extra))
-                                .metadata(formulas_set.len() + 1)
-                        }
-                        None => base.clone(),
-                    };
-                    formulas_set.push(formula);
-                    (text, attrs)
-                }
+                let attrs = match family { Some(family) => attrs.family(Family::Name(family)), None => attrs };
+                spans.push((&text[start..], attrs));
             }
-        })
-        .collect();
+            // Its source, as it could not be set
+            SpanKind::Math(_) if text != PLACEHOLDER => {
+                spans.push((text, base.clone().family(t.mono_family()).color(ct_color(t.error))));
+            }
+            SpanKind::Math(latex) => {
+                let formula = math::render(latex, false, size * t.math_scale, rgb(color)).ok();
+                let placeholder = placeholder_width(font_system, &t.body, bold, t.italic, size);
+                let attrs = match &formula {
+                    Some(formula) => {
+                        // Room for the formula: its width, and a line tall
+                        // enough to hold it about the text's baseline
+                        let above = formula.baseline - size * 0.8;
+                        let below = (formula.height - formula.baseline) - size * 0.25;
+                        let extra = 2.0 * above.max(below).max(0.0);
+                        base.clone()
+                            .color(cosmic_text::Color::rgba(0, 0, 0, 0))
+                            .letter_spacing((formula.width - placeholder) / size)
+                            .metrics(Metrics::new(size, line_height + extra))
+                            .metadata(formulas_set.len() + 1)
+                    }
+                    None => base.clone(),
+                };
+                formulas_set.push(formula);
+                spans.push((text, attrs));
+            }
+        }
+    }
     buffer.set_rich_text(
         spans.iter().map(|(text, attrs)| (*text, attrs.clone())),
         &base,
@@ -1926,7 +1954,7 @@ impl<'a, Message> Widget<Message, cosmic::Theme, Renderer> for RichText<'a, Mess
         tree: &Tree,
         renderer: &mut Renderer,
         _theme: &cosmic::Theme,
-        _style: &renderer::Style,
+        style: &renderer::Style,
         layout: Layout<'_>,
         _cursor: mouse::Cursor,
         viewport: &Rectangle,
@@ -1985,7 +2013,7 @@ impl<'a, Message> Widget<Message, cosmic::Theme, Renderer> for RichText<'a, Mess
                             if let Some(range) = &selected {
                                 cell.draw_selection(renderer, at, range.clone(), t.selection);
                             }
-                            draw_cell(renderer, cell, at, visible);
+                            draw_cell(renderer, cell, at, visible, style.scale_factor as f32);
                         }
                     };
                     // Over a diagram, whose SVG would hide the highlight,
@@ -2008,9 +2036,9 @@ impl<'a, Message> Widget<Message, cosmic::Theme, Renderer> for RichText<'a, Mess
                     }
                     match result {
                         Ok(formula) => {
-                            renderer.draw_svg(adv_svg::Svg::new(formula.handle.clone()), *rect + at, visible)
+                            renderer.draw_svg(adv_svg::Svg::new(formula.handle.clone()), formula_pixel_bounds(*rect + at, style.scale_factor as f32), visible)
                         }
-                        Err(shaped) => draw_cell(renderer, shaped, at, visible),
+                        Err(shaped) => draw_cell(renderer, shaped, at, visible, style.scale_factor as f32),
                     }
                 }
                 Laid::Image(path, rect, prepared) => {
@@ -2051,18 +2079,41 @@ impl<'a, Message> Widget<Message, cosmic::Theme, Renderer> for RichText<'a, Mess
                 }
             }
             if let Some(marker) = &block.marker {
-                draw_cell(renderer, marker, at, visible);
+                draw_cell(renderer, marker, at, visible, style.scale_factor as f32);
             }
         }
     }
 }
 
-fn draw_cell(renderer: &mut Renderer, cell: &Shaped, at: Vector, clip: Rectangle) {
+/// SVGs are rasterized at the ceiling of their physical dimensions. Keep the
+/// drawn quad that same integer size: independently snapped fractional edges
+/// can otherwise squeeze out a one-pixel mathematical stroke.
+fn formula_pixel_bounds(mut bounds: Rectangle, scale: f32) -> Rectangle {
+    let scale = if scale.is_finite() && scale > 0.0 { scale } else { 1.0 };
+    bounds.x = (bounds.x * scale).round() / scale;
+    bounds.y = (bounds.y * scale).round() / scale;
+    let extent = |size: f32| {
+        // The shader rounds both edges to nearest-even. An even extent keeps
+        // their rounded distance invariant even at a half-pixel translation.
+        let pixels = ((size * scale).ceil() / 2.0).ceil() * 2.0;
+        let mut logical = pixels / scale;
+        // Do not let division round upward into an extra raster allocation.
+        while logical > 0.0 && (logical * scale).ceil() > pixels {
+            logical = f32::from_bits(logical.to_bits() - 1);
+        }
+        logical
+    };
+    bounds.width = extent(bounds.width);
+    bounds.height = extent(bounds.height);
+    bounds
+}
+
+fn draw_cell(renderer: &mut Renderer, cell: &Shaped, at: Vector, clip: Rectangle, scale: f32) {
     let position = Point::new(at.x + cell.origin.x, at.y + cell.origin.y);
     renderer.fill_raw(Raw { buffer: Arc::downgrade(&cell.buffer), position, color: cell.color, clip_bounds: clip });
     for (formula, point) in &cell.formulas {
-        let bounds =
-            Rectangle::new(Point::new(at.x + point.x, at.y + point.y), Size::new(formula.width, formula.height));
+        let bounds = formula_pixel_bounds(
+            Rectangle::new(Point::new(at.x + point.x, at.y + point.y), Size::new(formula.width, formula.height)), scale);
         renderer.draw_svg(adv_svg::Svg::new(formula.handle.clone()), bounds, clip);
     }
 }
@@ -2087,6 +2138,25 @@ impl<'a, Message: 'a> From<RichText<'a, Message>> for Element<'a, Message, cosmi
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn formula_quad_matches_raster_size_at_fractional_scale_and_position() {
+        use cosmic::iced::Rectangle;
+        for scale in [1.0_f32, 1.25, 1.3, 1.5, 1.75, 2.0] {
+            for y in [314.1595_f32, 566.3455, 818.5316] {
+                let original = Rectangle { x: 409.55905, y, width: 80.5142, height: 15.6093 };
+                let aligned = super::formula_pixel_bounds(original, scale);
+                for (pos, size, original_size) in [(aligned.x, aligned.width, original.width), (aligned.y, aligned.height, original.height)] {
+                    let pixels = (((original_size * scale).ceil()) / 2.0).ceil() * 2.0;
+                    assert_eq!((size * scale).ceil(), pixels, "raster allocation at {scale}");
+                    for translation in [0.0_f32, 0.49, 0.5, 0.51, -0.5] {
+                        let from = pos * scale + translation;
+                        assert_eq!((from + size * scale).round_ties_even() - from.round_ties_even(), pixels, "drawn extent at {scale}, translation {translation}");
+                    }
+                }
+                assert!((aligned.y - original.y).abs() * scale <= 0.501);
+            }
+        }
+    }
     use super::*;
     use crate::markdown::parse;
 
@@ -2094,8 +2164,10 @@ mod tests {
         Arc::new(Typography {
             body: String::new(),
             mono: String::new(),
+            font_overrides: Vec::new(),
             size: 16.0,
             line_height: 1.4,
+            paragraph_spacing: 0.7,
             math_scale: 1.0,
             justify: false,
             italic: false,
@@ -2186,6 +2258,59 @@ mod tests {
         let doc = parse("Let $x^2$ be.\n\n$$y$$\n\n| a | b |\n|---|---|\n| c | d |");
         let all = copy(&doc, Pos::START, end_of(&doc));
         assert_eq!(all, "Let $x^2$ be.\n\n$$\ny\n$$\n\na\tb\nc\td");
+    }
+
+    #[test]
+    fn inline_formula_is_placed_in_the_shaped_paragraph() {
+        let mut fonts = WorkerFonts::capture();
+        let mut cache = LayoutCache::default();
+        let request = LayoutRequest {
+            doc: Arc::new(parse("Before $x + 0 = x$ after.")),
+            typography: typography(),
+            width: 320.0,
+            base_dir: None,
+            images: Arc::new(PreparedImages::default()),
+            font_generation: 0,
+            window: None,
+        };
+        let layout = cache.prepare(&request, &mut fonts);
+        let Laid::Cells(cells) = &layout.blocks[0].laid else { panic!("expected paragraph") };
+        assert_eq!(cells[0].formulas.len(), 1);
+    }
+
+    #[test]
+    fn explicit_font_override_shapes_only_its_range_and_preserves_offsets() {
+        let mut fonts = cosmic_text::FontSystem::new();
+        fonts.db_mut().load_font_data(include_bytes!("../../../res/deductum/fonts/IsabellumScripts.ttf").to_vec());
+        let mut typo = (*typography()).clone();
+        typo.font_overrides.push(FontOverride { start: '\u{e021}', end: '\u{e07e}', family: "Isabellum Scripts".into() });
+        let with_override = typo.key();
+        let mut changed = typo.clone();
+        changed.font_overrides[0].family = "Another family".into();
+        assert_ne!(with_override, changed.key());
+        changed.font_overrides.clear();
+        assert_ne!(with_override, changed.key());
+        let text = "a\u{e03e}b";
+        for body in ["NewComputerModern", "Libertinus Serif", "serif", ""] {
+            typo.body = body.into();
+            let shaped = shape(&mut fonts, &typo, plain_cell(text), 0, Point::ORIGIN, 320.0, 16.0, false, Color::WHITE, false);
+            let glyphs: Vec<_> = shaped.buffer.layout_runs().flat_map(|r| r.glyphs.iter()).collect();
+            let script = glyphs.iter().find(|g| g.start == 1).expect("script glyph");
+            assert_ne!(script.glyph_id, 0);
+            assert!(fonts.db().face(script.font_id).unwrap().families.iter().any(|(name, _)| name == "Isabellum Scripts"));
+            assert!(glyphs.iter().find(|g| g.start == 0).is_some_and(|g| g.font_id != script.font_id));
+            let hit = shaped.hit(Point::new(script.x + script.w * 0.25, 8.0));
+            assert!(hit == 1 || hit == 4, "hit {hit} must lie at a script boundary");
+        }
+        let mut cell = plain_cell("\u{e03e}");
+        cell.spans[0].kind = SpanKind::Text { style: Style { bold: true, italic: true, ..Style::default() }, link: None, tone: Tone::Normal };
+        let only = shape(&mut fonts, &typo, cell, 0, Point::ORIGIN, 320.0, 16.0, false, Color::WHITE, false);
+        let glyph = &only.buffer.layout_runs().next().unwrap().glyphs[0];
+        assert_ne!(glyph.glyph_id, 0);
+        assert!(fonts.db().face(glyph.font_id).unwrap().families.iter().any(|(name, _)| name == "Isabellum Scripts"));
+        assert_eq!(glyph.font_weight, cosmic_text::fontdb::Weight::BOLD);
+        assert!(matches!(only.hit(Point::new(glyph.x + glyph.w * 0.75, 8.0)), 0 | 3));
+        assert_eq!(copy(&parse(text), Pos::START, end_of(&parse(text))), text);
     }
 
     #[test]

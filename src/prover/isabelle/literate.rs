@@ -227,6 +227,18 @@ fn convert(chars: &[char], table: &dyn Codec, out: &mut String) {
     let mut i = 0;
     while i < n {
         let c = chars[i];
+        if let Some((marker, len)) = script_marker(chars, i)
+            && marker != "\\<^bold>"
+            && let Some(end) = script_end(chars, i, marker, len)
+        {
+            let source: String = chars[i..end].iter().collect();
+            let decoded = table.decode(&source);
+            if decoded.text != source {
+                for ch in decoded.text.chars() { escape(ch, out); }
+                i = end;
+                continue;
+            }
+        }
         // Literal maths: passed through
         if c == '$' {
             let double = chars.get(i + 1) == Some(&'$');
@@ -450,15 +462,6 @@ fn convert(chars: &[char], table: &dyn Codec, out: &mut String) {
             }
             if j < n && chars[j] == '>' {
                 let sym: String = chars[i..=j].iter().collect();
-                // Sub- and superscripts, as jEdit shows them
-                if (sym == "\\<^sub>" || sym == "\\<^sup>")
-                    && let Some(&next) = chars.get(j + 1)
-                    && let Some(sc) = super::symbols::unicode_script(sym == "\\<^sup>", next)
-                {
-                    out.push(sc);
-                    i = j + 2;
-                    continue;
-                }
                 if let Some(ch) = char_of(table, &sym) {
                     escape(ch, out);
                     i = j + 1;
@@ -469,6 +472,57 @@ fn convert(chars: &[char], table: &dyn Codec, out: &mut String) {
         escape(c, out);
         i += 1;
     }
+}
+
+/// End of a single-character or balanced Isabelle script control.
+fn script_marker(chars: &[char], start: usize) -> Option<(&'static str, usize)> {
+    for (named, unicode) in [("\\<^sup>", '⇧'), ("\\<^sub>", '⇩'), ("\\<^bsup>", '⇗'), ("\\<^esup>", '⇖'), ("\\<^bsub>", '⇘'), ("\\<^esub>", '⇙'), ("\\<^bold>", '❙')] {
+        if chars.get(start) == Some(&unicode) { return Some((named, 1)); }
+        if starts(chars, start, named) { return Some((named, named.chars().count())); }
+    }
+    None
+}
+
+fn script_end(chars: &[char], start: usize, marker: &str, len: usize) -> Option<usize> {
+    let from = start + len;
+    match marker {
+        "\\<^sup>" | "\\<^sub>" | "\\<^bold>" => {
+            if chars.get(from) == Some(&'\\') && chars.get(from + 1) == Some(&'<') {
+                Some(from + chars[from..].iter().position(|c| *c == '>')? + 1)
+            } else {
+                chars.get(from).map(|_| from + 1)
+            }
+        }
+        "\\<^bsup>" | "\\<^bsub>" => {
+            let close = if marker == "\\<^bsup>" { "\\<^esup>" } else { "\\<^esub>" };
+            (from..chars.len()).find_map(|j| script_marker(chars, j).filter(|(name, _)| *name == close).map(|(_, len)| j + len))
+        }
+        _ => None,
+    }
+}
+
+/// Text inside an Isabelle script is literal, including TeX's special characters.
+fn math_script_content(chars: &[char]) -> String {
+    let mut out = String::new();
+    let mut i = 0;
+    while i < chars.len() {
+        if chars[i] == '\\' && chars.get(i + 1) == Some(&'<')
+            && let Some(end) = chars[i..].iter().position(|c| *c == '>')
+        {
+            let token: String = chars[i..=i + end].iter().collect();
+            out.push_str(&math_symbols(&token));
+            i += end + 1;
+            continue;
+        }
+        match chars[i] {
+            '_' | '#' | '%' | '&' | '{' | '}' | '$' => { out.push('\\'); out.push(chars[i]); }
+            '\\' => out.push_str("\\backslash "),
+            '^' => out.push_str("\\text{\\textasciicircum}"),
+            c => out.push(c),
+        }
+        i += 1;
+    }
+    out
 }
 
 fn antiquotation(name: &str, arg: &str, table: &dyn Codec) -> String {
@@ -487,6 +541,21 @@ fn math_symbols(body: &str) -> String {
     let chars: Vec<char> = body.chars().collect();
     let mut i = 0;
     while i < chars.len() {
+        if let Some((marker, len)) = script_marker(&chars, i)
+            && let Some(end) = script_end(&chars, i, marker, len)
+        {
+            let sup = marker == "\\<^sup>" || marker == "\\<^bsup>";
+            let inner_start = i + len;
+            let close_start = if marker == "\\<^bsup>" || marker == "\\<^bsub>" {
+                (inner_start..end).find(|&j| script_marker(&chars, j).is_some_and(|(m, _)| m == if sup { "\\<^esup>" } else { "\\<^esub>" })).unwrap_or(end)
+            } else { end };
+            if marker == "\\<^bold>" { out.push_str("\\mathbf"); } else { out.push(if sup { '^' } else { '_' }); }
+            out.push('{');
+            out.push_str(&math_script_content(&chars[inner_start..close_start]));
+            out.push('}');
+            i = end;
+            continue;
+        }
         if starts(&chars, i, "\\<")
             && let Some(len) = chars[i..].iter().position(|c| *c == '>')
         {
@@ -556,5 +625,31 @@ mod tests {
     fn escapes_markdown_in_prose() {
         let table = Table::fallback();
         assert_eq!(to_markdown("a_b *c*", &table), "a\\_b \\*c\\*");
+    }
+
+    #[test]
+    fn scripts_in_prose_antiquotation_and_maths_keep_their_forms() {
+        let table = Table::fallback();
+        let md = to_markdown("x\\<^sup>2 y\\<^sub>\\<alpha> z\\<^bsup>n+1\\<^esup> @{term \"x\\<^sup>2\"} $a\\<^sup>2 + b\\<^sub>\\<alpha>$ $$c\\<^bsup>n+1\\<^esup>$$", &table);
+        let sup2 = super::super::symbols::script_glyph(true, '2').unwrap();
+        let sub_alpha = super::super::symbols::script_glyph(false, 'α').unwrap();
+        assert!(md.contains(sup2) && md.contains(sub_alpha), "{md:?}");
+        assert!(md.contains(&format!("`x{sup2}`")), "{md:?}");
+        assert!(md.contains("$a^{2} + b_{\\alpha }$"), "{md:?}");
+        assert!(md.contains("$$c^{n+1}$$"), "{md:?}");
+        let unicode = to_markdown("x⇧2 y⇩α z⇗n+1⇖ $a⇧2 + b⇩\\<alpha>$ $$c⇗n+1⇖$$", &table);
+        assert!(unicode.contains(sup2) && unicode.contains(sub_alpha), "{unicode:?}");
+        assert!(unicode.contains("$a^{2} + b_{\\alpha }$") && unicode.contains("$$c^{n+1}$$"), "{unicode:?}");
+        let malformed = to_markdown("unfinished \\<^bsup>abc and $x\\<^sup>$", &table);
+        assert!(!malformed.is_empty());
+        assert_eq!(math_symbols("x\\<^sup>_ + y\\<^sup># + z\\<^sup>{"), "x^{\\_} + y^{\\#} + z^{\\{}");
+        for c in ['_', '#', '%', '&', '{', '}', '^', '\\'] {
+            let latex = math_symbols(&format!("x\\<^sup>{c}"));
+            assert!(prose_render::math::parses(&latex), "{c:?} produced invalid maths {latex:?}");
+        }
+        for source in ["x\\<^bold>v", "x\\<^bold>\\<alpha>", "x❙v"] {
+            let latex = math_symbols(source);
+            assert!(latex.contains("\\mathbf{") && prose_render::math::parses(&latex), "{source:?}: {latex:?}");
+        }
     }
 }

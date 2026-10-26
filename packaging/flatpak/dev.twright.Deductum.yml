@@ -26,6 +26,7 @@ modules:
   - rm -rf /app/share/deductum/host/tests /app/share/deductum/host/__pycache__ /app/share/deductum/backend/*/lib
   - install -Dm644 res/deductum/dev.twright.Deductum.desktop /app/share/applications/dev.twright.Deductum.desktop
   - install -Dm644 res/deductum/dev.twright.Deductum.svg /app/share/icons/hicolor/scalable/apps/dev.twright.Deductum.svg
+  - install -Dm644 res/fonts/LICENSES.txt /app/share/licenses/deductum/fonts.txt
   - install -Dm644 res/icons/LICENSE.window-pop-out /app/share/licenses/deductum/LICENSE.window-pop-out
   - install -Dm644 res/icons/README.window-pop-out.md /app/share/licenses/deductum/README.window-pop-out.md
   - install -Dm644 packaging/flatpak/dev.twright.Deductum.metainfo.xml /app/share/metainfo/dev.twright.Deductum.metainfo.xml

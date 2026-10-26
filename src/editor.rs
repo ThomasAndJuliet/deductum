@@ -120,6 +120,8 @@ pub enum Mode {
 
 /// A block of the literate view being edited in place
 pub struct BlockEditor {
+    /// Changes whenever the editor's shaping/layout is discarded.
+    pub layout_revision: u64,
     pub start: usize,
     pub end: usize,
     pub decoded: Decoded,
@@ -151,10 +153,25 @@ impl BlockEditor {
         if shown == self.shown_text {
             return false;
         }
-        let pos = self.content.cursor().position;
+        // Positions are byte columns in the displayed text. Hiding markup replaces a
+        // one-byte delimiter with a three-byte zero-width character, so preserve both
+        // endpoints as character offsets before rebuilding the editor.
+        let cursor = self.content.cursor();
+        let old = LineIndex::new(&self.shown_text);
+        let position = old.offset(&self.shown_text, cursor.position);
+        let selection = cursor.selection.map(|anchor| old.offset(&self.shown_text, anchor));
+        let new = LineIndex::new(&shown);
+        let cursor = Cursor {
+            position: new.position(&shown, position),
+            selection: selection.map(|anchor| new.position(&shown, anchor)),
+        };
         self.content = text_editor::Content::with_text(&shown);
+        self.layout_revision = self.layout_revision.wrapping_add(1);
         self.shown_text = shown;
-        place(&mut self.content, pos);
+        self.content.move_to(cursor);
+        if cursor.selection.is_none() {
+            self.content.perform(Action::ClearSelection);
+        }
         true
     }
 }
@@ -603,6 +620,16 @@ pub struct BlockView {
     text_hash: u64,
 }
 
+#[derive(Clone)]
+pub struct InflightEdit {
+    pub identity: String,
+    pub revision: u64,
+    pub change: Change,
+    pub txn: String,
+    pub request: u64,
+    pub supported: bool,
+}
+
 pub struct Theory {
     pub path: String,
     pub confirmed: String,
@@ -610,6 +637,12 @@ pub struct Theory {
     pub local: String,
     /// The request id of the edit the host hasn't confirmed yet
     pub inflight: Option<u64>,
+    /// An edit was sent and may still need reconciliation after disconnect.
+    pub inflight_unknown: bool,
+    pub inflight_edit: Option<InflightEdit>,
+    pub recovery_revision: u64,
+    pub durability_pending: Vec<String>,
+    pub durability_error: bool,
     /// Where the earliest change the prover has not seen yet is, in the confirmed text: from there
     /// on Isabelle checks again, so the text there shows as waiting until it reports on it
     pub stale_from: Option<usize>,
@@ -888,6 +921,11 @@ impl Theory {
             confirmed_rev: doc["revision"].as_u64().unwrap_or(0),
             local: text,
             inflight: None,
+            inflight_unknown: false,
+            inflight_edit: None,
+            recovery_revision: 0,
+            durability_pending: Vec::new(),
+            durability_error: false,
             txn: new_txn(),
             last_edit: Instant::now(),
             steps: Default::default(),
@@ -1011,6 +1049,7 @@ impl Theory {
         if in_block {
             let be = self.block_editor.as_mut().unwrap();
             be.content = text_editor::Content::with_text(&new);
+            be.layout_revision = be.layout_revision.wrapping_add(1);
             let li2 = LineIndex::new(&new);
             place(&mut be.content, li2.position(&new, caret_after));
             // The editor shows `new`; apply it as an edit of the block, against the text as shown
@@ -1034,6 +1073,7 @@ impl Theory {
                 if shown != new {
                     let li = LineIndex::new(&shown);
                     be.content = text_editor::Content::with_text(&shown);
+                    be.layout_revision = be.layout_revision.wrapping_add(1);
                     place(&mut be.content, li.position(&shown, caret_after));
                 }
                 be.shown_text = shown;
@@ -1733,6 +1773,7 @@ impl Theory {
             if shown != new {
                 let li = LineIndex::new(&shown);
                 be.content = text_editor::Content::with_text(&shown);
+                be.layout_revision = be.layout_revision.wrapping_add(1);
                 place(&mut be.content, li.position(&shown, caret));
             }
             be.shown_text = shown;
@@ -1772,7 +1813,7 @@ impl Theory {
         let shown_text = shown_with_markup(self.profile, &decoded, wrap.is_some(), Some(decoded.text.chars().count()), table);
         let content = text_editor::Content::with_text(&shown_text);
         self.cursor = end;
-        self.block_editor = Some(BlockEditor { start, end, decoded, content, preview, kind, wrap, shown_text });
+        self.block_editor = Some(BlockEditor { layout_revision: 0, start, end, decoded, content, preview, kind, wrap, shown_text });
         self.compute_block_highlight();
     }
 
@@ -1830,7 +1871,7 @@ impl Theory {
         let pos = LineIndex::new(&shown).position(&shown, caret);
         place(&mut content, pos);
         self.cursor = at.clamp(s, e);
-        self.block_editor = Some(BlockEditor { start: s, end: e, decoded, content, preview, kind, wrap, shown_text: shown });
+        self.block_editor = Some(BlockEditor { layout_revision: 0, start: s, end: e, decoded, content, preview, kind, wrap, shown_text: shown });
         self.compute_block_highlight();
     }
 
@@ -1920,7 +1961,7 @@ impl Theory {
 
     /// Whether every edit made here has reached the host
     pub fn settled(&self) -> bool {
-        self.inflight.is_none() && self.local == self.confirmed && self.steps.is_empty()
+        self.inflight.is_none() && !self.inflight_unknown && self.durability_pending.is_empty() && !self.durability_error && self.local == self.confirmed && self.steps.is_empty()
     }
 
     // ----- the host
@@ -1934,6 +1975,7 @@ impl Theory {
         while let Some((txn, text)) = self.steps.pop_front() {
             if text != self.confirmed {
                 self.inflight = Some(id);
+                self.inflight_unknown = true;
                 return Some((self.confirmed_rev, ot::diff(&self.confirmed, &text), txn));
             }
         }
@@ -1942,6 +1984,7 @@ impl Theory {
         }
         let change = ot::diff(&self.confirmed, &self.local);
         self.inflight = Some(id);
+        self.inflight_unknown = true;
         Some((self.confirmed_rev, change, self.txn.clone()))
     }
 
@@ -1960,6 +2003,8 @@ impl Theory {
         }
         if own {
             self.inflight = None;
+            self.inflight_unknown = false;
+            self.inflight_edit = None;
             self.confirmed = confirmed;
             self.confirmed_rev = revision;
         } else {

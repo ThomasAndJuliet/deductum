@@ -21,7 +21,19 @@ use super::{App, Link, Message, Pending, link};
 const THY: &str = "theory Live\n  imports Main\nbegin\n\nlemma one: \"(a::nat) + b = b + a\"\n  sorry\n\nlemma two: \"\\<forall>x::nat. x + 0 = x\"\n  apply simp\n  done\n\nend\n";
 
 pub(super) fn app(target: link::Target) -> App {
+    let mut mode_model = cosmic::widget::segmented_button::SingleSelectModel::default();
+    let lit = mode_model.insert().text("Literate").id();
+    let src = mode_model.insert().text("Source").id();
+    mode_model.activate(lit);
     App {
+        deferred_leave: None,
+        nav_waiting: None,
+        nav_generation: 0,
+        nav_queue: Default::default(),
+        nav_raw_dispatch: false,
+        nav_target: None,
+        nav_atomic: false,
+        nav_reflow_pending: false,
         core: cosmic::app::Core::default(),
         links: vec![Link { target, name: "live".into(), sender: None, status: String::new(), hello: None, client_id: None, symbols: None }],
         ctrl: false,
@@ -57,8 +69,8 @@ pub(super) fn app(target: link::Target) -> App {
         window_width: 1400.0,
         vim: super::vim::Vim::default(),
         vim_enabled: false,
-        mode_model: cosmic::widget::segmented_button::SingleSelectModel::default(),
-        mode_entities: [cosmic::widget::segmented_button::Entity::default(); 2],
+        mode_model,
+        mode_entities: [lit, src],
         shell: Default::default(),
     }
 }

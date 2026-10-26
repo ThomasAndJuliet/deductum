@@ -299,8 +299,10 @@ fn a_project_file_opens_in_the_source_view_and_a_document_again_literate() {
     let read = |path: &str| json!({"ok": true, "doc": {"path": path, "text": "session Demo = HOL +\n  theories Demo\n", "revision": 1, "prover": null}});
     let _ = app.on_reply("local".into(), super::Pending::Read("s1".into(), "/home/me/Research/Demo/ROOT".into(), None), read("/home/me/Research/Demo/ROOT"));
     assert_eq!(app.workspace.as_ref().unwrap().theory.as_ref().unwrap().mode, Mode::Source);
+    assert_eq!(app.mode_model.active(), app.mode_entities[1]);
     let _ = app.on_reply("local".into(), super::Pending::Read("s1".into(), "/home/me/Research/Demo/Demo.thy".into(), None), read("/home/me/Research/Demo/Demo.thy"));
     assert_eq!(app.workspace.as_ref().unwrap().theory.as_ref().unwrap().mode, Mode::Literate);
+    assert_eq!(app.mode_model.active(), app.mode_entities[0]);
 }
 
 // ----- the project tab

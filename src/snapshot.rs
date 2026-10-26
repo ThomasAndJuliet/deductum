@@ -86,7 +86,19 @@ pub fn demo_app(mode: Mode) -> App {
                      {"path": "/home/me/Demo/More.thy", "status": {"consolidated": true}, "dirty": true}],
         "seen": {"claude:c1": {"label": "Claude", "position": {"path": "/home/me/Demo/Demo.thy", "line": 18}}},
     });
+    let mut mode_model = cosmic::widget::segmented_button::SingleSelectModel::default();
+    let lit = mode_model.insert().text("Literate").id();
+    let src = mode_model.insert().text("Source").id();
+    mode_model.activate(if mode == Mode::Source { src } else { lit });
     App {
+        deferred_leave: None,
+        nav_waiting: None,
+        nav_generation: 0,
+        nav_queue: Default::default(),
+        nav_raw_dispatch: false,
+        nav_target: None,
+        nav_atomic: false,
+        nav_reflow_pending: false,
         core: cosmic::app::Core::default(),
         links: vec![Link {
             target: link::Target { key: "local".into(), destination: None },
@@ -199,8 +211,8 @@ pub fn demo_app(mode: Mode) -> App {
         window_width: 1400.0,
         vim: super::vim::Vim::default(),
         vim_enabled: false,
-        mode_model: cosmic::widget::segmented_button::SingleSelectModel::default(),
-        mode_entities: [cosmic::widget::segmented_button::Entity::default(); 2],
+        mode_model,
+        mode_entities: [lit, src],
         shell: Default::default(),
     }
 }
@@ -310,6 +322,46 @@ fn draws_the_proof_window() {
 }
 
 #[test]
+fn proof_window_goal_routes_navigation_to_its_block_editor() {
+    use cosmic::iced::keyboard::{Event as K, Key, Location, Modifiers, key::{Named, NativeCode, Physical}};
+    use super::Message;
+    let _turn = ui_turn();
+    super::load_fonts();
+    let mut app = demo_app(Mode::Source);
+    let table = Table::fallback();
+    let ws = app.workspace.as_mut().unwrap();
+    ws.rebuild_views(&table);
+    let t = ws.theory.as_mut().unwrap();
+    let i = t.blocks.iter().position(|b| b.name == "lemma").unwrap();
+    t.open_block(i, &table);
+    let size = Size::new(1000.0, 700.0);
+    let mut renderer = cosmic::iced::futures::executor::block_on(<cosmic::Renderer as Headless>::new(Font::default(), Pixels(14.0), Some("tiny-skia"))).unwrap();
+    let mut ui = UserInterface::build(super::view::proof_window(&app), size, Cache::default(), &mut renderer);
+    let mut clipboard = clipboard::Null;
+    let mut clicked = false;
+    'scan: for y in (300..680).step_by(12) {
+        for x in (20..980).step_by(12) {
+            let point = cosmic::iced::Point::new(x as f32, y as f32);
+            let cursor = mouse::Cursor::Available(point);
+            let mut messages = Vec::new();
+            for event in [Event::Mouse(mouse::Event::CursorMoved { position: point }), Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)), Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left))] {
+                let _ = ui.update(&[event], cursor, &mut renderer, &mut clipboard, &mut messages);
+            }
+            if messages.iter().any(|m| matches!(m, Message::ViewAction(_, super::Action::Click(_)))) {
+                clicked = true;
+                break 'scan;
+            }
+        }
+    }
+    assert!(clicked, "a real read-only goal editor was focused");
+    let key = Key::Named(Named::ArrowDown);
+    let event = Event::Keyboard(K::KeyPressed { key: key.clone(), modified_key: key, physical_key: Physical::Unidentified(NativeCode::Unidentified), location: Location::Standard, modifiers: Modifiers::empty(), text: None, repeat: false });
+    let mut messages = Vec::new();
+    let _ = ui.update(&[event], mouse::Cursor::Unavailable, &mut renderer, &mut clipboard, &mut messages);
+    assert!(messages.iter().any(|m| matches!(m, Message::RawVim(super::EditorTarget::Block, _))), "{messages:?}");
+}
+
+#[test]
 fn draws_a_prose_preview_alone() {
     let app = demo_app(Mode::Literate);
     let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
@@ -408,10 +460,8 @@ fn sidebars_resize_and_the_header_shows_the_prover() {
 
 #[test]
 fn header_groups_keep_their_width() {
-    let mut app = demo_app(Mode::Literate);
-    let lit = app.mode_model.insert().text("Literate").id();
-    app.mode_model.insert().text("Source");
-    app.mode_model.activate(lit);
+    let app = demo_app(Mode::Literate);
+    assert_eq!(app.mode_model.len(), 2);
     let start: cosmic::Element<'_, super::Message> = cosmic::widget::row::with_children(super::view::header_start(&app)).into();
     draw_element(start, "deductum-header-start", Size::new(900.0, 48.0));
 }
@@ -659,6 +709,33 @@ impl Harness {
         ran
     }
 
+    /// Drive widget operations and their resulting app messages, as the runtime does.
+    pub fn run_task_with_updates(&mut self, app: &mut App, task: cosmic::app::Task<super::Message>) {
+        use cosmic::iced::futures::StreamExt;
+        let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().expect("a runtime");
+        let mut tasks = vec![task];
+        while let Some(task) = tasks.pop() {
+            let Some(mut stream) = cosmic::iced::runtime::task::into_stream(task) else { continue };
+            while let Ok(Some(action)) = runtime.block_on(async { tokio::time::timeout(std::time::Duration::from_millis(30), stream.next()).await }) {
+                match action {
+                    cosmic::iced::runtime::Action::Widget(mut operation) => {
+                        let mut current = Some(operation);
+                        while let Some(mut operation) = current.take() {
+                            let mut ui = UserInterface::build(super::view::view(app), self.size, self.cache.take().unwrap_or_default(), &mut self.renderer);
+                            ui.operate(&self.renderer, operation.as_mut());
+                            self.cache = Some(ui.into_cache());
+                            if let cosmic::iced::advanced::widget::operation::Outcome::Chain(next) = operation.finish() { current = Some(next); }
+                        }
+                    }
+                    cosmic::iced::runtime::Action::Output(cosmic::Action::App(message)) => tasks.push(cosmic::Application::update(app, message)),
+                    cosmic::iced::runtime::Action::Clipboard(cosmic::iced::runtime::clipboard::Action::Write { target, contents }) => clipboard::Clipboard::write(&mut self.clipboard, target, contents),
+                    cosmic::iced::runtime::Action::Clipboard(cosmic::iced::runtime::clipboard::Action::Read { target, channel }) => { let _ = channel.send(clipboard::Clipboard::read(&self.clipboard, target)); }
+                    _ => {}
+                }
+            }
+        }
+    }
+
     pub fn move_to(&mut self, app: &App, at: cosmic::iced::Point) -> Vec<super::Message> {
         self.cursor = mouse::Cursor::Available(at);
         self.events(app, &[Event::Mouse(mouse::Event::CursorMoved { position: at })])
@@ -871,7 +948,8 @@ fn prose_is_edited_a_paragraph_at_a_time() {
     app.vim_enabled = true;
     h.focus(&app, super::view::block_editor_id());
     for m in h.type_text(&app, "k") {
-        let _ = cosmic::Application::update(&mut app, m);
+        let task = cosmic::Application::update(&mut app, m);
+        h.run_task_with_updates(&mut app, task);
     }
     let be = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().block_editor.as_ref().unwrap();
     // its maths reads as Unicode, the caret being elsewhere
@@ -879,17 +957,21 @@ fn prose_is_edited_a_paragraph_at_a_time() {
     h.draw(&app, "prose-paragraph");
     // the caret moved into the formula: its source, to edit
     for m in h.type_text(&app, "0") {
-        let _ = cosmic::Application::update(&mut app, m);
+        let task = cosmic::Application::update(&mut app, m);
+        h.run_task_with_updates(&mut app, task);
     }
     for _ in 0.."The second says $".len() {
-        let _ = cosmic::Application::update(&mut app, super::Message::BlockAction(cosmic::widget::text_editor::Action::Move(cosmic::widget::text_editor::Motion::Right)));
+        let task = cosmic::Application::update(&mut app, super::Message::BlockAction(cosmic::widget::text_editor::Action::Move(cosmic::widget::text_editor::Motion::Right)));
+        h.run_task_with_updates(&mut app, task);
     }
     let be = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().block_editor.as_ref().unwrap();
     assert!(be.content.text().starts_with("The second says $x^2$"), "{:?}", be.content.text());
     h.draw(&app, "prose-paragraph-in-maths");
     // typing in it changes that paragraph only, in the source
-    let _ = cosmic::Application::update(&mut app, super::Message::BlockAction(cosmic::widget::text_editor::Action::Move(cosmic::widget::text_editor::Motion::DocumentStart)));
-    let _ = cosmic::Application::update(&mut app, super::Message::BlockAction(cosmic::widget::text_editor::Action::Edit(cosmic::widget::text_editor::Edit::Insert('Q'))));
+    let task = cosmic::Application::update(&mut app, super::Message::BlockAction(cosmic::widget::text_editor::Action::Move(cosmic::widget::text_editor::Motion::DocumentStart)));
+    h.run_task_with_updates(&mut app, task);
+    let task = cosmic::Application::update(&mut app, super::Message::BlockAction(cosmic::widget::text_editor::Action::Edit(cosmic::widget::text_editor::Edit::Insert('Q'))));
+    h.run_task_with_updates(&mut app, task);
     let local = &app.workspace.as_ref().unwrap().theory.as_ref().unwrap().local;
     assert!(local.contains("QThe second") && local.contains("The first paragraph says one thing\n  over two lines."), "{local}");
 }
@@ -1068,6 +1150,166 @@ fn a_reference_window_shows_its_theory_and_moves_on_ctrl_click() {
 /// The arrow keys run on past a block's last line into the next block (and back up), as j and k
 /// do, without vim
 #[test]
+fn switching_views_keeps_the_edited_caret() {
+    use cosmic::iced::keyboard::{Key, key::Named};
+    let mut app = demo_app(Mode::Literate);
+    let i = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.kind == super::theory::Kind::Text).unwrap();
+    let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(i));
+    let mut h = Harness::new(Size::new(1000.0, 900.0));
+    h.focus(&app, super::view::block_editor_id());
+    for key in [Named::Home, Named::ArrowRight, Named::ArrowRight] {
+        for m in h.key(&app, Key::Named(key), None) {
+            let _ = cosmic::Application::update(&mut app, m);
+        }
+    }
+    let offset = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().cursor;
+    let _ = cosmic::Application::update(&mut app, super::Message::SetMode(Mode::Source));
+    let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+    let source_offset = t.lines.offset(&t.decoded.text, t.source.cursor().position);
+    assert_eq!(t.decoded.to_source(source_offset), offset);
+    let _ = cosmic::Application::update(&mut app, super::Message::SetMode(Mode::Literate));
+    let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+    assert_eq!(t.cursor, offset);
+    assert_eq!(t.selected, Some(i));
+    let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(i));
+    let _ = cosmic::Application::update(&mut app, super::Message::SetMode(Mode::Literate));
+    assert!(app.workspace.as_ref().unwrap().theory.as_ref().unwrap().block_editor.is_some(), "choosing the active mode keeps the editor open");
+}
+
+#[test]
+fn source_paging_uses_viewport_rows_and_preserves_selection() {
+    use cosmic::iced::keyboard::{Key, key::Named};
+    let text = (0..100).map(|i| format!("line {i}\n")).collect::<String>();
+    let mut app = demo_app(Mode::Source);
+    let doc = json!({"text": text, "revision": 1});
+    app.workspace.as_mut().unwrap().theory = Some(Theory::new("/tmp/Page.thy".into(), &doc, &Table::fallback(), Arc::new(HashMap::new()), Mode::Source, crate::prover::profile(None)));
+    let scope = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().page_scope;
+    let mut h = Harness::new(Size::new(900.0, 800.0));
+    h.focus(&app, super::view::source_editor_id());
+    let messages = h.key(&app, Key::Named(Named::PageDown), None);
+    assert!(messages.iter().any(|m| matches!(m, super::Message::SourcePage(s, true, false) if *s == scope)));
+    let _ = cosmic::Application::update(&mut app, super::Message::SourcePageRows(scope, true, false, 10));
+    let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+    assert_eq!(t.source.cursor().position.line, 10);
+    let _ = cosmic::Application::update(&mut app, super::Message::SourcePageRows(scope, true, true, 10));
+    let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+    assert_eq!(t.source.cursor().position.line, 20);
+    assert_eq!(t.source.cursor().selection.unwrap().line, 10);
+    let _ = cosmic::Application::update(&mut app, super::Message::SourcePageRows(scope + 1, false, false, 10));
+    assert_eq!(app.workspace.as_ref().unwrap().theory.as_ref().unwrap().source.cursor().position.line, 20);
+}
+
+#[test]
+fn stale_clipboard_barrier_does_not_block_new_document_input() {
+    use cosmic::widget::text_editor::{Action, Edit};
+    let mut app = demo_app(Mode::Source);
+    let old_scope = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().page_scope;
+    app.nav_waiting = Some((old_scope, 7));
+    app.nav_queue.push_back(super::Message::SourceAction(Action::Edit(Edit::Insert('z'))));
+    let doc = json!({"text": "new document", "revision": 1});
+    app.workspace.as_mut().unwrap().theory = Some(Theory::new("/tmp/New.thy".into(), &doc, &Table::fallback(), Arc::new(HashMap::new()), Mode::Source, crate::prover::profile(None)));
+    let _ = cosmic::Application::update(&mut app, super::Message::SourceAction(Action::Edit(Edit::Insert('x'))));
+    let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+    assert!(t.local.contains('x'));
+    assert!(!t.local.contains('z'));
+    assert!(app.nav_waiting.is_none() && app.nav_queue.is_empty());
+    let _ = cosmic::Application::update(&mut app, super::Message::NavClipboardReady(old_scope, 7, super::EditorTarget::Source, Some("old".into())));
+    assert!(!app.workspace.as_ref().unwrap().theory.as_ref().unwrap().local.contains("old"));
+}
+
+#[test]
+fn pending_clipboard_and_context_change_preserve_input_order() {
+    use cosmic::widget::text_editor::{Action, Edit};
+    let mut app = demo_app(Mode::Source);
+    let scope = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().page_scope;
+    app.nav_waiting = Some((scope, 12));
+    let _ = cosmic::Application::update(&mut app, super::Message::SourceAction(Action::Edit(Edit::Insert('x'))));
+    let _ = cosmic::Application::update(&mut app, super::Message::SetMode(Mode::Literate));
+    let _ = cosmic::Application::update(&mut app, super::Message::NavClipboardReady(scope, 12, super::EditorTarget::Source, Some("p".into())));
+    let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+    assert!(t.local.starts_with("pxtheory Demo"), "paste and typing precede the mode switch: {:?}", t.local);
+    assert_eq!(t.mode, Mode::Literate);
+    assert!(app.nav_waiting.is_none() && app.nav_queue.is_empty());
+}
+
+#[test]
+fn queued_typing_precedes_opening_settings() {
+    use cosmic::widget::text_editor::{Action, Edit};
+    let mut app = demo_app(Mode::Source);
+    let scope = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().page_scope;
+    app.nav_waiting = Some((scope, 21));
+    let _ = cosmic::Application::update(&mut app, super::Message::SourceAction(Action::Edit(Edit::Insert('a'))));
+    let _ = cosmic::Application::update(&mut app, super::Message::Shell(super::shell::Msg::Settings(true)));
+    let _ = cosmic::Application::update(&mut app, super::Message::SourceAction(Action::Edit(Edit::Insert('b'))));
+    let _ = cosmic::Application::update(&mut app, super::Message::NavLayoutReady(scope, 21, true));
+    let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+    assert!(t.local.starts_with("atheory Demo"), "typing before settings was applied: {:?}", t.local);
+    assert!(!t.local.starts_with("abtheory Demo"), "typing after settings must not edit the hidden document");
+    assert!(app.shell.settings_open);
+    assert!(app.nav_queue.is_empty());
+}
+
+#[test]
+fn queued_old_editor_input_does_not_edit_after_mode_switch() {
+    use cosmic::widget::text_editor::{Action, Edit};
+    let mut app = demo_app(Mode::Source);
+    let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+    let scope = t.page_scope;
+    let old = t.local.clone();
+    app.nav_waiting = Some((scope, 22));
+    let _ = cosmic::Application::update(&mut app, super::Message::SetMode(Mode::Literate));
+    let _ = cosmic::Application::update(&mut app, super::Message::SourceAction(Action::Edit(Edit::Insert('z'))));
+    let _ = cosmic::Application::update(&mut app, super::Message::NavLayoutReady(scope, 22, true));
+    let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+    assert_eq!(t.mode, Mode::Literate);
+    assert_eq!(t.local, old);
+    assert!(app.status.as_deref().is_some_and(|s| s.contains("no longer visible")));
+}
+
+#[test]
+fn opening_another_document_rejects_later_old_editor_input() {
+    use cosmic::widget::text_editor::{Action, Edit};
+    let mut app = demo_app(Mode::Source);
+    let scope = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().page_scope;
+    app.nav_waiting = Some((scope, 23));
+    let _ = cosmic::Application::update(&mut app, super::Message::OpenTheory("/tmp/Other.thy".into()));
+    let _ = cosmic::Application::update(&mut app, super::Message::SourceAction(Action::Edit(Edit::Insert('b'))));
+    let _ = cosmic::Application::update(&mut app, super::Message::NavLayoutReady(scope, 23, true));
+    let _ = cosmic::Application::update(&mut app, super::Message::SourceAction(Action::Edit(Edit::Insert('c'))));
+    let ws = app.workspace.as_ref().unwrap();
+    assert_eq!(ws.opening.as_deref(), Some("/tmp/Other.thy"));
+    assert!(ws.theory.as_ref().unwrap().local.starts_with("theory Demo"));
+}
+
+#[test]
+fn sequence_waits_for_clipboard_before_next_binding() {
+    use cosmic::widget::text_editor::Binding;
+    let mut app = demo_app(Mode::Source);
+    let mut h = Harness::new(Size::new(900.0, 800.0));
+    clipboard::Clipboard::write(&mut h.clipboard, clipboard::Kind::Standard, "p".into());
+    let task = app.dispatch_editor_binding(super::EditorTarget::Source, Binding::Sequence(vec![Binding::Paste, Binding::Insert('x')]));
+    h.run_task_with_updates(&mut app, task);
+    assert!(app.workspace.as_ref().unwrap().theory.as_ref().unwrap().local.starts_with("pxtheory Demo"));
+    assert!(app.nav_waiting.is_none() && app.nav_queue.is_empty());
+}
+
+#[test]
+fn missing_layout_completion_releases_editor_input() {
+    use cosmic::widget::text_editor::{Action, Edit};
+    let mut app = demo_app(Mode::Literate);
+    let i = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.name == "lemma").unwrap();
+    let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(i));
+    let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+    let scope = t.page_scope;
+    let old = t.local.clone();
+    app.nav_waiting = Some((scope, 13));
+    let _ = cosmic::Application::update(&mut app, super::Message::BlockAction(Action::Edit(Edit::Insert('x'))));
+    let _ = cosmic::Application::update(&mut app, super::Message::NavLayoutReady(scope, 13, false));
+    assert_ne!(app.workspace.as_ref().unwrap().theory.as_ref().unwrap().local, old);
+    assert!(app.nav_waiting.is_none() && app.nav_queue.is_empty());
+}
+
+#[test]
 fn arrow_keys_move_between_blocks() {
     use cosmic::iced::keyboard::{Key, key::Named};
     let mut app = demo_app(Mode::Literate);
@@ -1084,7 +1326,8 @@ fn arrow_keys_move_between_blocks() {
     };
     let press = |h: &mut Harness, app: &mut App, named: Named| {
         for m in h.key(app, Key::Named(named), None) {
-            let _ = cosmic::Application::update(app, m);
+            let task = cosmic::Application::update(app, m);
+            h.run_task_with_updates(app, task);
         }
     };
     let lines = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().block_editor.as_ref().unwrap().content.line_count();
@@ -1527,7 +1770,7 @@ fn moving_from_a_text_block_into_a_code_block() {
             t.block_editor.as_ref().and_then(|be| t.blocks.iter().position(|b| b.start <= be.start && be.start <= b.end))
         };
         let down = |app: &mut App| {
-            let m = if vim { super::Message::Vim("j".into(), false) } else { super::Message::LineMove(true) };
+            let m = if vim { super::Message::Vim("j".into(), false) } else { super::Message::LineMove(super::EditorTarget::Block, true) };
             let _ = cosmic::Application::update(app, m);
         };
         let mut reached = None;
@@ -1541,6 +1784,143 @@ fn moving_from_a_text_block_into_a_code_block() {
         }
         assert!(reached.is_some_and(|i| blocks[i].kind == super::theory::Kind::Formal), "vim {vim}: down from the text block reaches the code block ({reached:?})");
     }
+}
+
+#[test]
+fn vim_up_from_proof_enters_the_last_row_of_wrapped_prose() {
+    use cosmic::iced::keyboard::Key;
+    use cosmic::widget::text_editor::Position;
+    let mut app = demo_app(Mode::Literate);
+    app.vim_enabled = true;
+    app.vim.mode = super::vim::Mode::Normal;
+    let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+    let text = t.blocks.iter().position(|b| b.kind == super::theory::Kind::Text).unwrap();
+    let proof = text + 1;
+    let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(proof));
+    let be = app.workspace.as_mut().unwrap().theory.as_mut().unwrap().block_editor.as_mut().unwrap();
+    super::editor::place(&mut be.content, Position { line: 0, column: 0 });
+    let mut h = Harness::new(Size::new(900.0, 800.0));
+    h.focus(&app, super::view::block_editor_id());
+    for _ in 0..2 {
+        for m in h.key(&app, Key::Character("k".into()), Some("k")) {
+            let task = cosmic::Application::update(&mut app, m);
+            h.run_task_with_updates(&mut app, task);
+        }
+        h.draw(&app, "vim-reverse-wrapped");
+        let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+        let be = t.block_editor.as_ref().unwrap();
+        assert!(t.blocks[text].start <= be.start && be.start <= t.blocks[text].end, "k must first cross the wrapped prose rows");
+    }
+}
+
+#[test]
+fn vim_down_from_proof_traverses_wrapped_prose_rows() {
+    use cosmic::iced::keyboard::Key;
+    use cosmic::widget::text_editor::{Action, Motion};
+    let para = "Paragraph 1: café naïve αβ repeated repeated; see [link](https://example.test) and $x + 0 = x$. This deliberately long paragraph wraps across multiple lines and continues with repeated repeated words for navigation.";
+    let text = format!("theory P imports Main begin\n\nlemma before: \"True\"\n  by simp\n\ntext \\<open>{para}\\<close>\n\nlemma after: \"True\"\n  by simp\n\nend\n");
+    let mut app = demo_app(Mode::Literate);
+    let doc = json!({"text": text, "revision": 1});
+    app.workspace.as_mut().unwrap().theory = Some(Theory::new("/tmp/P.thy".into(), &doc, &Table::fallback(), Arc::new(HashMap::new()), Mode::Literate, crate::prover::profile(None)));
+    app.show_sidebar = false;
+    app.show_right = false;
+    app.vim_enabled = true;
+    app.vim.mode = super::vim::Mode::Normal;
+    let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+    let prose = t.blocks.iter().position(|b| b.kind == super::theory::Kind::Text).unwrap();
+    let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(prose - 1));
+    app.workspace.as_mut().unwrap().theory.as_mut().unwrap().block_editor.as_mut().unwrap().content.perform(Action::Move(Motion::DocumentEnd));
+    let mut h = Harness::new(Size::new(1400.0, 900.0));
+    h.focus(&app, super::view::block_editor_id());
+    for _ in 0..3 {
+        for m in h.key(&app, Key::Character("j".into()), Some("j")) {
+            let task = cosmic::Application::update(&mut app, m);
+            h.run_task_with_updates(&mut app, task);
+        }
+        h.draw(&app, "vim-forward-wrapped");
+        let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+        let be = t.block_editor.as_ref().unwrap();
+        assert!(t.blocks[prose].start <= be.start && be.start <= t.blocks[prose].end, "j must traverse the wrapped prose rows before entering the next proof");
+    }
+    let mut reached = false;
+    for _ in 0..12 {
+        for m in h.key(&app, Key::Character("j".into()), Some("j")) {
+            let task = cosmic::Application::update(&mut app, m);
+            h.run_task_with_updates(&mut app, task);
+        }
+        h.draw(&app, "vim-forward-wrapped-progress");
+        let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+        reached = t.block_editor.as_ref().is_some_and(|be| be.start > t.blocks[prose].end);
+        if reached { break; }
+    }
+    assert!(reached, "j must continue through the paragraph to the next proof");
+}
+
+#[test]
+fn vim_burst_waits_for_each_new_cell_layout() {
+    use cosmic::iced::keyboard::Key;
+    use cosmic::widget::text_editor::{Action, Motion};
+    fn setup() -> (App, Harness) {
+        let para = "café naïve αβ repeated repeated [link](https://example.test) and $x + 0 = x$. This paragraph wraps over several rows and continues with repeated repeated words for navigation.";
+        let text = format!("theory P imports Main begin\n\nlemma first: \"True\"\n  by simp\n\ntext \\<open>{para}\\<close>\n\nlemma second: \"True\"\n  by simp\n\ntext \\<open>{para}\\<close>\n\nlemma third: \"True\"\n  by simp\n\nend\n");
+        let mut app = demo_app(Mode::Literate);
+        let doc = json!({"text": text, "revision": 1});
+        app.workspace.as_mut().unwrap().theory = Some(Theory::new("/tmp/Burst.thy".into(), &doc, &Table::fallback(), Arc::new(HashMap::new()), Mode::Literate, crate::prover::profile(None)));
+        app.show_sidebar = false; app.show_right = false; app.vim_enabled = true;
+        let i = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.name == "lemma").unwrap();
+        let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(i));
+        app.workspace.as_mut().unwrap().theory.as_mut().unwrap().block_editor.as_mut().unwrap().content.perform(Action::Move(Motion::DocumentEnd));
+        let mut h = Harness::new(Size::new(1000.0, 900.0));
+        h.focus(&app, super::view::block_editor_id());
+        h.frame(&app);
+        (app, h)
+    }
+    let (mut paced, mut hp) = setup();
+    let original = paced.workspace.as_ref().unwrap().theory.as_ref().unwrap().local.clone();
+    for _ in 0..12 {
+        for m in hp.key(&paced, Key::Character("j".into()), Some("j")) {
+            let task = cosmic::Application::update(&mut paced, m);
+            hp.run_task_with_updates(&mut paced, task);
+        }
+        hp.frame(&paced);
+    }
+    drop(hp);
+    let (mut burst, mut hb) = setup();
+    let mut messages = Vec::new();
+    for _ in 0..12 { messages.extend(hb.key(&burst, Key::Character("j".into()), Some("j"))); }
+    let mut tasks = Vec::new();
+    for m in messages { tasks.push(cosmic::Application::update(&mut burst, m)); }
+    hb.run_task_with_updates(&mut burst, cosmic::app::Task::batch(tasks));
+    let state = |app: &App| {
+        let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+        (t.cursor, t.block_editor.as_ref().map(|b| b.start), t.local.clone())
+    };
+    assert_eq!(state(&burst), state(&paced), "queued motions must match paced motions");
+    assert_eq!(state(&burst).2, original);
+    assert!(burst.nav_waiting.is_none() && burst.nav_queue.is_empty(), "waiting {:?}, queued {}", burst.nav_waiting, burst.nav_queue.len());
+
+    // Keys already captured in Normal mode must be interpreted in Insert mode after `i`.
+    let proof = burst.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.name == "lemma").unwrap();
+    let _ = cosmic::Application::update(&mut burst, super::Message::EditBlock(proof));
+    burst.workspace.as_mut().unwrap().theory.as_mut().unwrap().block_editor.as_mut().unwrap().content.perform(Action::Move(Motion::DocumentEnd));
+    hb.focus(&burst, super::view::block_editor_id());
+    hb.frame(&burst);
+    let mut mixed = Vec::new();
+    for (key, text) in [
+        (Key::Character("j".into()), Some("j")),
+        (Key::Character("i".into()), Some("i")),
+        (Key::Character("X".into()), Some("X")),
+        (Key::Named(cosmic::iced::keyboard::key::Named::Tab), None),
+        (Key::Named(cosmic::iced::keyboard::key::Named::ArrowLeft), None),
+        (Key::Character("Y".into()), Some("Y")),
+        (Key::Named(cosmic::iced::keyboard::key::Named::Escape), None),
+    ] { mixed.extend(hb.key(&burst, key, text)); }
+    let tasks = mixed.into_iter().map(|m| cosmic::Application::update(&mut burst, m)).collect::<Vec<_>>();
+    hb.run_task_with_updates(&mut burst, cosmic::app::Task::batch(tasks));
+    let t = burst.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+    assert!(t.local.contains("X Y café"), "typed text, Tab and Left must stay ordered: {:?}", t.local);
+    assert_eq!(burst.vim.mode, super::vim::Mode::Normal);
+    assert!(burst.nav_waiting.is_none() && burst.nav_queue.is_empty());
 }
 
 /// As the window does it: a long paragraph that wraps, drawn, and the keys pressed
@@ -1636,8 +2016,7 @@ fn moving_from_a_paragraph_through_the_next_into_a_code_block() {
 }
 
 
-/// A read-only view (the goal, a tool's output) focused by a click takes copying and selecting
-/// only: j, k, the arrows, d and Enter go on to the page's block navigation
+/// A focused read-only goal keeps copying and selection, and routes navigation keys to its window.
 #[test]
 fn a_focused_goal_view_leaves_navigation_keys_alone() {
     use cosmic::iced::keyboard::{Key, Modifiers, key::{Named, NativeCode, Physical}};
@@ -1650,11 +2029,68 @@ fn a_focused_goal_view_leaves_navigation_keys_alone() {
         text: text.map(Into::into),
         status: Status::Focused { is_hovered: false },
     };
+    let mut unfocused = press(Key::Character("a".into()), Modifiers::empty(), Some("a"));
+    unfocused.status = Status::Active;
+    assert!(super::view::read_only_binding(unfocused).is_none(), "an unfocused goal cannot capture another editor's input");
     for (key, text) in [(Key::Character("j".into()), Some("j")), (Key::Character("k".into()), Some("k")), (Key::Character("d".into()), Some("d")), (Key::Named(Named::ArrowDown), None), (Key::Named(Named::ArrowUp), None), (Key::Named(Named::Enter), None)] {
-        assert!(super::view::read_only_binding(press(key.clone(), Modifiers::empty(), text)).is_none(), "{key:?} goes on to the page");
+        assert!(matches!(super::view::read_only_binding(press(key.clone(), Modifiers::empty(), text)), Some(B::Custom(super::Message::ReadOnlyKey(_)))), "{key:?} goes on to the page");
     }
     assert!(matches!(super::view::read_only_binding(press(Key::Character("c".into()), Modifiers::CTRL, Some("c"))), Some(B::Copy)), "Ctrl+C copies");
+    for key in ["x", "v"] {
+        assert!(matches!(super::view::read_only_binding(press(Key::Character(key.into()), Modifiers::CTRL, Some(key))), Some(B::Custom(super::Message::Noop))), "Ctrl+{key} cannot edit another view");
+    }
+    assert!(matches!(super::view::read_only_binding(press(Key::Named(Named::Insert), Modifiers::SHIFT, None)), Some(B::Custom(super::Message::Noop))), "Shift+Insert cannot paste into another view");
+    assert!(matches!(super::view::read_only_binding(press(Key::Named(Named::Delete), Modifiers::SHIFT, None)), Some(B::Custom(super::Message::Noop))), "Shift+Delete cannot cut another view");
     assert!(matches!(super::view::read_only_binding(press(Key::Named(Named::ArrowDown), Modifiers::SHIFT, None)), Some(B::Select(_))), "Shift+Down selects");
+    let mut app = demo_app(Mode::Literate);
+    app.vim_enabled = true;
+    app.new_session = Some(super::NewSession::default());
+    let before = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().cursor;
+    let _ = cosmic::Application::update(&mut app, super::Message::WindowKey(press(Key::Character("j".into()), Modifiers::empty(), Some("j"))));
+    assert_eq!(app.workspace.as_ref().unwrap().theory.as_ref().unwrap().cursor, before, "new-session page does not navigate the hidden document");
+}
+
+#[test]
+fn focused_goal_copies_its_selection_not_the_inactive_source() {
+    use cosmic::iced::keyboard::{Key, Modifiers};
+    use cosmic::widget::text_editor::Action;
+    let mut app = demo_app(Mode::Source);
+    let table = Table::fallback();
+    let ws = app.workspace.as_mut().unwrap();
+    ws.rebuild_views(&table);
+    ws.theory.as_mut().unwrap().source.move_to(cosmic::widget::text_editor::Cursor {
+        position: cosmic::widget::text_editor::Position { line: 10, column: 1 },
+        selection: Some(cosmic::widget::text_editor::Position { line: 10, column: 0 }),
+    });
+    let mut h = Harness::new(Size::new(1400.0, 900.0));
+    h.frame(&app);
+    let mut goal = false;
+    'scan: for y in (650..880).step_by(10) {
+        for x in (340..920).step_by(10) {
+            let messages = h.click(&app, cosmic::iced::Point::new(x as f32, y as f32));
+            if messages.iter().any(|m| matches!(m, super::Message::ViewAction(_, Action::Click(_)))) {
+                for message in messages {
+                    let task = cosmic::Application::update(&mut app, message);
+                    h.run_task_with_updates(&mut app, task);
+                }
+                goal = true;
+                break 'scan;
+            }
+        }
+    }
+    assert!(goal, "a real goal editor received the click");
+    let selection_messages = h.key_with(&app, Key::Character("a".into()), Some("a"), Modifiers::CTRL);
+    assert!(selection_messages.iter().any(|m| matches!(m, super::Message::ViewAction(_, Action::SelectAll))), "goal accepts SelectAll: {selection_messages:?}");
+    for message in selection_messages {
+        let task = cosmic::Application::update(&mut app, message);
+        h.run_task_with_updates(&mut app, task);
+    }
+    for message in h.key_with(&app, Key::Character("c".into()), Some("c"), Modifiers::CTRL) {
+        let task = cosmic::Application::update(&mut app, message);
+        h.run_task_with_updates(&mut app, task);
+    }
+    let copied = h.copied_text().expect("goal selection was copied");
+    assert!(!copied.is_empty() && !copied.contains("theory Demo"), "copied goal rather than inactive source: {copied:?}");
 }
 
 /// The toolbar's toggle: off, the goal is under the proof even with room beside, and the page
@@ -1787,25 +2223,40 @@ fn the_insert_palette_follows_the_context() {
 #[test]
 fn opening_the_next_block_does_not_move_it() {
     let mut app = demo_app(Mode::Literate);
+    // Keep the paragraph identical while reading and editing. Markup at the caret
+    // reveals its source and can legitimately wrap onto another row; this check
+    // guards against editing controls adding space below an otherwise unchanged cell.
+    let start = DEMO.find("text \\<open>").unwrap() + "text \\<open>".len();
+    let end = start + DEMO[start..].find("\\<close>\n\nlemma").unwrap();
+    let text = format!("{}{}{}", &DEMO[..start], "A plain paragraph before the lemma, with no markup to reveal while editing.", &DEMO[end..]);
+    let doc = json!({"text": text, "revision": 1, "prover": prover_json(&text)});
+    app.workspace.as_mut().unwrap().theory = Some(Theory::new("/tmp/Demo.thy".into(), &doc, &Table::fallback(), Arc::new(HashMap::new()), Mode::Literate, crate::prover::profile(None)));
+    let note_at = text[..text.find("apply simp").unwrap()].chars().count();
+    for note in &mut app.workspace.as_mut().unwrap().notes {
+        note["start"] = json!(note_at);
+        note["end"] = json!(note_at + "apply simp".chars().count());
+    }
     app.show_right = false;
     app.show_sidebar = false;
     let blocks = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.clone();
     let ti = blocks.iter().position(|b| b.kind == super::theory::Kind::Text).unwrap();
     let li = blocks.iter().position(|b| b.name == "lemma").unwrap();
     let mut h = Harness::new(Size::new(1320.0, 900.0));
-    // the lemma's top: the first height, down its left, where the pointer is over it (its shown
-    // view, or its open editor)
-    let top = |h: &mut Harness, app: &App, open: bool| -> Option<u32> {
+    // Measure the actual cell bounds. Hover targets can begin below a cell's outer top,
+    // and their insets differ between the shown view and the open editor.
+    let top = |h: &mut Harness, app: &App, open: bool| -> Option<f32> {
+        struct Find { id: cosmic::widget::Id, top: Option<f32> }
+        impl cosmic::iced::advanced::widget::Operation<()> for Find {
+            fn traverse(&mut self, f: &mut dyn FnMut(&mut dyn cosmic::iced::advanced::widget::Operation<()>)) { f(self); }
+            fn container(&mut self, id: Option<&cosmic::widget::Id>, bounds: cosmic::iced::Rectangle) {
+                if id == Some(&self.id) { self.top = Some(bounds.y); }
+            }
+        }
+        h.frame(app);
         h.draw(app, if open { "jump-lemma-open" } else { "jump-text-open" });
-        (150..800).step_by(2).find(|&y| {
-            (150..700).step_by(30).any(|x| {
-                h.move_to(app, cosmic::iced::Point::new(x as f32, y as f32)).iter().any(|m| match m {
-                    super::Message::HoverMove(super::HoverTarget::View(i), _) => !open && *i == li,
-                    super::Message::HoverMove(super::HoverTarget::Block, _) => open,
-                    _ => false,
-                })
-            })
-        })
+        let mut find = Find { id: if open { super::view::selected_block_id() } else { super::view::test_block_id(li) }, top: None };
+        h.operate(app, &mut find);
+        find.top
     };
     let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(ti));
     let with_text = top(&mut h, &app, false);
@@ -1813,10 +2264,8 @@ fn opening_the_next_block_does_not_move_it() {
     let with_lemma = top(&mut h, &app, true);
     eprintln!("lemma top: text open {with_text:?}, lemma open {with_lemma:?}");
     let (a, b) = (with_text.expect("the lemma drawn"), with_lemma.expect("the lemma drawn"));
-    // (within a little: the paragraph being edited shows its antiquotations as source, so it can
-    // be a line longer than rendered; the row of editing hints under the open block, which moved
-    // it 23 px, is gone)
-    assert!(a.abs_diff(b) <= 12, "the lemma stays where it was as it opens ({a} then {b})");
+    // The row of editing hints formerly moved the next cell by 23 px.
+    assert!((a - b).abs() <= 12.0, "the lemma stays where it was as it opens ({a} then {b})");
 }
 
 /// Up from a block whose first line wraps: one press per row, then out to the block above (the
@@ -1893,7 +2342,9 @@ fn the_palette_wraps_the_selection() {
         let (a, b) = (li.position(&t, t[..s].chars().count()), li.position(&t, t[..s].chars().count() + 8));
         be.content.move_to(Cursor { position: b, selection: Some(a) });
     }
-    let _ = cosmic::Application::update(&mut app, super::Message::Wrap("\\<^emph>‹".into(), "›".into()));
+    let mut h = Harness::new(Size::new(1000.0, 900.0));
+    let task = cosmic::Application::update(&mut app, super::Message::Wrap("\\<^emph>‹".into(), "›".into()));
+    h.run_task_with_updates(&mut app, task);
     assert!(local(&app).contains("\\<^emph>\\<open>addition\\<close> with zero"), "{:?}", local(&app));
     assert!(local(&app).contains("identity\n  for every"), "the rest of the paragraph as it was: {:?}", local(&app));
     // 2. at the caret: both, the caret between
@@ -1942,9 +2393,12 @@ fn a_palette_click_is_one_history_entry() {
         let li = super::editor::LineIndex::new(&t);
         be.content.move_to(Cursor { position: li.position(&t, s + 8), selection: Some(li.position(&t, s)) });
     }
-    let _ = cosmic::Application::update(&mut app, super::Message::Wrap("\\<^emph>‹".into(), "›".into()));
+    let mut h = Harness::new(Size::new(1000.0, 900.0));
+    let task = cosmic::Application::update(&mut app, super::Message::Wrap("\\<^emph>‹".into(), "›".into()));
+    h.run_task_with_updates(&mut app, task);
     // then a typed character, which begins the next step
-    let _ = cosmic::Application::update(&mut app, super::Message::BlockAction(A::Edit(E::Insert('!'))));
+    let task = cosmic::Application::update(&mut app, super::Message::BlockAction(A::Edit(E::Insert('!'))));
+    h.run_task_with_updates(&mut app, task);
     let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
     let texts: Vec<&String> = t.steps.iter().map(|(_, text)| text).collect();
     // no step holds only half the wrap
@@ -1954,6 +2408,29 @@ fn a_palette_click_is_one_history_entry() {
         assert_eq!(after, before, "a step with half the wrap: {text:?}");
     }
     assert!(texts.iter().any(|text| text.contains("\\<^emph>\\<open>addition\\<close>") && !text.contains('!')), "the wrap, a step of its own: {texts:?}");
+}
+
+#[test]
+fn a_compound_wrap_sends_only_the_complete_edit() {
+    use cosmic::widget::text_editor::Cursor;
+    let mut app = demo_app(Mode::Literate);
+    let i = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.kind == super::theory::Kind::Text).unwrap();
+    let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(i));
+    let before = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().confirmed.clone();
+    let be = app.workspace.as_mut().unwrap().theory.as_mut().unwrap().block_editor.as_mut().unwrap();
+    let text = be.content.text();
+    let start = text[..text.find("addition").unwrap()].chars().count();
+    let lines = super::editor::LineIndex::new(&text);
+    be.content.move_to(Cursor { position: lines.position(&text, start + 8), selection: Some(lines.position(&text, start)) });
+    let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel();
+    app.links[0].sender = Some(sender);
+    let _ = cosmic::Application::update(&mut app, super::Message::Wrap("\\<^emph>‹".into(), "›".into()));
+    let sent: serde_json::Value = serde_json::from_str(&receiver.try_recv().expect("one complete edit sent")).unwrap();
+    assert_eq!(sent["op"], "edit");
+    let changes: super::ot::Change = sent["edits"].as_array().unwrap().iter().map(|c| (c["start"].as_u64().unwrap() as usize, c["end"].as_u64().unwrap() as usize, c["text"].as_str().unwrap().to_string())).collect();
+    let result = super::ot::apply(&before, &changes);
+    assert!(result.contains("\\<^emph>\\<open>addition\\<close>"), "host receives both halves: {result:?}");
+    assert!(receiver.try_recv().is_err(), "no partial edit was sent first");
 }
 
 /// In the paragraph being edited, markup reads as it renders (bold, emphasis, an antiquotation
