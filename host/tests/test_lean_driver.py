@@ -1,12 +1,255 @@
 """The Lean driver's pure parts: positions, the command splitter, goal parts and reports.
 Nothing here needs Lean."""
+import asyncio
 import os
 import sys
+import tempfile
+import threading
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from drivers import lean  # noqa: E402
 from drivers.lsp import TextIndex, utf16_len  # noqa: E402
+
+
+class ImportInvalidation(unittest.IsolatedAsyncioTestCase):
+    """The server can report checked before registering its import closure."""
+
+    async def asyncSetUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        (self.root / "Tiny").mkdir()
+        self.events, self.notifications = [], []
+        self.changed = asyncio.Event()
+        case = self
+        class Session:
+            meta = {}
+            def on_backend_event(self, obj):
+                case.events.append(obj)
+                case.changed.set()
+        class ServerWithoutImportGraph:
+            def notify(self, method, params):
+                # This is the real protocol boundary: a watched-file change
+                # arriving before Lean's importClosure has no stale reply.
+                case.notifications.append((method, params))
+            async def shutdown(self):
+                pass
+        self.driver = lean.LeanDriver(Session())
+        self.driver.lake_root = str(self.root)
+        self.driver.client = ServerWithoutImportGraph()
+        self.gates = []
+
+    async def asyncTearDown(self):
+        for gate in self.gates:
+            gate.set()
+        await self.driver.stop()
+        self.tmp.cleanup()
+
+    def source(self, module, text):
+        path = self.root / (module.replace(".", "/") + ".lean")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text)
+        return str(path)
+
+    def opened(self, path, text=None):
+        text = Path(path).read_text() if text is None else text
+        self.driver.send({"op": "open", "file": path, "text": text, "rev": 1})
+        doc = self.driver.docs[path]
+        self.driver._on_progress({"textDocument": {"uri": doc.uri, "version": 1}, "processing": []})
+        return doc
+
+    async def stale(self, path):
+        async def wait():
+            while True:
+                self.changed.clear()
+                for event in self.events:
+                    if (event.get("event") == "node" and event["file"] == path
+                            and lean.STALE_HEADER_ERROR in event["header_errors"]):
+                        return event
+                await self.changed.wait()
+        return await asyncio.wait_for(wait(), 1)
+
+    async def test_changed_direct_import_is_stale_without_server_graph(self):
+        dep = self.source("Tiny.Dep", "def n := 1\n")
+        use = self.source("Tiny.Use", "import Tiny.Dep\n\n#eval n\n")
+        doc = self.opened(use)
+        self.assertTrue(self.driver.node_for(doc)["status"]["consolidated"])
+        self.driver.send({"op": "disk_changed", "files": [dep]})
+        node = self.driver.node_for(doc)
+        self.assertEqual(node["header_errors"], [lean.STALE_HEADER_ERROR])
+        self.assertFalse(any("out of date" in message["text"] for message in node["messages"]))
+        self.assertIn(("workspace/didChangeWatchedFiles", {"changes": [{"uri": Path(dep).as_uri(), "type": 2}]}), self.notifications)
+
+    async def test_transitive_local_import_invalidates_only_affected_documents(self):
+        dep = self.source("Tiny.Dep", "def n := 1\n")
+        self.source("Tiny.Middle", "import Tiny.Dep\n")
+        use = self.source("Tiny.Use", "import Tiny.Middle\n")
+        unrelated = self.source("Tiny.Other", "/- import Tiny.Dep -/\ndef other := 1\n")
+        self.opened(use)
+        other = self.opened(unrelated)
+        self.driver.send({"op": "disk_changed", "files": [dep]})
+        self.assertEqual((await self.stale(use))["header_errors"], [lean.STALE_HEADER_ERROR])
+        self.assertFalse(other.stale)
+
+    async def test_transitive_scan_uses_open_module_text_and_handles_cycles(self):
+        dep = self.source("Tiny.Dep", "def n := 1\n")
+        middle = self.source("Tiny.Middle", "def unrelated := 1\n")
+        use = self.source("Tiny.Use", "import Tiny.Middle\n")
+        self.opened(middle, "import Tiny.Use Tiny.Dep\n")
+        self.opened(use)
+        self.driver.send({"op": "disk_changed", "files": [dep]})
+        await self.stale(use)
+
+    async def test_late_scan_does_not_invalidate_a_reopened_or_removed_document(self):
+        dep = self.source("Tiny.Dep", "def n := 1\n")
+        middle = self.source("Tiny.Middle", "import Tiny.Dep\n")
+        use = self.source("Tiny.Use", "import Tiny.Middle\n")
+        doc = self.opened(use)
+        entered, release = asyncio.Event(), threading.Event()
+        self.gates.append(release)
+        loop = asyncio.get_running_loop()
+        original = lean.read_import_source
+        def read(path, remaining):
+            if path == middle:
+                loop.call_soon_threadsafe(entered.set)
+                release.wait(2)
+            return original(path, remaining)
+        with patch.object(lean, "read_import_source", read):
+            self.driver.send({"op": "disk_changed", "files": [dep]})
+            await asyncio.wait_for(entered.wait(), 1)
+            self.driver._reopen(doc)
+            release.set()
+            await self.driver.disk_task
+        self.assertFalse(doc.stale)
+        # Stop also cancels the coalesced graph task and prevents late apply.
+        self.assertIsNone(self.driver.disk_task)
+
+    async def test_unrelated_edit_does_not_delay_a_confirmed_transitive_change(self):
+        dep = self.source("Tiny.Dep", "def n := 1\n")
+        middle = self.source("Tiny.Middle", "import Tiny.Dep\n")
+        use = self.source("Tiny.Use", "import Tiny.Middle\n")
+        other = self.source("Tiny.Other", "def unrelated := 1\n")
+        doc = self.opened(use)
+        self.opened(other)
+        entered, release = asyncio.Event(), threading.Event()
+        self.gates.append(release)
+        loop, original = asyncio.get_running_loop(), lean.read_import_source
+        calls = []
+        def read(path, remaining):
+            if path == middle:
+                calls.append(path)
+                loop.call_soon_threadsafe(entered.set)
+                release.wait(2)
+            return original(path, remaining)
+        with patch.object(lean, "read_import_source", read):
+            self.driver.send({"op": "disk_changed", "files": [dep]})
+            await asyncio.wait_for(entered.wait(), 1)
+            self.assertTrue(doc.import_pending)
+            self.assertIn(lean.UNVERIFIED_IMPORTS, self.driver.node_for(doc)["header_errors"])
+            self.driver.send({"op": "edit", "file": other, "rev": 2, "edits": [{"start": 0, "end": 0, "text": "-- typing\n"}]})
+            release.set()
+            await self.stale(use)
+        self.assertEqual(calls, [middle])
+        self.assertFalse(doc.import_pending)
+
+    async def test_real_dependency_buffer_edit_rescans_without_losing_change(self):
+        dep = self.source("Tiny.Dep", "def n := 1\n")
+        middle = self.source("Tiny.Middle", "import Tiny.Dep\n")
+        use = self.source("Tiny.Use", "import Tiny.Middle\n")
+        self.opened(use)
+        entered, release = asyncio.Event(), threading.Event()
+        self.gates.append(release)
+        loop, original = asyncio.get_running_loop(), lean.read_import_source
+        def read(path, remaining):
+            if path == middle:
+                loop.call_soon_threadsafe(entered.set)
+                release.wait(2)
+            return original(path, remaining)
+        with patch.object(lean, "read_import_source", read):
+            self.driver.send({"op": "disk_changed", "files": [dep]})
+            await asyncio.wait_for(entered.wait(), 1)
+            # Middle was a closed disk source. Its newly opened buffer must
+            # participate in the rescan, rather than publishing the old graph.
+            self.opened(middle, "-- current buffer\nimport Tiny.Dep\n")
+            release.set()
+            await self.stale(use)
+
+    async def test_graph_read_failure_and_limits_are_explicitly_unknown(self):
+        dep = self.source("Tiny.Dep", "def n := 1\n")
+        middle = self.source("Tiny.Middle", "import Tiny.Dep\n")
+        use = self.source("Tiny.Use", "import Tiny.Middle\n")
+        other = self.source("Tiny.Other", "def other := 1\n")
+        sources = {use: Path(use).read_text(), other: Path(other).read_text()}
+        original = lean.read_import_source
+        def failed(path, remaining):
+            if path == middle:
+                raise PermissionError("unreadable local dependency")
+            return original(path, remaining)
+        with patch.object(lean, "read_import_source", failed):
+            result, errors, _ = lean.local_import_effects(str(self.root), sources, {use: {dep}, other: {dep}})
+        self.assertIsNone(result[use])
+        self.assertFalse(result[other])
+        self.assertTrue(errors)
+        result, errors, readsets = lean.local_import_effects(str(self.root), {use: "import Tiny.A Tiny.B Tiny.C\n"},
+                                                            {use: {dep}}, module_limit=2)
+        self.assertIsNone(result[use])
+        self.assertLessEqual(len(readsets[use]), 2)
+        self.assertTrue(errors)
+        unicode_source = self.source("Tiny.Unicode", "🙂" * 10)
+        with self.assertRaises(lean.ImportBudgetExceeded):
+            lean.read_import_source(unicode_source, 4)
+
+    async def test_progress_metadata_does_not_touch_disk_on_the_event_loop(self):
+        dep = self.source("Tiny.Dep", "def n := 1\n")
+        use = self.source("Tiny.Use", "import Tiny.Dep\n")
+        doc = self.opened(use)
+        entered, release = asyncio.Event(), threading.Event()
+        self.gates.append(release)
+        loop, original = asyncio.get_running_loop(), os.stat
+        def slow(path, *args, **kwargs):
+            if path == dep:
+                self.assertIsNot(threading.current_thread(), threading.main_thread())
+                loop.call_soon_threadsafe(entered.set)
+                release.wait(2)
+            return original(path, *args, **kwargs)
+        with patch.object(lean.os, "stat", slow):
+            self.driver._emit_node(doc)
+            await asyncio.wait_for(entered.wait(), 1)
+            self.assertFalse(self.events)
+            self.assertEqual(self.driver.node_for(doc)["imports"], [])
+            release.set()
+            await doc.import_task
+        self.driver._emit_node(doc)
+        self.assertEqual(self.events[-1]["imports"], [dep])
+        with patch.object(lean.os, "stat", side_effect=AssertionError("progress performed filesystem I/O")):
+            self.assertEqual(self.driver.node_for(doc)["imports"], [dep])
+
+    async def test_overflow_is_unknown_and_stop_suppresses_late_apply(self):
+        dep = self.source("Tiny.Dep", "def n := 1\n")
+        middle = self.source("Tiny.Middle", "import Tiny.Dep\n")
+        use = self.source("Tiny.Use", "import Tiny.Middle\n")
+        doc = self.opened(use)
+        self.driver.send({"op": "disk_changed", "files": [str(self.root / f"Tiny/X{i}.lean") for i in range(129)]})
+        self.assertTrue(doc.import_error)
+        self.assertFalse(self.driver.disk_pending)
+        entered, release = asyncio.Event(), threading.Event()
+        self.gates.append(release)
+        loop, original = asyncio.get_running_loop(), lean.read_import_source
+        def read(path, remaining):
+            if path == middle:
+                loop.call_soon_threadsafe(entered.set)
+                release.wait(2)
+            return original(path, remaining)
+        with patch.object(lean, "read_import_source", read):
+            self.driver.send({"op": "disk_changed", "files": [dep]})
+            await asyncio.wait_for(entered.wait(), 1)
+            await asyncio.wait_for(self.driver.stop(), .5)
+            release.set()
+            await asyncio.sleep(.01)
+        self.assertFalse(doc.stale)
+        self.assertIsNone(self.driver.disk_task)
 
 
 def split(text):
