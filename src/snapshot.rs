@@ -1918,7 +1918,15 @@ fn vim_burst_waits_for_each_new_cell_layout() {
     let tasks = mixed.into_iter().map(|m| cosmic::Application::update(&mut burst, m)).collect::<Vec<_>>();
     hb.run_task_with_updates(&mut burst, cosmic::app::Task::batch(tasks));
     let t = burst.workspace.as_ref().unwrap().theory.as_ref().unwrap();
-    assert!(t.local.contains("X Y café"), "typed text, Tab and Left must stay ordered: {:?}", t.local);
+    // Tab's width is a published setting and another settings test can change it
+    // while these tests run. Left must put Y immediately before the final space
+    // of the inserted indent, regardless of how many spaces Tab inserted.
+    let after_x = t.local.split_once("text \\<open>X").map(|(_, rest)| rest);
+    assert!(after_x.is_some_and(|rest| {
+        let spaces_before_y = rest.bytes().take_while(|b| *b == b' ').count();
+        spaces_before_y < 8 && rest[spaces_before_y..].starts_with("Y café")
+    }),
+        "typed text, Tab and Left must stay ordered: {:?}", t.local);
     assert_eq!(burst.vim.mode, super::vim::Mode::Normal);
     assert!(burst.nav_waiting.is_none() && burst.nav_queue.is_empty());
 }
