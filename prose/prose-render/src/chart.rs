@@ -17,10 +17,10 @@
 use cosmic::iced::widget::canvas::{Cache, Frame, Path, Stroke, path};
 use cosmic::iced::{Color, Point, Radians, Rectangle, Size, Vector};
 use serde_json::Value;
+use std::sync::Mutex;
 
 use chartgen::model::{
-    LayoutConstraints, Measurements, Paint, PathCommand, Primitive, Report, Scene, TextContent, TextMetrics,
-    Theme,
+    LayoutConstraints, Measurements, Paint, PathCommand, Primitive, Report, Scene, TextContent, TextMetrics, Theme,
 };
 
 /// The family chartgen names, as the bundled fonts call it
@@ -67,7 +67,7 @@ pub struct Chart {
     pub labels: Vec<Label>,
     page: Color,
     ink: Color,
-    shapes: Cache,
+    shapes: Mutex<Cache>,
 }
 
 /// Lay out the chart of `spec`, `width` pixels wide, its text `text_size`
@@ -124,7 +124,7 @@ pub fn render(
                     labels: Vec::new(),
                     page,
                     ink,
-                    shapes: Cache::new(),
+                    shapes: Mutex::new(Cache::new()),
                 };
                 let mut labels = Vec::new();
                 for primitive in &chart.scene.primitives {
@@ -147,7 +147,11 @@ fn refusal(report: &Report) -> String {
         .filter(|finding| finding.severity == "error")
         .map(|finding| format!("{}: {}", finding.rule, finding.message))
         .collect();
-    if findings.is_empty() { format!("chartgen did not draw the chart ({})", report.status) } else { findings.join("\n") }
+    if findings.is_empty() {
+        format!("chartgen did not draw the chart ({})", report.status)
+    } else {
+        findings.join("\n")
+    }
 }
 
 impl Chart {
@@ -156,7 +160,7 @@ impl Chart {
         &self,
         renderer: &cosmic::Renderer,
     ) -> <cosmic::Renderer as cosmic::iced::advanced::graphics::geometry::Renderer>::Geometry {
-        self.shapes.draw(renderer, self.size, |frame| {
+        self.shapes.lock().unwrap().draw(renderer, self.size, |frame| {
             for primitive in &self.scene.primitives {
                 self.draw(frame, primitive, Vector::ZERO);
             }
@@ -188,10 +192,8 @@ impl Chart {
                 });
             }
             Primitive::Group { children, translate, .. } => {
-                let offset = Vector::new(
-                    offset.x + translate.x as f32 * self.scale,
-                    offset.y + translate.y as f32 * self.scale,
-                );
+                let offset =
+                    Vector::new(offset.x + translate.x as f32 * self.scale, offset.y + translate.y as f32 * self.scale);
                 for child in children {
                     self.collect_labels(child, offset, labels);
                 }
@@ -254,7 +256,8 @@ impl Chart {
                         }
                         b.close();
                     });
-                    let fill = Paint { fill: paint.stroke.clone(), stroke: None, stroke_width: 0.0, opacity: paint.opacity };
+                    let fill =
+                        Paint { fill: paint.stroke.clone(), stroke: None, stroke_width: 0.0, opacity: paint.opacity };
                     self.paint(frame, &outline, &fill);
                 }
             }
@@ -264,10 +267,8 @@ impl Chart {
                 }
             }
             Primitive::Group { children, translate, clip, .. } => {
-                let offset = Vector::new(
-                    offset.x + translate.x as f32 * self.scale,
-                    offset.y + translate.y as f32 * self.scale,
-                );
+                let offset =
+                    Vector::new(offset.x + translate.x as f32 * self.scale, offset.y + translate.y as f32 * self.scale);
                 match clip {
                     Some(clip) => {
                         let region = Rectangle::new(
@@ -348,7 +349,9 @@ impl Chart {
         if css.is_empty() || css == "none" || css == "transparent" {
             return None;
         }
-        let Some(color) = parse_hex(css) else { return Some(self.ink) };
+        let Some(color) = parse_hex(css) else {
+            return Some(self.ink);
+        };
         let [r, g, b, _] = color.into_rgba8();
         let (lo, hi) = (r.min(g).min(b), r.max(g).max(b));
         if hi - lo > 6 {
@@ -380,7 +383,14 @@ fn parse_hex(css: &str) -> Option<Color> {
 
 /// An SVG arc, from `from` to `to`, as the centre-parameterised ellipse
 /// iced draws (SVG 1.1, appendix F.6.5), or `None` for a straight line
-fn endpoint_arc(from: Point, to: Point, radii: Vector, rotation: f32, large_arc: bool, sweep: bool) -> Option<path::arc::Elliptical> {
+fn endpoint_arc(
+    from: Point,
+    to: Point,
+    radii: Vector,
+    rotation: f32,
+    large_arc: bool,
+    sweep: bool,
+) -> Option<path::arc::Elliptical> {
     let (mut rx, mut ry) = (radii.x.abs(), radii.y.abs());
     if rx == 0.0 || ry == 0.0 || from == to {
         return None;
@@ -403,10 +413,8 @@ fn endpoint_arc(from: Point, to: Point, radii: Vector, rotation: f32, large_arc:
     }
     let cx1 = coef * rx * y1 / ry;
     let cy1 = -coef * ry * x1 / rx;
-    let center = Point::new(
-        cos * cx1 - sin * cy1 + (from.x + to.x) / 2.0,
-        sin * cx1 + cos * cy1 + (from.y + to.y) / 2.0,
-    );
+    let center =
+        Point::new(cos * cx1 - sin * cy1 + (from.x + to.x) / 2.0, sin * cx1 + cos * cy1 + (from.y + to.y) / 2.0);
     let angle = |ux: f32, uy: f32, vx: f32, vy: f32| (ux * vy - uy * vx).atan2(ux * vx + uy * vy);
     let start = angle(1.0, 0.0, (x1 - cx1) / rx, (y1 - cy1) / ry);
     let mut delta = angle((x1 - cx1) / rx, (y1 - cy1) / ry, (-x1 - cx1) / rx, (-y1 - cy1) / ry);
@@ -470,7 +478,8 @@ mod tests {
 
     #[test]
     fn a_half_circle_arc_has_its_centre_between_the_ends() {
-        let arc = endpoint_arc(Point::new(0.0, 0.0), Point::new(10.0, 0.0), Vector::new(5.0, 5.0), 0.0, false, true).unwrap();
+        let arc =
+            endpoint_arc(Point::new(0.0, 0.0), Point::new(10.0, 0.0), Vector::new(5.0, 5.0), 0.0, false, true).unwrap();
         assert!((arc.center.x - 5.0).abs() < 1e-4 && arc.center.y.abs() < 1e-4, "{:?}", arc.center);
         assert!(((arc.end_angle.0 - arc.start_angle.0).abs() - std::f32::consts::PI).abs() < 1e-4);
     }

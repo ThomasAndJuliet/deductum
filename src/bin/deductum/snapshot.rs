@@ -564,28 +564,55 @@ fn a_typed_sledgehammer_leaves_the_proof_unfinished_not_failed() {
 /// The window as the app runs it, without a compositor: the real view, laid out and drawn by the
 /// real renderer, with its widget state (focus, carets, scrolling) kept between frames, and
 /// mouse and keyboard events going through the widgets as they do in the app
+#[derive(Default)]
+struct TestClipboard {
+    standard: Option<String>,
+    primary: Option<String>,
+}
+
+impl clipboard::Clipboard for TestClipboard {
+    fn read(&self, kind: clipboard::Kind) -> Option<String> {
+        match kind {
+            clipboard::Kind::Standard => self.standard.clone(),
+            clipboard::Kind::Primary => self.primary.clone(),
+        }
+    }
+
+    fn write(&mut self, kind: clipboard::Kind, contents: String) {
+        match kind {
+            clipboard::Kind::Standard => self.standard = Some(contents),
+            clipboard::Kind::Primary => self.primary = Some(contents),
+        }
+    }
+}
+
 pub struct Harness {
     _turn: std::sync::MutexGuard<'static, ()>,
     renderer: cosmic::Renderer,
     cache: Option<Cache>,
     pub size: Size,
     cursor: mouse::Cursor,
+    clipboard: TestClipboard,
 }
 
 impl Harness {
     pub fn new(size: Size) -> Self {
         super::load_fonts();
         let renderer = cosmic::iced::futures::executor::block_on(<cosmic::Renderer as Headless>::new(Font::default(), Pixels(14.0), Some("tiny-skia"))).expect("a headless renderer");
-        Self { _turn: ui_turn(), renderer, cache: None, size, cursor: mouse::Cursor::Unavailable }
+        Self { _turn: ui_turn(), renderer, cache: None, size, cursor: mouse::Cursor::Unavailable, clipboard: TestClipboard::default() }
     }
 
     /// Events through the widgets; the messages they publish
     pub fn events(&mut self, app: &App, events: &[Event]) -> Vec<super::Message> {
         let mut ui = UserInterface::build(super::view::view(app), self.size, self.cache.take().unwrap_or_default(), &mut self.renderer);
         let mut messages = Vec::new();
-        let _ = ui.update(events, self.cursor, &mut self.renderer, &mut clipboard::Null, &mut messages);
+        let _ = ui.update(events, self.cursor, &mut self.renderer, &mut self.clipboard, &mut messages);
         self.cache = Some(ui.into_cache());
         messages
+    }
+
+    pub fn copied_text(&self) -> Option<&str> {
+        self.clipboard.standard.as_deref()
     }
 
     /// What a focus task does in the app
@@ -613,11 +640,20 @@ impl Harness {
         let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().expect("a runtime");
         let mut ran = 0;
         while let Ok(Some(action)) = runtime.block_on(async { tokio::time::timeout(std::time::Duration::from_millis(30), stream.next()).await }) {
-            if let cosmic::iced::runtime::Action::Widget(mut operation) = action {
-                let mut ui = UserInterface::build(super::view::view(app), self.size, self.cache.take().unwrap_or_default(), &mut self.renderer);
-                ui.operate(&self.renderer, operation.as_mut());
-                self.cache = Some(ui.into_cache());
-                ran += 1;
+            match action {
+                cosmic::iced::runtime::Action::Widget(mut operation) => {
+                    let mut ui = UserInterface::build(super::view::view(app), self.size, self.cache.take().unwrap_or_default(), &mut self.renderer);
+                    ui.operate(&self.renderer, operation.as_mut());
+                    self.cache = Some(ui.into_cache());
+                    ran += 1;
+                }
+                cosmic::iced::runtime::Action::Clipboard(cosmic::iced::runtime::clipboard::Action::Write { target, contents }) => {
+                    clipboard::Clipboard::write(&mut self.clipboard, target, contents);
+                }
+                cosmic::iced::runtime::Action::Clipboard(cosmic::iced::runtime::clipboard::Action::Read { target, channel }) => {
+                    let _ = channel.send(clipboard::Clipboard::read(&self.clipboard, target));
+                }
+                _ => {}
             }
         }
         ran
@@ -688,7 +724,7 @@ impl Harness {
             &[Event::Window(cosmic::iced::window::Event::RedrawRequested(earlier))],
             self.cursor,
             &mut self.renderer,
-            &mut clipboard::Null,
+            &mut self.clipboard,
             &mut Vec::new(),
         );
         let text: cosmic::iced::Color = theme.cosmic().on_bg_color().into();
@@ -2389,7 +2425,7 @@ fn a_chip_on_the_bar_inserts_at_the_caret_and_keeps_the_focus() {
 
 /// Scroll the literate page with the wheel until the open block's top is a third of the way
 /// down the window, as a reader would to work on it
-pub fn scroll_to_open_block(h: &mut Harness, app: &App) {
+pub fn scroll_to_open_block(h: &mut Harness, app: &App) -> Vec<super::Message> {
     struct Find(Option<cosmic::iced::Rectangle>, cosmic::iced::Vector);
     impl cosmic::iced::advanced::widget::Operation<()> for Find {
         fn traverse(&mut self, operate: &mut dyn FnMut(&mut dyn cosmic::iced::advanced::widget::Operation<()>)) {
@@ -2408,10 +2444,11 @@ pub fn scroll_to_open_block(h: &mut Harness, app: &App) {
     }
     let mut find = Find(None, cosmic::iced::Vector::ZERO);
     h.operate(app, &mut find);
-    let Some(block) = find.0 else { return };
+    let Some(block) = find.0 else { return Vec::new() };
     let by = block.y - find.1.y - h.size.height / 3.0;
-    h.move_to(app, cosmic::iced::Point::new(h.size.width / 4.0, h.size.height / 2.0));
-    h.events(app, &[cosmic::iced::Event::Mouse(cosmic::iced::mouse::Event::WheelScrolled { delta: cosmic::iced::mouse::ScrollDelta::Pixels { x: 0.0, y: -by } })]);
+    let mut messages = h.move_to(app, cosmic::iced::Point::new(h.size.width / 4.0, h.size.height / 2.0));
+    messages.extend(h.events(app, &[cosmic::iced::Event::Mouse(cosmic::iced::mouse::Event::WheelScrolled { delta: cosmic::iced::mouse::ScrollDelta::Pixels { x: 0.0, y: -by } })]));
+    messages
 }
 
 /// Opening a selected block does not move its goal down: the insert bar's row is there, saying

@@ -315,6 +315,11 @@ class DriverTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(H.HostError):
             self.host.create_session({"folder": str(self.folder("FAKEROOT")), "backend": "fake", "new": True})
         await s.stop()
+        # Admission also reserves the next start's memory, even before its
+        # process has RSS. An impossibly small budget still rejects a start.
+        with self.assertRaises(H.HostError):
+            self.host.check_memory_budget()
+        cfg.write_text(json.dumps({"memory_budget_gb": 1}))
         self.host.check_memory_budget()
 
     async def test_project_files_stay_out_of_the_prover(self):

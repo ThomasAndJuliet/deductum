@@ -36,6 +36,7 @@ mod shell;
 mod sidebar;
 mod theory;
 mod view;
+mod viewport;
 mod vim;
 
 #[cfg(test)]
@@ -46,6 +47,8 @@ mod snapshot_shell;
 mod snapshot_lean;
 #[cfg(test)]
 mod snapshot_tools;
+#[cfg(test)]
+mod ui_responsiveness;
 #[cfg(test)]
 mod live;
 #[cfg(test)]
@@ -68,7 +71,7 @@ pub const FONTS: [&[u8]; 5] = [
 pub fn load_fonts() {
     let mut font_system = cosmic::iced::advanced::graphics::text::font_system().write().unwrap();
     for data in FONTS {
-        font_system.raw().db_mut().load_font_data(data.to_vec());
+        font_system.load_font(std::borrow::Cow::Borrowed(data));
     }
 }
 
@@ -237,6 +240,8 @@ pub enum Message {
     ProsePointer(usize, cosmic::iced::Point),
     /// Where in a rendered prose block's text (its Markdown block and offset in it) the pointer is
     ProseHover(usize, prose_render::rich::Pos),
+    LiterateScrolled(f32, f32),
+    LiterateAdjust(f32),
     /// A click replayed in the block editor once it is laid out (opening prose where it was clicked)
     BlockClickAt(cosmic::iced::Point),
     /// Ctrl and Alt held or not, for Ctrl+click and Alt+click
@@ -3214,6 +3219,12 @@ impl cosmic::Application for App {
                 t.selected = Some(i.min(t.blocks.len().saturating_sub(1)));
                 self.status = Some("Block deleted (Ctrl+Z brings it back)".into());
                 return Task::batch([self.flush_edits(), view::centre_selected(), Self::unfocus_all()]);
+            }
+            Message::LiterateScrolled(top, height) => {
+                if let Some(t) = self.workspace.as_ref().and_then(|w| w.theory.as_ref()) { t.page_viewport.set((top, height)); }
+            }
+            Message::LiterateAdjust(delta) => {
+                return cosmic::iced::widget::scrollable::scroll_by(view::literate_scroll_id(), cosmic::iced::widget::scrollable::AbsoluteOffset { x: 0.0, y: delta });
             }
             Message::ProseHover(i, pos) => {
                 self.prose_hover = Some((i, pos));

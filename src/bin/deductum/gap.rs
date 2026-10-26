@@ -388,6 +388,7 @@ pub struct GoalLayer<'a, Message, Theme, Renderer> {
     /// The item the goal is for, and how far below its top
     anchor: Option<(usize, f32)>,
     gap: f32,
+    indices: Option<super::viewport::Indices>,
 }
 
 /// How far the goal was moved from where it was laid out, when last drawn: where the widgets in
@@ -401,8 +402,12 @@ pub fn goal_moved() -> Vector {
 
 impl<'a, Message, Theme, Renderer> GoalLayer<'a, Message, Theme, Renderer> {
     pub fn new(page: impl Into<Element<'a, Message, Theme, Renderer>>, goal: impl Into<Element<'a, Message, Theme, Renderer>>, anchor: Option<(usize, f32)>, gap: f32) -> Self {
-        Self { page: page.into(), goal: goal.into(), anchor, gap }
+        Self { page: page.into(), goal: goal.into(), anchor, gap, indices: None }
     }
+}
+
+impl<Message, Theme, Renderer> GoalLayer<'_, Message, Theme, Renderer> {
+    pub fn indices(mut self, indices: super::viewport::Indices) -> Self { self.indices = Some(indices); self }
 }
 
 /// How far right an item's content reaches: the widest element its rows show
@@ -429,7 +434,11 @@ where
         let mut children = layout.children();
         let (page, goal) = (children.next()?, children.next()?);
         let items: Vec<Layout<'_>> = page.children().collect();
-        let anchor = *items.get(index)?;
+        let slot = match &self.indices {
+            Some(indices) => indices.lock().unwrap_or_else(|e| e.into_inner()).binary_search(&index).ok()?,
+            None => index,
+        };
+        let anchor = *items.get(slot)?;
         let (gw, gh) = (goal.bounds().width, goal.bounds().height);
         let wanted = Rectangle { x: goal.bounds().x, y: anchor.bounds().y + top, width: gw, height: gh };
         let y = wanted.y + nudge(anchor.bounds(), wanted, viewport);

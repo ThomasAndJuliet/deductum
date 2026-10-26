@@ -32,13 +32,42 @@ report mapped to the local text. Prover progress retains unchanged prose maps,
 rendered documents and highlighting; source edits explicitly refresh them.
 Current proof-state requests retry after saturation or stale results, and
 delayed navigation replies retain their source context through file reads.
+The host gives each real socket a bounded output queue. Replaceable prover
+snapshots can coalesce between lossless message fences; edits and replies are
+never dropped. Slow clients disconnect and resynchronise instead of blocking
+other clients. Recovery journals and routine project reads, listings, watches and autosaves use separate
+bounded worker lanes. Edit acknowledgements still wait for journal completion,
+while opted-in connections can dispatch Stop during that wait. Autosave keeps
+an immutable revision and checks disk identity before writing; an older save
+cannot clear a newer edit's dirty state.
+
+Long literate pages retain block heights and construct widget trees near the
+viewport, with the active editor and selected navigation target pinned. Small
+pages retain exact eager layout. Height corrections preserve the visible source
+anchor. The shared `prose-render` crate owns retained block geometry, indexed
+viewport/hit queries, exact Markdown provenance and immutable prepared resource
+and layout APIs. The app owns source revisions, edits, selection policy, undo
+and prover state. Preparing resources/layout on workers is explicit; existing
+synchronous callers remain supported.
+
 The focused regressions are:
 
 ```sh
 python3 -m unittest discover -s deductum/host/tests -p "test_responsiveness.py"
+python3 -m unittest discover -s deductum/host/tests -p "test_background_io.py"
 cargo --offline --locked test --bin deductum link::tests
 cargo --offline --locked test --bin deductum prover_view_tests
+cargo --offline --locked test --bin deductum ui_responsiveness
+cargo --offline --locked test -p prose-render
 ```
+
+Machine-local `~/.config/deductum/host.json` can set `max_running_provers`,
+`memory_budget_gb`, `prover_start_reserve_mb`, `prover_threads` and
+`scratch_checks`. Admission includes starting sessions before their RSS is
+available, using the reservation (256 MB by default). Optional thread and job
+limits apply to new backend work; existing session options remain available.
+Process sampling and configuration refresh run off the host event loop. These
+settings do not change machine policy or stop existing sessions. Cold session resolution, independent fork/merge and git/discard cleanup still perform some synchronous filesystem work.
 
 A separate hosted job installs Lean 4.19.0 and the checksum-pinned official
 Isabelle2025 distribution. It runs the existing real backend integrations:

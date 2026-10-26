@@ -76,10 +76,21 @@ mod tests {
 
     #[test]
     fn replaces_dead_bindings_but_preserves_live_sockets_and_files() {
+        const DEAD_SOCKET: &str = "CT_TEST_DEAD_SUDO_SOCKET";
+        if let Some(path) = std::env::var_os(DEAD_SOCKET) {
+            drop(UnixListener::bind(path).unwrap());
+            return;
+        }
         let dir = std::env::temp_dir().join(format!("ct-sudo-socket-{}", crate::random_hex(16)));
         fs::create_dir(&dir).unwrap();
         let path = dir.join("agent.sock");
-        drop(UnixListener::bind(&path).unwrap());
+        // A concurrent test can fork while this process holds a listener and
+        // keep its descriptor alive after drop. Make the stale binding in an
+        // isolated test process and wait for every descriptor there to close.
+        assert!(std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", "sudo_socket::tests::replaces_dead_bindings_but_preserves_live_sockets_and_files", "--quiet"])
+            .env(DEAD_SOCKET, &path)
+            .status().unwrap().success());
         let listener = listen(&path).unwrap();
         let inode = fs::metadata(&path).unwrap().ino();
         assert_eq!(fs::metadata(&path).unwrap().mode() & 0o777, 0o600);
