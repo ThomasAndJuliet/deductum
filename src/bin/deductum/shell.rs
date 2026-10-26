@@ -19,7 +19,7 @@ use cosmic::{iced, theme};
 use serde_json::{Value, json};
 
 use super::editor::Mode;
-use super::settings::{Loogle, Settings, ThemeChoice};
+use super::settings::{DisplayChange, Loogle, Settings, ThemeChoice};
 use super::theory::Status;
 use super::{App, Message, Panel, Pending, Workspace, file_name, link};
 
@@ -53,6 +53,7 @@ pub enum Msg {
     Settings(bool),
     ToggleSettings,
     Theme(ThemeChoice),
+    Display(DisplayChange),
     /// The text size, in percent
     TextSize(i32),
     GoalBeside(bool),
@@ -138,9 +139,20 @@ impl App {
     pub fn shell_update(&mut self, msg: Msg) -> Task<Message> {
         match msg {
             Msg::Settings(open) => {
+                let closing = self.shell.settings_open && !open;
                 self.shell.settings_open = open;
                 if open {
                     self.new_session = None;
+                } else if closing && let Some(t) = self.workspace.as_ref().and_then(|w| w.theory.as_ref()) {
+                    if t.mode == Mode::Source {
+                        return Task::batch([
+                            widget::text_input::focus(super::view::source_editor_id()),
+                            super::view::keep_source_caret(t.source.cursor().position.line),
+                        ]);
+                    }
+                    if t.block_editor.is_some() && self.popout.is_none() {
+                        return widget::text_input::focus(super::view::block_editor_id());
+                    }
                 }
             }
             Msg::ToggleSettings => return self.shell_update(Msg::Settings(!self.shell.settings_open)),
@@ -148,6 +160,10 @@ impl App {
                 self.shell.settings.appearance.theme = choice;
                 self.save_settings();
                 return cosmic::command::set_theme(choice.theme());
+            }
+            Msg::Display(display) => {
+                self.shell.settings.display.update(display);
+                self.save_settings();
             }
             Msg::TextSize(percent) => {
                 super::view::set_zoom(percent as f32 / 100.0);
@@ -436,7 +452,10 @@ pub fn header_start(app: &App) -> Vec<Element<'_, Message>> {
     }
     if let Some(t) = app.workspace.as_ref().and_then(|w| w.theory.as_ref()) {
         items.push(widget::Space::new().width(Length::Fixed(4.0)).into());
-        items.push(mode_switch(t.mode, app.window_width < 1100.0));
+        items.push(widget::segmented_control::horizontal(&app.mode_model)
+            .width(Length::Shrink)
+            .on_activate(Message::SetModeEntity)
+            .into());
         items.push(widget::Space::new().width(Length::Fixed(sp().space_s as f32)).into());
         items.push(icon_button("edit-undo-symbolic", "Undo your last edit (Ctrl+Z)", t.can_undo.then_some(Message::Undo)));
         items.push(icon_button("edit-redo-symbolic", "Redo (Ctrl+Shift+Z)", t.can_redo.then_some(Message::Redo)));
@@ -445,27 +464,6 @@ pub fn header_start(app: &App) -> Vec<Element<'_, Message>> {
         }
     }
     items
-}
-
-/// Literate or Source: two equal segments in one rounded frame, the current one filled
-/// (`narrow`: segments as wide as their words, for a narrow window's header)
-pub fn mode_switch<'a>(mode: Mode, narrow: bool) -> Element<'a, Message> {
-    let segment = |label: &'static str, this: Mode| {
-        let on = mode == this;
-        button::custom(widget::text::body(label).width(Length::Fill).align_x(Alignment::Center))
-            .width(Length::Fixed(if narrow { 76.0 } else { 92.0 }))
-            .padding([5, 10])
-            .class(segment_style(on))
-            .on_press(Message::SetMode(this))
-    };
-    widget::container(widget::row::with_capacity(2).spacing(2).push(segment("Literate", Mode::Literate)).push(segment("Source", Mode::Source)))
-        .padding(2)
-        .class(theme::Container::custom(|theme| iced::widget::container::Style {
-            background: Some(Color::from(theme.cosmic().bg_component_color()).into()),
-            border: Border { radius: 16.0.into(), width: 1.0, color: Color { a: 0.12, ..Color::from(theme.cosmic().on_bg_color()) } },
-            ..Default::default()
-        }))
-        .into()
 }
 
 /// A segment of a switch or a tab: filled with the accent when it is the current one
@@ -574,7 +572,7 @@ pub fn header_center(app: &App) -> Vec<Element<'_, Message>> {
     let toolchain = summary.and_then(|s| s["toolchain"]["label"].as_str()).filter(|l| !l.is_empty()).map(str::to_string);
     let backend = summary.and_then(|s| s["backend"].as_str()).unwrap_or("isabelle").to_string();
     match (&ws.theory, lifecycle.as_str()) {
-        (Some(t), "Running") => prover_status(ws, t, &backend, toolchain, app.window_width < 1250.0, app.window_width < 1100.0).into_iter().collect(),
+        (Some(t), "Running") => prover_status(ws, t, &backend, toolchain, app.window_width < 1250.0, app.window_width < 1100.0, app.window_width < 900.0).into_iter().collect(),
         (_, "") => Vec::new(),
         (_, lc) => {
             let (icon_name, tint): (&'static str, fn(&cosmic::Theme) -> Color) = match lc {
@@ -661,7 +659,7 @@ pub fn pending_imports(ws: &Workspace, t: &super::editor::Theory) -> Vec<(String
 
 /// (`compact`, in a narrow window: the state and what fails only)
 /// (`narrow`, narrower still: no backend mark, and a running tool without its time)
-fn prover_status<'a>(ws: &'a Workspace, t: &'a super::editor::Theory, backend: &str, toolchain: Option<String>, compact: bool, narrow: bool) -> Option<Element<'a, Message>> {
+fn prover_status<'a>(ws: &'a Workspace, t: &'a super::editor::Theory, backend: &str, toolchain: Option<String>, compact: bool, narrow: bool, icon_only: bool) -> Option<Element<'a, Message>> {
     let act = ws.activity.as_ref()?;
     let theories = act["theories"].as_array()?;
     let waiting = pending_imports(ws, t);
@@ -698,9 +696,13 @@ fn prover_status<'a>(ws: &'a Workspace, t: &'a super::editor::Theory, backend: &
         row = row.push(spinner(14.0));
     } else if waiting.is_empty() && !t.prover.status.is_null() && failed == 0 {
         row = row.push(tinted_icon("emblem-ok-symbolic", 14, success));
+    } else if icon_only {
+        row = row.push(tinted_icon(if failed > 0 { "dialog-error-symbolic" } else { "dialog-information-symbolic" }, 14, if failed > 0 { destructive } else { muted }));
     }
-    row = row.push(widget::text::body(state).wrapping(iced::widget::text::Wrapping::None));
-    if failed > 0 {
+    if !icon_only {
+        row = row.push(widget::text::body(state.clone()).wrapping(iced::widget::text::Wrapping::None));
+    }
+    if failed > 0 && !icon_only {
         row = row.push(badge(format!("{failed} failing"), destructive));
     }
     let is_tool = |r: &Value| r["name"].as_str().is_some_and(|n| ws.caps.typed_tool(n).is_some());
@@ -726,13 +728,14 @@ fn prover_status<'a>(ws: &'a Workspace, t: &'a super::editor::Theory, backend: &
             row = row.push(widget::text::caption(r).wrapping(iced::widget::text::Wrapping::None));
         }
     }
+    let detail = if failed > 0 { format!("{state}; {failed} failing") } else { state };
     let tip = if waiting.is_empty() {
-        "Prover activity and log".to_string()
+        format!("{detail} — prover activity and log")
     } else {
         let mut w = waiting.clone();
         w.sort_by_key(|w| (!w.2, w.1));
         format!(
-            "Waiting for: {}",
+            "{detail} — waiting for: {}",
             w.iter().take(8).map(|(n, p, f)| if *f { format!("{n} (cannot load)") } else { format!("{n} {p}%") }).collect::<Vec<_>>().join(", ")
         )
     };

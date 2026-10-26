@@ -94,8 +94,10 @@ impl ThreadStyle {
         let base = Typography {
             body: body_family,
             mono,
+            font_overrides: Vec::new(),
             size,
             line_height,
+            paragraph_spacing: 0.7,
             math_scale: f32::from(settings.math_scale) / 100.0,
             justify,
             italic: false,

@@ -93,6 +93,11 @@ fn in_scripts_font(c: char) -> bool {
     matches!(c as u32, 0x21..=0x7E | 0x391..=0x3C9)
 }
 
+/// Glyphs already decoded by this codec still need the scripts font when displayed again.
+pub fn is_script_glyph(c: char) -> bool {
+    matches!(c as u32, 0xE021..=0xE07E | 0xE121..=0xE17E | 0xE211..=0xE249 | 0xE311..=0xE349)
+}
+
 /// How `c` shows as a superscript in running text, which can't change fonts per
 /// character: a Unicode form where there is one
 pub fn unicode_script(superscript: bool, c: char) -> Option<char> {
@@ -362,6 +367,9 @@ impl Table {
                     continue;
                 }
             }
+            if is_script_glyph(chars[i]) {
+                styles.push((src_of.len(), Style::Script));
+            }
             text.push(chars[i]);
             src_of.push(i);
             i += 1;
@@ -512,6 +520,15 @@ mod tests {
 #[cfg(test)]
 mod real_table_probe {
     use super::*;
+
+    #[test]
+    fn decoded_script_glyph_retains_font_metadata_on_second_decode() {
+        let table = Table::fallback();
+        let first = table.decode("x\\<^sup>\\<alpha> + y\\<^sub>v");
+        let again = table.decode(&first.text);
+        assert_eq!(again.text, first.text);
+        assert_eq!(again.styles, first.styles);
+    }
 
     /// `DEDUCTUM_SYMBOLS=/tmp/isa-symbols.json`: how lines of a UTP theory decode with the
     /// prover's real symbol table

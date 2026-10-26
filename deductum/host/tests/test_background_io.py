@@ -192,6 +192,41 @@ class BackgroundHost(unittest.IsolatedAsyncioTestCase):
             await asyncio.wait_for(asyncio.gather(*self.sessions[0]._save_jobs.values()), 1)
             self.assertEqual(Path(self.docs[0].path).read_text(), "abcd")
 
+    async def test_recovery_read_and_duplicate_wait_for_original_journal(self):
+        for fail in (False, True):
+            reader, writer = await self.connect("app")
+            other, output = await self.connect("app")
+            entered, release, block = self.blocked()
+            original = builtins.open
+            def opened(path, mode="r", *args, **kwargs):
+                if str(path) == str(self.docs[0].log_path()) and mode == "a":
+                    block()
+                    if fail:
+                        raise OSError("journal failed")
+                return original(path, mode, *args, **kwargs)
+            rev = self.docs[0].revision
+            identity = "failure" if fail else "success"
+            edit = {"revision": rev, "edits": [{"start": 0, "end": 0, "text": identity}], "txn": identity, "edit_id": identity}
+            with patch.object(H, "open", opened, create=True):
+                self.send(reader, 10, "edit", **edit)
+                await asyncio.wait_for(entered.wait(), 1)
+                self.send(other, 11, "read", since_revision=rev, receipt_ids=[identity])
+                self.send(other, 12, "edit", **edit)
+                self.send(other, 13, "cancel_tools")
+                await asyncio.wait_for(output.reply(13), 1)
+                self.assertFalse(any(m.get("id") in (11, 12) for m in output.messages))
+                release.set()
+                read, duplicate = await output.reply(11), await output.reply(12)
+                self.assertEqual(read["ok"], not fail)
+                self.assertEqual(duplicate["ok"], not fail)
+                if not fail:
+                    self.assertTrue(duplicate["duplicate"])
+                    self.assertEqual(read["edit_receipts"], [identity])
+                    self.assertEqual(read["edit_history"]["entries"][0]["edit_id"], identity)
+                else:
+                    self.assertEqual(read["code"], "io_error")
+                    self.assertEqual(duplicate["code"], "io_error")
+
     async def test_queue_overflow_precedes_authoritative_edit(self):
         self.host.state_io.limit = 0
         doc = self.docs[0]

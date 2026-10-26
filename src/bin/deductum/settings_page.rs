@@ -10,7 +10,7 @@ use cosmic::prelude::*;
 use cosmic::widget::{self, settings};
 use cosmic::iced;
 
-use super::settings::{Loogle, ThemeChoice};
+use super::settings::{DisplayChange, Loogle, TextFont, ThemeChoice};
 use super::shell::{self, Msg, sp};
 use super::{App, Message};
 
@@ -29,7 +29,7 @@ pub fn page(app: &App) -> Element<'_, Message> {
         .title("Appearance")
         .add(settings::item::builder("Theme").control(widget::dropdown(themes, theme_index, |i| set(Msg::Theme(ThemeChoice::ALL[i])))))
         .add(
-            settings::item::builder("Text size")
+            settings::item::builder("Zoom")
                 .description("Also Ctrl+= and Ctrl+−; Ctrl+0 for 100%")
                 .control(widget::spin_button(format!("{zoom}%"), zoom, 10, 50, 300, |p| set(Msg::TextSize(p)))),
         )
@@ -38,6 +38,31 @@ pub fn page(app: &App) -> Element<'_, Message> {
                 .description("When the window has room; otherwise under the proof, with the page centred")
                 .toggler(super::view::goal_beside_on(), |on| set(Msg::GoalBeside(on))),
         );
+
+    let d = &st.display;
+    let choose = |label: &'static str, values: &'static [f32], value: f32, suffix: &'static str, change: fn(f32) -> DisplayChange| {
+        let mut choices = values.to_vec();
+        if !choices.iter().any(|v| (*v - value).abs() < 0.001) { choices.push(value); choices.sort_by(f32::total_cmp); }
+        let selected = choices.iter().position(|v| (*v - value).abs() < 0.001);
+        let options: Vec<String> = choices.iter().map(|v| format!("{v}{suffix}")).collect();
+        settings::item::builder(label).control(widget::dropdown(options, selected, move |i| set(Msg::Display(change(choices[i])))))
+    };
+    let mut width_values: Vec<f32> = vec![0.0, 28.0, 32.0, 36.0, 40.0, 48.0, 52.0, 60.0, 72.0];
+    if !width_values.iter().any(|v| (*v - d.measure).abs() < 0.001) { width_values.push(d.measure); width_values.sort_by(f32::total_cmp); }
+    let width_selected = width_values.iter().position(|v| (*v - d.measure).abs() < 0.001);
+    let widths: Vec<String> = width_values.iter().map(|v| if *v == 0.0 { "Automatic".into() } else { format!("{v} em") }).collect();
+    let display = settings::section()
+        .title("Display")
+        .add(settings::item::builder("Text font").description("The literate document and its prose editor; Sans matches Terminal threads")
+            .control(widget::dropdown(TextFont::ALL.iter().map(|f| f.label()).collect::<Vec<_>>(), TextFont::ALL.iter().position(|f| *f == d.font), |i| set(Msg::Display(DisplayChange::Font(TextFont::ALL[i]))))))
+        .add(choose("Text size", &[12.0, 14.0, 16.0, 17.0, 18.0, 20.0, 22.0, 24.0, 28.0, 32.0], d.text_size, " px", DisplayChange::TextSize))
+        .add(choose("Line spacing", &[1.2, 1.3, 1.4, 1.45, 1.5, 1.55, 1.6, 1.8, 2.0], d.line_height, "", DisplayChange::LineHeight))
+        .add(settings::item::builder("Text width").description("Maximum reading width in ems; Automatic fits the proof layout")
+            .control(widget::dropdown(widths, width_selected, move |i| set(Msg::Display(DisplayChange::Measure(width_values[i]))))))
+        .add(choose("Paragraph spacing", &[0.4, 0.65, 0.7, 0.9, 1.2, 1.5], d.paragraph_spacing, " em", DisplayChange::ParagraphSpacing))
+        .add(choose("Maths size", &[0.9, 1.0, 1.1, 1.21, 1.3, 1.5], d.math_scale, " × text", DisplayChange::MathScale))
+        .add(settings::item::builder("Justify paragraphs").toggler(d.justify, |v| set(Msg::Display(DisplayChange::Justify(v)))))
+        .add(settings::item::builder("Centre the column").toggler(d.centred, |v| set(Msg::Display(DisplayChange::Centred(v)))));
 
     let pause = st.editing.keyword_pause_ms;
     let editing = settings::section()
@@ -146,6 +171,7 @@ pub fn page(app: &App) -> Element<'_, Message> {
         .max_width(760)
         .push(head)
         .push(appearance)
+        .push(display)
         .push(editing)
         .push(proof_state)
         .push(llm)

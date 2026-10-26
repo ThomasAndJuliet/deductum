@@ -50,6 +50,10 @@ mod snapshot_tools;
 #[cfg(test)]
 mod ui_responsiveness;
 #[cfg(test)]
+mod ui_vnc;
+#[cfg(test)]
+mod ui_style_review;
+#[cfg(test)]
 mod live;
 #[cfg(test)]
 mod live_lean;
@@ -58,10 +62,14 @@ mod live_mixed;
 #[cfg(test)]
 mod live_tools;
 
-/// LaTeX's fonts, New Computer Modern, for the literate view's prose; see `res/fonts/README`
-pub const FONTS: [&[u8]; 5] = [
+/// The bundled prose fonts, shared with Cerea and Terminal; see `res/fonts/README`
+pub const FONTS: [&[u8]; 9] = [
     // Raised and lowered small glyphs for \<^sup> and \<^sub>; see res/deductum/make-scripts-font.py
     include_bytes!("../../../res/deductum/fonts/IsabellumScripts.ttf"),
+    include_bytes!("../../../res/fonts/LibertinusSerif-Regular.otf"),
+    include_bytes!("../../../res/fonts/LibertinusSerif-Bold.otf"),
+    include_bytes!("../../../res/fonts/LibertinusSerif-Italic.otf"),
+    include_bytes!("../../../res/fonts/LibertinusSerif-BoldItalic.otf"),
     include_bytes!("../../../res/fonts/NewCM10-Regular.otf"),
     include_bytes!("../../../res/fonts/NewCM10-Bold.otf"),
     include_bytes!("../../../res/fonts/NewCM10-Italic.otf"),
@@ -96,6 +104,10 @@ pub use new_session::NewSession;
 pub const APP_ID: &str = "dev.twright.Deductum";
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    #[cfg(test)]
+    if std::env::var_os("DEDUCTUM_VNC_FIXTURE").is_some() {
+        return ui_vnc::run();
+    }
     env_logger_init();
     prover::register_highlighters();
     let request = cli::parse(std::env::args().skip(1).collect());
@@ -148,6 +160,12 @@ pub enum LeftMode {
     Problems,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EditorTarget {
+    Source,
+    Block,
+}
+
 #[derive(Clone, Debug)]
 pub enum Message {
     Link(String, link::Event),
@@ -157,6 +175,13 @@ pub enum Message {
     OpenTheory(String),
     SetMode(Mode),
     SourceAction(Action),
+    SourcePage(u64, bool, bool),
+    SourcePageRows(u64, bool, bool, usize),
+    NavLayoutReady(u64, u64, bool),
+    NavPageReady(u64, u64, bool, bool, usize),
+    NavClipboardReady(u64, u64, EditorTarget, Option<String>),
+    NavOps(EditorTarget, Vec<vim::Op>),
+    NavBinding(EditorTarget, Box<cosmic::widget::text_editor::Binding<Message>>),
     BlockAction(Action),
     EditBlock(usize),
     CloseBlock,
@@ -200,6 +225,8 @@ pub enum Message {
     Unindent,
     /// A key for the vim machine (key, with Ctrl)
     Vim(String, bool),
+    /// Resolve an editor key against the Vim mode current when it is handled.
+    RawVim(EditorTarget, cosmic::widget::text_editor::KeyPress),
     ToggleVim,
     /// Open the session's folder in the file manager, Zed or a terminal
     OpenFolder(link::Opener),
@@ -207,7 +234,9 @@ pub enum Message {
     /// Copy (or cut, if true) the selection, as Isabelle source: symbols as escapes
     CopySelection(bool),
     /// A key nobody else took: vim's block navigation in the literate view
-    WindowKey(String, bool),
+    WindowKey(cosmic::widget::text_editor::KeyPress),
+    /// Input declined by a focused read-only message, mapped by its window.
+    ReadOnlyKey(cosmic::widget::text_editor::KeyPress),
     SetModeEntity(widget::segmented_button::Entity),
     SymbolSearch(String),
     /// A motion or selection in a message shown as code (it is read-only)
@@ -260,7 +289,7 @@ pub enum Message {
     StopToolsAgain(u8),
     /// Show the definition in its window in the main window; its window closed
     /// Up or down a line (true: down), past a block's ends into its neighbours
-    LineMove(bool),
+    LineMove(EditorTarget, bool),
     /// The goal beside the text, or under the proof with the page centred
     ToggleGoalBeside,
     /// The insert palette's search (the bar's above the goal too)
@@ -355,6 +384,13 @@ struct Navigation {
     record_back: bool,
 }
 
+/// A request to leave the current replica after its edits have reached the host.
+enum DeferredLeave {
+    Theory { path: String, nav: Option<Navigation>, goto: Option<usize> },
+    Session { machine: String, sid: String },
+    Close,
+}
+
 impl Navigation {
     fn current(&self, app: &App, machine: &str) -> bool {
         if self.machine != machine || self.serial.is_some_and(|n| app.nav_latest.get(&self.source) != Some(&n)) {
@@ -378,13 +414,13 @@ enum Pending {
     Symbols,
     SessionInfo(String),
     Read(String, String, Option<Navigation>),
-    Edit(String),
+    Edit(String, String),
     State(StateRequest),
     Query(&'static str),
     Fill,
     History(String),
-    ListDir,
-    Suggest,
+    ListDir(u64, String),
+    Suggest(u64, String),
     Create,
     Plain,
     /// An undo or redo: says what it did, and the app goes there
@@ -564,6 +600,14 @@ pub struct Workspace {
 }
 
 pub struct App {
+    deferred_leave: Option<DeferredLeave>,
+    nav_waiting: Option<(u64, u64)>,
+    nav_generation: u64,
+    nav_queue: std::collections::VecDeque<Message>,
+    nav_raw_dispatch: bool,
+    nav_target: Option<EditorTarget>,
+    nav_atomic: bool,
+    nav_reflow_pending: bool,
     core: Core,
     pub links: Vec<Link>,
     /// Ctrl is held (Ctrl+click goes to a definition)
@@ -623,9 +667,16 @@ impl App {
     fn vim_ops(&mut self, ops: Vec<vim::Op>) -> Task<Message> {
         use cosmic::widget::text_editor::{Action as A, Edit as E, Motion as M};
         let mut tasks = Vec::new();
-        for op in ops {
+        let mut remaining = ops.into_iter();
+        while let Some(op) = remaining.next() {
+            if self.nav_waiting.is_some() {
+                let mut rest = vec![op];
+                rest.extend(remaining);
+                self.nav_queue.push_back(Message::NavOps(self.nav_target.unwrap_or(EditorTarget::Block), rest));
+                return Task::batch(tasks);
+            }
             let Some(t) = self.workspace.as_ref().and_then(|w| w.theory.as_ref()) else { break };
-            let in_block = t.block_editor.is_some() && t.mode == Mode::Literate;
+            let in_block = self.nav_target.map_or(t.block_editor.is_some() && t.mode == Mode::Literate, |target| target == EditorTarget::Block);
             let act = |a: A| if in_block { Message::BlockAction(a) } else { Message::SourceAction(a) };
             // In the literate view j and k run on past a block's ends into its neighbours
             let crossing = match (&op, &t.block_editor) {
@@ -652,10 +703,38 @@ impl App {
                     .is_some_and(|be| editor::on_edge_row(&mut be.content, m == M::Down));
                 if !on_edge_row {
                     tasks.push(self.update(Message::BlockAction(A::Move(m))));
+                    if self.nav_waiting.is_some() {
+                        let rest: Vec<_> = remaining.collect();
+                        if !rest.is_empty() { self.nav_queue.push_back(Message::NavOps(self.nav_target.unwrap_or(EditorTarget::Block), rest)); }
+                        return Task::batch(tasks);
+                    }
                     let Some(t) = self.workspace.as_ref().and_then(|w| w.theory.as_ref()) else { break };
                     let Some(be) = &t.block_editor else { continue };
                     if be.content.cursor().position != before {
                         continue;
+                    }
+                    if be.kind == theory::Kind::Text && be.content.line(before.line).is_some_and(|line| before.column < line.text.len()) {
+                        // A cursor at a wrapped-row boundary can have Before affinity
+                        // after the Vim block cursor is removed. Step into the row and
+                        // retry instead of treating the unchanged motion as a block edge.
+                        tasks.push(self.update(Message::BlockAction(A::Move(M::Right))));
+                        if self.nav_waiting.is_some() {
+                            let mut rest = vec![vim::Op::Act(A::Move(m))];
+                            rest.extend(remaining);
+                            self.nav_queue.push_back(Message::NavOps(self.nav_target.unwrap_or(EditorTarget::Block), rest));
+                            return Task::batch(tasks);
+                        }
+                        let retry = self.workspace.as_ref().and_then(|w| w.theory.as_ref()).and_then(|t| t.block_editor.as_ref()).map(|be| be.content.cursor().position);
+                        tasks.push(self.update(Message::BlockAction(A::Move(m))));
+                        if self.nav_waiting.is_some() {
+                            let rest: Vec<_> = remaining.collect();
+                            if !rest.is_empty() { self.nav_queue.push_back(Message::NavOps(self.nav_target.unwrap_or(EditorTarget::Block), rest)); }
+                            return Task::batch(tasks);
+                        }
+                        let after = self.workspace.as_ref().and_then(|w| w.theory.as_ref()).and_then(|t| t.block_editor.as_ref()).map(|be| be.content.cursor().position);
+                        if after != retry {
+                            continue;
+                        }
                     }
                 }
                 let m = &m;
@@ -666,6 +745,12 @@ impl App {
                     && t.adjacent_paragraph(*m == M::Down, &*table)
                 {
                     tasks.push(view::centre_selected());
+                    if self.nav_raw_dispatch {
+                        let rest: Vec<_> = remaining.collect();
+                        if !rest.is_empty() { self.nav_queue.push_back(Message::NavOps(self.nav_target.unwrap_or(EditorTarget::Block), rest)); }
+                        tasks.push(self.nav_wait_layout());
+                        return Task::batch(tasks);
+                    }
                     continue;
                 }
                 let Some(t) = self.workspace.as_ref().and_then(|w| w.theory.as_ref()) else { break };
@@ -679,15 +764,31 @@ impl App {
                             && let Some(be) = &mut t.block_editor
                         {
                             be.content.perform(A::Move(if down { M::DocumentStart } else { M::DocumentEnd }));
-                            if !down {
+                            // A newly opened prose editor has not been laid out yet. Home
+                            // would go to the start of its whole logical paragraph, skipping
+                            // the wrapped rows we are entering from below.
+                            if !down && be.kind != theory::Kind::Text {
                                 be.content.perform(A::Move(M::Home));
                             }
+                            t.sync_block_cursor();
                         }
                         tasks.push(view::centre_selected());
+                        if self.nav_raw_dispatch {
+                            let rest: Vec<_> = remaining.collect();
+                            if !rest.is_empty() { self.nav_queue.push_back(Message::NavOps(self.nav_target.unwrap_or(EditorTarget::Block), rest)); }
+                            tasks.push(self.nav_wait_layout());
+                            return Task::batch(tasks);
+                        }
                         continue;
                     }
                 }
                 // (the first or last block: the move was made, and was nowhere to go)
+                if let Some(t) = self.workspace.as_mut().and_then(|w| w.theory.as_mut())
+                    && let Some(be) = &mut t.block_editor
+                {
+                    editor::place(&mut be.content, before);
+                    t.sync_block_cursor();
+                }
                 continue;
             }
             match op {
@@ -749,9 +850,109 @@ impl App {
         }
         Task::batch(tasks)
     }
+
+    fn nav_wait_layout(&mut self) -> Task<Message> {
+        let Some(scope) = self.workspace.as_ref().and_then(|w| w.theory.as_ref()).map(|t| t.page_scope) else { return Task::none() };
+        self.nav_generation = self.nav_generation.wrapping_add(1);
+        let generation = self.nav_generation;
+        self.nav_waiting = Some((scope, generation));
+        view::navigation_layout(scope, generation)
+    }
+
+    /// Stopping work does not wait for an editor's layout or clipboard continuation.
+    fn escape_stop(&mut self) -> Option<Task<Message>> {
+        let ws = self.workspace.as_ref()?;
+        if flow::report(ws).is_some_and(|report| report.running && report.stoppable) {
+            return Some(self.update(Message::StopTools));
+        }
+        if view::fill_here(ws) && matches!(ws.fill.status.as_str(), "asking" | "checking" | "starting") {
+            return Some(self.update(Message::FillDismiss));
+        }
+        None
+    }
+
+    fn nav_wait_clipboard(&mut self, target: EditorTarget) -> Task<Message> {
+        let Some(scope) = self.workspace.as_ref().and_then(|w| w.theory.as_ref()).map(|t| t.page_scope) else { return Task::none() };
+        self.nav_generation = self.nav_generation.wrapping_add(1);
+        let generation = self.nav_generation;
+        self.nav_waiting = Some((scope, generation));
+        cosmic::iced::clipboard::read().map(move |text| cosmic::Action::App(Message::NavClipboardReady(scope, generation, target, text)))
+    }
+
+    fn nav_drain(&mut self) -> Task<Message> {
+        let mut tasks = Vec::new();
+        while self.nav_waiting.is_none() {
+            let Some(message) = self.nav_queue.pop_front() else { break };
+            let target = match &message {
+                Message::RawVim(target, _) | Message::NavOps(target, _) | Message::NavBinding(target, _) | Message::LineMove(target, _) => Some(*target),
+                Message::SourceAction(..) => Some(EditorTarget::Source),
+                Message::BlockAction(..) => Some(EditorTarget::Block),
+                _ => None,
+            };
+            let hidden_editor = target.is_some_and(|target| !self.nav_target_visible(target))
+                || ((self.shell.settings_open || self.new_session.is_some()) && matches!(&message, Message::Vim(..)));
+            if hidden_editor {
+                self.status = Some("Editor input was not applied because its editor is no longer visible".into());
+                continue;
+            }
+            // Nested actions from this intent must precede later user input.
+            let mut later = std::mem::take(&mut self.nav_queue);
+            let scope = self.workspace.as_ref().and_then(|w| w.theory.as_ref()).map(|t| t.page_scope);
+            let leaving = match &message {
+                Message::OpenTheory(path) => self.workspace.as_ref().and_then(|w| w.theory.as_ref()).is_some_and(|t| &t.path != path),
+                Message::OpenSession(machine, sid) => self.workspace.as_ref().is_some_and(|w| &w.machine != machine || &w.sid != sid),
+                Message::CloseWorkspace => true,
+                _ => false,
+            };
+            tasks.push(self.update(message));
+            if leaving || self.workspace.as_ref().and_then(|w| w.theory.as_ref()).map(|t| t.page_scope) != scope {
+                let count = later.len();
+                later.retain(|message| !Self::nav_editor_intent(message));
+                if later.len() != count { self.status = Some("Pending editor input cancelled because the document changed".into()); }
+            }
+            self.nav_queue.append(&mut later);
+        }
+        Task::batch(tasks)
+    }
+
+    fn nav_target_visible(&self, target: EditorTarget) -> bool {
+        if self.shell.settings_open || self.new_session.is_some() || self.deferred_leave.is_some() { return false }
+        self.workspace.as_ref().is_some_and(|w| w.theory.as_ref().is_some_and(|t| {
+            if w.opening.as_ref().is_some_and(|path| path != &t.path) { return false }
+            match target {
+                EditorTarget::Source => t.mode == Mode::Source,
+                EditorTarget::Block => t.block_editor.is_some() && (t.mode == Mode::Literate || self.popout.is_some()),
+            }
+        }))
+    }
+
+    fn nav_editor_intent(message: &Message) -> bool {
+        matches!(message, Message::RawVim(..) | Message::Vim(..) | Message::NavOps(..) | Message::NavBinding(..)
+            | Message::SourceAction(..) | Message::BlockAction(..) | Message::SourcePage(..) | Message::SourcePageRows(..)
+            | Message::LineMove(..) | Message::Newline | Message::Unindent | Message::Undo | Message::Redo
+            | Message::CopySelection(..) | Message::Complete(..) | Message::InsertSymbol(..) | Message::WindowKey(..)
+            | Message::Escape | Message::DeleteBlock(..) | Message::InsertBlock(..) | Message::Wrap(..)
+            | Message::InsertProof(..) | Message::InsertFill(..) | Message::InsertUsing | Message::InsertOutput(..)
+            | Message::BlockClickAt(..))
+    }
 }
 
 impl App {
+    fn leave_ready(&self) -> bool {
+        let Some(ws) = &self.workspace else { return true };
+        let Some(t) = &ws.theory else { return true };
+        t.settled() && t.queued.is_empty()
+            && !self.pending.values().any(|(machine, pending)| machine == &ws.machine && matches!(pending, Pending::Undo))
+    }
+
+    /// Keep the current replica and its subscription until every local edit is confirmed.
+    fn defer_leave(&mut self, leave: DeferredLeave) -> bool {
+        if self.leave_ready() { return false }
+        self.deferred_leave = Some(leave);
+        self.status = Some("Waiting for edits to reach the host before switching documents".into());
+        true
+    }
+
     fn link(&self, key: &str) -> Option<&Link> {
         self.links.iter().find(|l| l.target.key == key)
     }
@@ -851,10 +1052,13 @@ impl App {
                 if let Some(ws) = &self.workspace
                     && ws.machine == key
                 {
-                    let (sid, path) = (ws.sid.clone(), ws.theory.as_ref().map(|t| t.path.clone()));
+                    let (sid, theory) = (ws.sid.clone(), ws.theory.as_ref().map(|t| (t.path.clone(), t.inflight_edit.as_ref().map(|_| t.confirmed_rev), t.durability_pending.iter().filter(|id| t.inflight_edit.as_ref().is_none_or(|e| &e.identity != *id)).cloned().collect::<Vec<_>>())));
                     self.send(&key, "session_info", json!({"session": sid}), Pending::SessionInfo(sid.clone()));
-                    if let Some(path) = path {
-                        self.send(&key, "read", json!({"session": sid, "path": path}), Pending::Read(sid, path, None));
+                    if let Some((path, since, receipts)) = theory {
+                        let mut params = json!({"session": sid, "path": path});
+                        if let Some(revision) = since { params["since_revision"] = json!(revision); }
+                        if !receipts.is_empty() { params["receipt_ids"] = json!(receipts); }
+                        self.send(&key, "read", params, Pending::Read(sid, path, None));
                     }
                 }
             }
@@ -882,6 +1086,20 @@ impl App {
     }
 
     fn on_reply(&mut self, machine: String, pending: Pending, v: Value) -> Task<Message> {
+        if let Pending::Read(sid, _, _) = &pending
+            && !self.workspace.as_ref().is_some_and(|ws| ws.machine == machine && ws.sid == *sid)
+        {
+            return Task::none();
+        }
+        if let Pending::ListDir(generation, path) | Pending::Suggest(generation, path) = &pending {
+            let current = self.new_session.as_ref().is_some_and(|ns| {
+                ns.generation == *generation && ns.folder == *path
+                    && self.links.get(ns.machine).is_some_and(|link| link.target.key == machine)
+            });
+            if !current {
+                return Task::none();
+            }
+        }
         let navigation = match &pending {
             Pending::Definition(_, nav) | Pending::RefInfo(_, _, nav) => Some(nav),
             Pending::RefRead(_, _, nav) | Pending::Read(_, _, nav) => nav.as_ref(),
@@ -905,20 +1123,41 @@ impl App {
             }
         }
         if v["ok"] != json!(true) {
+            let failed_opening = match &pending {
+                Pending::Read(_, path, _) => self.workspace.as_ref().is_some_and(|ws| ws.opening.as_ref() == Some(path)),
+                _ => false,
+            };
             if let Pending::Read(_, path, Some(nav)) = &pending {
                 self.clear_navigation_loading(&machine, path, nav);
             }
             let error = v["error"].as_str().unwrap_or("error").to_string();
             match pending {
-                Pending::Edit(_) => {
-                    // The replica is out of step: read the theory again
-                    if let Some(ws) = &self.workspace
-                        && let Some(t) = &ws.theory
-                    {
-                        let (sid, path) = (ws.sid.clone(), t.path.clone());
+                Pending::Read(_, _, _) if failed_opening => {
+                    let old = self.workspace.as_mut().and_then(|ws| {
+                        ws.opening = None;
+                        ws.pending_goto = None;
+                        ws.theory.as_ref().map(|t| (ws.sid.clone(), t.path.clone()))
+                    });
+                    self.status = Some(error);
+                    // The previous `close` only unsubscribed; re-read it to restore its stream.
+                    if let Some((sid, path)) = old {
                         self.send(&machine, "read", json!({"session": sid, "path": path}), Pending::Read(sid, path, None));
                     }
+                    return Task::none();
+                }
+                Pending::Undo => {
                     self.status = Some(error);
+                    return self.flush_edits();
+                }
+                Pending::Edit(path, identity) => {
+                    if !self.workspace.as_ref().filter(|w| w.machine == machine).and_then(|w| w.theory.as_ref()).is_some_and(|t| t.path == path && t.durability_pending.contains(&identity)) { return Task::none(); }
+                    // A refused identified edit remains available locally. Do not retry
+                    // automatically after a refusal (which could loop on a stale base).
+                    if let Some(t) = self.workspace.as_mut().and_then(|w| w.theory.as_mut()) {
+                        if t.inflight_edit.as_ref().is_some_and(|e| e.identity == identity) { t.inflight = None; }
+                        t.durability_error = true;
+                    }
+                    self.status = Some(format!("Edit not confirmed: {error}. Your local document remains open."));
                 }
                 Pending::State(request) => {
                     if request.is_current(self, &machine) && let Some(ws) = &mut self.workspace {
@@ -944,7 +1183,7 @@ impl App {
                         ws.fill.error = Some(error);
                     }
                 }
-                Pending::Create | Pending::Suggest | Pending::ListDir => {
+                Pending::Create | Pending::Suggest(..) | Pending::ListDir(..) => {
                     if let Some(ns) = &mut self.new_session {
                         ns.error = Some(error);
                         // (no detections will come: the cards offer every backend)
@@ -1007,10 +1246,50 @@ impl App {
                 }
             }
             Pending::Read(sid, path, nav) => {
+                if !self.workspace.as_ref().is_some_and(|ws| ws.machine == machine && ws.sid == sid) { return Task::none(); }
+                if let Some(t) = self.workspace.as_mut().and_then(|ws| ws.theory.as_mut()).filter(|t| t.path == path) {
+                    let required: Vec<_> = t.durability_pending.iter().filter(|id| t.inflight_edit.as_ref().is_none_or(|e| &e.identity != *id)).cloned().collect();
+                    if !required.is_empty() {
+                        let Some(receipts) = v["edit_receipts"].as_array() else {
+                            self.status = Some("Edit durability could not be confirmed; your local document remains open.".into()); return Task::none();
+                        };
+                        if required.iter().any(|id| !receipts.iter().any(|v| v.as_str() == Some(id))) {
+                            self.status = Some("Edit durability could not be confirmed; your local document remains open.".into()); return Task::none();
+                        }
+                        t.durability_pending.retain(|id| !required.contains(id));
+                    }
+                }
+                let current = self.workspace.as_ref().and_then(|ws| ws.theory.as_ref()).map(|t| t.path.clone());
+                if current.as_ref().is_some_and(|old| old != &path) {
+                    if self.deferred_leave.is_some() || self.workspace.as_ref().and_then(|ws| ws.opening.as_ref()).is_some_and(|opening| opening != &path) {
+                        return Task::none();
+                    }
+                    if !self.leave_ready() {
+                        let goto = self.workspace.as_mut().and_then(|ws| { ws.opening = None; ws.pending_goto.take() });
+                        self.defer_leave(DeferredLeave::Theory { path, nav, goto });
+                        return self.flush_edits();
+                    }
+                }
                 if nav.as_ref().is_some_and(|n| n.record_back)
                     && let Some(t) = self.workspace.as_ref().and_then(|w| w.theory.as_ref())
                 {
                     self.back.push((t.path.clone(), Self::host_offset(t, t.cursor)));
+                }
+                if self.workspace.as_ref().and_then(|ws| ws.theory.as_ref()).is_some_and(|t| {
+                    t.path == path && t.inflight.is_none() && t.inflight_unknown
+                }) {
+                    return self.recover_edit(machine, sid, path, &v);
+                }
+                // A newer event may have arrived while this snapshot was in flight.
+                // Receipts above remain useful, but the older text must not replace it.
+                if self.workspace.as_ref().and_then(|ws| ws.theory.as_ref()).is_some_and(|t| {
+                    t.path == path && v["doc"]["revision"].as_u64().is_some_and(|revision| revision < t.confirmed_rev)
+                }) {
+                    let goto = self.workspace.as_mut().and_then(|ws| {
+                        if ws.opening.as_deref() == Some(path.as_str()) { ws.opening = None; ws.pending_goto.take() } else { None }
+                    });
+                    if let Some(at) = goto { return Task::batch([self.flush_edits(), self.update(Message::Goto(at))]); }
+                    return self.flush_edits();
                 }
                 let table = self.table(&machine);
                 let kinds = self.kinds.clone();
@@ -1026,6 +1305,7 @@ impl App {
                         Some(m) => m,
                         None => Mode::Literate,
                     };
+                    self.mode_model.activate(self.mode_entities[if mode == Mode::Source { 1 } else { 0 }]);
                     let doc = &v["doc"];
                     let real = doc["path"].as_str().unwrap_or(&path).to_string();
                     // Typing the host hasn't confirmed (a reconnect, a resync) is kept,
@@ -1044,10 +1324,12 @@ impl App {
                         theory.replace_change(&rebased, &*table);
                     }
                     ws.theory = Some(theory);
-                    ws.opening = None;
+                    let goto = if ws.opening.as_deref() == Some(path.as_str()) {
+                        ws.opening = None;
+                        ws.pending_goto.take()
+                    } else { None };
                     ws.output = None;
                     ws.notes.clear();
-                    let goto = ws.pending_goto.take();
                     let sid = ws.sid.clone();
                     self.send(&machine, "history", json!({"session": sid, "path": path, "limit": 60}), Pending::History(sid.clone()));
                     self.send(&machine, "notes", json!({"session": sid, "path": path}), Pending::Notes);
@@ -1057,7 +1339,22 @@ impl App {
                 }
                 return Task::batch([self.flush_edits(), self.retitle()]);
             }
-            Pending::Edit(_) => {}
+            Pending::Edit(path, identity) => {
+                if let Some(t) = self.workspace.as_mut().filter(|w| w.machine == machine).and_then(|w| w.theory.as_mut()).filter(|t| t.path == path) {
+                    t.durability_pending.retain(|item| item != &identity);
+                }
+                if v["duplicate"] == json!(true)
+                    && let Some(ws) = &mut self.workspace
+                    && let Some(t) = &mut ws.theory
+                    && t.path == path
+                    && t.inflight_edit.as_ref().is_some_and(|e| e.identity == identity)
+                {
+                    let (sid, base) = (ws.sid.clone(), t.confirmed_rev);
+                    t.inflight = None;
+                    self.send(&machine, "read", json!({"session": sid, "path": path, "since_revision": base}), Pending::Read(sid, path, None));
+                }
+                return self.flush_edits();
+            }
             Pending::State(request) => {
                 if request.is_current(self, &machine)
                     && let Some(ws) = &mut self.workspace
@@ -1106,7 +1403,7 @@ impl App {
                     ws.history = v["history"].as_array().cloned().unwrap_or_default();
                 }
             }
-            Pending::ListDir => {
+            Pending::ListDir(generation, _) => {
                 if let Some(ns) = &mut self.new_session {
                     ns.folder = v["path"].as_str().unwrap_or("").to_string();
                     ns.listing = Some(v);
@@ -1114,10 +1411,10 @@ impl App {
                     ns.error = None;
                     let folder = ns.folder.clone();
                     let machine = self.links.get(ns.machine).map(|l| l.target.key.clone()).unwrap_or_default();
-                    self.send(&machine, "suggest", json!({"folder": folder}), Pending::Suggest);
+                    self.send(&machine, "suggest", json!({"folder": folder}), Pending::Suggest(generation, folder.clone()));
                 }
             }
-            Pending::Suggest => {
+            Pending::Suggest(..) => {
                 // (nothing detected and one backend on the machine, as with an older host: it)
                 let only = self.new_session.as_ref().map(|ns| self.backends(ns.machine)).filter(|b| b.len() == 1).and_then(|b| b[0]["backend"].as_str().map(str::to_string));
                 if let Some(ns) = &mut self.new_session {
@@ -1258,7 +1555,11 @@ impl App {
             "session_removed" => {
                 if let Some(id) = v["session"].as_str() {
                     self.sessions.remove(&(machine.clone(), id.to_string()));
-                    if self.workspace.as_ref().is_some_and(|w| w.sid == id) {
+                    if self.workspace.as_ref().is_some_and(|w| w.machine == machine && w.sid == id) {
+                        if !self.leave_ready() {
+                            self.status = Some("Session removed; unconfirmed edits remain in this window".into());
+                            return Task::none();
+                        }
                         self.workspace = None;
                         return self.retitle();
                     }
@@ -1302,8 +1603,13 @@ impl App {
                         })
                         .unwrap_or_default();
                     let revision = v["revision"].as_u64().unwrap_or(0);
-                    let mine = v["client"].as_str().is_some() && v["client"].as_str() == client_id.as_deref();
-                    let request = v["request"].as_u64();
+                    if t.inflight.is_none() && t.inflight_edit.is_some() {
+                        t.recovery_revision = t.recovery_revision.max(revision);
+                        return Task::none();
+                    }
+                    let by_identity = t.inflight_edit.as_ref().is_some_and(|edit| v["entry"]["edit_id"].as_str() == Some(edit.identity.as_str()));
+                    let mine = by_identity || (v["client"].as_str().is_some() && v["client"].as_str() == client_id.as_deref());
+                    let request = if by_identity { t.inflight } else { v["request"].as_u64() };
                     if !t.committed(revision, &change, request, mine, &*table) {
                         resync = Some((ws.sid.clone(), t.path.clone()));
                     }
@@ -1485,29 +1791,152 @@ impl App {
             .filter(|t| Some(t.path.as_str()) == v["path"].as_str())
     }
 
+    /// Reconcile a lost acknowledgement against a contiguous host history, without
+    /// interpreting equal text as proof of who made an edit.
+    fn recover_edit(&mut self, machine: String, sid: String, path: String, value: &Value) -> Task<Message> {
+        let Some(t) = self.workspace.as_ref().and_then(|w| w.theory.as_ref()) else { return Task::none() };
+        let Some(edit) = t.inflight_edit.clone() else { return Task::none() };
+        let unknown = "The connection was lost while an edit was awaiting acknowledgement; its outcome is unknown. Your local document remains open.";
+        let revision = value["doc"]["revision"].as_u64().unwrap_or(0);
+        if revision < t.recovery_revision {
+            self.send(&machine, "read", json!({"session": sid, "path": path, "since_revision": t.confirmed_rev}), Pending::Read(sid, path, None));
+            return Task::none();
+        }
+        let Some(entries) = value["edit_history"]["entries"].as_array().filter(|_| edit.supported && value["edit_history"]["complete"] == json!(true)) else {
+            self.status = Some(unknown.into()); return Task::none();
+        };
+        // OT works on whole strings. Bound synchronous replay so a large retained
+        // history cannot monopolise the interface; preserve the replica if exceeded.
+        if entries.len() > 128 || t.confirmed.len().saturating_mul(entries.len().max(1)) > 2_000_000 {
+            self.status = Some("Edit recovery needs a larger history; your local document remains open.".into());
+            return Task::none();
+        }
+        let mut expected = t.confirmed_rev;
+        let mut text = t.confirmed.clone();
+        let mut changes = Vec::new();
+        let mut work = 0usize;
+        let mut own_count = 0;
+        for entry in entries {
+            expected += 1;
+            if entry["rev"].as_u64() != Some(expected) { self.status = Some(unknown.into()); return Task::none(); }
+            let Some(parts) = entry["change"].as_array() else { self.status = Some(unknown.into()); return Task::none() };
+            let change: Option<ot::Change> = parts.iter().map(|c| Some((c[0].as_u64()? as usize, c[1].as_u64()? as usize, c[2].as_str()?.to_string()))).collect();
+            let Some(change) = change else { self.status = Some(unknown.into()); return Task::none() };
+            work = work.saturating_add(text.len()).saturating_add(change.iter().map(|(_, _, text)| text.len()).sum::<usize>());
+            if work > 2_000_000 { self.status = Some("Edit recovery needs a larger history; your local document remains open.".into()); return Task::none(); }
+            let mut end = 0;
+            let length = text.chars().count();
+            for (start, stop, _) in &change {
+                if *start < end || *start > *stop || *stop > length { self.status = Some(unknown.into()); return Task::none(); }
+                end = *stop;
+            }
+            let own = entry["edit_id"].as_str() == Some(edit.identity.as_str());
+            own_count += usize::from(own);
+            if own_count > 1 { self.status = Some(unknown.into()); return Task::none(); }
+            text = ot::apply(&text, &change);
+            changes.push((expected, change, own));
+        }
+        if expected != revision || value["doc"]["text"].as_str() != Some(text.as_str()) {
+            self.status = Some(unknown.into()); return Task::none();
+        }
+        let table = self.table(&machine);
+        let t = self.workspace.as_mut().and_then(|w| w.theory.as_mut()).unwrap();
+        t.inflight = Some(edit.request);
+        let mut found = false;
+        for (rev, change, own) in changes {
+            if own { found = true; }
+            t.committed(rev, &change, Some(edit.request), own, &*table);
+        }
+        t.recovery_revision = 0;
+        if found { t.durability_pending.retain(|id| id != &edit.identity); }
+        if !found {
+            let id = self.next_id + 1;
+            let t = self.workspace.as_mut().and_then(|w| w.theory.as_mut()).unwrap();
+            t.inflight = Some(id);
+            if let Some(current) = &mut t.inflight_edit { current.request = id; }
+            let edits: Vec<Value> = edit.change.iter().map(|(s, e, text)| json!({"start": s, "end": e, "text": text})).collect();
+            let sent = self.send(&machine, "edit", json!({"session": sid, "path": path, "revision": edit.revision, "edits": edits, "txn": edit.txn, "request": id, "edit_id": edit.identity, "policy": "merge"}), Pending::Edit(path, edit.identity));
+            if !self.pending.contains_key(&sent) {
+                if let Some(t) = self.workspace.as_mut().and_then(|w| w.theory.as_mut()) { t.inflight = None; }
+            }
+            return Task::none();
+        }
+        self.flush_edits()
+    }
+
     /// Send the next edit, if any
     fn flush_edits(&mut self) -> Task<Message> {
+        // Compound edits must be sent as a whole, including when a send fails.
+        if self.nav_atomic { return Task::none() }
         let Some(ws) = &self.workspace else { return Task::none() };
         let machine = ws.machine.clone();
         let sid = ws.sid.clone();
+        // `outgoing` marks an edit in flight; never do that if it cannot be sent.
+        if self.link(&machine).and_then(|link| link.sender.as_ref()).is_none_or(|sender| sender.is_closed()) {
+            return Task::none();
+        }
         let id = self.next_id + 1;
+        let identity_supported = self.link(&machine).and_then(|l| l.hello.as_ref()).is_some_and(|h| h["edit_identity"] == json!(true));
         let Some(t) = self.workspace.as_mut().and_then(|w| w.theory.as_mut()) else { return Task::none() };
+        if t.inflight.is_none() && t.inflight_unknown {
+            return Task::none();
+        }
         if let Some((revision, change, txn)) = t.outgoing(id) {
             let path = t.path.clone();
+            let retry_text = ot::apply(&t.confirmed, &change);
+            let retry_txn = txn.clone();
+            use chacha20poly1305::aead::rand_core::{OsRng, RngCore};
+            let mut bytes = [0u8; 16];
+            OsRng.fill_bytes(&mut bytes);
+            let identity = bytes.iter().map(|b| format!("{b:02x}")).collect::<String>();
+            t.inflight_edit = Some(editor::InflightEdit { identity: identity.clone(), revision, change: change.clone(), txn: txn.clone(), request: id, supported: identity_supported });
+            t.durability_pending.push(identity.clone());
             let edits: Vec<Value> = change.iter().map(|(s, e, text)| json!({"start": s, "end": e, "text": text})).collect();
             let sent = self.send(
                 &machine,
                 "edit",
-                json!({"session": sid, "path": path, "revision": revision, "edits": edits, "txn": txn, "request": id, "policy": "merge"}),
-                Pending::Edit(path),
+                json!({"session": sid, "path": path, "revision": revision, "edits": edits, "txn": txn, "request": id, "edit_id": identity, "policy": "merge"}),
+                Pending::Edit(path, identity.clone()),
             );
             debug_assert_eq!(sent, id);
+            if !self.pending.contains_key(&id)
+                && let Some(t) = self.workspace.as_mut().and_then(|w| w.theory.as_mut()).filter(|t| t.inflight == Some(id))
+            {
+                t.inflight = None;
+                t.inflight_unknown = false;
+                t.inflight_edit = None;
+                t.durability_pending.retain(|item| item != &identity);
+                t.steps.push_front((retry_txn, retry_text));
+            }
         } else if t.settled()
             && let Some(op) = t.queued.pop_front()
         {
             // An undo or redo waits for the edits typed before it
             let path = t.path.clone();
-            self.send(&machine, op, json!({"session": sid, "path": path}), Pending::Undo);
+            let sent = self.send(&machine, op, json!({"session": sid, "path": path}), Pending::Undo);
+            if !self.pending.contains_key(&sent)
+                && let Some(t) = self.workspace.as_mut().and_then(|w| w.theory.as_mut())
+            {
+                t.queued.push_front(op);
+            }
+        }
+        if self.deferred_leave.is_some() && self.leave_ready() {
+            let leave = self.deferred_leave.take().unwrap();
+            if self.status.as_deref() == Some("Waiting for edits to reach the host before switching documents") {
+                self.status = None;
+            }
+            return match leave {
+                DeferredLeave::Theory { path, nav, goto } => {
+                    if nav.as_ref().is_some_and(|n| !n.current(self, &machine)) {
+                        self.status = Some("Navigation cancelled because its source changed while edits were saved".into());
+                        Task::none()
+                    } else {
+                        self.open_theory(path, nav, goto)
+                    }
+                }
+                DeferredLeave::Session { machine, sid } => self.update(Message::OpenSession(machine, sid)),
+                DeferredLeave::Close => self.update(Message::CloseWorkspace),
+            };
         }
         Task::none()
     }
@@ -1662,7 +2091,7 @@ impl App {
         let normal = self.vim.mode == vim::Mode::Normal;
         let was = std::mem::replace(&mut self.vim_block, false);
         let Some(t) = self.workspace.as_mut().and_then(|w| w.theory.as_mut()) else { return };
-        let in_block = t.block_editor.is_some() && t.mode == Mode::Literate;
+        let in_block = self.nav_target.map_or(t.block_editor.is_some() && t.mode == Mode::Literate, |target| target == EditorTarget::Block);
         let content = match &mut t.block_editor {
             Some(be) if in_block => &mut be.content,
             _ => &mut t.source,
@@ -1717,6 +2146,84 @@ impl App {
     /// editor should show one)
     fn unfocus_all() -> Task<Message> {
         cosmic::iced::advanced::widget::operate(cosmic::iced::advanced::widget::operation::focusable::unfocus())
+    }
+
+    /// Resolve a queued key using the mode and completion state at replay time.
+    fn dispatch_raw_vim(&mut self, target: EditorTarget, press: cosmic::widget::text_editor::KeyPress) -> Task<Message> {
+        let completing = self.workspace.as_ref().and_then(|w| w.theory.as_ref()).is_some_and(|t| !t.completions.is_empty());
+        let mode = self.vim_enabled.then_some(self.vim.mode);
+        if target == EditorTarget::Source && (mode.is_none() || mode == Some(vim::Mode::Insert))
+            && !press.modifiers.control() && !press.modifiers.alt() && !press.modifiers.logo()
+            && let cosmic::iced::keyboard::Key::Named(key) = press.key.as_ref()
+            && let Some(down) = match key {
+                cosmic::iced::keyboard::key::Named::PageUp => Some(false),
+                cosmic::iced::keyboard::key::Named::PageDown => Some(true),
+                _ => None,
+            }
+            && let Some(scope) = self.workspace.as_ref().and_then(|w| w.theory.as_ref()).map(|t| t.page_scope)
+        {
+            return self.update(Message::SourcePage(scope, down, press.modifiers.shift()));
+        }
+        match view::resolve_key_binding(press, completing, mode, target) {
+            Some(binding) => self.dispatch_editor_binding(target, binding),
+            None => Task::none(),
+        }
+    }
+
+    fn dispatch_editor_binding(&mut self, target: EditorTarget, binding: cosmic::widget::text_editor::Binding<Message>) -> Task<Message> {
+        use cosmic::widget::text_editor::{Action as A, Binding as B, Edit as E};
+        let in_block = target == EditorTarget::Block;
+        let action = |a| if in_block { Message::BlockAction(a) } else { Message::SourceAction(a) };
+        match binding {
+            B::Custom(Message::CopySelection(cut)) => self.copy_editor_selection(target, cut),
+            B::Custom(message) => self.update(message),
+            B::Unfocus => Self::unfocus_all(),
+            B::Copy => self.copy_editor_selection(target, false),
+            B::Cut => self.copy_editor_selection(target, true),
+            B::Paste => self.nav_wait_clipboard(target),
+            B::Move(motion) => self.update(action(A::Move(motion))),
+            B::Select(motion) => self.update(action(A::Select(motion))),
+            B::SelectWord => self.update(action(A::SelectWord)),
+            B::SelectLine => self.update(action(A::SelectLine)),
+            B::SelectAll => self.update(action(A::SelectAll)),
+            B::Insert(c) => self.update(action(A::Edit(E::Insert(c)))),
+            B::Enter => self.update(action(A::Edit(E::Enter))),
+            B::Backspace => self.update(action(A::Edit(E::Backspace))),
+            B::Delete => self.update(action(A::Edit(E::Delete))),
+            B::Sequence(bindings) => {
+                let mut pending = bindings.into_iter();
+                let mut task = Task::none();
+                while let Some(binding) = pending.next() {
+                    if self.nav_waiting.is_some() {
+                        let mut rest = vec![binding];
+                        rest.extend(pending);
+                        for binding in rest {
+                            self.nav_queue.push_back(Message::NavBinding(target, Box::new(binding)));
+                        }
+                        break;
+                    }
+                    task = task.chain(self.dispatch_editor_binding(target, binding));
+                }
+                task
+            }
+        }
+    }
+
+    fn copy_editor_selection(&mut self, target: EditorTarget, cut: bool) -> Task<Message> {
+        let Some(machine) = self.workspace.as_ref().map(|w| w.machine.clone()) else { return Task::none() };
+        let table = self.table(&machine);
+        let Some(t) = self.workspace.as_ref().and_then(|w| w.theory.as_ref()) else { return Task::none() };
+        let selected = match target {
+            EditorTarget::Block => t.block_editor.as_ref().and_then(|be| be.content.selection()),
+            EditorTarget::Source => t.source.selection(),
+        };
+        let Some(selected) = selected else { return Task::none() };
+        let mut tasks = vec![cosmic::iced::clipboard::write(table.encode(&selected.replace('\u{200B}', "")))];
+        if cut {
+            let delete = Action::Edit(cosmic::widget::text_editor::Edit::Delete);
+            tasks.push(self.update(match target { EditorTarget::Block => Message::BlockAction(delete), EditorTarget::Source => Message::SourceAction(delete) }));
+        }
+        Task::batch(tasks)
     }
 
     /// A rejected read releases loading only while it still owns the pending opening.
@@ -1909,6 +2416,15 @@ impl App {
     /// Read a theory while retaining the originating navigation until the reply arrives.
     fn open_theory(&mut self, path: String, nav: Option<Navigation>, goto: Option<usize>) -> Task<Message> {
         let Some((machine, sid)) = self.workspace_ids() else { return Task::none() };
+        let current = self.workspace.as_ref().and_then(|ws| ws.theory.as_ref()).map(|t| t.path.as_str());
+        if current == Some(path.as_str()) && self.deferred_leave.is_some() && nav.is_none() {
+            self.deferred_leave = None;
+            if self.status.as_deref() == Some("Waiting for edits to reach the host before switching documents") { self.status = None; }
+            return Task::none();
+        }
+        if current.is_some_and(|old| old != path) && self.defer_leave(DeferredLeave::Theory { path: path.clone(), nav: nav.clone(), goto }) {
+            return self.flush_edits();
+        }
         if nav.is_none() {
             self.nav_serial += 1;
             self.nav_latest.insert(None, self.nav_serial);
@@ -2070,6 +2586,14 @@ impl cosmic::Application for App {
         mode_model.activate(lit);
         let mode_entities = [lit, src];
         let mut app = App {
+            deferred_leave: None,
+            nav_waiting: None,
+            nav_generation: 0,
+            nav_queue: Default::default(),
+            nav_raw_dispatch: false,
+            nav_target: None,
+            nav_atomic: false,
+            nav_reflow_pending: false,
             core,
             links,
             ctrl: false,
@@ -2166,17 +2690,17 @@ impl cosmic::Application for App {
             if let cosmic::iced::Event::Window(cosmic::iced::window::Event::Resized(size)) = event {
                 return Some(Message::WindowWidth(size.width));
             }
-            let cosmic::iced::Event::Keyboard(Key::KeyPressed { key, modifiers, .. }) = event else { return None };
+            let cosmic::iced::Event::Keyboard(Key::KeyPressed { key, modified_key, physical_key, modifiers, text, .. }) = event else { return None };
             match key.as_ref() {
                 K::Character("=" | "+") if modifiers.command() => Some(Message::Zoom(1)),
                 K::Character("-") if modifiers.command() => Some(Message::Zoom(-1)),
                 K::Character("0") if modifiers.command() => Some(Message::Zoom(0)),
                 K::Character(",") if modifiers.command() => Some(Message::Shell(shell::Msg::ToggleSettings)),
                 K::Named(cosmic::iced::keyboard::key::Named::ArrowLeft) if modifiers.alt() => Some(Message::Back),
-                K::Character(c) if !modifiers.alt() && !modifiers.logo() => Some(Message::WindowKey(c.to_string(), modifiers.control())),
-                K::Named(cosmic::iced::keyboard::key::Named::Enter) => Some(Message::WindowKey("Enter".into(), false)),
-                K::Named(cosmic::iced::keyboard::key::Named::ArrowDown) => Some(Message::WindowKey("Down".into(), false)),
-                K::Named(cosmic::iced::keyboard::key::Named::ArrowUp) => Some(Message::WindowKey("Up".into(), false)),
+                _ if !modifiers.alt() && !modifiers.logo() => Some(Message::WindowKey(cosmic::widget::text_editor::KeyPress {
+                    key, modified_key, physical_key, modifiers, text,
+                    status: cosmic::widget::text_editor::Status::Focused { is_hovered: false },
+                })),
                 _ => None,
             }
         });
@@ -2194,7 +2718,125 @@ impl cosmic::Application for App {
     }
 
     fn update(&mut self, message: Self::Message) -> Task<Self::Message> {
+        let escape = match &message {
+            Message::Escape => true,
+            Message::RawVim(_, press) | Message::WindowKey(press) => {
+                !self.vim_enabled && !self.shell.settings_open && self.new_session.is_none()
+                    && matches!(press.key.as_ref(), cosmic::iced::keyboard::Key::Named(cosmic::iced::keyboard::key::Named::Escape))
+            }
+            _ => false,
+        };
+        if (self.nav_waiting.is_some() || self.deferred_leave.is_some()) && escape && let Some(stop) = self.escape_stop() {
+            return stop;
+        }
+        let switching = self.deferred_leave.is_some() || self.workspace.as_ref().is_some_and(|ws| {
+            ws.opening.as_ref().zip(ws.theory.as_ref()).is_some_and(|(path, t)| path != &t.path)
+        });
+        if switching && Self::nav_editor_intent(&message) {
+            self.status = Some(if self.deferred_leave.is_some() { "Waiting for edits to reach the host before switching documents" } else { "Opening the selected document" }.into());
+            return Task::none();
+        }
+        if self.nav_waiting.is_some_and(|(scope, _)| self.workspace.as_ref().and_then(|w| w.theory.as_ref()).is_none_or(|t| t.page_scope != scope)) {
+            self.nav_waiting = None;
+            self.nav_generation = self.nav_generation.wrapping_add(1);
+            self.nav_queue.clear();
+            self.status = Some("Pending editor input cancelled because the document changed".into());
+        }
+        if self.nav_waiting.is_some() {
+            if matches!(&message, Message::Open(..)) {
+                self.nav_waiting = None;
+                self.nav_generation = self.nav_generation.wrapping_add(1);
+                self.nav_queue.clear();
+                self.status = Some("Pending editor input cancelled because the document changed".into());
+            } else if matches!(&message,
+                Message::RawVim(..) | Message::Vim(..) | Message::NavOps(..) | Message::NavBinding(..) | Message::SourceAction(..)
+                | Message::BlockAction(..) | Message::SourcePage(..) | Message::SourcePageRows(..)
+                | Message::LineMove(..) | Message::Newline | Message::Unindent | Message::Undo | Message::Redo
+                | Message::Save | Message::CopySelection(..) | Message::Complete(..) | Message::InsertSymbol(..)
+                | Message::WindowKey(..) | Message::OpenSession(..) | Message::CloseWorkspace | Message::OpenTheory(..)
+                | Message::SetMode(..) | Message::SetModeEntity(..) | Message::EditBlock(..) | Message::CloseBlock
+                | Message::ViewPress(..) | Message::BlockViewAction(..) | Message::PopOut | Message::PopIn
+                | Message::ToggleVim | Message::Shell(..) | Message::Escape | Message::DeleteBlock(..)
+                | Message::InsertBlock(..) | Message::Wrap(..) | Message::InsertProof(..) | Message::InsertFill(..)
+                | Message::InsertUsing | Message::InsertOutput(..) | Message::BlockClickAt(..) | Message::Goto(..)
+                | Message::PopOutClosed(..) | Message::Modifiers(..)) {
+                self.nav_queue.push_back(message);
+                return Task::none();
+            }
+        }
+        let opening_other = self.workspace.as_ref().is_some_and(|w| w.opening.as_ref().is_some_and(|path| w.theory.as_ref().is_some_and(|t| path != &t.path)));
+        if opening_other && Self::nav_editor_intent(&message) {
+            self.status = Some("Editor input was not applied because another document is opening".into());
+            return Task::none();
+        }
         match message {
+            Message::RawVim(target, press) => {
+                if !self.nav_target_visible(target) {
+                    self.status = Some("Editor input was not applied because its editor is no longer visible".into());
+                    return Task::none();
+                }
+                self.nav_raw_dispatch = true;
+                self.nav_target = Some(target);
+                let task = self.dispatch_raw_vim(target, press);
+                self.nav_target = None;
+                self.nav_raw_dispatch = false;
+                return task;
+            }
+            Message::NavOps(target, ops) => {
+                self.nav_raw_dispatch = true;
+                self.nav_target = Some(target);
+                self.vim_caret(false);
+                let task = self.vim_ops(ops);
+                self.vim_caret(true);
+                self.nav_target = None;
+                self.nav_raw_dispatch = false;
+                return task;
+            }
+            Message::NavBinding(target, binding) => {
+                self.nav_raw_dispatch = true;
+                self.nav_target = Some(target);
+                let task = self.dispatch_editor_binding(target, *binding);
+                self.nav_target = None;
+                self.nav_raw_dispatch = false;
+                return task;
+            }
+            Message::NavLayoutReady(scope, generation, found) => {
+                if self.nav_waiting != Some((scope, generation)) { return Task::none() }
+                self.nav_waiting = None;
+                if self.workspace.as_ref().and_then(|w| w.theory.as_ref()).is_none_or(|t| t.page_scope != scope) {
+                    self.nav_queue.clear();
+                    return Task::none();
+                }
+                if !found { self.status = Some("The editor is no longer visible".into()); }
+                return self.nav_drain();
+            }
+            Message::NavPageReady(scope, generation, down, select, rows) => {
+                if self.nav_waiting != Some((scope, generation)) { return Task::none() }
+                self.nav_waiting = None;
+                if self.workspace.as_ref().and_then(|w| w.theory.as_ref()).is_none_or(|t| t.page_scope != scope) || !self.nav_target_visible(EditorTarget::Source) {
+                    self.nav_queue.clear();
+                    return Task::none();
+                }
+                let page = self.update(Message::SourcePageRows(scope, down, select, rows));
+                return Task::batch([page, self.nav_drain()]);
+            }
+            Message::NavClipboardReady(scope, generation, target, text) => {
+                if self.nav_waiting != Some((scope, generation)) { return Task::none() }
+                self.nav_waiting = None;
+                if self.workspace.as_ref().and_then(|w| w.theory.as_ref()).is_none_or(|t| t.page_scope != scope) {
+                    self.nav_queue.clear();
+                    return Task::none();
+                }
+                if !self.nav_target_visible(target) {
+                    self.status = Some("Clipboard input was not applied because its editor is no longer visible".into());
+                    return self.nav_drain();
+                }
+                let paste = text.map(|text| {
+                    let action = Action::Edit(cosmic::widget::text_editor::Edit::Paste(Arc::new(text)));
+                    self.update(if target == EditorTarget::Block { Message::BlockAction(action) } else { Message::SourceAction(action) })
+                }).unwrap_or_else(Task::none);
+                return Task::batch([paste, self.nav_drain()]);
+            }
             Message::Noop => {}
             Message::Shell(m) => return self.shell_update(m),
             Message::Link(key, event) => return self.on_link(key, event),
@@ -2208,10 +2850,15 @@ impl cosmic::Application for App {
             }
             Message::OpenSession(machine, sid) => {
                 // (a session picked while the settings show: the document again)
-                self.shell.settings_open = false;
                 if self.workspace.as_ref().is_some_and(|w| w.machine == machine && w.sid == sid) {
+                    self.deferred_leave = None;
+                    if self.status.as_deref() == Some("Waiting for edits to reach the host before switching documents") { self.status = None; }
                     return Task::none();
                 }
+                if self.defer_leave(DeferredLeave::Session { machine: machine.clone(), sid: sid.clone() }) {
+                    return self.flush_edits();
+                }
+                self.shell.settings_open = false;
                 if let Some((m, old)) = self.workspace_ids() {
                     self.send(&m, "detach", json!({"session": old}), Pending::Plain);
                 }
@@ -2266,6 +2913,9 @@ impl cosmic::Application for App {
                 return self.retitle();
             }
             Message::CloseWorkspace => {
+                if self.defer_leave(DeferredLeave::Close) {
+                    return self.flush_edits();
+                }
                 if let Some((m, sid)) = self.workspace_ids() {
                     self.send(&m, "detach", json!({"session": sid}), Pending::Plain);
                 }
@@ -2278,8 +2928,19 @@ impl cosmic::Application for App {
             Message::SetMode(mode) => {
                 self.mode_model.activate(self.mode_entities[if mode == Mode::Source { 1 } else { 0 }]);
                 if let Some(t) = self.workspace.as_mut().and_then(|w| w.theory.as_mut()) {
+                    if t.mode == mode {
+                        return Task::none();
+                    }
                     t.mode = mode;
                     t.block_editor = None;
+                    let offset = t.cursor;
+                    let line = t.lines.position(&t.decoded.text, t.decoded.to_decoded(offset)).line;
+                    let goto = self.update(Message::Goto(offset));
+                    return if mode == Mode::Source {
+                        Task::batch([goto, view::keep_source_caret(line)])
+                    } else {
+                        goto
+                    };
                 }
             }
             Message::SourceAction(action) if (self.ctrl || self.alt) && matches!(action, cosmic::widget::text_editor::Action::Click(_)) => {
@@ -2330,6 +2991,25 @@ impl cosmic::Application for App {
                     return Task::batch([state, keep]);
                 }
             }
+            Message::SourcePage(scope, down, select) => {
+                if self.workspace.as_ref().and_then(|w| w.theory.as_ref()).is_none_or(|t| t.page_scope != scope || t.mode != Mode::Source) { return Task::none() }
+                self.nav_generation = self.nav_generation.wrapping_add(1);
+                let generation = self.nav_generation;
+                self.nav_waiting = Some((scope, generation));
+                return view::source_page(scope, generation, down, select);
+            }
+            Message::SourcePageRows(scope, down, select, rows) => {
+                use cosmic::widget::text_editor::{Action as A, Motion as M};
+                let Some(machine) = self.workspace.as_ref().map(|w| w.machine.clone()) else { return Task::none() };
+                let table = self.table(&machine);
+                let Some(t) = self.workspace.as_mut().and_then(|w| w.theory.as_mut()).filter(|t| t.mode == Mode::Source && t.page_scope == scope) else { return Task::none() };
+                let motion = if down { M::Down } else { M::Up };
+                for _ in 0..rows {
+                    t.source_action(if select { A::Select(motion) } else { A::Move(motion) }, &*table);
+                }
+                let keep = view::keep_source_caret(t.source.cursor().position.line);
+                return Task::batch([self.schedule_state(), keep]);
+            }
             Message::BlockAction(cosmic::widget::text_editor::Action::Edit(cosmic::widget::text_editor::Edit::Backspace)) if self.open_block_empty() => {
                 return self.delete_open_block();
             }
@@ -2339,7 +3019,9 @@ impl cosmic::Application for App {
                 let Some(machine) = self.workspace.as_ref().map(|w| w.machine.clone()) else { return Task::none() };
                 let table = self.table(&machine);
                 if let Some(t) = self.workspace.as_mut().and_then(|w| w.theory.as_mut()) {
+                    let old_layout = t.block_editor.as_ref().map(|be| be.layout_revision);
                     let edited = t.block_action(action, &*table);
+                    let reflow = t.block_editor.as_ref().map(|be| be.layout_revision) != old_layout;
                     t.update_completions(&*table, edited);
                     // (vim's block cursor where the click put the caret, in normal mode)
                     if clicked {
@@ -2352,6 +3034,10 @@ impl cosmic::Application for App {
                         _ => Task::none(),
                     };
                     let state = Task::batch([self.schedule_state(), keep]);
+                    let layout = if reflow && self.nav_atomic {
+                        self.nav_reflow_pending = true;
+                        Task::none()
+                    } else if reflow && self.nav_waiting.is_none() { self.nav_wait_layout() } else { Task::none() };
                     if edited {
                         // A line reading `claude …` or `codex …`: asked when the typing pauses
                         self.keyword_gen += 1;
@@ -2364,9 +3050,9 @@ impl cosmic::Application for App {
                             },
                             |g| cosmic::Action::App(Message::KeywordTick(g)),
                         );
-                        return Task::batch([self.flush_edits(), state, pause]);
+                        return Task::batch([self.flush_edits(), state, pause, layout]);
                     }
-                    return state;
+                    return Task::batch([state, layout]);
                 }
             }
             Message::EditBlock(index) => {
@@ -2701,9 +3387,12 @@ impl cosmic::Application for App {
                 self.shell.settings_open = false;
                 if open {
                     let machine = self.workspace.as_ref().and_then(|w| self.links.iter().position(|l| l.target.key == w.machine)).unwrap_or(0);
-                    self.new_session = Some(NewSession { machine, ..Default::default() });
+                    let mut ns = NewSession { machine, ..Default::default() };
+                    ns.invalidate_folder();
+                    let generation = ns.generation;
+                    self.new_session = Some(ns);
                     let key = self.links.get(machine).map(|l| l.target.key.clone()).unwrap_or_default();
-                    self.send(&key, "list_dir", json!({}), Pending::ListDir);
+                    self.send(&key, "list_dir", json!({}), Pending::ListDir(generation, String::new()));
                 } else {
                     self.new_session = None;
                 }
@@ -2711,23 +3400,28 @@ impl cosmic::Application for App {
             Message::NewMachine(i) => {
                 if let Some(ns) = &mut self.new_session {
                     ns.machine = i;
-                    ns.listing = None;
-                    ns.detections = None;
-                    ns.backend = None;
-                    ns.toolchain = None;
+                    ns.invalidate_folder();
+                    ns.folder.clear();
+                    let generation = ns.generation;
                     let key = self.links.get(i).map(|l| l.target.key.clone()).unwrap_or_default();
-                    self.send(&key, "list_dir", json!({}), Pending::ListDir);
+                    self.send(&key, "list_dir", json!({}), Pending::ListDir(generation, String::new()));
                 }
             }
             Message::NewFolder(folder) => {
                 if let Some(ns) = &mut self.new_session {
+                    if ns.folder != folder {
+                        ns.invalidate_folder();
+                    }
                     ns.folder = folder;
                 }
             }
             Message::NewBrowse(path) => {
-                if let Some(ns) = &self.new_session {
+                if let Some(ns) = &mut self.new_session {
+                    ns.invalidate_folder();
+                    ns.folder = path.clone();
+                    let generation = ns.generation;
                     let key = self.links.get(ns.machine).map(|l| l.target.key.clone()).unwrap_or_default();
-                    self.send(&key, "list_dir", json!({"path": path}), Pending::ListDir);
+                    self.send(&key, "list_dir", json!({"path": path}), Pending::ListDir(generation, path.clone()));
                 }
             }
             Message::NewLogic(logic) => {
@@ -2736,7 +3430,7 @@ impl cosmic::Application for App {
                 }
             }
             Message::NewCreate => {
-                if let Some(ns) = &mut self.new_session {
+                if let Some(ns) = &mut self.new_session && ns.ready() {
                     ns.error = None;
                     let params = ns.create_params();
                     let key = self.links.get(ns.machine).map(|l| l.target.key.clone()).unwrap_or_default();
@@ -2810,6 +3504,7 @@ impl cosmic::Application for App {
                 let li = editor::LineIndex::new(&text);
                 let range = editor::selection_range(content);
                 let mut tasks = Vec::new();
+                self.nav_atomic = true;
                 // (one click, one entry of the history: what goes before and after together)
                 if let Some(t) = self.workspace.as_mut().and_then(|w| w.theory.as_mut()) {
                     t.begin_group();
@@ -2852,6 +3547,9 @@ impl cosmic::Application for App {
                 if let Some(t) = self.workspace.as_mut().and_then(|w| w.theory.as_mut()) {
                     t.end_group();
                 }
+                self.nav_atomic = false;
+                if std::mem::take(&mut self.nav_reflow_pending) { tasks.push(self.nav_wait_layout()); }
+                tasks.push(self.flush_edits());
                 // A tool started from the opened palette: the palette folds back to its row, so
                 // that the tool's findings come where the goal was, not below the palette
                 if let Some(ws) = &mut self.workspace
@@ -3083,9 +3781,14 @@ impl cosmic::Application for App {
                 self.status = Some("Copied".into());
                 return cosmic::iced::clipboard::write(text);
             }
-            Message::LineMove(down) => {
+            Message::LineMove(target, down) => {
                 use cosmic::widget::text_editor::{Action as A, Motion as M};
-                return self.vim_ops(vec![vim::Op::Act(A::Move(if down { M::Down } else { M::Up }))]);
+                self.nav_raw_dispatch = true;
+                self.nav_target = Some(target);
+                let task = self.vim_ops(vec![vim::Op::Act(A::Move(if down { M::Down } else { M::Up }))]);
+                self.nav_target = None;
+                self.nav_raw_dispatch = false;
+                return task;
             }
             Message::RefOpenHere(id) => {
                 let Some((_, r)) = self.references.iter().find(|(w, _)| *w == id) else { return Task::none() };
@@ -3393,7 +4096,7 @@ impl cosmic::Application for App {
                 }
                 let Some(t) = self.workspace.as_ref().and_then(|w| w.theory.as_ref()) else { return Task::none() };
                 let paste = cosmic::widget::text_editor::Action::Edit(cosmic::widget::text_editor::Edit::Paste(Arc::new(text)));
-                if t.block_editor.is_some() && t.mode == Mode::Literate {
+                if self.nav_target.map_or(t.block_editor.is_some() && t.mode == Mode::Literate, |target| target == EditorTarget::Block) {
                     return Task::batch([self.update(Message::BlockAction(paste)), widget::text_input::focus(view::block_editor_id())]);
                 }
                 if t.mode == Mode::Source {
@@ -3430,14 +4133,35 @@ impl cosmic::Application for App {
                     return Task::none();
                 }
                 let ops = self.vim.key(&key, ctrl);
+                let was_raw = self.nav_raw_dispatch;
+                self.nav_raw_dispatch = true;
                 let task = self.vim_ops(ops);
+                self.nav_raw_dispatch = was_raw;
                 self.vim_caret(true);
                 return task;
             }
-            Message::WindowKey(key, ctrl) => {
+            Message::WindowKey(press) => {
+                use cosmic::iced::keyboard::{Key, key::Named};
+                if self.shell.settings_open || self.new_session.is_some() { return Task::none() }
+                if self.workspace.as_ref().and_then(|w| w.theory.as_ref()).is_some_and(|t| t.mode == Mode::Literate && t.block_editor.is_some()) {
+                    self.nav_raw_dispatch = true;
+                    self.nav_target = Some(EditorTarget::Block);
+                    let task = self.dispatch_raw_vim(EditorTarget::Block, press);
+                    self.nav_target = None;
+                    self.nav_raw_dispatch = false;
+                    return task;
+                }
+                let ctrl = press.modifiers.control();
+                let key = match press.key.as_ref() {
+                    Key::Named(Named::Enter) => "Enter",
+                    Key::Named(Named::ArrowDown) => "Down",
+                    Key::Named(Named::ArrowUp) => "Up",
+                    Key::Character(c) if ctrl => c,
+                    _ => press.text.as_deref().unwrap_or(""),
+                };
                 // Block navigation in the literate view with no block open: arrows always,
                 // the letters with vim keys on
-                if !self.vim_enabled && !matches!(key.as_str(), "Down" | "Up" | "Enter") {
+                if !self.vim_enabled && !matches!(key, "Down" | "Up" | "Enter") {
                     return Task::none();
                 }
                 let Some(t) = self.workspace.as_mut().and_then(|w| w.theory.as_mut()) else { return Task::none() };
@@ -3452,7 +4176,7 @@ impl cosmic::Application for App {
                 let pending = std::mem::take(&mut self.vim.pending);
                 let pending_g = pending == "g";
                 let pending_d = pending == "d";
-                let next = match (key.as_str(), ctrl) {
+                let next = match (key, ctrl) {
                     ("r", true) => return self.update(Message::Redo),
                     ("u", false) => return self.update(Message::Undo),
                     ("j" | "Down", false) => Some((cur + 1).min(n - 1)),
@@ -3468,7 +4192,12 @@ impl cosmic::Application for App {
                         self.vim.pending = "d".into();
                         None
                     }
-                    ("Enter" | "i" | "a" | "o", false) => return Task::batch([self.update(Message::EditBlock(cur)), view::centre_selected()]),
+                    ("Enter" | "i" | "a" | "o", false) => {
+                        let open = self.update(Message::EditBlock(cur));
+                        let edit = if self.vim_enabled && key != "Enter" { self.update(Message::Vim(key.into(), false)) } else { Task::none() };
+                        let ready = self.nav_wait_layout();
+                        return Task::batch([open, edit, view::centre_selected(), ready]);
+                    }
                     _ => None,
                 };
                 if let Some(i) = next {
@@ -3477,11 +4206,12 @@ impl cosmic::Application for App {
                     return Task::batch([view::centre_selected(), self.schedule_state(), Self::unfocus_all()]);
                 }
             }
+            Message::ReadOnlyKey(_) => {}
             Message::CopySelection(cut) => {
                 let Some(machine) = self.workspace.as_ref().map(|w| w.machine.clone()) else { return Task::none() };
                 let table = self.table(&machine);
                 let Some(t) = self.workspace.as_ref().and_then(|w| w.theory.as_ref()) else { return Task::none() };
-                let in_block = t.block_editor.is_some() && t.mode == Mode::Literate;
+                let in_block = self.nav_target.map_or(t.block_editor.is_some() && t.mode == Mode::Literate, |target| target == EditorTarget::Block);
                 let sel = match &t.block_editor {
                     Some(be) if in_block => be.content.selection(),
                     _ => t.source.selection(),
@@ -3519,7 +4249,7 @@ impl cosmic::Application for App {
             Message::Unindent => {
                 use cosmic::widget::text_editor::{Action as A, Edit as E, Motion as M};
                 let Some(t) = self.workspace.as_ref().and_then(|w| w.theory.as_ref()) else { return Task::none() };
-                let in_block = t.block_editor.is_some() && t.mode == Mode::Literate;
+                let in_block = self.nav_target.map_or(t.block_editor.is_some() && t.mode == Mode::Literate, |target| target == EditorTarget::Block);
                 let line = {
                     let (text, pos) = match &t.block_editor {
                         Some(be) if in_block => (be.content.text(), be.content.cursor().position),
@@ -3532,17 +4262,21 @@ impl cosmic::Application for App {
                     return Task::none();
                 }
                 let act = |a: A| if in_block { Message::BlockAction(a) } else { Message::SourceAction(a) };
+                self.nav_atomic = true;
                 let mut tasks = vec![self.update(act(A::Move(M::Home)))];
                 for _ in 0..n {
                     tasks.push(self.update(act(A::Edit(E::Delete))));
                 }
+                self.nav_atomic = false;
+                if std::mem::take(&mut self.nav_reflow_pending) { tasks.push(self.nav_wait_layout()); }
+                tasks.push(self.flush_edits());
                 return Task::batch(tasks);
             }
             Message::Newline => {
                 let Some(t) = self.workspace.as_ref().and_then(|w| w.theory.as_ref()) else { return Task::none() };
                 let indent = t.profile.next_indent(&t.line_before_caret());
                 let paste = cosmic::widget::text_editor::Action::Edit(cosmic::widget::text_editor::Edit::Paste(Arc::new(format!("\n{indent}"))));
-                if t.block_editor.is_some() && t.mode == Mode::Literate {
+                if self.nav_target.map_or(t.block_editor.is_some() && t.mode == Mode::Literate, |target| target == EditorTarget::Block) {
                     return self.update(Message::BlockAction(paste));
                 }
                 return self.update(Message::SourceAction(paste));
@@ -3650,14 +4384,8 @@ impl cosmic::Application for App {
             Message::Escape => {
                 // A tool running at the caret (or an LLM asked there) stops first; the block is
                 // finished with the next Esc
-                if let Some(ws) = &self.workspace {
-                    if let Some(r) = flow::report(ws).filter(|r| r.running && r.stoppable) {
-                        let _ = r;
-                        return self.update(Message::StopTools);
-                    }
-                    if view::fill_here(ws) && matches!(ws.fill.status.as_str(), "asking" | "checking" | "starting") {
-                        return self.update(Message::FillDismiss);
-                    }
+                if let Some(stop) = self.escape_stop() {
+                    return stop;
                 }
                 return self.update(Message::CloseBlock);
             }

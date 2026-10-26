@@ -186,6 +186,8 @@ class Doc:
         self.crlf = False
         self.bom = False
         self.entries: List[Dict[str, Any]] = []
+        # Journal writes not yet completed; this does not add an fsync guarantee.
+        self.entry_fences: Dict[int, asyncio.Task] = {}
         self.next_entry = 1
         self.conflict: Optional[Dict[str, Any]] = None
         self.opened = False
@@ -532,7 +534,7 @@ class Session:
                 doc = Doc.from_json(self, data)
                 self.docs[doc.path] = doc
 
-    def append_log(self, doc: Doc, entry: Dict[str, Any]) -> None:
+    def append_log(self, doc: Doc, entry: Dict[str, Any]) -> Optional[asyncio.Task]:
         path = doc.log_path()
         frozen = copy.deepcopy(entry)
         def write():
@@ -541,9 +543,10 @@ class Session:
                 f.write(json.dumps(frozen, ensure_ascii=False) + "\n")
         if self.host.state_io is not None:
             size = 4096 + sum((len(t) + e - s) * 8 for s, e, t in entry["change"])
-            self._state_write(write, size)
+            return self._state_write(write, size)
         else:
             write()
+            return None
 
     def _state_write(self, operation: Callable[[], Any], size: int) -> asyncio.Task:
         assert self.host.state_io is not None
@@ -715,7 +718,8 @@ class Session:
 
     def commit(self, doc: Doc, author: Dict[str, Any], kind: str, change: ot.Change,
                target: Optional[int] = None, txn: Optional[str] = None,
-               request: Optional[Any] = None, client: Optional["Client"] = None) -> Dict[str, Any]:
+               request: Optional[Any] = None, client: Optional["Client"] = None,
+               edit_id: Optional[str] = None, edit_intent: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         change = ot.normalize(change, len(doc.text))
         old = doc.text
         new = ot.apply(old, change)
@@ -724,9 +728,18 @@ class Session:
             "change": [list(r) for r in change], "inverse": [list(r) for r in ot.invert(old, change)],
             "target": target, "txn": txn or f"e{doc.next_entry}", "time": now(),
         }
+        if edit_id is not None:
+            entry["edit_id"] = edit_id
+            entry["edit_intent"] = edit_intent
         # Admission and the immutable journal record precede authoritative mutation.
         # The dispatcher waits for this write before acknowledging the edit.
-        self.append_log(doc, entry)
+        fence = self.append_log(doc, entry)
+        if fence is not None:
+            doc.entry_fences[entry["id"]] = fence
+            def release_durable(task, entry_id=entry["id"]):
+                if not task.cancelled() and task.exception() is None:
+                    doc.entry_fences.pop(entry_id, None)
+            fence.add_done_callback(release_durable)
         doc.revision += 1
         doc.next_entry += 1
         doc.text = new
@@ -771,7 +784,7 @@ class Session:
         self.schedule_save(doc)
         self.host.broadcast_doc(self, doc, {
             "event": "doc_changed", "session": self.id, "path": doc.path, "revision": doc.revision,
-            "entry": {k: entry[k] for k in ("id", "rev", "author", "kind", "change", "target", "txn")},
+            "entry": {k: entry[k] for k in ("id", "rev", "author", "kind", "change", "target", "txn", "edit_id") if k in entry},
             "request": request, "client": client.id if client else None,
             "dirty": doc.dirty, "can_undo": bool(doc.undo_stack), "can_redo": bool(doc.redo_stack),
         })
@@ -821,9 +834,27 @@ class Session:
                                 f"in {Path(doc.path).name} around line {line}"),
                 })
 
+    def include_entry_fence(self, doc: Doc, entry: Dict[str, Any]) -> None:
+        fence = doc.entry_fences.get(entry["id"])
+        context = WRITE_FENCES.get()
+        if fence is not None and context is not None and context[1] is asyncio.current_task():
+            context[0].append(fence)
+
     def client_edit(self, client: "Client", path: str, base_rev: int, edits: List[Any],
-                    policy: str, txn: Optional[str], request: Any) -> Dict[str, Any]:
+                    policy: str, txn: Optional[str], request: Any,
+                    edit_id: Optional[str] = None) -> Dict[str, Any]:
         doc = self.get_doc(path)
+        if edit_id is not None:
+            if not isinstance(edit_id, str) or not edit_id or len(edit_id) > 128:
+                raise HostError("Invalid edit identity", "bad_request")
+            intent = {"revision": base_rev, "edits": edits, "txn": txn, "policy": policy}
+            for entry in doc.entries:
+                if entry.get("edit_id") == edit_id:
+                    if entry.get("edit_intent") != intent:
+                        raise HostError("Edit identity was reused for another edit", "bad_request")
+                    self.include_entry_fence(doc, entry)
+                    return {"revision": doc.revision, "change": entry["change"],
+                            "entry": entry["id"], "duplicate": True}
         if base_rev > doc.revision:
             raise HostError("Base revision is ahead of the theory", "bad_revision")
         later_entries = doc.entries_after(base_rev)
@@ -832,6 +863,8 @@ class Session:
                for e in edits]
         change = ot.normalize(raw, base_len)
         if not change:
+            if edit_id is not None:
+                raise HostError("An identified edit must change the document", "bad_request")
             return {"revision": doc.revision, "change": []}
         try:
             rebased, _ = ot.rebase_through(change, [[tuple(r) for r in e["change"]] for e in later_entries],
@@ -859,7 +892,7 @@ class Session:
         # Deleting a proof tool typed in the text (sledgehammer, nitpick, …) stops it
         tools_hit = any(c[2] in self.driver_class.tool_names and any(s0 < c[1] and c[0] < e0 for s0, e0, _ in rebased)
                         for c in (doc.prover.get("commands") or []))
-        entry = self.commit(doc, author, "edit", rebased, txn=txn, request=request, client=client)
+        entry = self.commit(doc, author, "edit", rebased, txn=txn, request=request, client=client, edit_id=edit_id, edit_intent=intent if edit_id is not None else None)
         if tools_hit and self.driver and self.driver.ready:
             with contextlib.suppress(HostError):
                 self.driver.send({"op": "cancel_tools"})
@@ -2993,7 +3026,7 @@ class Host:
                 client.key = f"{ident['provider']}:{ident['conversation']}"
             client.location = p.get("location") or {}
             return {"protocol": PROTOCOL, "version": VERSION, "client": client.id, "key": client.key,
-                    "machine": socket.gethostname(), "home": str(HOME), "runtimes": find_runtimes(),
+                    "edit_identity": True, "machine": socket.gethostname(), "home": str(HOME), "runtimes": find_runtimes(),
                     "backends": await asyncio.to_thread(self.backends_info)}
         if op == "ping":
             return {"pong": True}
@@ -3165,14 +3198,46 @@ class Host:
             client.attach(s)
             if p.get("subscribe", client.kind == "app"):
                 client.open_docs.add((s.id, doc.path))
-            return {"doc": s.doc_view(doc, with_conflict_texts=bool(p.get("conflict_texts")))}
+            result = {"doc": s.doc_view(doc, with_conflict_texts=bool(p.get("conflict_texts")))}
+            if "since_revision" in p:
+                try:
+                    base = int(p["since_revision"])
+                    if base < 0 or base > doc.revision:
+                        raise HostError("Invalid base revision", "stale_base")
+                    entries = doc.entries_after(base)
+                    # Keep the recovery reply and client replay bounded even for very
+                    # large documents or a busy disconnected session.
+                    cost = len(doc.text) * max(1, len(entries))
+                    cost += sum(len(part[2]) for e in entries for part in e["change"])
+                    complete = len(entries) <= 128 and cost <= 2_000_000
+                    if complete:
+                        for entry in entries:
+                            s.include_entry_fence(doc, entry)
+                    result["edit_history"] = {"complete": complete, "entries": [
+                        {k: e[k] for k in ("rev", "change", "edit_id") if k in e} for e in entries] if complete else []}
+                except HostError as error:
+                    if error.code != "stale_base":
+                        raise
+                    result["edit_history"] = {"complete": False, "entries": []}
+            if "receipt_ids" in p:
+                ids = p["receipt_ids"]
+                if not isinstance(ids, list) or len(ids) > 128 or any(not isinstance(i, str) or len(i) > 128 for i in ids):
+                    raise HostError("Invalid receipt identities", "bad_request")
+                receipts = []
+                for identity in ids:
+                    entry = next((e for e in doc.entries if e.get("edit_id") == identity), None)
+                    if entry is not None:
+                        s.include_entry_fence(doc, entry)
+                        receipts.append(identity)
+                result["edit_receipts"] = receipts
+            return result
         if op == "close":
             client.open_docs.discard((s.id, s.doc_path(p["path"])))
             return {}
         if op == "edit":
             return s.client_edit(client, p["path"], int(p.get("revision", 0)), p.get("edits", []),
                                  p.get("policy") or ("merge" if client.kind == "app" else "strict"),
-                                 p.get("txn"), p.get("request"))
+                                 p.get("txn"), p.get("request"), p.get("edit_id"))
         if op == "undo":
             return s.undo(client, p["path"])
         if op == "redo":

@@ -119,6 +119,48 @@ ssh:
     flatpak-cargo-generator.py Cargo.lock -o packaging/flatpak/cargo-sources.json
     python3 scripts/fix-cargo-sources-ssh.py packaging/flatpak/cargo-sources.json
 
+## Text interaction and recovery
+
+Editor input keeps its source or proof-window origin and waits for fresh layout
+when a cell or its displayed markup changes. Clipboard and page-navigation
+continuations retain input order; prover events and Stop continue independently.
+Document and session switches wait for journal-backed edit acknowledgements.
+The bundled host records per-edit identities for idempotent retry and bounded
+recovery after a lost reply. When history or receipts cannot establish the
+outcome, the app retains the local buffer instead of guessing.
+
+## Display and reading fonts
+
+Settings includes Cerea's reading controls: New Computer Modern, Libertinus
+Serif, system serif and interface sans-serif; prose size, line spacing,
+paragraph spacing, maths size, justification, column width and centring.
+Interface sans-serif uses the same generic sans family as Terminal's normal
+threads. The two named serif families are bundled with the app.
+
+Changes apply immediately to rendered prose and the prose editor and are kept
+in `~/.config/deductum/settings.json`. Text size sets the prose size; Zoom scales
+the document and proof editors together. Automatic text width follows the
+proof layout, while an explicit width is a maximum in ems that fits the window.
+Existing settings retain the original New Computer Modern appearance.
+
+## Isolated graphical UI review
+
+`scripts/build-vnc-fixture.py` builds a test-only `deductum-vnc` executable
+with the real COSMIC window and fixture documents. It uses a distinct binary
+name so it cannot overwrite the normal test executable. Build it through the
+machine's build coordinator, then run it inside a disposable VNC container
+with `DEDUCTUM_VNC_FIXTURE=1`; it does not connect to a live session host.
+
+The fixture writes caret/source state to `/tmp/deductum-vnc-state.json` for
+checking actual keyboard and mouse interactions. `DEDUCTUM_VNC_LEAN=1`
+selects Lean, `DEDUCTUM_VNC_SOURCE=1` starts in Source, and
+`DEDUCTUM_VNC_LONG=1` selects a long document. Set `DEDUCTUM_CONFIG_DIR` to a
+container-local directory to check display-setting persistence, or use
+`DEDUCTUM_VNC_SCRIPTS=1` for Isabelle scripts in prose, antiquotations and maths.
+Debug KaTeX fonts must be copied into the container at their build-time resource path;
+release binaries embed them. UI review uses separate network-free containers
+with no host desktop, session sockets or user-data mounts.
+
 ## Existing sessions
 
 Deductum has its own settings, host bundle and state. Installing or publishing
