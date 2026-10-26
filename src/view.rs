@@ -1356,7 +1356,7 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
     // its column on the left
     // Each item of the page: what it shows in the text column, then the goal's reserved column
     // (the goal itself is drawn by the page, past whatever is level with it)
-    let side_at = |el: Element<'a, Message>, _goal: bool, _top: f32| -> Element<'a, Message> {
+    let side_at = move |el: Element<'a, Message>, _goal: bool, _top: f32| -> Element<'a, Message> {
         match beside {
             Some((_, width, text_width)) => widget::row::with_capacity(2)
                 .spacing(GOAL_GAP)
@@ -1371,9 +1371,18 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
                 .into(),
         }
     };
-    let mut anchor: Option<(usize, f32)> = None;
-    let mut open_item: Option<usize> = None;
-    let side = |el: Element<'a, Message>, goal: bool| side_at(el, goal, 0.0);
+    let editing = t.block_editor.as_ref().map(|b| b.start);
+    let opened = editing.and_then(|start| t.blocks.iter().position(|b| b.start <= start && start <= b.end));
+    let open_item = opened.filter(|_| app.popout.is_none());
+    let open_top = t.block_editor.as_ref().map_or(0.0, |be| match goal_placement(true, be.content.line_count()) {
+        GoalPlacement::Construct => t.construct_at(be.start, be.end).map_or(0.0, |(cs, _)| match block_line(be, cs) { 0 => 0.0, line => CODE_PADDING.top + line as f32 * code_line_height() }),
+        _ => 0.0,
+    });
+    let mut anchor = if beside.is_some() {
+        open_item.filter(|_| t.block_editor.as_ref().is_some_and(|b| b.kind == Kind::Formal)).map(|i| (i, open_top))
+            .or_else(|| editing.is_none().then(|| t.blocks.iter().enumerate().find(|(i, b)| b.kind == Kind::Formal && t.selected.map_or(b.start <= t.cursor && t.cursor < b.end, |s| s == *i)).map(|(i, _)| (i, 0.0))).flatten())
+    } else { None };
+    let side = move |el: Element<'a, Message>, goal: bool| side_at(el, goal, 0.0);
     let mut typo = typography(&theme::active());
     typo.size = z(17.0);
     let typo = Arc::new(typo);
@@ -1386,9 +1395,15 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
     } else {
         sp.space_l
     };
-    let mut col = widget::column::with_capacity(t.blocks.len() * 2).spacing(0).padding([sp.space_s, gutter]);
-    let editing = t.block_editor.as_ref().map(|b| b.start);
-    for (i, block) in t.blocks.iter().enumerate() {
+    let last = t.blocks.iter().rposition(|b| b.kind != Kind::End);
+    let last_selected = editing.is_none() && last.is_some() && t.selected == last && last.is_some_and(|i| t.blocks[i].kind != Kind::Header);
+    let indices = super::viewport::Indices::default();
+    let build_table = table.clone();
+    let build = move |i: usize| -> Element<'a, Message> {
+        let table = build_table.clone();
+        if i == t.blocks.len() { return if last_selected { side(widget::Space::new().into(), false) } else { side(block_actions(t, None, false), false) }; }
+        if i > t.blocks.len() { return widget::Space::new().height(Length::Fixed(if beside.is_some() { view_height() * 0.5 } else { 0.0 })).into(); }
+        let block = &t.blocks[i];
         // Each block is one element of the page, whatever it shows, so that the open block's
         // editor keeps its place (and so its focus and caret) as things around it come and go
         let mut item = widget::column::with_capacity(4);
@@ -1416,10 +1431,6 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
                             }),
                         _ => 0.0,
                     };
-                    if formal && beside.is_some() {
-                        anchor = Some((i, top));
-                    }
-                    open_item = Some(i);
                     item = item.push(side_at(widget::container(block_editor_in(app.workspace.as_ref(), t, false, inline, &*table)).id(selected_block_id()).into(), formal, top));
                 }
             }
@@ -1442,8 +1453,7 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
             if opens_here {
                 item = item.push(side(widget::Space::new().height(Length::Fixed(z(BLOCK_GAP))).into(), false));
             }
-            col = col.push(item);
-            continue;
+            return item.into();
         }
         let current = block.start <= t.cursor && t.cursor <= block.end;
         // The block j and k selected, else the one the caret is in: outlined
@@ -1481,7 +1491,7 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
             }
             Kind::Comment => widget::text(table.decode(&t.source_text(block.start, block.end)).text).font(cosmic::font::mono()).size(z(12.0)).class(theme::Text::Default).into(),
             // (the theory's `end` is source, not reading)
-            Kind::End => continue,
+            Kind::End => return widget::Space::new().into(),
         };
         // The block j and k selected, found by its id to centre it; a prose block shows it with a bar
         let content: Element<'a, Message> = if t.selected == Some(i) && t.block_editor.is_none() {
@@ -1497,10 +1507,6 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
         } else {
             content
         };
-        // The goal beside the selected proof when none is open (as beside the open one)
-        if marked && editing.is_none() && block.kind == Kind::Formal && beside.is_some() {
-            anchor = Some((i, 0.0));
-        }
         // Formal blocks take their own clicks (the caret goes where the click lands)
         if block.kind == Kind::Formal && t.block_views.get(i).is_some_and(Option::is_some) {
             item = item.push(side(content, marked && editing.is_none()));
@@ -1542,14 +1548,29 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
         } else {
             item = item.push(widget::Space::new().height(Length::Fixed(z(BLOCK_GAP) - z(8.0))));
         }
-        col = col.push(item);
-    }
-    // At the end: add a block (unless the last block is selected, whose own actions add one there)
-    let last = t.blocks.iter().rposition(|b| b.kind != Kind::End);
-    let last_selected = editing.is_none() && last.is_some() && t.selected == last && last.is_some_and(|i| t.blocks[i].kind != Kind::Header);
-    col = col.push(if last_selected { side(widget::Space::new().height(Length::Fixed(0.0)).into(), false) } else { side(block_actions(t, None, false), false) });
-    // (room at the end, for a goal beside the last block to be scrolled into sight)
-    col = col.push(widget::Space::new().height(Length::Fixed(if beside.is_some() { view_height() * 0.5 } else { 0.0 })));
+        item.into()
+    };
+    let source = t.page_rows.clone();
+    let estimate = move |i: usize, width: f32| {
+        let Some(row) = t.page_rows.get(i) else { return if i == t.blocks.len() { z(42.0) } else if beside.is_some() { view_height() * 0.5 } else { 0.0 }; };
+        match row.kind {
+            Kind::End => 0.0,
+            Kind::Formal | Kind::Comment => row.lines as f32 * code_line_height() + CODE_PADDING.top + CODE_PADDING.bottom + z(BLOCK_GAP),
+            Kind::Header => z(70.0),
+            Kind::Heading(_) => z(55.0),
+            Kind::Text => ((row.characters as f32 / (width.min(text_width) / z(8.5)).max(1.0)).ceil().max(row.lines as f32) * z(24.0)) + z(BLOCK_GAP),
+        }
+    };
+    let style = {
+        use std::hash::{Hash, Hasher};
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        z(17.0).to_bits().hash(&mut hasher);
+        text_width.to_bits().hash(&mut hasher);
+        cosmic::iced::advanced::graphics::text::font_system().read().unwrap().version().hash(&mut hasher);
+        hasher.finish()
+    };
+    let col = super::viewport::Column::new(indices.clone(), t.page_scope, source, style, t.page_viewport.get(), build, estimate, Message::LiterateAdjust)
+        .padding([sp.space_s, gutter]).editor(open_item).pin(t.selected).pin(anchor.map(|a| a.0));
     // Clicking outside every block finishes the one being edited
     // (its side margins included, so that the page is centred, the same room on either side)
     // (with the goal under the proof, the readable text column alone, centred)
@@ -1579,9 +1600,9 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
         },
         _ => widget::Space::new().width(Length::Fixed(0.0)).height(Length::Fixed(0.0)).into(),
     };
-    let laid = super::gap::GoalLayer::new(col, goal, anchor, GOAL_GAP);
+    let laid = super::gap::GoalLayer::new(col, goal, anchor, GOAL_GAP).indices(indices);
     let page = widget::container(widget::container(laid).max_width(page_width).width(Length::Fill)).center_x(Length::Fill);
-    widget::mouse_area(thin(page).id(literate_scroll_id()).height(Length::Fill)).on_press(Message::CloseBlock).into()
+    widget::mouse_area(thin(page).id(literate_scroll_id()).height(Length::Fill).on_scroll(|v| Message::LiterateScrolled(v.absolute_offset().y, v.bounds().height))).on_press(Message::CloseBlock).into()
 }
 
 /// Where a scroll view is (the source view's, the proof window's), to keep the caret in sight there

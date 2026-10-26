@@ -18,7 +18,7 @@ import subprocess
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-from . import (SHARE_DIR, Driver, HostError, log, read_config, stop_process)
+from . import (SHARE_DIR, Driver, HostError, log, read_config, resource_limit, stop_process)
 
 
 # ---------------------------------------------------------------------------
@@ -446,12 +446,16 @@ class IsabelleDriver(Driver):
         meta = s.meta
         runtime = meta.get("toolchain") or meta["runtime"]
         proj = meta.get("project") or {}
-        await asyncio.to_thread(ensure_component, runtime, lambda m: s.session_log(m))
+        loop = asyncio.get_running_loop()
+        await asyncio.to_thread(ensure_component, runtime, lambda m: loop.call_soon_threadsafe(s.session_log, m))
         cmd = [runtime, "deductum_backend", "-l", proj.get("logic") or "HOL"]
         for d in proj.get("dirs", []):
             cmd += ["-d", d]
         for name in proj.get("include_sessions", []):
             cmd += ["-i", name]
+        threads = resource_limit(s, "prover_threads")
+        if threads:
+            cmd += ["-o", f"threads={threads}"]
         for opt in meta.get("options", []):
             cmd += ["-o", opt]
         log("starting backend", s.id, " ".join(cmd))

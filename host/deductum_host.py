@@ -21,7 +21,10 @@ Standard library only; Python 3.9 or newer.
 from __future__ import annotations
 
 import asyncio
+from collections import deque
 import contextlib
+import contextvars
+import copy
 import difflib
 import errno
 import fcntl
@@ -44,6 +47,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import deductum_ot as ot  # noqa: E402
 import drivers  # noqa: E402
 import prompts  # noqa: E402
+from background import OrderedIO, Busy as IOBusy, weight as io_weight  # noqa: E402
 from drivers import HostError, log, read_json  # noqa: E402
 from drivers.isabelle import IsabelleDriver, find_runtimes, known_sessions, suggest_logic  # noqa: E402,F401
 
@@ -63,6 +67,11 @@ AUTOSAVE_DELAY = 2.0
 WATCH_INTERVAL = 1.0
 MEMORY_ENTRIES = 5000
 MAX_SNAPSHOT_REQUESTS = 4  # per connection; never queue reads ahead of edits or Stop
+CLIENT_OUTPUT_BYTES = 64 * 1024 * 1024
+CLIENT_OUTPUT_MESSAGES = 1024
+CLIENT_DRAIN_TIMEOUT = 15.0
+PROJECT_IO_TIMEOUT = 10.0
+WRITE_FENCES: contextvars.ContextVar = contextvars.ContextVar("deductum_write_fences", default=None)
 LIFECYCLES = ("Starting", "Running", "Paused", "Stopping", "Stopped", "Failed")
 
 
@@ -447,6 +456,10 @@ class Session:
         self.listen_event = asyncio.Event()
         self.cpu_sample: Optional[Tuple[float, float]] = None
         self.last_activity: Optional[Dict[str, Any]] = None
+        self.io_error: Optional[str] = None
+        self._save_jobs: Dict[str, asyncio.Task] = {}
+        self._watch_job: Optional[asyncio.Task] = None
+        self._group_sample: Optional[Tuple[int, int]] = None
         meta.setdefault("backend", self.driver_class.backend)
         self.driver_class.migrate_meta(meta)
         meta.setdefault("grants", [])
@@ -475,16 +488,42 @@ class Session:
             loop = asyncio.get_running_loop()
             self.persist_handle = loop.call_later(0.5, self.persist_now)
 
-    def persist_now(self) -> None:
+    def persist_now(self) -> bool:
+        if self.persist_handle:
+            self.persist_handle.cancel()
         self.persist_handle = None
         if self.meta.get("discarded"):
-            return
+            return True
+        if self.host.state_io is not None:
+            meta = copy.deepcopy(self.meta)
+            docs = [(doc.state_path(), copy.deepcopy(doc.to_json()))
+                    for path in list(self.changed_docs) if (doc := self.docs.get(path)) is not None]
+            meta_path = self.dir / "meta.json"
+            def write():
+                write_json_atomic(meta_path, meta)
+                for path, data in docs:
+                    write_json_atomic(path, data)
+            try:
+                task = self._state_write(write, io_weight(meta) + sum(io_weight(data) for _, data in docs))
+            except HostError:
+                # Keep the dirty set and retry metadata after a bounded queue fills.
+                if not self.io_error:
+                    self.persist_handle = asyncio.get_running_loop().call_later(0.5, self.persist_now)
+                return False
+            self.changed_docs.clear()
+            paths = [data["path"] for _, data in docs]
+            def failed(future):
+                if not future.cancelled() and future.exception() is not None:
+                    self.changed_docs.update(paths)
+            task.add_done_callback(failed)
+            return True
         write_json_atomic(self.dir / "meta.json", self.meta)
         for path in list(self.changed_docs):
             doc = self.docs.get(path)
             if doc:
                 write_json_atomic(doc.state_path(), doc.to_json())
         self.changed_docs.clear()
+        return True
 
     def load_docs(self) -> None:
         for p in sorted((self.dir / "docs").glob("*.json")):
@@ -495,9 +534,36 @@ class Session:
 
     def append_log(self, doc: Doc, entry: Dict[str, Any]) -> None:
         path = doc.log_path()
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with open(path, "a", encoding="utf-8") as f:
-            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        frozen = copy.deepcopy(entry)
+        def write():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with open(path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(frozen, ensure_ascii=False) + "\n")
+        if self.host.state_io is not None:
+            size = 4096 + sum((len(t) + e - s) * 8 for s, e, t in entry["change"])
+            self._state_write(write, size)
+        else:
+            write()
+
+    def _state_write(self, operation: Callable[[], Any], size: int) -> asyncio.Task:
+        assert self.host.state_io is not None
+        if self.io_error:
+            raise HostError("Recovery storage is unavailable: " + self.io_error, "io_error")
+        try:
+            task = self.host.state_io.submit(self.id, operation, size, strict=True)
+        except IOBusy as exn:
+            raise HostError(str(exn), "busy")
+        except Exception as exn:
+            raise HostError(f"Recovery storage is unavailable: {exn}", "io_error")
+        context = WRITE_FENCES.get()
+        if context is not None and context[1] is asyncio.current_task():
+            context[0].append(task)
+        def completed(future):
+            if not future.cancelled() and future.exception() is not None:
+                self.io_error = str(future.exception())
+                self.session_log("Recovery write failed: " + self.io_error)
+        task.add_done_callback(completed)
+        return task
 
     # ----- descriptions
 
@@ -543,7 +609,7 @@ class Session:
     # ----- documents
 
     def get_doc(self, path: str) -> Doc:
-        path = os.path.realpath(os.path.expanduser(path))
+        path = self.doc_path(path)
         doc = self.docs.get(path)
         if doc is None:
             if not os.path.isfile(path):
@@ -560,10 +626,36 @@ class Session:
                 self.backend_open(doc)
         return doc
 
+    def doc_path(self, path: str) -> str:
+        path = os.path.abspath(os.path.expanduser(path))
+        # Paths handed out by the host are already canonical. Resolving them
+        # on every caret movement/edit would touch a potentially stalled mount.
+        return path if path in self.docs else os.path.realpath(path)
+
+    async def load_doc(self, path: str) -> Doc:
+        expanded = os.path.abspath(os.path.expanduser(path))
+        if expanded not in self.docs and self.host.project_io is not None:
+            def read():
+                canonical = os.path.realpath(expanded)
+                return canonical, read_file(canonical), stat_sig(canonical)
+            canonical, got, sig = await self.host.project_read(expanded, read)
+            if self.host.sessions.get(self.id) is not self:
+                raise HostError("The session was removed while reading", "not_found")
+            if canonical not in self.docs:
+                if got is None:
+                    raise HostError(f"Cannot read {canonical}", "not_found")
+                doc = Doc(self, canonical)
+                doc.text, doc.crlf, doc.bom = got
+                doc.disk_text, doc.disk_sig = doc.text, sig
+                self.docs[canonical] = doc
+                self.persist(doc)
+            path = canonical
+        return self.get_doc(path)
+
     def note_agent_query(self, path: str) -> None:
         """An agent asked about a document: with the "viewed" open policy it stays open in the
         prover for a while"""
-        doc = self.docs.get(os.path.realpath(os.path.expanduser(path)))
+        doc = self.docs.get(self.doc_path(path))
         if doc is not None:
             doc.agent_query = now()  # type: ignore[attr-defined]
 
@@ -627,19 +719,21 @@ class Session:
         change = ot.normalize(change, len(doc.text))
         old = doc.text
         new = ot.apply(old, change)
-        doc.revision += 1
         entry = {
-            "id": doc.next_entry, "rev": doc.revision, "author": author, "kind": kind,
+            "id": doc.next_entry, "rev": doc.revision + 1, "author": author, "kind": kind,
             "change": [list(r) for r in change], "inverse": [list(r) for r in ot.invert(old, change)],
             "target": target, "txn": txn or f"e{doc.next_entry}", "time": now(),
         }
+        # Admission and the immutable journal record precede authoritative mutation.
+        # The dispatcher waits for this write before acknowledging the edit.
+        self.append_log(doc, entry)
+        doc.revision += 1
         doc.next_entry += 1
         doc.text = new
         doc.entries.append(entry)
         if len(doc.entries) > MEMORY_ENTRIES:
             doc.entries = doc.entries[-MEMORY_ENTRIES:]
         doc.last_edit = now()
-        self.append_log(doc, entry)
         self.update_trackers(doc, entry, old)
         if author["kind"] == "agent":
             self.track_agent_change(doc, entry)
@@ -671,7 +765,7 @@ class Session:
                     pr["backend_revision"] = doc.revision
                 pr["revision"] = doc.revision
                 self.host.broadcast_doc(self, doc, {"event": "doc_prover", "session": self.id, "path": doc.path,
-                                                    "prover": pr})
+                                                    "epoch": self.meta["epoch"], "prover": pr})
         self.track_keyword_holes(doc, change)
         self.persist(doc)
         self.schedule_save(doc)
@@ -1286,6 +1380,67 @@ class Session:
             return True
         if doc.conflict:
             return False
+        if self.host.project_io is not None:
+            if doc.path in self._save_jobs:
+                return True
+            text, revision = doc.text, doc.revision
+            expected, crlf, bom = doc.disk_sig, doc.crlf, doc.bom
+            path = doc.path
+            group = self.host.project_group(path)
+            def write():
+                sig = stat_sig(path)
+                if sig != expected:
+                    return False, sig, read_file(path)
+                write_file_atomic(path, encode_file(text, crlf, bom))
+                return True, stat_sig(path), None
+            try:
+                work = self.host.project_io.submit(group, write, io_weight(text))
+            except IOBusy as exn:
+                doc.save_error = str(exn)
+                self.schedule_save(doc, 1)
+                return False
+            async def complete():
+                try:
+                    saved, sig, got = await self.host.project_io.wait(work, group, PROJECT_IO_TIMEOUT)
+                except asyncio.TimeoutError:
+                    # The write still owns its lane. Retain its result handler:
+                    # a deadline must never let a later save overtake this one.
+                    doc.save_error = "Saving is waiting for the filesystem"
+                    self.host.broadcast_doc(self, doc, {"event": "doc_saved", "session": self.id,
+                        "path": path, "error": doc.save_error, "revision": revision, "dirty": True})
+                    try:
+                        saved, sig, got = await asyncio.shield(work)
+                    except Exception as exn:
+                        doc.save_error = str(exn)
+                        return False
+                except Exception as exn:
+                    doc.save_error = str(exn)
+                    self.host.broadcast_doc(self, doc, {"event": "doc_saved", "session": self.id,
+                        "path": path, "error": doc.save_error, "revision": revision, "dirty": True})
+                    return False
+                if self.docs.get(path) is not doc or self.meta.get("discarded"):
+                    return False
+                if not saved:
+                    self._apply_disk(doc, sig, got)
+                    return not doc.conflict
+                doc.disk_text, doc.disk_sig = text, sig
+                doc.saved_revision = revision
+                doc.save_error = None
+                self.persist(doc)
+                self.host.broadcast_doc(self, doc, {"event": "doc_saved", "session": self.id,
+                    "path": path, "revision": revision, "dirty": doc.dirty})
+                self.backend_disk_changed([path])
+                return True
+            task = asyncio.create_task(complete())
+            self._save_jobs[path] = task
+            def finished(future):
+                self._save_jobs.pop(path, None)
+                if not future.cancelled():
+                    future.exception()
+                    if doc.dirty and not doc.conflict and not self.host.stopping.is_set():
+                        self.schedule_save(doc, 1)
+            task.add_done_callback(finished)
+            return True
         if stat_sig(doc.path) != doc.disk_sig:
             self.check_disk(doc)
             if doc.conflict or not doc.dirty:
@@ -1315,27 +1470,59 @@ class Session:
             if doc.dirty and not doc.conflict:
                 self.save_doc(doc)
 
+    async def save_through(self, doc: Doc, revision: Optional[int] = None,
+                           timeout: float = PROJECT_IO_TIMEOUT) -> bool:
+        """Save at least the revision requested, even behind an older save."""
+        target = doc.revision if revision is None else revision
+        deadline = asyncio.get_running_loop().time() + timeout
+        first = True
+        while doc.dirty and (first or doc.saved_revision < target):
+            first = False
+            if not self.save_doc(doc, force=True):
+                return False
+            job = self._save_jobs.get(doc.path)
+            if job is None:  # synchronous direct callers
+                return not doc.dirty
+            try:
+                remaining = max(0, deadline - asyncio.get_running_loop().time())
+                if not await asyncio.wait_for(asyncio.shield(job), remaining):
+                    return False
+            except asyncio.TimeoutError:
+                doc.save_error = "Saving is waiting for the filesystem"
+                return False
+        return not doc.conflict
+
     def check_disk(self, doc: Doc) -> None:
         sig = stat_sig(doc.path)
         if sig == doc.disk_sig:
             return
         got = read_file(doc.path)
+        self._apply_disk(doc, sig, got)
+
+    def _apply_disk(self, doc: Doc, sig: Optional[Tuple[int, int]], got) -> None:
+        if sig == doc.disk_sig:
+            return
         disk_text = got[0] if got else None
-        doc.disk_sig = sig
         if disk_text is not None and disk_text == doc.disk_text:
+            doc.disk_sig = sig
             self.persist(doc)
             return
         if disk_text is not None and doc.conflict and doc.conflict.get("disk_text") == disk_text:
+            doc.disk_sig = sig
+            self.persist(doc)
             return
         if disk_text is not None and not doc.dirty and not doc.conflict:
             # No unsaved edits: take the disk version, as a logged, revertable edit
-            doc.crlf, doc.bom = got[1], got[2]
             change = line_change(doc.text, disk_text)
-            doc.disk_text = disk_text
             self.commit(doc, DISK, "reload", change)
+            doc.crlf, doc.bom = got[1], got[2]
+            doc.disk_text, doc.disk_sig = disk_text, sig
             doc.saved_revision = doc.revision
             self.persist(doc)
+            self.host.broadcast_doc(self, doc, {"event": "doc_saved", "session": self.id,
+                "path": doc.path, "revision": doc.revision, "dirty": False})
             return
+        doc.disk_sig = sig
         doc.conflict = {"disk_text": disk_text, "base_text": doc.disk_text, "since": now()}
         if doc.save_handle:
             doc.save_handle.cancel()
@@ -1370,11 +1557,14 @@ class Session:
             target = text.replace("\r\n", "\n")
         else:
             raise HostError("Choice must be disk, buffer or merge")
-        doc.conflict = None
-        doc.disk_text = disk_text
-        doc.disk_sig = stat_sig(doc.path)
         if target != doc.text:
             self.commit(doc, author, "resolve", line_change(doc.text, target), client=client)
+        doc.conflict = None
+        doc.disk_text = disk_text
+        # Keep the signature represented by the conflict. The save lane checks
+        # it again so a later external change becomes a fresh conflict.
+        if self.host.project_io is None:
+            doc.disk_sig = stat_sig(doc.path)
         self.persist(doc)
         self.schedule_save(doc, 0.1)
         self.host.broadcast_doc(self, doc, {"event": "doc_conflict", "session": self.id, "path": doc.path,
@@ -1383,6 +1573,11 @@ class Session:
         return {"revision": doc.revision}
 
     def watch(self) -> None:
+        if self.host.project_io is not None:
+            if self._watch_job is None:
+                self._watch_job = asyncio.create_task(self._watch_background())
+                self._watch_job.add_done_callback(lambda f: f.exception() if not f.cancelled() else None)
+            return
         for doc in list(self.docs.values()):
             if stat_sig(doc.path) != doc.disk_sig:
                 self.check_disk(doc)
@@ -1416,13 +1611,60 @@ class Session:
         if changed:
             self.backend_disk_changed(changed)
 
+    async def _watch_background(self) -> None:
+        folder, cls = self.meta["folder"], self.driver_class
+        docs = [(d.path, d.disk_sig, d.revision) for d in self.docs.values()
+                if d.path not in self._save_jobs]
+        relist = now() - self.watch_listed > 5
+        paths = list(self.watch_list)
+        group = self.host.project_group(folder)
+        def scan():
+            listed = [p for p in list_documents(folder, 1500, [cls]) if p.endswith(cls.documents)] if relist else paths
+            changes = []
+            for path, expected, revision in docs:
+                sig = stat_sig(path)
+                if sig != expected:
+                    changes.append((path, expected, revision, sig, read_file(path)))
+            return listed, changes, {p: stat_sig(p) for p in listed}
+        try:
+            work = self.host.project_io.submit(group, scan)
+            listed, changes, sigs = await self.host.project_io.wait(work, group, PROJECT_IO_TIMEOUT)
+            if self.meta.get("discarded"):
+                return
+            for path, expected, revision, sig, got in changes:
+                doc = self.docs.get(path)
+                if doc and doc.disk_sig == expected and doc.revision == revision and path not in self._save_jobs:
+                    self._apply_disk(doc, sig, got)
+            if relist:
+                if self.watch_listed_once and set(listed) != set(self.watch_list):
+                    for client in self.attached_clients():
+                        client.push({"event": "theories_changed", "session": self.id})
+                self.watch_listed, self.watch_listed_once, self.watch_list = now(), True, listed
+            changed = [p for p, sig in sigs.items() if p in self.watch_sigs and self.watch_sigs[p] != sig
+                       and not (p in self.docs and getattr(self.docs[p], "_sent_open", False))]
+            self.watch_sigs.update(sigs)
+            if self.driver and self.driver.ready:
+                self.close_unviewed()
+                self.backend_disk_changed(changed) if changed else None
+        except (IOBusy, asyncio.TimeoutError):
+            pass
+        except Exception as exn:
+            log("watch failed", self.id, repr(exn))
+        finally:
+            self._watch_job = None
+
     def group_usage(self) -> Optional[Tuple[int, int]]:
         """Ticks of CPU time and pages of memory of the prover's process group (the JVM and the
         ML process; Lean's server and its workers)"""
+        if self.host.state_io is not None:
+            return self._group_sample
         proc = self.driver.proc if self.driver else None
         if not (proc and proc.returncode is None):
             return None
-        pgid = proc.pid
+        return self.process_group_usage(proc.pid)
+
+    @staticmethod
+    def process_group_usage(pgid: int) -> Optional[Tuple[int, int]]:
         ticks = 0
         rss_pages = 0
         try:
@@ -1485,7 +1727,7 @@ class Session:
             return
         act = self.activity()
         for c in apps:
-            c.push({"event": "activity", "session": self.id, "activity": act})
+            c.push({"event": "activity", "session": self.id, "epoch": self.meta["epoch"], "activity": act})
 
     def backend_disk_changed(self, paths: List[str]) -> None:
         if self.driver and self.driver.ready:
@@ -1498,6 +1740,8 @@ class Session:
         if self.lifecycle in ("Starting", "Running", "Paused", "Stopping"):
             return
         self.host.check_memory_budget()
+        self._group_sample = None
+        self.cpu_sample = None
         self.meta["epoch"] = self.meta.get("epoch", 0) + 1
         self.meta["desired"] = "running"
         for doc in self.docs.values():
@@ -1667,7 +1911,7 @@ class Session:
             for key in running:
                 self.running_since.setdefault(key, t)
             self.host.broadcast_doc(self, doc, {"event": "doc_prover", "session": self.id, "path": path,
-                                                "prover": doc.prover})
+                                                "epoch": self.meta["epoch"], "prover": doc.prover})
         if self.status_handle is None:
             self.status_handle = asyncio.get_running_loop().call_later(0.5, self.flush_status)
 
@@ -1676,7 +1920,7 @@ class Session:
         for c in self.attached_clients():
             if c.kind == "app":
                 c.push({"event": "theory_status", "session": self.id, "status": self.theory_status,
-                        "activity": self.summary()["activity"]})
+                        "epoch": self.meta["epoch"], "activity": self.summary()["activity"]})
 
     # ----- queries (state, Sledgehammer, find theorems)
 
@@ -1719,16 +1963,25 @@ class Session:
                 info = r.get("info") or {}
                 d = info.get("definition")
                 if d and d.get("file"):
-                    target_path = os.path.realpath(d["file"])
+                    source = d["file"]
+                    disk_text = None
+                    if source in self.docs:
+                        target_path = source
+                    else:
+                        def read_target():
+                            canonical = os.path.realpath(source)
+                            text = None
+                            with contextlib.suppress(OSError):
+                                text = Path(canonical).read_text()
+                            return canonical, text
+                        target_path, disk_text = await self.host.project_read(source, read_target)
+                        check_current()
                     target = self.docs.get(target_path)
                     current = (target, target.revision) if target else None
                     if targets.get(target_path) != current:
                         raise HostError("The definition's document changed while reading it", "stale_snapshot",
                                         revision=captured_revision)
-                    text = target.text if target else None
-                    if text is None:
-                        with contextlib.suppress(OSError):
-                            text = Path(d["file"]).read_text()
+                    text = target.text if target else disk_text
                     if text is not None:
                         d["offset"] = ot.offset_of(text, int(d.get("line", 1)), int(d.get("column", 0)))
                 return {"info": info, "revision": captured_revision}
@@ -2205,6 +2458,58 @@ class Client:
         self.closed = False
         # Older GUIs depend on reads and mutations completing in request order.
         self.concurrent_reads = False
+        self._output = deque()
+        self._output_bytes = 0
+        self._output_ready = asyncio.Event()
+        self._output_finishing = False
+        self._writer_task: Optional[asyncio.Task] = None
+        self.durable_replies: set = set()
+
+    def start_writer(self) -> None:
+        self._writer_task = asyncio.create_task(self._write_loop())
+
+    @staticmethod
+    def _snapshot_key(obj: Dict[str, Any]) -> Optional[Tuple[Any, ...]]:
+        event = obj.get("event")
+        if event not in ("activity", "theory_status", "doc_prover"):
+            return None
+        prover = obj.get("prover") or {}
+        return event, obj.get("session"), obj.get("path"), obj.get("epoch"), prover.get("revision")
+
+    def _close_output(self) -> None:
+        self.closed = True
+        self._output_ready.set()
+        with contextlib.suppress(Exception):
+            self.writer.close()
+
+    async def _write_loop(self) -> None:
+        try:
+            while not self.closed:
+                await self._output_ready.wait()
+                while self._output and not self.closed:
+                    data, _ = self._output.popleft()
+                    self.writer.write(data)
+                    await asyncio.wait_for(self.writer.drain(), CLIENT_DRAIN_TIMEOUT)
+                    self._output_bytes -= len(data)
+                self._output_ready.clear()
+                if self._output_finishing:
+                    return
+        except (ConnectionError, OSError, asyncio.TimeoutError):
+            self._close_output()
+        finally:
+            self._output.clear()
+            self._output_bytes = 0
+
+    async def finish_writer(self) -> None:
+        self._output_finishing = True
+        self._output_ready.set()
+        if self._writer_task is not None:
+            await self._writer_task
+
+    async def cancel_writer(self) -> None:
+        if self._writer_task is not None:
+            self._writer_task.cancel()
+            await asyncio.gather(self._writer_task, return_exceptions=True)
 
     def author(self) -> Dict[str, Any]:
         if self.kind == "agent":
@@ -2221,8 +2526,37 @@ class Client:
     def push(self, obj: Dict[str, Any]) -> None:
         if self.closed:
             return
+        data = (json.dumps(obj, ensure_ascii=False) + "\n").encode()
+        if self._writer_task is not None:
+            key = self._snapshot_key(obj)
+            # A lossless message is an ordering fence: no snapshot can cross an
+            # edit acknowledgement, document change, query result or lifecycle.
+            if key is not None:
+                for i in range(len(self._output) - 1, -1, -1):
+                    old, previous = self._output[i]
+                    if previous is None:
+                        break
+                    if previous == key:
+                        size = self._output_bytes + len(data) - len(old)
+                        if size > CLIENT_OUTPUT_BYTES:
+                            self._close_output()
+                            return
+                        self._output[i] = data, key
+                        self._output_bytes = size
+                        self._output_ready.set()
+                        return
+            if (self._output_bytes + len(data) > CLIENT_OUTPUT_BYTES
+                    or len(self._output) >= CLIENT_OUTPUT_MESSAGES):
+                # Never drop an edit or response. A slow client reconnects and
+                # reads the authoritative buffers, rather than missing changes.
+                self._close_output()
+                return
+            self._output.append((data, key))
+            self._output_bytes += len(data)
+            self._output_ready.set()
+            return
         try:
-            self.writer.write((json.dumps(obj, ensure_ascii=False) + "\n").encode())
+            self.writer.write(data)
         except Exception:
             self.closed = True
 
@@ -2263,6 +2597,41 @@ class Host:
         self.stopping = asyncio.Event()
         # Sessions that were running when the host last stopped: started again as it comes back
         self.resume_after_load: List[str] = []
+        self.state_io: Optional[OrderedIO] = None
+        self.project_io: Optional[OrderedIO] = None
+        self.sample_io: Optional[OrderedIO] = None
+        self.sample_job: Optional[asyncio.Task] = None
+        self.resource_policy: Dict[str, Any] = {}
+        self._mounts = ["/"]
+
+    def enable_background_io(self) -> None:
+        self.state_io = OrderedIO("state", workers=2)
+        self.project_io = OrderedIO("project", workers=4)
+        self.sample_io = OrderedIO("process", workers=1, pending=1)
+        self.resource_policy = drivers.read_config()
+        try:
+            with open("/proc/self/mountinfo") as source:
+                mounts = [re.sub(r"\\([0-7]{3})", lambda m: chr(int(m[1], 8)), line.split()[4])
+                          for line in source if len(line.split()) > 4]
+            self._mounts = sorted(mounts, key=len, reverse=True)
+        except OSError:
+            pass
+
+    def project_group(self, path: str) -> str:
+        path = os.path.abspath(path)
+        return next((p for p in self._mounts if p == "/" or path == p or path.startswith(p + "/")), "/")
+
+    async def project_read(self, path: str, operation: Callable[[], Any]):
+        if self.project_io is None:
+            return operation()
+        group = self.project_group(path)
+        try:
+            work = self.project_io.submit(group, operation)
+            return await self.project_io.wait(work, group, PROJECT_IO_TIMEOUT)
+        except IOBusy as exn:
+            raise HostError(str(exn), "busy")
+        except asyncio.TimeoutError:
+            raise HostError("The filesystem is taking too long; retry after it responds", "io_timeout")
 
     # ----- sessions on disk
 
@@ -2351,20 +2720,52 @@ class Host:
         return backends_info(only)
 
     def check_memory_budget(self) -> None:
-        """Refuse to start a prover when the running ones already use the configured budget
-        (`memory_budget_gb` in host.json); no budget, no limit"""
-        budget = drivers.read_config().get("memory_budget_gb")
+        """Admit starts against configured aggregate jobs and memory reservations.
+
+        Starts reserve space immediately, before their processes report RSS.
+        Policy is optional and applies to new starts, never stopping a prover.
+        """
+        policy = self.resource_policy if self.state_io is not None else drivers.read_config()
+        active = [s for s in self.sessions.values() if s.lifecycle in ("Starting", "Running", "Paused", "Stopping")]
+        cap = policy.get("max_running_provers")
+        if type(cap) is int and cap > 0 and len(active) >= cap:
+            raise HostError(f"The configured limit of {cap} running provers is reached; stop a session first",
+                            "prover_limit", limit=cap)
+        budget = policy.get("memory_budget_gb")
         if not isinstance(budget, (int, float)) or budget <= 0:
             return
+        reserve = policy.get("prover_start_reserve_mb", 256)
+        if not isinstance(reserve, (int, float)) or reserve < 0:
+            reserve = 256
+        reserved = reserve * 1e6
         used = 0
-        for s in self.sessions.values():
+        for s in active:
             usage = s.group_usage()
-            if usage:
-                used += usage[1] * os.sysconf("SC_PAGE_SIZE")
-        if used >= budget * 1e9:
+            used += max(usage[1] * os.sysconf("SC_PAGE_SIZE") if usage else 0, reserved)
+        if used + reserved > budget * 1e9:
             raise HostError(f"The running provers use {used / 1e9:.1f} GB, the memory budget is {budget:g} GB; "
                             "stop a session before starting another", "memory_budget",
-                            used_gb=round(used / 1e9, 2), budget_gb=budget)
+                            used_gb=round(used / 1e9, 2), budget_gb=budget, reserve_mb=reserve)
+
+    def sample_resources(self) -> None:
+        if self.sample_io is None or self.sample_job is not None:
+            return
+        procs = [(s, s.driver.proc) for s in self.sessions.values() if s.driver and s.driver.proc
+                 and s.driver.proc.returncode is None]
+        pids = [proc.pid for _, proc in procs]
+        def sample():
+            return [Session.process_group_usage(pid) for pid in pids], drivers.read_config()
+        async def complete():
+            try:
+                result, policy = await self.sample_io.submit("sample", sample)
+                self.resource_policy = policy
+                for (session, proc), usage in zip(procs, result):
+                    if session.driver and session.driver.proc is proc:
+                        session._group_sample = usage
+            finally:
+                self.sample_job = None
+        self.sample_job = asyncio.create_task(complete())
+        self.sample_job.add_done_callback(lambda f: f.exception() if not f.cancelled() else None)
 
     def create_session(self, params: Dict[str, Any], owner: Optional[Dict[str, Any]] = None,
                        parent: Optional[Dict[str, Any]] = None) -> Session:
@@ -2529,6 +2930,19 @@ class Host:
         if s.meta.get("parent") and not force and self.merge_preview(s):
             raise HostError("This independent session has changes that were not merged", "unmerged")
         await s.stop()
+        deadline = asyncio.get_running_loop().time() + PROJECT_IO_TIMEOUT
+        while True:
+            pending = list(s._save_jobs.values())
+            tail = self.state_io.tails.get(s.id) if self.state_io is not None else None
+            if tail is not None and not tail.done():
+                pending.append(tail)
+            if not pending:
+                break
+            try:
+                await asyncio.wait_for(asyncio.shield(asyncio.gather(*pending)),
+                                       max(0, deadline - asyncio.get_running_loop().time()))
+            except asyncio.TimeoutError:
+                raise HostError("Saving is still waiting for the filesystem; retry discard after it finishes", "busy")
         parent = s.meta.get("parent")
         if parent:
             with contextlib.suppress(HostError):
@@ -2553,8 +2967,10 @@ class Host:
                                 "own independent sessions", "forbidden")
 
     def prepare_snapshot(self, client: Client, req: Dict[str, Any]) -> Callable[[], Awaitable[Dict[str, Any]]]:
-        path = translate_path(req["path"], client.location.get("machine"))
+        if self.stopping.is_set():
+            raise HostError("The host is shutting down", "stopping")
         s = self.session(req.get("session"))
+        path = req["path"] if req["path"] in s.docs else translate_path(req["path"], client.location.get("machine"))
         if client.kind == "agent":
             s.note_agent_query(path)
         return s.prepare_snapshot(client, req["op"], path, int(req.get("offset", 0)),
@@ -2563,6 +2979,8 @@ class Host:
     async def handle(self, client: Client, req: Dict[str, Any]) -> Dict[str, Any]:
         op = req.get("op")
         p = req
+        if self.stopping.is_set() and op != "ping":
+            raise HostError("The host is shutting down", "stopping")
         if op in ("state", "info"):
             return await self.prepare_snapshot(client, req)()
         if op == "hello":
@@ -2588,7 +3006,11 @@ class Host:
         # through COSMIC Terminal's sshfs mount of it
         for key in ("path", "folder"):
             if isinstance(p.get(key), str):
-                p[key] = translate_path(p[key], client.location.get("machine"))
+                known = self.sessions.get(str(p.get("session")))
+                if key == "path" and known and p[key] in known.docs:
+                    continue
+                path, machine = p[key], client.location.get("machine")
+                p[key] = await self.project_read(path, lambda: translate_path(path, machine))
         if op == "runtimes":
             return {"runtimes": find_runtimes()}
         if op == "toolchains":
@@ -2606,20 +3028,23 @@ class Host:
             detections = await asyncio.to_thread(self.detections, folder)
             return {"suggestion": suggestion, "runtimes": runtimes, "detections": detections}
         if op == "list_dir":
-            path = os.path.realpath(os.path.expanduser(p.get("path") or str(HOME)))
+            path = os.path.abspath(os.path.expanduser(p.get("path") or str(HOME)))
             # Documents and project files of every backend; inside a session, of its backend
             classes = list(drivers.registry().values())
             if p.get("session") in self.sessions:
                 classes = [self.sessions[p["session"]].driver_class]
-            entries = []
-            with contextlib.suppress(OSError):
-                for e in sorted(os.scandir(path), key=lambda e: e.name.lower()):
-                    if e.name.startswith("."):
-                        continue
-                    if e.is_dir():
-                        entries.append({"name": e.name, "dir": True})
-                    elif any(c.is_document(e.name) for c in classes):
-                        entries.append({"name": e.name, "dir": False})
+            def scan():
+                entries = []
+                with contextlib.suppress(OSError):
+                    for e in sorted(os.scandir(path), key=lambda e: e.name.lower()):
+                        if e.name.startswith("."):
+                            continue
+                        if e.is_dir():
+                            entries.append({"name": e.name, "dir": True})
+                        elif any(c.is_document(e.name) for c in classes):
+                            entries.append({"name": e.name, "dir": False})
+                return entries
+            entries = await self.project_read(path, scan)
             return {"path": path, "parent": str(Path(path).parent), "entries": entries}
         if op == "sessions":
             return {"sessions": [s.summary() for s in self.sessions.values()]}
@@ -2666,15 +3091,20 @@ class Host:
             return {}
 
         s = self.session(p.get("session"))
+        if p.get("path") and op in ("edit", "undo", "redo", "revert", "history", "resolve",
+                                    "dismiss_alternative", "query", "fill_hole", "show", "add_note", "keyword"):
+            p["path"] = (await s.load_doc(p["path"])).path
         if client.kind == "agent" and isinstance(p.get("path"), str):
             s.note_agent_query(p["path"])
         if op == "session_info":
             client.attach(s)
+            folder, cls = s.meta["folder"], s.driver_class
+            listed = await self.project_read(folder, lambda: list_documents(folder, classes=[cls]))
             info = s.summary()
             info["theories"] = [{"path": t, "status": s.theory_status.get(t),
                                  "dirty": s.docs[t].dirty if t in s.docs else False,
                                  "conflict": bool(s.docs[t].conflict) if t in s.docs else False}
-                                for t in list_documents(s.meta["folder"], classes=[s.driver_class])]
+                                for t in listed]
             info["docs"] = [d.summary() for d in s.docs.values()]
             info["logs"] = s.logs[-100:]
             info["seen"] = s.meta["seen"]
@@ -2719,23 +3149,25 @@ class Host:
             if p.get("peek"):
                 # A theory to look at (a reference window): one outside the session's folder, such
                 # as a library theory, is read from disk and not opened as a document of the session
-                path = os.path.realpath(os.path.expanduser(p["path"]))
-                if path not in s.docs and not path_inside(path, s.meta["folder"]):
+                source, folder = p["path"], s.meta["folder"]
+                path = await self.project_read(source, lambda: os.path.realpath(os.path.expanduser(source)))
+                outside = path not in s.docs and await self.project_read(path, lambda: not path_inside(path, folder))
+                if outside:
                     try:
-                        text = Path(path).read_text()
+                        text = await self.project_read(path, lambda: Path(path).read_text())
                     except OSError as e:
                         raise HostError(f"Cannot read {path}: {e}", "not_found")
                     return {"doc": {"path": path, "text": text, "revision": 0, "prover": None, "library": True}}
-                doc = s.get_doc(path)
+                doc = await s.load_doc(path)
                 client.attach(s)
                 return {"doc": s.doc_view(doc)}
-            doc = s.get_doc(p["path"])
+            doc = await s.load_doc(p["path"])
             client.attach(s)
             if p.get("subscribe", client.kind == "app"):
                 client.open_docs.add((s.id, doc.path))
             return {"doc": s.doc_view(doc, with_conflict_texts=bool(p.get("conflict_texts")))}
         if op == "close":
-            client.open_docs.discard((s.id, os.path.realpath(p["path"])))
+            client.open_docs.discard((s.id, s.doc_path(p["path"])))
             return {}
         if op == "edit":
             return s.client_edit(client, p["path"], int(p.get("revision", 0)), p.get("edits", []),
@@ -2750,7 +3182,7 @@ class Host:
         if op == "history":
             return {"history": s.history(p["path"], int(p.get("limit", 100)), p.get("author"))}
         if op == "save":
-            paths = [os.path.realpath(p["path"])] if p.get("path") else list(s.docs)
+            paths = [s.doc_path(p["path"])] if p.get("path") else list(s.docs)
             failed = []
             for path in paths:
                 doc = s.docs.get(path)
@@ -2758,7 +3190,8 @@ class Host:
                     continue
                 if client.kind == "agent" and not s.agent_may_edit(client.author()["key"], doc, []):
                     raise HostError("You have no editing rights for " + Path(path).name, "forbidden")
-                if not s.save_doc(doc, force=True):
+                success = await s.save_through(doc)
+                if not success:
                     failed.append({"path": path, "error": doc.save_error or
                                    ("changed on disk; resolve the conflict first" if doc.conflict else "")})
             return {"failed": failed}
@@ -2839,7 +3272,7 @@ class Host:
                                      p.get("path"), p.get("offset"))}
         if op == "view":
             # The app says where the human is (sent as the caret moves)
-            client.views[s.id] = {"path": os.path.realpath(p.get("path") or ""), "offset": int(p.get("offset", 0)),
+            client.views[s.id] = {"path": s.doc_path(p.get("path") or ""), "offset": int(p.get("offset", 0)),
                                   "selection": (p.get("selection") or "")[:4000], "mode": p.get("mode"),
                                   "construct": p.get("construct"), "time": now()}
             return {}
@@ -2940,8 +3373,11 @@ class Host:
 
     async def serve_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         client = Client(self, reader, writer)
+        client.start_writer()
         self.clients.append(client)
         snapshots: set = set()
+        slots: Dict[Tuple[Any, ...], asyncio.Task] = {}
+        slot_requests: Dict[Tuple[Any, ...], Dict[str, Any]] = {}
         transport_closed = asyncio.create_task(writer.wait_closed())
         reading: Optional[asyncio.Task] = None
 
@@ -2956,20 +3392,31 @@ class Host:
                 client.push({"id": req.get("id"), "ok": False,
                              "error": f"{type(exn).__name__}: {exn}", "code": "internal"})
 
-        async def drain() -> None:
-            try:
-                await writer.drain()
-            except (ConnectionError, OSError):
-                client.closed = True
-                writer.close()
-
         async def respond(req: Dict[str, Any], work: Callable[[], Awaitable[Dict[str, Any]]]) -> None:
+            fences: list = []
+            token = WRITE_FENCES.set((fences, asyncio.current_task()))
             try:
                 result = await work()
-                client.push({"id": req.get("id"), "ok": True, **result})
             except Exception as exn:
                 error_reply(req, exn)
-            await drain()
+                return
+            finally:
+                WRITE_FENCES.reset(token)
+            async def reply_after_writes():
+                try:
+                    if fences:
+                        await asyncio.gather(*(asyncio.shield(f) for f in fences))
+                    client.push({"id": req.get("id"), "ok": True, **result})
+                except Exception as exn:
+                    error_reply(req, HostError(f"Could not persist the change: {exn}", "io_error"))
+            if fences and client.concurrent_reads:
+                # Mutation has happened in input order. Only its durability
+                # acknowledgement waits; later edits and Stop can be dispatched.
+                task = asyncio.create_task(reply_after_writes())
+                client.durable_replies.add(task)
+                task.add_done_callback(client.durable_replies.discard)
+            else:
+                await reply_after_writes()
 
         try:
             while not client.closed:
@@ -2982,14 +3429,15 @@ class Host:
                 if not line:
                     # The stdio bridge half-closes its input after its final request. It must
                     # still receive pending replies; transport loss below cancels them instead.
-                    if snapshots:
-                        pending = asyncio.gather(*snapshots)
+                    if snapshots or client.durable_replies:
+                        pending = asyncio.gather(*snapshots, *client.durable_replies)
                         try:
                             await asyncio.wait((pending, transport_closed), return_when=asyncio.FIRST_COMPLETED)
                         finally:
                             if not pending.done():
                                 pending.cancel()
                             await asyncio.gather(pending, return_exceptions=True)
+                    await client.finish_writer()
                     break
                 try:
                     req = json.loads(line)
@@ -2997,24 +3445,37 @@ class Host:
                         raise ValueError("request must be an object")
                 except ValueError:
                     client.push({"error": "bad json", "code": "bad_request"})
-                    await drain()
                     continue
                 if client.concurrent_reads and req.get("op") in ("state", "info"):
+                    slot = (req.get("op"), req.get("session")) if client.kind == "app" else None
+                    previous = slots.get(slot) if slot else None
                     # Refuse saturation immediately: waiting for a semaphore here would put
                     # the next edit or Stop back behind the very reads we are separating.
-                    if len(snapshots) >= MAX_SNAPSHOT_REQUESTS:
+                    if len(snapshots) >= MAX_SNAPSHOT_REQUESTS and previous is None:
                         error_reply(req, HostError("Too many pending document reads; try again", "busy"))
-                        await drain()
                         continue
                     try:
                         work = self.prepare_snapshot(client, req)
                     except Exception as exn:
                         error_reply(req, exn)
-                        await drain()
                         continue
+                    if previous is not None:
+                        if not previous.done():
+                            error_reply(slot_requests[slot], HostError("A newer cursor read replaced this request",
+                                                                      "stale_snapshot"))
+                        previous.cancel()
+                        snapshots.discard(previous)
                     task = asyncio.create_task(respond(req, work))
                     snapshots.add(task)
                     task.add_done_callback(snapshots.discard)
+                    if slot:
+                        slots[slot] = task
+                        slot_requests[slot] = req
+                        def clear(finished, slot=slot):
+                            if slots.get(slot) is finished:
+                                slots.pop(slot, None)
+                                slot_requests.pop(slot, None)
+                        task.add_done_callback(clear)
                 else:
                     # Edits, lifecycle changes and all other mutations retain input order.
                     await respond(req, lambda: self.handle(client, req))
@@ -3028,6 +3489,10 @@ class Host:
             for task in snapshots:
                 task.cancel()
             await asyncio.gather(*snapshots, return_exceptions=True)
+            for task in client.durable_replies:
+                task.cancel()
+            await asyncio.gather(*client.durable_replies, return_exceptions=True)
+            await client.cancel_writer()
             self.clients.remove(client)
             for sid in list(client.sessions):
                 s = self.sessions.get(sid)
@@ -3040,10 +3505,38 @@ class Host:
             transport_closed.cancel()
             await asyncio.gather(transport_closed, return_exceptions=True)
 
+    async def flush_recovery(self) -> None:
+        """Flush accepted records and final snapshots, including a full queue."""
+        if self.state_io is None:
+            for session in self.sessions.values():
+                session.persist_now()
+            return
+        errors = []
+        async def flush():
+            try:
+                await self.state_io.flush()
+            except Exception as exn:
+                errors.append(str(exn))
+        await flush()
+        for session in list(self.sessions.values()):
+            while not session.persist_now():
+                if session.io_error:
+                    errors.append(session.id + ": " + session.io_error)
+                    break
+                if not self.state_io.tasks:
+                    errors.append(session.id + ": recovery snapshot exceeds queue capacity")
+                    break
+                await flush()
+        await flush()
+        if errors:
+            raise HostError("Could not flush recovery storage: " + "; ".join(errors), "io_error")
+
     async def watch_loop(self) -> None:
         tick = 0
         while not self.stopping.is_set():
             tick += 1
+            if tick % 2 == 0:
+                self.sample_resources()
             for s in list(self.sessions.values()):
                 try:
                     s.watch()
@@ -3056,6 +3549,7 @@ class Host:
     async def run(self) -> None:
         STATE_DIR.mkdir(parents=True, exist_ok=True)
         self.load()
+        self.enable_background_io()
         with contextlib.suppress(FileNotFoundError):
             SOCKET_PATH.unlink()
         self.server = await asyncio.start_unix_server(self.serve_client, path=str(SOCKET_PATH),
@@ -3076,6 +3570,7 @@ class Host:
                 log("resuming failed", sid, repr(exn))
         self.resume_after_load.clear()
         await self.stopping.wait()
+        self.server.close()
         watcher.cancel()
         for s in list(self.sessions.values()):
             s.save_all()
@@ -3085,8 +3580,32 @@ class Host:
                 s.meta["resume_on_start"] = True
             with contextlib.suppress(Exception):
                 await s.stop()
-            s.persist_now()
-        self.server.close()
+        # Project calls have deadlines; recovery writes have a separate lane.
+        # A stalled mount cannot prevent flushing the authoritative buffer.
+        saves = [asyncio.create_task(s.save_through(doc)) for s in self.sessions.values()
+                 for doc in s.docs.values() if doc.dirty and not doc.conflict]
+        if saves:
+            # Each fence has one overall deadline, including an older save.
+            await asyncio.gather(*saves, return_exceptions=True)
+        pending = [job for s in self.sessions.values() for job in [s._watch_job, *s._save_jobs.values()] if job]
+        if self.sample_job:
+            pending.append(self.sample_job)
+        for job in pending:
+            job.cancel()
+        await asyncio.gather(*pending, return_exceptions=True)
+        assert self.state_io is not None and self.project_io is not None
+        try:
+            await self.flush_recovery()
+        except Exception as exn:
+            log("Recovery flush failed during shutdown", repr(exn))
+        await asyncio.gather(*(f for c in self.clients for f in c.durable_replies), return_exceptions=True)
+        await asyncio.gather(*(c.finish_writer() for c in self.clients), return_exceptions=True)
+        for client in list(self.clients):
+            client._close_output()
+        self.state_io.close()
+        self.project_io.close()
+        if self.sample_io is not None:
+            self.sample_io.close()
         with contextlib.suppress(FileNotFoundError):
             SOCKET_PATH.unlink()
 
@@ -3129,7 +3648,7 @@ def translate_path(path: str, machine: Optional[str]) -> str:
     """A path as a client on `machine` gave it, as this machine reaches it: unchanged if it
     exists here, else through the mount of that machine (~/.cache/cosmic-term/mounts/NAME)"""
     p = os.path.expanduser(path)
-    if not os.path.isabs(p) or os.path.exists(p) or not machine or machine == socket.gethostname():
+    if not os.path.isabs(p) or not machine or machine == socket.gethostname() or os.path.exists(p):
         return p
     alt = HOME / ".cache" / "cosmic-term" / "mounts" / machine.split(".")[0] / p.lstrip("/")
     return str(alt) if alt.exists() else p

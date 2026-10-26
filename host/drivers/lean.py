@@ -34,7 +34,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from . import Driver, HostError, message
+from . import Driver, HostError, message, resource_limit
 from .lsp import LspClient, LspClosed, LspError, TextIndex, UNHANDLED
 
 HOME = os.path.expanduser("~")
@@ -1160,12 +1160,14 @@ class LeanDriver(Driver):
         want = meta.get("toolchain") or project.get("toolchain")
         if meta.get("toolchain") and meta["toolchain"] != project.get("toolchain"):
             env["ELAN_TOOLCHAIN"] = meta["toolchain"]
-        if want and version_tuple(want) not in [version_tuple(t["id"]) for t in self.toolchains()]:
+        toolchains = await asyncio.to_thread(self.toolchains) if want else []
+        if want and version_tuple(want) not in [version_tuple(t["id"]) for t in toolchains]:
             self.emit({"event": "phase", "phase": "building", "message": f"Installing the Lean toolchain {want}"})
-        self.check_slots = asyncio.Semaphore(2)
+        self.check_slots = asyncio.Semaphore(resource_limit(s, "scratch_checks", 2))
+        server_args = ["--", "-j", str(threads)] if (threads := resource_limit(s, "prover_threads")) else []
         try:
             self.proc = await asyncio.create_subprocess_exec(
-                lake, "serve", cwd=self.lake_root, env=env, stdin=asyncio.subprocess.PIPE,
+                lake, "serve", *server_args, cwd=self.lake_root, env=env, stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, start_new_session=True,
                 limit=64 * 1024 * 1024)
         except OSError as exn:

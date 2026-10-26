@@ -10,11 +10,14 @@
 //! Shared by Cerea, Isabellum and Terminal Agents' threads; it lives in
 //! Cerea's `prose/` and is a git subtree in the others.
 
+pub mod assets;
 pub mod chart;
 pub mod diagram;
 pub mod highlight;
 pub mod images;
+pub mod layout;
 pub mod markdown;
 pub mod math;
 pub mod pan_zoom;
 pub mod rich;
+pub mod source_map;

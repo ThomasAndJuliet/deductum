@@ -27,8 +27,7 @@ use std::time::{Duration, Instant};
 use cosmic::Renderer;
 use cosmic::iced::advanced::graphics::text::{Raw, font_system};
 use cosmic::iced::advanced::{
-    Clipboard, Layout, Shell, Widget, image as adv_image, layout, mouse, renderer,
-    svg as adv_svg,
+    Clipboard, Layout, Shell, Widget, image as adv_image, layout, mouse, renderer, svg as adv_svg,
     widget::{Tree, tree},
 };
 use cosmic::iced::core::text::Renderer as _;
@@ -36,6 +35,8 @@ use cosmic::iced::core::{image::Renderer as _, renderer::Renderer as _, svg::Ren
 use cosmic::iced::{Background, Border, Color, Element, Event, Length, Point, Rectangle, Size, Vector};
 use cosmic_text::{Align, Attrs, Buffer, Cursor, Family, Metrics, Shaping, Style as FontStyle, Weight, Wrap};
 
+use crate::assets::{ImageHandle, PreparedImages};
+use crate::layout::HeightIndex;
 use crate::markdown::{Block, Doc, Run, Style, TextKind};
 use crate::{chart, diagram, math};
 
@@ -183,7 +184,11 @@ enum Tone {
 
 #[derive(Clone, Debug, PartialEq)]
 enum SpanKind {
-    Text { style: Style, link: Option<String>, tone: Tone },
+    Text {
+        style: Style,
+        link: Option<String>,
+        tone: Tone,
+    },
     /// A no-break space standing for a formula
     Math(String),
 }
@@ -357,14 +362,24 @@ fn cell_copy(cell: &Cell, range: Range<usize>) -> String {
 fn block_copy(block: &Block, start: usize, end: usize) -> String {
     match block {
         Block::Math { latex, .. } => {
-            if start < 1 && end >= 1 { format!("$$\n{latex}\n$$") } else { String::new() }
+            if start < 1 && end >= 1 {
+                format!("$$\n{latex}\n$$")
+            } else {
+                String::new()
+            }
         }
         Block::Image { url, alt, .. } => {
-            if start < 1 && end >= 1 { format!("![{alt}]({url})") } else { String::new() }
+            if start < 1 && end >= 1 {
+                format!("![{alt}]({url})")
+            } else {
+                String::new()
+            }
         }
         Block::Rule => String::new(),
         // The whole chart copies as its specification
-        Block::Chart { spec, .. } if start == 0 && end >= block_len(block) => format!("```chartgen\n{spec}\n```"),
+        Block::Chart { spec, .. } if start == 0 && end >= block_len(block) => {
+            format!("```chartgen\n{spec}\n```")
+        }
         // And a diagram as its source
         Block::Diagram { source, .. } if start == 0 && end >= block_len(block) => {
             format!("```mermaid\n{source}\n```")
@@ -403,7 +418,9 @@ fn is_row_break(block: &Block, i: usize) -> bool {
     if let Block::Chart { .. } | Block::Diagram { .. } = block {
         return true;
     }
-    let Block::Table { rows } = block else { return false };
+    let Block::Table { rows } = block else {
+        return false;
+    };
     let mut n = 0;
     for row in rows {
         if n == i {
@@ -517,7 +534,9 @@ fn spec_key(spec: &str) -> u64 {
 
 /// A chart's labels as cells, a line each
 fn chart_cells(spec: &str) -> Vec<(usize, Cell)> {
-    let Some(labels) = CHART_LABELS.lock().unwrap().get(&spec_key(spec)).cloned() else { return Vec::new() };
+    let Some(labels) = CHART_LABELS.lock().unwrap().get(&spec_key(spec)).cloned() else {
+        return Vec::new();
+    };
     let mut at = 0;
     labels
         .iter()
@@ -532,7 +551,9 @@ fn chart_cells(spec: &str) -> Vec<(usize, Cell)> {
 
 /// A diagram's lines of text as cells, a line each
 fn diagram_cells(source: &str) -> Vec<(usize, Cell)> {
-    let Some(labels) = diagram::labels_of(source) else { return Vec::new() };
+    let Some(labels) = diagram::labels_of(source) else {
+        return Vec::new();
+    };
     let mut at = 0;
     labels
         .iter()
@@ -554,19 +575,20 @@ fn plain_cell(text: &str) -> Cell {
     }
 }
 
-static IMAGE_SIZES: LazyLock<Mutex<std::collections::HashMap<PathBuf, Option<(u32, u32)>>>> =
+static IMAGE_SIZES: LazyLock<Mutex<std::collections::HashMap<(PathBuf, u64), Option<(u32, u32)>>>> =
     LazyLock::new(Default::default);
 
-fn image_size(path: &Path) -> Option<(u32, u32)> {
+fn image_size(path: &Path, generation: u64) -> Option<(u32, u32)> {
     let mut sizes = IMAGE_SIZES.lock().unwrap();
-    if let Some(size) = sizes.get(path) {
+    let key = (path.to_path_buf(), generation);
+    if let Some(size) = sizes.get(&key) {
         return *size;
     }
     let size = crate::images::dimensions(path);
     if sizes.len() > 4096 {
         sizes.clear();
     }
-    sizes.insert(path.to_path_buf(), size);
+    sizes.insert(key, size);
     size
 }
 
@@ -583,7 +605,7 @@ pub fn thumbnail_of(path: &Path) -> PathBuf {
 #[derive(Clone)]
 struct Shaped {
     buffer: Arc<Buffer>,
-    /// Relative to the widget
+    /// Relative to the block
     origin: Vector,
     size: Size,
     /// Where it starts in its block's linear text
@@ -591,7 +613,7 @@ struct Shaped {
     cell: Cell,
     /// Byte offset of each buffer line in the cell's text
     line_starts: Vec<usize>,
-    /// Formulas in the text, and where they go, relative to the widget
+    /// Formulas in the text, and where they go, relative to the block
     formulas: Vec<(Arc<math::Formula>, Point)>,
     color: Color,
 }
@@ -600,7 +622,7 @@ struct Shaped {
 enum Laid {
     Cells(Vec<Shaped>),
     Math(Result<Arc<math::Formula>, Shaped>, Rectangle),
-    Image(PathBuf, Rectangle),
+    Image(PathBuf, Rectangle, Option<ImageHandle>),
     Rule(Rectangle),
 }
 
@@ -615,7 +637,6 @@ enum Figure {
 
 #[derive(Clone)]
 struct BlockLayout {
-    top: f32,
     bottom: f32,
     laid: Laid,
     /// Panels behind it: code backgrounds, quote bars, table rules
@@ -627,19 +648,166 @@ struct BlockLayout {
     len: usize,
 }
 
+/// Geometry stays relative to its block. Placing it elsewhere only retains an
+/// Arc and a top; streaming edits never clone every cell and span after them.
+#[derive(Clone)]
+struct PlacedBlock {
+    top: f32,
+    bottom: f32,
+    layout: Arc<BlockLayout>,
+}
+
+impl std::ops::Deref for PlacedBlock {
+    type Target = BlockLayout;
+
+    fn deref(&self) -> &Self::Target {
+        &self.layout
+    }
+}
+
 #[derive(Default)]
 struct State {
     key: Option<(u64, u32)>,
     /// Each block's layout as last built, placed at the top, by what it was
     /// built from: while text streams in, only the last block changes, and
     /// only it is shaped again
-    built: std::collections::HashMap<u64, BlockLayout>,
+    built: LayoutCache,
     style: Option<u64>,
-    blocks: Vec<BlockLayout>,
+    blocks: Arc<Vec<PlacedBlock>>,
+    positions: HeightIndex,
+    /// Keep the identity used by the layout key alive until it is replaced.
+    doc: Option<Arc<Doc>>,
+    first_block: usize,
+    prepared: Option<Arc<PreparedLayout>>,
     height: f32,
     last_click: Option<(Instant, Point, u8)>,
     /// Pressed in this widget, and where, for clicks on links and images
     pressed: Option<Point>,
+}
+
+/// Selectable rich text
+#[derive(Clone, Debug, PartialEq)]
+pub struct BlockWindow {
+    /// Source block IDs to shape, generally the viewport and an overscan margin.
+    pub blocks: Range<usize>,
+    /// Height before the first block, excluding its own leading interblock gap.
+    pub before: f32,
+    /// Height following the last block, including its following interblock gap.
+    pub after: f32,
+}
+
+/// All inputs needed by a layout worker. Documents and application state stay
+/// authoritative in the caller; a request is an immutable rendering snapshot.
+#[derive(Clone)]
+pub struct LayoutRequest {
+    pub doc: Arc<Doc>,
+    pub typography: Arc<Typography>,
+    pub width: f32,
+    pub base_dir: Option<PathBuf>,
+    pub images: Arc<PreparedImages>,
+    /// Advance whenever the worker's fonts are added or replaced.
+    pub font_generation: u64,
+    pub window: Option<BlockWindow>,
+}
+
+/// Private shaping caches with the renderer's exact font-face IDs. A fresh,
+/// independently constructed FontSystem can assign different IDs and make
+/// otherwise valid buffers draw the wrong glyphs in the toolkit renderer.
+pub struct WorkerFonts {
+    raw: cosmic_text::FontSystem,
+    version: cosmic::iced::advanced::graphics::text::Version,
+}
+
+impl WorkerFonts {
+    /// Capture after application fonts load. The short lock only clones the
+    /// database and locale; shaping runs after releasing it. Capture again
+    /// after fonts change; widgets reject geometry from older snapshots.
+    pub fn capture() -> Self {
+        let (locale, db, version) = {
+            let mut fonts = font_system().write().unwrap();
+            let version = fonts.version();
+            let raw = fonts.raw();
+            (raw.locale().to_string(), raw.db().clone(), version)
+        };
+        Self { raw: cosmic_text::FontSystem::new_with_locale_and_db(locale, db), version }
+    }
+}
+
+/// Retained block geometry, shared by the widget and worker entry points.
+#[derive(Default)]
+pub struct LayoutCache {
+    blocks: std::collections::HashMap<u64, Arc<BlockLayout>>,
+    style: Option<u64>,
+}
+
+/// A completed layout. Position queries never shape text or access resources.
+pub struct PreparedLayout {
+    doc: Arc<Doc>,
+    config: u64,
+    width: f32,
+    window: Option<BlockWindow>,
+    blocks: Arc<Vec<PlacedBlock>>,
+    positions: HeightIndex,
+    height: f32,
+    images: Arc<PreparedImages>,
+    font_version: cosmic::iced::advanced::graphics::text::Version,
+}
+
+impl PreparedLayout {
+    pub fn height(&self) -> f32 {
+        self.height
+    }
+    pub fn positions(&self) -> &HeightIndex {
+        &self.positions
+    }
+}
+
+impl LayoutCache {
+    /// Shape with fonts exclusively owned by the worker. Preparation and
+    /// subsequent drawing never take the toolkit's font write lock.
+    /// Retain this cache across requests to reuse unchanged block geometry.
+    pub fn prepare(&mut self, request: &LayoutRequest, fonts: &mut WorkerFonts) -> Arc<PreparedLayout> {
+        let mut widget = rich_text::<()>(request.doc.clone(), request.typography.clone())
+            .base_dir(request.base_dir.as_deref())
+            .prepared_images(request.images.clone());
+        widget.window = request.window.clone();
+        let config = widget.config_key();
+        let mut key = std::hash::DefaultHasher::new();
+        (config, request.font_generation, fonts.version).hash(&mut key);
+        let style = key.finish();
+        if self.style != Some(style) {
+            self.blocks.clear();
+            self.style = Some(style);
+        }
+        let (blocks, height) = widget.build(request.width, &mut self.blocks, Some(&mut fonts.raw));
+        fonts.raw.shape_run_cache.trim(64);
+        let positions = positions(&blocks);
+        Arc::new(PreparedLayout {
+            doc: request.doc.clone(),
+            config,
+            width: request.width,
+            window: request.window.clone(),
+            blocks: Arc::new(blocks),
+            positions,
+            height,
+            images: request.images.clone(),
+            font_version: fonts.version,
+        })
+    }
+}
+
+fn positions(blocks: &[PlacedBlock]) -> HeightIndex {
+    let mut previous = 0.0;
+    HeightIndex::new(
+        blocks
+            .iter()
+            .map(|block| {
+                let height = block.bottom - previous;
+                previous = block.bottom;
+                height
+            })
+            .collect(),
+    )
 }
 
 /// Selectable rich text
@@ -649,6 +817,10 @@ pub struct RichText<'a, Message> {
     selection: Option<(Pos, Pos)>,
     dragging: bool,
     base_dir: Option<&'a Path>,
+    resource_generation: u64,
+    prepared_images: Option<Arc<PreparedImages>>,
+    window: Option<BlockWindow>,
+    prepared_layout: Option<Arc<PreparedLayout>>,
     on_select: Option<Box<dyn Fn(Select) -> Message + 'a>>,
     on_link: Option<Box<dyn Fn(String) -> Message + 'a>>,
     on_image: Option<Box<dyn Fn(PathBuf) -> Message + 'a>>,
@@ -663,6 +835,10 @@ pub fn rich_text<'a, Message>(doc: Arc<Doc>, typography: Arc<Typography>) -> Ric
         selection: None,
         dragging: false,
         base_dir: None,
+        resource_generation: 0,
+        prepared_images: None,
+        window: None,
+        prepared_layout: None,
         on_select: None,
         on_link: None,
         on_image: None,
@@ -672,6 +848,21 @@ pub fn rich_text<'a, Message>(doc: Arc<Doc>, typography: Arc<Typography>) -> Ric
 }
 
 impl<'a, Message> RichText<'a, Message> {
+    /// Install immutable geometry prepared with a worker-owned font system.
+    /// A stale document, style, resource snapshot, width or window is rejected.
+    pub fn prepared_layout(mut self, layout: Arc<PreparedLayout>) -> Self {
+        self.prepared_images = Some(layout.images.clone());
+        self.prepared_layout = Some(layout);
+        self
+    }
+    /// Lay out only these source blocks. The caller's height index supplies
+    /// the space occupied by omitted blocks and owns scroll anchoring when
+    /// estimates change. Positions and selections keep document block IDs.
+    /// Without this option the document's height remains exact.
+    pub fn block_window(mut self, window: BlockWindow) -> Self {
+        self.window = Some(window);
+        self
+    }
     /// The selected part of this text, from start to end
     pub fn selection(mut self, selection: Option<(Pos, Pos)>) -> Self {
         self.selection = selection;
@@ -687,6 +878,20 @@ impl<'a, Message> RichText<'a, Message> {
     /// Where relative image paths are
     pub fn base_dir(mut self, dir: Option<&'a Path>) -> Self {
         self.base_dir = dir;
+        self
+    }
+
+    /// Invalidate prepared resources after an image arrives or is replaced.
+    /// Callers that watch their asset directory can provide its generation.
+    pub fn resource_generation(mut self, generation: u64) -> Self {
+        self.resource_generation = generation;
+        self
+    }
+
+    /// Use a snapshot prepared by an application worker. Layout and drawing
+    /// never access image files in this mode, including for missing images.
+    pub fn prepared_images(mut self, images: Arc<PreparedImages>) -> Self {
+        self.prepared_images = Some(images);
         self
     }
 
@@ -721,7 +926,29 @@ impl<'a, Message> RichText<'a, Message> {
     fn key(&self) -> u64 {
         let mut hasher = std::hash::DefaultHasher::new();
         (Arc::as_ptr(&self.doc) as usize).hash(&mut hasher);
+        self.style_key().hash(&mut hasher);
+        self.prepared_layout.as_ref().map(|layout| Arc::as_ptr(layout) as usize).hash(&mut hasher);
+        if let Some(window) = &self.window {
+            window.blocks.hash(&mut hasher);
+            window.before.to_bits().hash(&mut hasher);
+            window.after.to_bits().hash(&mut hasher);
+        }
+        hasher.finish()
+    }
+
+    fn style_key(&self) -> u64 {
+        let mut hasher = std::hash::DefaultHasher::new();
+        self.config_key().hash(&mut hasher);
+        font_system().read().unwrap().version().hash(&mut hasher);
+        hasher.finish()
+    }
+
+    fn config_key(&self) -> u64 {
+        let mut hasher = std::hash::DefaultHasher::new();
         self.typography.key().hash(&mut hasher);
+        self.base_dir.hash(&mut hasher);
+        self.resource_generation.hash(&mut hasher);
+        self.prepared_images.as_ref().map(|images| images.generation()).hash(&mut hasher);
         hasher.finish()
     }
 
@@ -731,37 +958,36 @@ impl<'a, Message> RichText<'a, Message> {
             return None;
         }
         let path = Path::new(path);
-        Some(if path.is_absolute() {
-            path.to_path_buf()
-        } else {
-            self.base_dir?.join(path)
-        })
+        Some(if path.is_absolute() { path.to_path_buf() } else { self.base_dir?.join(path) })
     }
 
     fn build(
         &self,
         width: f32,
-        built: &mut std::collections::HashMap<u64, BlockLayout>,
-    ) -> (Vec<BlockLayout>, f32) {
-        let mut reused = std::collections::HashMap::with_capacity(self.doc.blocks.len());
+        built: &mut std::collections::HashMap<u64, Arc<BlockLayout>>,
+        mut worker_fonts: Option<&mut cosmic_text::FontSystem>,
+    ) -> (Vec<PlacedBlock>, f32) {
         let t = &*self.typography;
         let size = t.size;
-        let mut font_system = font_system().write().unwrap();
-        let font_system = font_system.raw();
-        let mut blocks = Vec::with_capacity(self.doc.blocks.len());
-        let mut y = 0.0f32;
-        let mut previous: Option<&Block> = None;
-        for block in &self.doc.blocks {
+        let range = self.window.as_ref().map_or(0..self.doc.blocks.len(), |window| {
+            window.blocks.start.min(self.doc.blocks.len())
+                ..window.blocks.end.min(self.doc.blocks.len()).max(window.blocks.start.min(self.doc.blocks.len()))
+        });
+        let mut reused = std::collections::HashMap::with_capacity(range.len());
+        let mut blocks = Vec::with_capacity(range.len());
+        let mut offset = self.window.as_ref().map_or(0.0, |window| window.before.max(0.0));
+        let mut previous = range.start.checked_sub(1).and_then(|i| self.doc.blocks.get(i));
+        for block in &self.doc.blocks[range] {
             if let Some(previous) = previous {
                 let tight = matches!(
                     (previous, block),
                     (Block::Text(a), Block::Text(b)) if a.marker.is_some() && b.marker.is_some() && a.indent == b.indent
                 );
-                y += if tight { size * 0.25 } else { size * 0.7 };
+                offset += if tight { size * 0.25 } else { size * 0.7 };
                 if let Block::Text(text) = block
                     && matches!(text.kind, TextKind::Heading(_))
                 {
-                    y += size * 0.5;
+                    offset += size * 0.5;
                 }
             }
             previous = Some(block);
@@ -772,12 +998,34 @@ impl<'a, Message> RichText<'a, Message> {
                 hasher.finish()
             };
             if let Some(layout) = built.remove(&key).or_else(|| reused.get(&key).cloned()) {
-                let layout = layout.shifted(y);
-                y = layout.bottom;
-                reused.insert(key, layout.shifted(-layout.top));
-                blocks.push(layout);
+                let top = offset;
+                offset += layout.bottom;
+                reused.insert(key, layout.clone());
+                blocks.push(PlacedBlock { top, bottom: offset, layout });
                 continue;
             }
+            // Resolve file metadata before taking the toolkit's font lock. A
+            // slow asset provider must not hold up unrelated text widgets.
+            let image = match block {
+                Block::Image { url, .. } => self.resolve_image(url).and_then(|path| {
+                    if let Some(images) = &self.prepared_images {
+                        let image = images.get(&path)?;
+                        return Some((path, image.width, image.height, Some(image.handle.clone())));
+                    }
+                    let (w, h) = image_size(&path, self.resource_generation)?;
+                    Some((path, w, h, None))
+                }),
+                _ => None,
+            };
+            let mut toolkit_fonts;
+            let font_system = match worker_fonts.as_deref_mut() {
+                Some(fonts) => fonts,
+                None => {
+                    toolkit_fonts = font_system().write().unwrap();
+                    toolkit_fonts.raw()
+                }
+            };
+            let mut y = 0.0f32;
             let (indent, quote, marker) = match block {
                 Block::Text(text) => (text.indent, text.quote, text.marker.as_deref()),
                 Block::Code { indent, quote, .. } => (*indent, *quote, None),
@@ -836,54 +1084,51 @@ impl<'a, Message> RichText<'a, Message> {
                         false,
                     );
                     let height = shaped.size.height + 2.0 * pad;
-                    panels.push((Rectangle::new(Point::new(x0, y), Size::new(available, height)), t.code_background, size * 0.3));
+                    panels.push((
+                        Rectangle::new(Point::new(x0, y), Size::new(available, height)),
+                        t.code_background,
+                        size * 0.3,
+                    ));
                     y += height;
                     Laid::Cells(vec![shaped])
                 }
-                Block::Math { latex, .. } => {
-                    match math::render(latex, true, size * t.math_scale, rgb(t.text)) {
-                        Ok(formula) => {
-                            let scale = (available / formula.width).min(1.0);
-                            let (w, h) = (formula.width * scale, formula.height * scale);
-                            let x = x0 + ((available - w) / 2.0).max(0.0);
-                            let rect = Rectangle::new(Point::new(x, y + size * 0.2), Size::new(w, h));
-                            y += h + size * 0.4;
-                            Laid::Math(Ok(formula), rect)
-                        }
-                        Err(_) => {
-                            let pad = size * 0.5;
-                            let shaped = shape(
-                                font_system,
-                                t,
-                                code_cell("", latex),
-                                0,
-                                Point::new(x0 + pad, y + pad),
-                                available - 2.0 * pad,
-                                size * 0.88,
-                                false,
-                                t.error,
-                                false,
-                            );
-                            let rect = Rectangle::new(
-                                Point::new(x0, y),
-                                Size::new(available, shaped.size.height + 2.0 * pad),
-                            );
-                            panels.push((rect, t.code_background, size * 0.3));
-                            y += rect.height;
-                            Laid::Math(Err(shaped), rect)
-                        }
+                Block::Math { latex, .. } => match math::render(latex, true, size * t.math_scale, rgb(t.text)) {
+                    Ok(formula) => {
+                        let scale = (available / formula.width).min(1.0);
+                        let (w, h) = (formula.width * scale, formula.height * scale);
+                        let x = x0 + ((available - w) / 2.0).max(0.0);
+                        let rect = Rectangle::new(Point::new(x, y + size * 0.2), Size::new(w, h));
+                        y += h + size * 0.4;
+                        Laid::Math(Ok(formula), rect)
                     }
-                }
-                Block::Image { url, alt, .. } => match self.resolve_image(url).and_then(|path| {
-                    let (w, h) = image_size(&path)?;
-                    Some((path, w, h))
-                }) {
-                    Some((path, w, h)) => {
+                    Err(_) => {
+                        let pad = size * 0.5;
+                        let shaped = shape(
+                            font_system,
+                            t,
+                            code_cell("", latex),
+                            0,
+                            Point::new(x0 + pad, y + pad),
+                            available - 2.0 * pad,
+                            size * 0.88,
+                            false,
+                            t.error,
+                            false,
+                        );
+                        let rect =
+                            Rectangle::new(Point::new(x0, y), Size::new(available, shaped.size.height + 2.0 * pad));
+                        panels.push((rect, t.code_background, size * 0.3));
+                        y += rect.height;
+                        Laid::Math(Err(shaped), rect)
+                    }
+                },
+                Block::Image { url, alt, .. } => match image {
+                    Some((path, w, h, handle)) => {
                         let max = available.min(t.image_width);
                         let scale = (max / w as f32).min(size * 24.0 / h as f32).min(1.0);
                         let rect = Rectangle::new(Point::new(x0, y), Size::new(w as f32 * scale, h as f32 * scale));
                         y += rect.height;
-                        Laid::Image(path, rect)
+                        Laid::Image(path, rect, handle)
                     }
                     None => {
                         let cell = cell_from_runs(&[Run {
@@ -891,14 +1136,21 @@ impl<'a, Message> RichText<'a, Message> {
                             style: Style { italic: true, ..Style::default() },
                             link: Some(url.clone()),
                         }]);
-                        let shaped = shape(font_system, t, cell, 0, Point::new(x0, y), available, size, false, t.muted, false);
+                        let shaped =
+                            shape(font_system, t, cell, 0, Point::new(x0, y), available, size, false, t.muted, false);
                         y += shaped.size.height;
                         Laid::Cells(vec![shaped])
                     }
                 },
                 Block::Chart { spec, .. } => {
                     // A label's text, shaped as the chart will draw it
-                    let label = |font_system: &mut cosmic_text::FontSystem, text: &str, family: &str, size: f32, bold: bool, italic: bool, color: Color| {
+                    let label = |font_system: &mut cosmic_text::FontSystem,
+                                 text: &str,
+                                 family: &str,
+                                 size: f32,
+                                 bold: bool,
+                                 italic: bool,
+                                 color: Color| {
                         let lt = Typography {
                             body: family.to_string(),
                             italic,
@@ -906,9 +1158,25 @@ impl<'a, Message> RichText<'a, Message> {
                             justify: false,
                             ..t.clone()
                         };
-                        shape(font_system, &lt, plain_cell(text), 0, Point::ORIGIN, f32::MAX / 4.0, size, bold, color, false)
+                        shape(
+                            font_system,
+                            &lt,
+                            plain_cell(text),
+                            0,
+                            Point::ORIGIN,
+                            f32::MAX / 4.0,
+                            size,
+                            bold,
+                            color,
+                            false,
+                        )
                     };
-                    let first_line = |s: &Shaped| s.buffer.layout_runs().next().map(|run| (run.line_w, run.line_height, run.line_y - run.line_top));
+                    let first_line = |s: &Shaped| {
+                        s.buffer
+                            .layout_runs()
+                            .next()
+                            .map(|run| (run.line_w, run.line_height, run.line_y - run.line_top))
+                    };
                     let width = available.min(size * 42.0);
                     let mut measure = |text: &str, family: &str, size: f32, bold: bool, italic: bool| {
                         let shaped = label(font_system, text, family, size, bold, italic, t.text);
@@ -921,7 +1189,8 @@ impl<'a, Message> RichText<'a, Message> {
                             let mut cells = Vec::with_capacity(drawn.labels.len());
                             let mut start = 0;
                             for l in &drawn.labels {
-                                let mut shaped = label(font_system, &l.text, &l.family, l.size, l.bold, l.italic, l.color);
+                                let mut shaped =
+                                    label(font_system, &l.text, &l.family, l.size, l.bold, l.italic, l.color);
                                 let line_y = shaped.buffer.layout_runs().next().map_or(0.0, |run| run.line_y);
                                 shaped.origin = Vector::new(rect.x + l.x, rect.y + l.baseline - line_y);
                                 shaped.start = start;
@@ -932,7 +1201,10 @@ impl<'a, Message> RichText<'a, Message> {
                             if labels.len() > 256 {
                                 labels.clear();
                             }
-                            labels.insert(spec_key(spec), Arc::new(drawn.labels.iter().map(|l| l.text.clone()).collect()));
+                            labels.insert(
+                                spec_key(spec),
+                                Arc::new(drawn.labels.iter().map(|l| l.text.clone()).collect()),
+                            );
                             drop(labels);
                             y = rect.y + rect.height + size * 0.4;
                             figure = Some((Figure::Chart(Arc::new(drawn)), rect));
@@ -954,7 +1226,8 @@ impl<'a, Message> RichText<'a, Message> {
                                 t.error,
                                 false,
                             );
-                            let rect = Rectangle::new(Point::new(x0, y), Size::new(available, shaped.size.height + 2.0 * pad));
+                            let rect =
+                                Rectangle::new(Point::new(x0, y), Size::new(available, shaped.size.height + 2.0 * pad));
                             panels.push((rect, t.code_background, size * 0.3));
                             y += rect.height;
                             Laid::Math(Err(shaped), rect)
@@ -973,7 +1246,13 @@ impl<'a, Message> RichText<'a, Message> {
                             let (w, h) = ((drawn.width * scale).floor(), (drawn.height * scale).floor());
                             let x = x0 + ((available - w) / 2.0).max(0.0);
                             let rect = Rectangle::new(Point::new(x, y + size * 0.4), Size::new(w, h));
-                            let lt = Typography { body: drawn.family.clone(), italic: false, line_height: 1.2, justify: false, ..t.clone() };
+                            let lt = Typography {
+                                body: drawn.family.clone(),
+                                italic: false,
+                                line_height: 1.2,
+                                justify: false,
+                                ..t.clone()
+                            };
                             let mut cells = Vec::with_capacity(drawn.labels.len());
                             let mut start = 0;
                             for l in &drawn.labels {
@@ -1017,7 +1296,8 @@ impl<'a, Message> RichText<'a, Message> {
                                 t.error,
                                 false,
                             );
-                            let rect = Rectangle::new(Point::new(x0, y), Size::new(available, shaped.size.height + 2.0 * pad));
+                            let rect =
+                                Rectangle::new(Point::new(x0, y), Size::new(available, shaped.size.height + 2.0 * pad));
                             panels.push((rect, t.code_background, size * 0.3));
                             y += rect.height;
                             Laid::Math(Err(shaped), rect)
@@ -1040,7 +1320,18 @@ impl<'a, Message> RichText<'a, Message> {
                         for (c, _) in row.iter().enumerate() {
                             let (_, cell) = &cells[index];
                             index += 1;
-                            let probe = shape(font_system, t, cell.clone(), 0, Point::ORIGIN, f32::MAX / 4.0, size, r == 0, t.text, false);
+                            let probe = shape(
+                                font_system,
+                                t,
+                                cell.clone(),
+                                0,
+                                Point::ORIGIN,
+                                f32::MAX / 4.0,
+                                size,
+                                r == 0,
+                                t.text,
+                                false,
+                            );
                             natural[c] = natural[c].max(probe.size.width.ceil() + 2.0 * pad + 1.0);
                         }
                     }
@@ -1111,17 +1402,20 @@ impl<'a, Message> RichText<'a, Message> {
                 shaped.origin = Vector::new(x0 - shaped.size.width - size * 0.45, y);
                 shaped
             });
-            let layout = BlockLayout { top, bottom, laid, panels, marker, figure, len: block_len(block) };
-            reused.insert(key, layout.shifted(-top));
-            blocks.push(layout);
+            let layout = Arc::new(BlockLayout { bottom, laid, panels, marker, figure, len: block_len(block) });
+            let top = offset;
+            offset += layout.bottom;
+            reused.insert(key, layout.clone());
+            blocks.push(PlacedBlock { top, bottom: offset, layout });
         }
         *built = reused;
-        (blocks, y)
+        (blocks, offset + self.window.as_ref().map_or(0.0, |window| window.after.max(0.0)))
     }
 }
 
-/// The advance of [`PLACEHOLDER`] in the body font, measured once per font
-/// and size
+/// The advance of [`PLACEHOLDER`] in the current font system. Its own shaping
+/// caches are generation-aware; a separate family-name cache would go stale
+/// when an application replaces a font without changing its family name.
 fn placeholder_width(
     font_system: &mut cosmic_text::FontSystem,
     family: &str,
@@ -1129,14 +1423,6 @@ fn placeholder_width(
     italic: bool,
     size: f32,
 ) -> f32 {
-    thread_local! {
-        static WIDTHS: std::cell::RefCell<std::collections::HashMap<(String, bool, bool, u32), f32>> =
-            Default::default();
-    }
-    let key = (family.to_string(), bold, italic, size.to_bits());
-    if let Some(width) = WIDTHS.with(|w| w.borrow().get(&key).copied()) {
-        return width;
-    }
     let width = {
         let mut buffer = Buffer::new(font_system, Metrics::new(size, size));
         let attrs = Attrs::new()
@@ -1147,7 +1433,6 @@ fn placeholder_width(
         buffer.shape_until_scroll(font_system, false);
         buffer.layout_runs().next().map_or(size * 0.5, |run| run.line_w)
     };
-    WIDTHS.with(|w| w.borrow_mut().insert(key, width));
     width
 }
 
@@ -1347,60 +1632,19 @@ impl Shaped {
     }
 }
 
-impl Shaped {
-    fn shift(&mut self, dy: f32) {
-        self.origin.y += dy;
-        for (_, point) in &mut self.formulas {
-            point.y += dy;
-        }
-    }
-}
-
-impl BlockLayout {
-    /// The same layout, `dy` lower
-    fn shifted(&self, dy: f32) -> Self {
-        let mut out = self.clone();
-        out.top += dy;
-        out.bottom += dy;
-        for (rect, _, _) in &mut out.panels {
-            rect.y += dy;
-        }
-        if let Some(marker) = &mut out.marker {
-            marker.shift(dy);
-        }
-        if let Some((_, rect)) = &mut out.figure {
-            rect.y += dy;
-        }
-        match &mut out.laid {
-            Laid::Cells(cells) => cells.iter_mut().for_each(|cell| cell.shift(dy)),
-            Laid::Math(result, rect) => {
-                rect.y += dy;
-                if let Err(shaped) = result {
-                    shaped.shift(dy);
-                }
-            }
-            Laid::Image(_, rect) | Laid::Rule(rect) => rect.y += dy,
-        }
-        out
-    }
-}
-
 impl State {
     /// The position nearest `point`, relative to the widget
     fn hit(&self, point: Point) -> Pos {
         if self.blocks.is_empty() {
             return Pos::START;
         }
-        let index = self
-            .blocks
-            .iter()
-            .position(|block| point.y < block.bottom)
-            .unwrap_or(self.blocks.len() - 1);
+        let index = self.positions.index_at(point.y).unwrap_or(0);
         let block = &self.blocks[index];
         if point.y < block.top && index > 0 {
             // Between blocks: the start of the lower one
-            return Pos { block: index, offset: 0 };
+            return Pos { block: self.first_block + index, offset: 0 };
         }
+        let point = Point::new(point.x, point.y - block.top);
         let offset = match &block.laid {
             Laid::Cells(cells) => {
                 // The cell under the point, else the nearest above it
@@ -1415,35 +1659,33 @@ impl State {
                 cell.map_or(0, |cell| cell.hit(point))
             }
             Laid::Math(Err(shaped), _) => shaped.hit(point),
-            Laid::Math(Ok(_), rect) | Laid::Image(_, rect) => usize::from(point.x > rect.center_x()),
+            Laid::Math(Ok(_), rect) | Laid::Image(_, rect, _) => usize::from(point.x > rect.center_x()),
             Laid::Rule(_) => 0,
         };
-        Pos { block: index, offset }
+        Pos { block: self.first_block + index, offset }
     }
 
     /// The word around `pos`, or the block's whole text for `whole`
     fn around(&self, pos: Pos, whole: bool) -> (Pos, Pos) {
-        let Some(block) = self.blocks.get(pos.block) else { return (pos, pos) };
+        let Some(block) = pos.block.checked_sub(self.first_block).and_then(|i| self.blocks.get(i)) else {
+            return (pos, pos);
+        };
         if whole {
             return (Pos { block: pos.block, offset: 0 }, Pos { block: pos.block, offset: block.len });
         }
         let Laid::Cells(cells) = &block.laid else {
             return (Pos { block: pos.block, offset: 0 }, Pos { block: pos.block, offset: block.len });
         };
-        let Some(cell) = cells.iter().find(|cell| {
-            pos.offset >= cell.start && pos.offset <= cell.start + cell.cell.text.len()
-        }) else {
+        let Some(cell) =
+            cells.iter().find(|cell| pos.offset >= cell.start && pos.offset <= cell.start + cell.cell.text.len())
+        else {
             return (pos, pos);
         };
         let text = &cell.cell.text;
         let local = (pos.offset - cell.start).min(text.len());
         let is_word = |c: char| c.is_alphanumeric() || c == '_';
-        let start = text[..local]
-            .char_indices()
-            .rev()
-            .take_while(|(_, c)| is_word(*c))
-            .last()
-            .map_or(local, |(i, _)| i);
+        let start =
+            text[..local].char_indices().rev().take_while(|(_, c)| is_word(*c)).last().map_or(local, |(i, _)| i);
         let end = text[local..]
             .char_indices()
             .take_while(|(_, c)| is_word(*c))
@@ -1454,45 +1696,53 @@ impl State {
         } else {
             (start, end)
         };
-        (
-            Pos { block: pos.block, offset: cell.start + start },
-            Pos { block: pos.block, offset: cell.start + end },
-        )
+        (Pos { block: pos.block, offset: cell.start + start }, Pos { block: pos.block, offset: cell.start + end })
     }
 
     fn link_at(&self, point: Point) -> Option<&str> {
         let pos = self.hit(point);
-        let block = self.blocks.get(pos.block)?;
-        let Laid::Cells(cells) = &block.laid else { return None };
-        cells
-            .iter()
-            .find(|cell| cell.rect().contains(point))
-            .and_then(|cell| cell.link_at(pos.offset))
+        let block = self.blocks.get(pos.block.checked_sub(self.first_block)?)?;
+        let point = Point::new(point.x, point.y - block.top);
+        let Laid::Cells(cells) = &block.laid else {
+            return None;
+        };
+        cells.iter().find(|cell| cell.rect().contains(point)).and_then(|cell| cell.link_at(pos.offset))
     }
 
     /// The source of the diagram under `point`
     fn diagram_at(&self, point: Point) -> Option<&str> {
-        self.blocks.iter().find_map(|block| match &block.figure {
+        let block = self.blocks.get(self.positions.index_at(point.y)?)?;
+        let point = Point::new(point.x, point.y - block.top);
+        match &block.figure {
             Some((Figure::Diagram(_, source), rect)) if rect.contains(point) => Some(&**source),
             _ => None,
-        })
+        }
     }
 
     /// Whether `point` is on a diagram but off its text
     fn on_diagram_ground(&self, point: Point) -> bool {
-        self.blocks.iter().any(|block| match (&block.figure, &block.laid) {
+        let Some(index) = self.positions.index_at(point.y) else {
+            return false;
+        };
+        let Some(block) = self.blocks.get(index) else {
+            return false;
+        };
+        let point = Point::new(point.x, point.y - block.top);
+        match (&block.figure, &block.laid) {
             (Some((Figure::Diagram(..), rect)), Laid::Cells(cells)) => {
                 rect.contains(point) && !cells.iter().any(|cell| cell.rect().contains(point))
             }
             _ => false,
-        })
+        }
     }
 
     fn image_at(&self, point: Point) -> Option<&Path> {
-        self.blocks.iter().find_map(|block| match &block.laid {
-            Laid::Image(path, rect) if rect.contains(point) => Some(path.as_path()),
+        let block = self.blocks.get(self.positions.index_at(point.y)?)?;
+        let point = Point::new(point.x, point.y - block.top);
+        match &block.laid {
+            Laid::Image(path, rect, _) if rect.contains(point) => Some(path.as_path()),
             _ => None,
-        })
+        }
     }
 }
 
@@ -1514,13 +1764,36 @@ impl<'a, Message> Widget<Message, cosmic::Theme, Renderer> for RichText<'a, Mess
         let width = limits.max().width;
         let key = (self.key(), width.to_bits());
         if state.key != Some(key) {
-            // A new style changes every block
-            if state.style != Some(self.typography.key()) {
-                state.built.clear();
-                state.style = Some(self.typography.key());
+            if let Some(prepared) = &self.prepared_layout
+                && Arc::ptr_eq(&prepared.doc, &self.doc)
+                && prepared.config == self.config_key()
+                && prepared.font_version == font_system().read().unwrap().version()
+                && prepared.width.to_bits() == width.to_bits()
+                && prepared.window == self.window
+            {
+                state.blocks = prepared.blocks.clone();
+                state.built.blocks.clear();
+                state.style = None;
+                state.positions = prepared.positions.clone();
+                state.height = prepared.height;
+                state.first_block =
+                    self.window.as_ref().map_or(0, |window| window.blocks.start.min(self.doc.blocks.len()));
+                state.doc = Some(self.doc.clone());
+                state.key = Some(key);
+                state.prepared = Some(prepared.clone());
+                return layout::Node::new(limits.resolve(Length::Fill, Length::Shrink, Size::new(width, state.height)));
             }
-            let (blocks, height) = self.build(width, &mut state.built);
-            state.blocks = blocks;
+            // A new style changes every block
+            if state.style != Some(self.style_key()) {
+                state.built.blocks.clear();
+                state.style = Some(self.style_key());
+            }
+            let (blocks, height) = self.build(width, &mut state.built.blocks, None);
+            state.positions = positions(&blocks);
+            state.blocks = Arc::new(blocks);
+            state.prepared = None;
+            state.first_block = self.window.as_ref().map_or(0, |window| window.blocks.start.min(self.doc.blocks.len()));
+            state.doc = Some(self.doc.clone());
             state.height = height;
             state.key = Some(key);
         }
@@ -1547,13 +1820,15 @@ impl<'a, Message> Widget<Message, cosmic::Theme, Renderer> for RichText<'a, Mess
         }
         match event {
             Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => {
-                let Some(point) = cursor.position_in(bounds) else { return };
-                let Some(on_select) = &self.on_select else { return };
+                let Some(point) = cursor.position_in(bounds) else {
+                    return;
+                };
+                let Some(on_select) = &self.on_select else {
+                    return;
+                };
                 let now = Instant::now();
                 let count = match state.last_click {
-                    Some((at, last, count))
-                        if now - at < Duration::from_millis(450) && last.distance(point) < 6.0 =>
-                    {
+                    Some((at, last, count)) if now - at < Duration::from_millis(450) && last.distance(point) < 6.0 => {
                         count % 3 + 1
                     }
                     _ => 1,
@@ -1577,8 +1852,12 @@ impl<'a, Message> Widget<Message, cosmic::Theme, Renderer> for RichText<'a, Mess
                 shell.capture_event();
             }
             Event::Mouse(mouse::Event::CursorMoved { .. }) if self.dragging => {
-                let Some(on_select) = &self.on_select else { return };
-                let Some(point) = cursor.position() else { return };
+                let Some(on_select) = &self.on_select else {
+                    return;
+                };
+                let Some(point) = cursor.position() else {
+                    return;
+                };
                 // Only the widget the pointer is level with follows it
                 if point.y >= bounds.y && point.y < bounds.y + bounds.height {
                     let local = Point::new(point.x - bounds.x, point.y - bounds.y);
@@ -1591,8 +1870,12 @@ impl<'a, Message> Widget<Message, cosmic::Theme, Renderer> for RichText<'a, Mess
                 }
             }
             Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)) => {
-                let Some(pressed) = state.pressed.take() else { return };
-                let Some(point) = cursor.position_in(bounds) else { return };
+                let Some(pressed) = state.pressed.take() else {
+                    return;
+                };
+                let Some(point) = cursor.position_in(bounds) else {
+                    return;
+                };
                 if pressed.distance(point) > 3.0 || state.last_click.is_some_and(|(_, _, n)| n > 1) {
                     return;
                 }
@@ -1650,10 +1933,15 @@ impl<'a, Message> Widget<Message, cosmic::Theme, Renderer> for RichText<'a, Mess
     ) {
         let state = tree.state.downcast_ref::<State>();
         let bounds = layout.bounds();
-        let Some(visible) = bounds.intersection(viewport) else { return };
-        let at = Vector::new(bounds.x, bounds.y);
+        let Some(visible) = bounds.intersection(viewport) else {
+            return;
+        };
         let t = &*self.typography;
-        for (index, block) in state.blocks.iter().enumerate() {
+        let range = state.positions.visible_range(visible.y - bounds.y, visible.y + visible.height - bounds.y);
+        for local_index in range {
+            let block = &state.blocks[local_index];
+            let index = state.first_block + local_index;
+            let at = Vector::new(bounds.x, bounds.y + block.top);
             // Only blocks on screen
             if bounds.y + block.bottom < visible.y || bounds.y + block.top > visible.y + visible.height {
                 continue;
@@ -1719,21 +2007,31 @@ impl<'a, Message> Widget<Message, cosmic::Theme, Renderer> for RichText<'a, Mess
                         );
                     }
                     match result {
-                        Ok(formula) => renderer.draw_svg(adv_svg::Svg::new(formula.handle.clone()), *rect + at, visible),
+                        Ok(formula) => {
+                            renderer.draw_svg(adv_svg::Svg::new(formula.handle.clone()), *rect + at, visible)
+                        }
                         Err(shaped) => draw_cell(renderer, shaped, at, visible),
                     }
                 }
-                Laid::Image(path, rect) => {
-                    if crate::images::is_svg(path) {
+                Laid::Image(path, rect, prepared) => {
+                    if let Some(ImageHandle::Svg(handle)) = prepared {
+                        renderer.draw_svg(adv_svg::Svg::new(handle.clone()), *rect + at, visible);
+                    } else if let Some(ImageHandle::Raster(handle)) = prepared {
+                        renderer.draw_image(
+                            adv_image::Image {
+                                border_radius: (t.size * 0.3).into(),
+                                ..adv_image::Image::new(handle.clone())
+                            },
+                            *rect + at,
+                            visible,
+                        );
+                    } else if crate::images::is_svg(path) {
                         let handle = adv_svg::Handle::from_path(path);
                         renderer.draw_svg(adv_svg::Svg::new(handle), *rect + at, visible);
                     } else {
                         let handle = adv_image::Handle::from_path(thumbnail_of(path));
                         renderer.draw_image(
-                            adv_image::Image {
-                                border_radius: (t.size * 0.3).into(),
-                                ..adv_image::Image::new(handle)
-                            },
+                            adv_image::Image { border_radius: (t.size * 0.3).into(), ..adv_image::Image::new(handle) },
                             *rect + at,
                             visible,
                         );
@@ -1761,17 +2059,10 @@ impl<'a, Message> Widget<Message, cosmic::Theme, Renderer> for RichText<'a, Mess
 
 fn draw_cell(renderer: &mut Renderer, cell: &Shaped, at: Vector, clip: Rectangle) {
     let position = Point::new(at.x + cell.origin.x, at.y + cell.origin.y);
-    renderer.fill_raw(Raw {
-        buffer: Arc::downgrade(&cell.buffer),
-        position,
-        color: cell.color,
-        clip_bounds: clip,
-    });
+    renderer.fill_raw(Raw { buffer: Arc::downgrade(&cell.buffer), position, color: cell.color, clip_bounds: clip });
     for (formula, point) in &cell.formulas {
-        let bounds = Rectangle::new(
-            Point::new(at.x + point.x, at.y + point.y),
-            Size::new(formula.width, formula.height),
-        );
+        let bounds =
+            Rectangle::new(Point::new(at.x + point.x, at.y + point.y), Size::new(formula.width, formula.height));
         renderer.draw_svg(adv_svg::Svg::new(formula.handle.clone()), bounds, clip);
     }
 }
@@ -1798,6 +2089,97 @@ impl<'a, Message: 'a> From<RichText<'a, Message>> for Element<'a, Message, cosmi
 mod tests {
     use super::*;
     use crate::markdown::parse;
+
+    fn typography() -> Arc<Typography> {
+        Arc::new(Typography {
+            body: String::new(),
+            mono: String::new(),
+            size: 16.0,
+            line_height: 1.4,
+            math_scale: 1.0,
+            justify: false,
+            italic: false,
+            text: Color::WHITE,
+            muted: Color::WHITE,
+            link: Color::WHITE,
+            code: Color::WHITE,
+            code_background: Color::BLACK,
+            page: Color::BLACK,
+            rule: Color::WHITE,
+            selection: Color::WHITE,
+            error: Color::WHITE,
+            added: Color::WHITE,
+            removed: Color::WHITE,
+            image_width: 800.0,
+        })
+    }
+
+    #[test]
+    fn retained_worker_layout_reuses_geometry_and_preserves_window_positions() {
+        fn shared<T: Send + Sync>() {}
+        shared::<PreparedLayout>();
+        shared::<PreparedImages>();
+        let mut fonts = WorkerFonts::capture();
+        let mut cache = LayoutCache::default();
+        let mut request = LayoutRequest {
+            doc: Arc::new(parse("First paragraph.\n\nSecond paragraph.\n\nThird paragraph.")),
+            typography: typography(),
+            width: 320.0,
+            base_dir: None,
+            images: Arc::new(PreparedImages::default()),
+            font_generation: 0,
+            window: None,
+        };
+        let initial = cache.prepare(&request, &mut fonts);
+        request.doc = Arc::new(parse(
+            "A much longer first paragraph, wrapping onto a number of lines because it is narrow.\n\nSecond paragraph.\n\nThird paragraph.",
+        ));
+        let changed = cache.prepare(&request, &mut fonts);
+        assert!(Arc::ptr_eq(&initial.blocks[1].layout, &changed.blocks[1].layout));
+        assert!(changed.blocks[1].top > initial.blocks[1].top);
+        request.window = Some(BlockWindow {
+            blocks: 1..2,
+            before: changed.positions.top(1),
+            after: changed.height - changed.positions.top(2),
+        });
+        let visible = cache.prepare(&request, &mut fonts);
+        assert_eq!(visible.blocks.len(), 1);
+        assert!(Arc::ptr_eq(&visible.blocks[0].layout, &changed.blocks[1].layout));
+        assert!((visible.height - changed.height).abs() < 0.01);
+        assert_eq!(visible.blocks[0].top, changed.blocks[1].top);
+        let state = State {
+            blocks: visible.blocks.clone(),
+            positions: visible.positions.clone(),
+            first_block: 1,
+            ..State::default()
+        };
+        assert_eq!(state.hit(Point::new(0.0, visible.blocks[0].top)).block, 1);
+    }
+
+    #[test]
+    fn asset_and_font_generations_invalidate_retained_geometry() {
+        let mut fonts = WorkerFonts::capture();
+        let mut cache = LayoutCache::default();
+        let mut request = LayoutRequest {
+            doc: Arc::new(parse("Retained.")),
+            typography: typography(),
+            width: 320.0,
+            base_dir: None,
+            images: Arc::new(PreparedImages::default()),
+            font_generation: 0,
+            window: None,
+        };
+        let initial = cache.prepare(&request, &mut fonts);
+        request.font_generation = 1;
+        let fonts_changed = cache.prepare(&request, &mut fonts);
+        assert!(!Arc::ptr_eq(&initial.blocks[0].layout, &fonts_changed.blocks[0].layout));
+        request.images = Arc::new(PreparedImages::default());
+        let images_changed = cache.prepare(&request, &mut fonts);
+        assert!(!Arc::ptr_eq(&fonts_changed.blocks[0].layout, &images_changed.blocks[0].layout));
+        request.base_dir = Some(PathBuf::from("/new/assets"));
+        let directory_changed = cache.prepare(&request, &mut fonts);
+        assert!(!Arc::ptr_eq(&images_changed.blocks[0].layout, &directory_changed.blocks[0].layout));
+    }
 
     #[test]
     fn copies_formulas_as_latex_and_tables_with_tabs() {

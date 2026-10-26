@@ -16,7 +16,7 @@
 
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
-use std::sync::{Arc, LazyLock, Mutex, OnceLock};
+use std::sync::{Arc, LazyLock, Mutex};
 
 use cosmic::iced::Color;
 use cosmic::iced::advanced::svg;
@@ -81,6 +81,7 @@ pub struct Diagram {
 struct Key {
     source: String,
     palette: [[u8; 4]; 7],
+    fonts: u64,
 }
 
 struct Cache {
@@ -109,7 +110,7 @@ pub fn labels_of(source: &str) -> Option<Arc<Vec<String>>> {
 
 /// `source` drawn in `palette`, or why it can't be
 pub fn render(source: &str, palette: &Palette) -> Result<Arc<Diagram>, String> {
-    let key = Key { source: source.to_string(), palette: palette.key() };
+    let key = Key { source: source.to_string(), palette: palette.key(), fonts: fonts().key };
     let mut cache = CACHE.lock().unwrap();
     cache.clock += 1;
     let clock = cache.clock;
@@ -164,25 +165,50 @@ pub fn cache_usage() -> (usize, usize) {
 /// cosmic-text of their own, as merman measures while the view holds the
 /// app's
 struct Fonts {
+    key: u64,
     db: Arc<fontdb::Database>,
     family: String,
     measure: Mutex<(cosmic_text::FontSystem, HashMap<(String, u32, bool, bool), f64>)>,
 }
 
-static FONTS: OnceLock<Fonts> = OnceLock::new();
+thread_local! {
+    // Each layout worker retains its own shaping/measurement caches. A font
+    // change replaces this snapshot; diagrams in the global cache include it
+    // in their identity, so fonts loaded later cannot reuse stale geometry.
+    static FONTS: std::cell::RefCell<Option<Arc<Fonts>>> = const { std::cell::RefCell::new(None) };
+}
+
+fn font_key(db: &fontdb::Database, locale: &str) -> u64 {
+    let mut key = std::hash::DefaultHasher::new();
+    locale.hash(&mut key);
+    db.family_name(&fontdb::Family::SansSerif).hash(&mut key);
+    for face in db.faces() {
+        face.id.hash(&mut key);
+    }
+    key.finish()
+}
 
 /// Take the app's fonts, before the first diagram is drawn while the app's
 /// font system is held
 pub fn prepare(system: &cosmic_text::FontSystem) {
-    FONTS.get_or_init(|| fonts_from(system.db(), system.locale()));
+    let key = font_key(system.db(), system.locale());
+    FONTS.with(|fonts| {
+        let mut fonts = fonts.borrow_mut();
+        if fonts.as_ref().is_none_or(|fonts| fonts.key != key) {
+            *fonts = Some(Arc::new(fonts_from(system.db(), system.locale())));
+        }
+    });
 }
 
-fn fonts() -> &'static Fonts {
-    FONTS.get_or_init(|| {
+fn fonts() -> Arc<Fonts> {
+    if let Some(fonts) = FONTS.with(|fonts| fonts.borrow().clone()) {
+        return fonts;
+    }
+    {
         let mut system = cosmic::iced::advanced::graphics::text::font_system().write().unwrap();
-        let system = system.raw();
-        fonts_from(system.db(), system.locale())
-    })
+        prepare(system.raw());
+    }
+    FONTS.with(|fonts| fonts.borrow().as_ref().unwrap().clone())
 }
 
 fn fonts_from(db: &fontdb::Database, locale: &str) -> Fonts {
@@ -197,7 +223,7 @@ fn fonts_from(db: &fontdb::Database, locale: &str) -> Fonts {
         .unwrap_or("sans-serif")
         .to_string();
     let system = cosmic_text::FontSystem::new_with_locale_and_db(locale.to_string(), db.clone());
-    Fonts { db: Arc::new(db.clone()), family, measure: Mutex::new((system, HashMap::new())) }
+    Fonts { key: font_key(db, locale), db: Arc::new(db.clone()), family, measure: Mutex::new((system, HashMap::new())) }
 }
 
 /// The width of `text` in the diagrams' family
@@ -318,10 +344,8 @@ fn recolour(svg: &str, palette: &Palette) -> String {
     let muted = hex(palette.muted);
     let text_fill = format!(r#"style="fill:{}""#, hex(palette.text));
     // C4 sets words as spans that start with their space, which usvg drops
-    let mut out = svg.replace(
-        r#"<tspan class="text-inner-tspan"> "#,
-        r#"<tspan class="text-inner-tspan" xml:space="preserve"> "#,
-    );
+    let mut out = svg
+        .replace(r#"<tspan class="text-inner-tspan"> "#, r#"<tspan class="text-inner-tspan" xml:space="preserve"> "#);
     for (from, to) in [
         // Architecture icons' tiles
         ("#087ebf", tile.as_str()),
@@ -396,7 +420,10 @@ fn draw(source: &str, palette: &Palette) -> Result<Arc<Diagram>, String> {
         environment,
         pipeline: Some(output.pipeline()),
         presentation: resolved.render_policy(),
-        options: SvgRenderOptions { diagram_id: Some(format!("mermaid-{:x}", source_key(source))), ..Default::default() },
+        options: SvgRenderOptions {
+            diagram_id: Some(format!("mermaid-{:x}", source_key(source))),
+            ..Default::default()
+        },
         ..Default::default()
     };
     let svg = match renderer.render(RenderRequest::svg(source, OperationControl::new(), request)) {
@@ -404,11 +431,8 @@ fn draw(source: &str, palette: &Palette) -> Result<Arc<Diagram>, String> {
         Ok(_) => return Err("this is not a diagram merman knows".into()),
         Err(err) => return Err(err.to_string()),
     };
-    let options = usvg::Options {
-        fontdb: fonts.db.clone(),
-        font_family: fonts.family.clone(),
-        ..usvg::Options::default()
-    };
+    let options =
+        usvg::Options { fontdb: fonts.db.clone(), font_family: fonts.family.clone(), ..usvg::Options::default() };
     let tree = usvg::Tree::from_str(&svg, &options).map_err(|err| format!("the SVG does not parse: {err}"))?;
     let mut labels = Vec::new();
     collect_labels(tree.root(), &tree, palette.text, &mut labels);
@@ -569,15 +593,42 @@ mod tests {
         let Some(dir) = std::env::var_os("CT_SNAPSHOTS") else { return };
         let kinds = [
             ("flowchart", FLOWCHART),
-            ("sequence", "sequenceDiagram\n    participant T as Terminal\n    participant C as Claude\n    T->>C: prompt\n    activate C\n    C-->>T: markdown\n    deactivate C\n    Note over T,C: drawn locally\n    loop Every turn\n        T->>C: more\n    end\n"),
-            ("class", "classDiagram\n    class Block {\n        +String source\n        +render()\n    }\n    class Diagram\n    Block <|-- Diagram\n"),
-            ("state", "stateDiagram-v2\n    [*] --> Streaming\n    Streaming --> Closed: fence ends\n    Closed --> [*]\n"),
-            ("er", "erDiagram\n    THREAD ||--o{ ENTRY : holds\n    ENTRY {\n        string id\n        string text\n    }\n"),
-            ("architecture", "architecture-beta\n    group api(cloud)[API]\n    service db(database)[Database] in api\n    service disk1(disk)[Storage] in api\n    service server(server)[Server] in api\n    service net(internet)[Internet]\n    db:L -- R:server\n    disk1:T -- B:server\n    net:R -- L:server\n"),
-            ("c4", "C4Context\n    title System Context\n    Person(user, \"User\", \"Uses the terminal\")\n    System(term, \"Agent Terminal\", \"Renders threads\")\n    System_Ext(api, \"Claude API\", \"The model\")\n    Rel(user, term, \"Types prompts\")\n    Rel(term, api, \"Sends messages\", \"HTTPS\")\n"),
-            ("mindmap", "mindmap\n  root((Threads))\n    Markdown\n      Math\n      Charts\n    Diagrams\n      Mermaid\n"),
-            ("timeline", "timeline\n    title Releases\n    2024 : Terminal\n    2025 : Agents : Threads\n    2026 : Diagrams\n"),
-            ("gantt", "gantt\n    title Plan\n    dateFormat YYYY-MM-DD\n    section Work\n    Parse :a1, 2026-01-01, 3d\n    Draw  :after a1, 4d\n"),
+            (
+                "sequence",
+                "sequenceDiagram\n    participant T as Terminal\n    participant C as Claude\n    T->>C: prompt\n    activate C\n    C-->>T: markdown\n    deactivate C\n    Note over T,C: drawn locally\n    loop Every turn\n        T->>C: more\n    end\n",
+            ),
+            (
+                "class",
+                "classDiagram\n    class Block {\n        +String source\n        +render()\n    }\n    class Diagram\n    Block <|-- Diagram\n",
+            ),
+            (
+                "state",
+                "stateDiagram-v2\n    [*] --> Streaming\n    Streaming --> Closed: fence ends\n    Closed --> [*]\n",
+            ),
+            (
+                "er",
+                "erDiagram\n    THREAD ||--o{ ENTRY : holds\n    ENTRY {\n        string id\n        string text\n    }\n",
+            ),
+            (
+                "architecture",
+                "architecture-beta\n    group api(cloud)[API]\n    service db(database)[Database] in api\n    service disk1(disk)[Storage] in api\n    service server(server)[Server] in api\n    service net(internet)[Internet]\n    db:L -- R:server\n    disk1:T -- B:server\n    net:R -- L:server\n",
+            ),
+            (
+                "c4",
+                "C4Context\n    title System Context\n    Person(user, \"User\", \"Uses the terminal\")\n    System(term, \"Agent Terminal\", \"Renders threads\")\n    System_Ext(api, \"Claude API\", \"The model\")\n    Rel(user, term, \"Types prompts\")\n    Rel(term, api, \"Sends messages\", \"HTTPS\")\n",
+            ),
+            (
+                "mindmap",
+                "mindmap\n  root((Threads))\n    Markdown\n      Math\n      Charts\n    Diagrams\n      Mermaid\n",
+            ),
+            (
+                "timeline",
+                "timeline\n    title Releases\n    2024 : Terminal\n    2025 : Agents : Threads\n    2026 : Diagrams\n",
+            ),
+            (
+                "gantt",
+                "gantt\n    title Plan\n    dateFormat YYYY-MM-DD\n    section Work\n    Parse :a1, 2026-01-01, 3d\n    Draw  :after a1, 4d\n",
+            ),
             ("pie", "pie title Time\n    \"Layout\" : 40\n    \"Drawing\" : 35\n    \"Text\" : 25\n"),
         ];
         let light = Palette {
@@ -592,7 +643,10 @@ mod tests {
         for (name, source) in kinds {
             for (tone, palette) in [("dark", dark()), ("light", light)] {
                 match render(source, &palette) {
-                    Ok(diagram) => std::fs::write(std::path::Path::new(&dir).join(format!("{name}-{tone}.svg")), &*diagram.svg).unwrap(),
+                    Ok(diagram) => {
+                        std::fs::write(std::path::Path::new(&dir).join(format!("{name}-{tone}.svg")), &*diagram.svg)
+                            .unwrap()
+                    }
                     Err(err) => eprintln!("{name}: {err}"),
                 }
             }

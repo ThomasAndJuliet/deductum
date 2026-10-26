@@ -23,7 +23,7 @@ use super::prover::Profile;
 #[cfg(test)]
 use super::prover::isabelle::symbols::Table;
 use super::theory::{self, Block, Command, Status};
-use prose_render::markdown::{self, Doc};
+use prose_render::markdown::{self, Affinity, Doc, SourceMap};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ProverMessage {
@@ -641,9 +641,13 @@ pub struct Theory {
     local_unchecked: Option<usize>,
     pub blocks: Vec<Block>,
     pub docs: Vec<Option<Arc<Doc>>>,
+    pub page_rows: Arc<Vec<super::viewport::Row>>,
+    pub page_scope: u64,
+    pub page_viewport: std::cell::Cell<(f32, f32)>,
     /// Each prose block's Markdown offsets mapped to the source, where the profile can say
     pub prose_maps: Vec<Option<crate::prover::ProseMap>>,
-    doc_cache: HashMap<String, Arc<Doc>>,
+    rendered_sources: Vec<Option<Arc<SourceMap>>>,
+    doc_cache: HashMap<String, (Arc<Doc>, Arc<SourceMap>)>,
     pub block_editor: Option<BlockEditor>,
     pub mode: Mode,
     /// Source offset of the caret, for the proof state
@@ -903,7 +907,11 @@ impl Theory {
             stale_from: None,
             blocks: Vec::new(),
             docs: Vec::new(),
+            page_rows: Arc::new(Vec::new()),
+            page_scope: { static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1); NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed) },
+            page_viewport: std::cell::Cell::new((0.0, 800.0)),
             prose_maps: Vec::new(),
+            rendered_sources: Vec::new(),
             doc_cache: HashMap::new(),
             block_editor: None,
             mode,
@@ -1193,67 +1201,15 @@ impl Theory {
         Some(start + self.prose_maps.get(i)?.as_ref()?.source_char(md))
     }
 
-    /// The source offset under a pointer over the rendered prose of block `i`: its Markdown block
-    /// `block` and the byte `offset` in that block's text, as the renderer reports them. Found by
-    /// matching the text under the pointer, in order, against the Markdown the block renders from
-    /// (so only for profiles with a prose map). Nearest the start of its block when the pointer
-    /// is on something that is not a word
+    /// Compose rendered Markdown provenance with the profile's source mapping.
+    /// Offsets reported by the renderer are UTF-8 bytes; the resulting prover
+    /// position is a source character offset, including the body's prefix.
     pub fn source_of_hit(&self, i: usize, block: usize, offset: usize) -> Option<usize> {
-        use prose_render::markdown::Block as B;
-        let doc = self.docs.get(i)?.as_ref()?;
+        let markdown = self.rendered_sources.get(i)?.as_ref()?
+            .source_byte(block, offset, Affinity::After)?;
         let map = self.prose_maps.get(i)?.as_ref()?;
         let (body_start, _) = self.blocks.get(i)?.body?;
-        let linear = |b: &B| -> Option<String> {
-            match b {
-                B::Text(t) => Some(t.runs.iter().map(|r| r.text.as_str()).collect()),
-                B::Code { text, .. } => Some(text.clone()),
-                B::Math { latex, .. } => Some(latex.clone()),
-                _ => None,
-            }
-        };
-        let word = |s: &str| -> Option<String> {
-            s.split(|c: char| !c.is_alphanumeric()).find(|w| w.chars().count() >= 3).map(str::to_string)
-        };
-        // Where each block's text starts in the Markdown: its first word, after the last block's
-        let md = &map.markdown;
-        let mut from = 0;
-        let mut start = None;
-        for (k, b) in doc.blocks.iter().enumerate().take(block + 1) {
-            let Some(text) = linear(b) else { continue };
-            let Some(key) = word(&text) else { continue };
-            match md[from..].find(&key) {
-                Some(p) => {
-                    if k == block {
-                        start = Some(from + p);
-                    }
-                    from += p + key.len();
-                }
-                None if k == block => return None,
-                None => {}
-            }
-        }
-        let start = start?;
-        let text = linear(doc.blocks.get(block)?)?;
-        // The word under the pointer: the n-th of its kind in the block, the n-th after the start
-        let at = offset.min(text.len());
-        let at = (0..=at).rev().find(|&k| text.is_char_boundary(k)).unwrap_or(0);
-        let (ws, we) = {
-            let b: Vec<(usize, char)> = text.char_indices().collect();
-            let mut s = at;
-            while let Some(&(p, c)) = b.iter().rev().find(|(p, _)| *p < s) {
-                if c.is_alphanumeric() { s = p } else { break }
-            }
-            let e = text[at..].char_indices().find(|(_, c)| !c.is_alphanumeric()).map_or(text.len(), |(p, _)| at + p);
-            (s, e)
-        };
-        let w = &text[ws..we];
-        let md_at = if w.is_empty() {
-            start
-        } else {
-            let nth = text[..ws].matches(w).count();
-            md[start..].match_indices(w).nth(nth).map_or(start, |(p, _)| start + p) + (at - ws).min(w.len())
-        };
-        Some(body_start + map.source_char(md_at))
+        Some(body_start + map.source_char(markdown))
     }
 
     /// Open prose block `index` with the caret at source offset `at`, as the paragraph there
@@ -1299,7 +1255,33 @@ impl Theory {
 
     fn compute_prose(&mut self, table: &dyn Symbols) {
         let chars: Vec<char> = self.local.chars().collect();
+        use std::hash::{Hash, Hasher};
+        // Repeated text has no unique source identity. Invalidate those rows
+        // after a source refresh rather than moving retained state to a different
+        // occurrence after a collaborative insertion. The active editor has its
+        // own identity in the viewport widget.
+        static NEXT_ROWS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+        let generation = NEXT_ROWS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let mut counts = HashMap::<u64, usize>::new();
+        let mut rows: Vec<_> = self.blocks.iter().map(|b| {
+            let slice = chars.get(b.start..b.end).unwrap_or(&[]);
+            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+            slice.hash(&mut hasher);
+            format!("{:?}", b.kind).hash(&mut hasher);
+            let key = hasher.finish();
+            *counts.entry(key).or_default() += 1;
+            super::viewport::Row { key, characters: slice.len(), lines: 1 + slice.iter().filter(|c| **c == '\n').count(), kind: b.kind }
+        }).collect();
+        for (i, row) in rows.iter_mut().enumerate() {
+            if counts[&row.key] > 1 {
+                let mut hasher = std::collections::hash_map::DefaultHasher::new();
+                (row.key, generation, i).hash(&mut hasher);
+                row.key = hasher.finish();
+            }
+        }
+        self.page_rows = Arc::new(rows);
         let mut docs = Vec::with_capacity(self.blocks.len());
+        let mut rendered_sources = Vec::with_capacity(self.blocks.len());
         let mut maps = Vec::with_capacity(self.blocks.len());
         let cache = std::mem::take(&mut self.doc_cache);
         let mut used = HashMap::new();
@@ -1323,14 +1305,19 @@ impl Theory {
                 _ => None,
             }
             .map(|md| {
-                let doc = cache.get(&md).or_else(|| used.get(&md)).cloned().unwrap_or_else(|| Arc::new(markdown::parse(&md)));
+                let doc = cache.get(&md).or_else(|| used.get(&md)).cloned().unwrap_or_else(|| {
+                    let parsed = markdown::parse_mapped(&md);
+                    (Arc::new(parsed.doc), Arc::new(parsed.map))
+                });
                 used.insert(md, doc.clone());
                 doc
             });
-            docs.push(doc);
+            rendered_sources.push(doc.as_ref().map(|(_, map)| map.clone()));
+            docs.push(doc.map(|(doc, _)| doc));
         }
         self.doc_cache = used;
         self.docs = docs;
+        self.rendered_sources = rendered_sources;
         self.prose_maps = maps;
     }
 
@@ -2168,6 +2155,26 @@ mod prover_view_tests {
     use serde_json::json;
 
     #[test]
+    fn rendered_hits_compose_exact_markdown_bytes_with_source_characters() {
+        let profile = &crate::prover::LEAN;
+        let table = profile.symbols(None);
+        let text = "/-! same **same** [é](target) $x$ end -/\n";
+        let doc = json!({"text": text, "revision": 1, "prover": {}});
+        let t = Theory::new("/mapped.lean".into(), &doc, &*table, Arc::new(HashMap::new()), Mode::Literate, profile);
+        let prose = t.blocks.iter().position(|b| b.kind == theory::Kind::Text).unwrap();
+        let source_at = |needle: &str, skip: usize| {
+            let at = text.find(needle).unwrap() + skip;
+            text[..at].chars().count()
+        };
+        assert_eq!(t.source_of_hit(prose, 0, 5), Some(source_at("**same", 2)));
+        assert_eq!(t.source_of_hit(prose, 0, 10), Some(source_at("[é]", 1)));
+        assert_eq!(t.source_of_hit(prose, 0, 13), Some(source_at("$x$", 0)));
+        assert_eq!(t.source_of_hit(prose, 0, 14), Some(source_at("$x$", 3)));
+        assert_eq!(t.source_of_hit(prose, 0, 18), Some(source_at("end", 3)));
+        assert_eq!(t.source_of_hit(prose, 1, 0), None);
+    }
+
+    #[test]
     fn prover_reports_keep_the_prose_maps_and_unchanged_highlighting() {
         let profile = &crate::prover::LEAN;
         let table = profile.symbols(None);
@@ -2262,7 +2269,7 @@ mod prover_view_tests {
         let removed = t.blocks[indices[1]].clone();
         t.replace(removed.start, removed.end, "", &*table);
         assert_eq!(prose_indices(&t).len(), 1);
-        assert!(!t.doc_cache.values().any(|doc| Arc::ptr_eq(doc, &repeated)), "removed prose must not stay in the document cache");
+        assert!(!t.doc_cache.values().any(|(doc, _)| Arc::ptr_eq(doc, &repeated)), "removed prose must not stay in the document cache");
         assert_eq!(t.docs.len(), t.blocks.len());
         assert_eq!(t.prose_maps.len(), t.blocks.len());
         assert_eq!(t.block_views.len(), t.blocks.len());

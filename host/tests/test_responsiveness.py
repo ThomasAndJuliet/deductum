@@ -133,6 +133,62 @@ class Responsiveness(unittest.IsolatedAsyncioTestCase):
         req = {"id": rid, "op": op, "session": "s", "path": self.path, **params}
         self.reader.feed_data((json.dumps(req) + "\n").encode())
 
+    async def test_slow_output_does_not_hold_edits_or_cancellation(self):
+        blocked, release = asyncio.Event(), asyncio.Event()
+        async def drain():
+            blocked.set()
+            await release.wait()
+        self.writer.drain = drain
+        self.host.clients[0].push({"event": "activity", "session": "s", "activity": {}})
+        await asyncio.wait_for(blocked.wait(), 1)
+        self.request(1, "edit", revision=0, edits=[{"start": 3, "end": 3, "text": "d"}])
+        self.request(2, "cancel_tools")
+        async def dispatched():
+            while not any(c["op"] == "cancel_tools" for c in self.backend.calls):
+                self.backend.changed.clear()
+                await self.backend.changed.wait()
+        await asyncio.wait_for(dispatched(), 1)
+        self.assertEqual(self.doc.text, "abcd")
+        self.assertNotIn(2, [m.get("id") for m in self.writer.messages])
+        release.set()
+        self.assertTrue((await self.writer.reply(2))["ok"])
+        self.assertTrue((await self.writer.reply(1))["ok"])
+
+    async def test_snapshot_coalescing_does_not_cross_an_edit_fence(self):
+        blocked, release = asyncio.Event(), asyncio.Event()
+        async def drain():
+            blocked.set()
+            await release.wait()
+        self.writer.drain = drain
+        client = self.host.clients[0]
+        client.push({"event": "activity", "session": "s", "value": 0})
+        await asyncio.wait_for(blocked.wait(), 1)
+        for value in [1, 2]:
+            client.push({"event": "activity", "session": "s", "value": value})
+        client.push({"event": "doc_changed", "session": "s", "revision": 1})
+        for value in [3, 4]:
+            client.push({"event": "activity", "session": "s", "value": value})
+        release.set()
+        await client.finish_writer()
+        messages = [m for m in self.writer.messages if m.get("event") in ("activity", "doc_changed")]
+        self.assertEqual([m.get("value", "edit") for m in messages], [0, 2, "edit", 4])
+
+    async def test_lossless_output_overflow_disconnects_instead_of_dropping_edits(self):
+        blocked, release = asyncio.Event(), asyncio.Event()
+        async def drain():
+            blocked.set()
+            await release.wait()
+        self.writer.drain = drain
+        client = self.host.clients[0]
+        client.push({"event": "activity", "session": "s"})
+        await asyncio.wait_for(blocked.wait(), 1)
+        with patch.object(H, "CLIENT_OUTPUT_MESSAGES", 2):
+            for revision in range(3):
+                client.push({"event": "doc_changed", "session": "s", "revision": revision})
+        await asyncio.wait_for(self.serving, 1)
+        self.assertTrue(client.closed)
+        self.assertTrue(self.writer.closed.done())
+
     async def test_legacy_hello_keeps_reads_and_mutations_in_request_order(self):
         # A legacy GUI's hello has no opt-in. Its existing navigation assumptions
         # require the state reply before the following edit is applied.

@@ -7,6 +7,8 @@
 //! CommonMark would read as escapes, so [`normalize_math`] rewrites them to
 //! dollars first, leaving code alone.
 
+use crate::source_map::SourceTracker;
+pub use crate::source_map::{Affinity, MappedDoc, SourceMap};
 use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
@@ -47,18 +49,42 @@ pub struct TextBlock {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Block {
     Text(TextBlock),
-    Code { lang: String, text: String, indent: u16, quote: u16 },
+    Code {
+        lang: String,
+        text: String,
+        indent: u16,
+        quote: u16,
+    },
     /// Display math
-    Math { latex: String, indent: u16, quote: u16, marker: Option<String> },
+    Math {
+        latex: String,
+        indent: u16,
+        quote: u16,
+        marker: Option<String>,
+    },
     Rule,
     /// Rows of cells; the first row is the header
-    Table { rows: Vec<Vec<Vec<Run>>> },
-    Image { url: String, alt: String, indent: u16 },
+    Table {
+        rows: Vec<Vec<Vec<Run>>>,
+    },
+    Image {
+        url: String,
+        alt: String,
+        indent: u16,
+    },
     /// A chart: a `chartgen` code block's specification
-    Chart { spec: String, indent: u16, quote: u16 },
+    Chart {
+        spec: String,
+        indent: u16,
+        quote: u16,
+    },
     /// A Mermaid diagram: a closed `mermaid` code block's source. One whose
     /// fence is still open, as while it streams in, stays code
-    Diagram { source: String, indent: u16, quote: u16 },
+    Diagram {
+        source: String,
+        indent: u16,
+        quote: u16,
+    },
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -72,16 +98,12 @@ impl Doc {
         self.blocks.iter().flat_map(|block| -> Box<dyn Iterator<Item = (&str, bool)>> {
             match block {
                 Block::Math { latex, .. } => Box::new(std::iter::once((latex.as_str(), true))),
-                Block::Text(text) => Box::new(
-                    text.runs.iter().filter(|r| r.style.math).map(|r| (r.text.as_str(), false)),
-                ),
-                Block::Table { rows } => Box::new(
-                    rows.iter()
-                        .flatten()
-                        .flatten()
-                        .filter(|r| r.style.math)
-                        .map(|r| (r.text.as_str(), false)),
-                ),
+                Block::Text(text) => {
+                    Box::new(text.runs.iter().filter(|r| r.style.math).map(|r| (r.text.as_str(), false)))
+                }
+                Block::Table { rows } => {
+                    Box::new(rows.iter().flatten().flatten().filter(|r| r.style.math).map(|r| (r.text.as_str(), false)))
+                }
                 _ => Box::new(std::iter::empty()),
             }
         })
@@ -108,25 +130,43 @@ pub fn plain(text: &str) -> Doc {
 }
 
 pub fn parse(markdown: &str) -> Doc {
-    let source = normalize_math(markdown);
+    parse_with_map(markdown, false).0
+}
+
+/// Parse Markdown and retain the exact origin of rendered UTF-8 positions.
+pub fn parse_mapped(markdown: &str) -> MappedDoc {
+    let (doc, map) = parse_with_map(markdown, true);
+    MappedDoc { doc, map: map.unwrap() }
+}
+
+fn parse_with_map(markdown: &str, mapped: bool) -> (Doc, Option<SourceMap>) {
+    let (source, rewrites) = normalize_math_mapped(markdown);
     let options = Options::ENABLE_MATH
         | Options::ENABLE_TABLES
         | Options::ENABLE_STRIKETHROUGH
         | Options::ENABLE_TASKLISTS
         | Options::ENABLE_GFM;
     let mut builder = Builder::default();
+    if mapped {
+        builder.mapping = Some(SourceTracker::new(&source));
+    }
     for (event, range) in Parser::new_ext(&source, options).into_offset_iter() {
+        if let Some(map) = &mut builder.mapping {
+            map.range = range.clone();
+        }
         if let Event::Start(Tag::CodeBlock(CodeBlockKind::Fenced(_))) = &event {
             builder.fence_closed = fence_closed(&source[range]);
         }
         builder.event(event);
     }
     builder.flush();
-    Doc { blocks: builder.blocks }
+    let map = builder.mapping.map(|map| map.finish(markdown, rewrites));
+    (Doc { blocks: builder.blocks }, map)
 }
 
 #[derive(Default)]
 struct Builder {
+    mapping: Option<SourceTracker>,
     blocks: Vec<Block>,
     runs: Vec<Run>,
     kind: Option<TextKind>,
@@ -153,6 +193,9 @@ impl Builder {
             alt.push_str(text);
             return;
         }
+        if let Some(map) = &mut self.mapping {
+            map.push(text, style.math, style.code);
+        }
         if let Some(rows) = &mut self.table {
             if let Some(cell) = rows.last_mut().and_then(|row| row.last_mut()) {
                 cell.push(Run { text: text.to_string(), style, link: self.link.clone() });
@@ -173,7 +216,11 @@ impl Builder {
     /// End the text block being built, if it has any text
     fn flush(&mut self) {
         let runs = std::mem::take(&mut self.runs);
-        if runs.iter().all(|run| run.text.trim().is_empty()) {
+        let keep = runs.iter().any(|run| !run.text.trim().is_empty());
+        if let Some(map) = &mut self.mapping {
+            map.flush(keep);
+        }
+        if !keep {
             return;
         }
         self.blocks.push(Block::Text(TextBlock {
@@ -209,6 +256,9 @@ impl Builder {
                 }
                 Tag::CodeBlock(kind) => {
                     self.flush();
+                    if let Some(map) = &mut self.mapping {
+                        map.begin_code();
+                    }
                     let lang = match kind {
                         CodeBlockKind::Fenced(lang) => lang.split_whitespace().next().unwrap_or_default().to_string(),
                         CodeBlockKind::Indented => String::new(),
@@ -236,17 +286,31 @@ impl Builder {
                 Tag::Strong => self.style.bold = true,
                 Tag::Strikethrough => self.style.strike = true,
                 Tag::Link { dest_url, .. } => self.link = Some(dest_url.to_string()),
-                Tag::Image { dest_url, .. } => self.image = Some((dest_url.to_string(), String::new())),
+                Tag::Image { dest_url, .. } => {
+                    if let Some(map) = &mut self.mapping {
+                        map.begin_image();
+                    }
+                    self.image = Some((dest_url.to_string(), String::new()));
+                }
                 Tag::Table(_) => {
                     self.flush();
                     self.table = Some(Vec::new());
+                    if let Some(map) = &mut self.mapping {
+                        map.begin_table();
+                    }
                 }
                 Tag::TableHead | Tag::TableRow => {
+                    if let Some(map) = &mut self.mapping {
+                        map.row();
+                    }
                     if let Some(rows) = &mut self.table {
                         rows.push(Vec::new());
                     }
                 }
                 Tag::TableCell => {
+                    if let Some(map) = &mut self.mapping {
+                        map.cell();
+                    }
                     if let Some(row) = self.table.as_mut().and_then(|rows| rows.last_mut()) {
                         row.push(Vec::new());
                     }
@@ -265,6 +329,9 @@ impl Builder {
                 TagEnd::CodeBlock => {
                     if let Some((lang, text)) = self.code.take() {
                         let text = text.strip_suffix('\n').unwrap_or(&text).to_string();
+                        if let Some(map) = &mut self.mapping {
+                            map.end_code(text.len(), lang == "chartgen" || lang == "mermaid" && self.fence_closed);
+                        }
                         let (indent, quote) = (self.indent(), self.quote);
                         self.blocks.push(if lang == "chartgen" {
                             Block::Chart { spec: text, indent, quote }
@@ -288,11 +355,17 @@ impl Builder {
                     if let Some((url, alt)) = self.image.take() {
                         self.flush();
                         self.blocks.push(Block::Image { url, alt, indent: self.indent() });
+                        if let Some(map) = &mut self.mapping {
+                            map.end_image();
+                        }
                     }
                 }
                 TagEnd::Table => {
                     if let Some(rows) = self.table.take() {
                         self.blocks.push(Block::Table { rows });
+                        if let Some(map) = &mut self.mapping {
+                            map.end_table();
+                        }
                     }
                 }
                 _ => {}
@@ -300,6 +373,9 @@ impl Builder {
             Event::Text(text) => {
                 if let Some((_, code)) = &mut self.code {
                     code.push_str(&text);
+                    if let Some(map) = &mut self.mapping {
+                        map.code_text(&text);
+                    }
                 } else {
                     self.push_text(&text, self.style);
                 }
@@ -308,6 +384,9 @@ impl Builder {
             Event::InlineMath(latex) => self.push_text(latex.trim(), Style { math: true, ..Style::default() }),
             Event::DisplayMath(latex) => {
                 if let Some(rows) = &mut self.table {
+                    if let Some(map) = &mut self.mapping {
+                        map.push(latex.trim(), true, false);
+                    }
                     if let Some(cell) = rows.last_mut().and_then(|row| row.last_mut()) {
                         cell.push(Run {
                             text: latex.trim().to_string(),
@@ -325,6 +404,9 @@ impl Builder {
                     None
                 } else {
                     self.runs.clear();
+                    if let Some(map) = &mut self.mapping {
+                        map.flush(false);
+                    }
                     self.marker.take()
                 };
                 self.blocks.push(Block::Math {
@@ -333,6 +415,9 @@ impl Builder {
                     quote: self.quote,
                     marker,
                 });
+                if let Some(map) = &mut self.mapping {
+                    map.object();
+                }
             }
             // An agent means its line breaks, as chats take them
             Event::SoftBreak => {
@@ -344,6 +429,9 @@ impl Builder {
             Event::Rule => {
                 self.flush();
                 self.blocks.push(Block::Rule);
+                if let Some(map) = &mut self.mapping {
+                    map.object();
+                }
             }
             Event::TaskListMarker(done) => {
                 self.marker = Some(if done { "☑" } else { "☐" }.to_string());
@@ -359,12 +447,14 @@ impl Builder {
 fn fence_closed(block: &str) -> bool {
     let strip = |line: &str| line.trim_start_matches(|c: char| c.is_whitespace() || c == '>').to_string();
     let mut lines = block.trim_end().lines();
-    let Some(open) = lines.next().map(strip) else { return false };
+    let Some(open) = lines.next().map(strip) else {
+        return false;
+    };
     let fence: String = open.chars().take_while(|c| *c == '`' || *c == '~').collect();
-    let Some(close) = lines.last().map(strip) else { return false };
-    !fence.is_empty()
-        && close.starts_with(&fence)
-        && close.trim_end().chars().all(|c| fence.starts_with(c))
+    let Some(close) = lines.last().map(strip) else {
+        return false;
+    };
+    !fence.is_empty() && close.starts_with(&fence) && close.trim_end().chars().all(|c| fence.starts_with(c))
 }
 
 /// Rewrite `\(…\)` as `$…$`, `\[…\]` as `$$…$$`, and wrap bare display
@@ -389,7 +479,7 @@ pub fn normalize_math_mapped(text: &str) -> (String, Vec<Rewrite>) {
         ["align", "align*", "equation", "equation*", "gather", "gather*", "multline", "eqnarray"];
     let mut out = String::with_capacity(text.len() + 16);
     let mut rewrites = Vec::new();
-    let mut insert = |out: &mut String, rewrites: &mut Vec<Rewrite>, src: std::ops::Range<usize>, with: &str| {
+    let insert = |out: &mut String, rewrites: &mut Vec<Rewrite>, src: std::ops::Range<usize>, with: &str| {
         let start = out.len();
         out.push_str(with);
         rewrites.push(Rewrite { src, out: start..out.len() });
@@ -497,7 +587,9 @@ impl<'a> OffsetMap<'a> {
     pub fn source(&self, at: usize) -> usize {
         // The last rewrite starting at or before `at`
         let i = self.rewrites.partition_point(|r| r.out.start <= at);
-        let Some(r) = i.checked_sub(1).map(|i| &self.rewrites[i]) else { return at };
+        let Some(r) = i.checked_sub(1).map(|i| &self.rewrites[i]) else {
+            return at;
+        };
         if at >= r.out.end {
             r.src.end + (at - r.out.end)
         } else if at == r.out.start {
@@ -524,10 +616,7 @@ mod tests {
     #[test]
     fn dollars_make_inline_and_display_math() {
         let doc = parse("Let $x^2$ be.\n\n$$\\int_0^1 f$$\n\nDone, costs $5 and $6.");
-        assert_eq!(
-            math_runs(&doc),
-            vec![("x^2".to_string(), false), ("\\int_0^1 f".to_string(), true)]
-        );
+        assert_eq!(math_runs(&doc), vec![("x^2".to_string(), false), ("\\int_0^1 f".to_string(), true)]);
     }
 
     #[test]
@@ -592,7 +681,9 @@ mod tests {
 
     #[test]
     fn lists_headings_code_and_tables() {
-        let doc = parse("# Title\n\n1. one\n2. two\n   - nested\n\n```rust\nfn x() {}\n```\n\n| a | b |\n|---|---|\n| $1$ | 2 |\n");
+        let doc = parse(
+            "# Title\n\n1. one\n2. two\n   - nested\n\n```rust\nfn x() {}\n```\n\n| a | b |\n|---|---|\n| $1$ | 2 |\n",
+        );
         let Block::Text(heading) = &doc.blocks[0] else { panic!() };
         assert_eq!(heading.kind, TextKind::Heading(1));
         let Block::Text(item) = &doc.blocks[2] else { panic!() };

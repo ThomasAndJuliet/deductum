@@ -137,6 +137,18 @@ def read_config() -> Dict[str, Any]:
     return cfg if isinstance(cfg, dict) else {}
 
 
+def resource_limit(session: Any, name: str, default: Optional[int] = None) -> Optional[int]:
+    """Optional machine-local process policy, cached by a running host.
+
+    Limits are applied only when starting new backend work. Session-specific
+    prover options remain available for project requirements.
+    """
+    host = getattr(session, "host", None)
+    policy = host.resource_policy if host is not None and getattr(host, "state_io", None) is not None else read_config()
+    value = policy.get(name)
+    return value if type(value) is int and 1 <= value <= 256 else default
+
+
 class Driver:
     """One session's prover. Subclasses set ``backend`` and implement ``start``
     and either a process speaking the backend protocol (``Process``) or
