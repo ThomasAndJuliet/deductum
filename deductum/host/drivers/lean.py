@@ -24,6 +24,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import sys
 import time
 import subprocess
@@ -36,6 +37,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from . import Driver, HostError, message, resource_limit
 from .lsp import LspClient, LspClosed, LspError, TextIndex, UNHANDLED
+from background import OrderedIO
 
 HOME = os.path.expanduser("~")
 ELAN_BIN = os.path.join(HOME, ".elan", "bin")
@@ -504,6 +506,24 @@ class TextMap:
 
 STALE_MESSAGE = "Imports are out of date and should be rebuilt"
 STALE_HEADER_ERROR = "Imports changed; rebuild imports"
+UNVERIFIED_IMPORTS = "Could not verify changed imports; rebuild imports"
+
+
+class ImportBudgetExceeded(ValueError):
+    pass
+
+
+def import_source_bytes(text: str, limit: int) -> int:
+    if len(text) > limit:
+        raise ImportBudgetExceeded("local import graph exceeds its source budget")
+    if text.isascii():
+        return len(text)
+    size = 0
+    for start in range(0, len(text), 65536):
+        size += len(text[start:start + 65536].encode("utf-8"))
+        if size > limit:
+            raise ImportBudgetExceeded("local import graph exceeds its source budget")
+    return size
 KINDS_BY_SEVERITY = {1: "error", 2: "warning", 3: "information", 4: "writeln"}
 
 
@@ -856,6 +876,111 @@ def lake_project(root: str) -> Dict[str, Any]:
 # The driver
 
 
+def local_import_header(root: str, text: str, header_limit: Optional[int] = None,
+                        module_limit: int = 4096) -> Tuple[List[str], bool]:
+    """Local source candidates, without stat or canonicalization on the loop."""
+    prefix = text[:header_limit] if header_limit is not None else text
+    mask = scan_regions(prefix)
+    code = "".join(c if kind == CODE or c == "\n" else " " for c, kind in zip(prefix, mask))
+    ident = r"(?:«[^»\n]+»|[\w']+)(?:\.(?:«[^»\n]+»|[\w']+))*"
+    paths = []
+    complete = len(prefix) == len(text)
+    lines = code.splitlines(keepends=True)
+    if not complete and lines and not lines[-1].endswith("\n"):
+        lines.pop()  # a truncated module identifier is not an import
+    for line in lines:
+        line = line.strip()
+        if not line or line == "prelude":
+            continue
+        if not re.match(r"import\s", line):
+            complete = True
+            break
+        for match in re.finditer(ident, line[len("import"):]):
+            name = match[0]
+            if len(paths) >= module_limit:
+                raise ImportBudgetExceeded("local import graph exceeds its module budget")
+            parts = [part[1:-1] if part.startswith("«") else part for part in re.findall(r"«[^»]+»|[^.]+", name)]
+            path = os.path.abspath(os.path.join(root, *parts)) + ".lean"
+            if os.path.commonpath([root, path]) == root:
+                paths.append(path)
+    return paths, complete
+
+
+def local_import_paths(root: str, text: str) -> List[str]:
+    return local_import_header(root, text)[0]
+
+
+def read_import_source(path: str, remaining: int) -> Optional[str]:
+    try:
+        with open(path, "rb") as source:
+            text = source.read(remaining + 1)
+    except FileNotFoundError:
+        # An external module isn't in this project's source root. Lean's own
+        # import closure remains responsible for external package roots.
+        return None
+    if len(text) > remaining:
+        raise ImportBudgetExceeded("local import graph exceeds its source budget")
+    return text.decode("utf-8")
+
+
+def local_import_effects(root: str, sources: Dict[str, str], changes: Dict[str, set],
+                         module_limit: int = 4096, byte_limit: int = 64 * 1024 * 1024):
+    """Pure snapshot/worker boundary: True affected, False unrelated, None unknown."""
+    cache: Dict[str, Any] = {}
+    remaining = byte_limit
+    remaining_edges = module_limit * 4
+    remaining_visits = module_limit * 16
+    errors = set()
+    def edges(path):
+        nonlocal remaining, remaining_edges
+        if path not in cache:
+            if len(cache) >= module_limit:
+                raise ImportBudgetExceeded("local import graph exceeds its module budget")
+            try:
+                text = sources.get(path)
+                if text is None:
+                    text = read_import_source(path, remaining)
+                if text is not None:
+                    remaining -= import_source_bytes(text, remaining)
+                paths = local_import_header(root, text, module_limit=min(module_limit, remaining_edges))[0] if text is not None else []
+                remaining_edges -= len(paths)
+                cache[path] = paths
+            except (OSError, UnicodeError, ValueError) as exn:
+                cache[path] = exn
+        value = cache[path]
+        if isinstance(value, Exception):
+            raise value
+        return value
+    result, readsets = {}, {}
+    for path, changed in changes.items():
+        todo, seen, unknown = [path], set(), False
+        while todo:
+            current = todo.pop()
+            if current in changed:
+                result[path] = True
+                break
+            if current in seen:
+                continue
+            if remaining_visits <= 0:
+                errors.add("local import graph exceeds its traversal budget")
+                result[path] = None
+                break
+            remaining_visits -= 1
+            seen.add(current)
+            try:
+                todo.extend(edges(current))
+            except (OSError, UnicodeError, ValueError) as exn:
+                unknown = True
+                errors.add(str(exn))
+                if isinstance(exn, ImportBudgetExceeded):
+                    result[path] = None
+                    break
+        else:
+            result[path] = None if unknown else False
+        readsets[path] = seen
+    return result, sorted(errors), readsets
+
+
 class LDoc:
     """One document as the driver has it: the host's text and revision, and what the server said"""
 
@@ -871,6 +996,13 @@ class LDoc:
         self.progress: Optional[Tuple[int, List[Tuple[int, int]]]] = None
         self.colours: Optional[Tuple[int, List[List[Any]]]] = None
         self.stale = False
+        self.import_error = False
+        self.import_pending = False
+        self.import_generation = 0
+        self.import_paths: Optional[Tuple[int, str, List[str], bool]] = None
+        self.import_metadata: Optional[Tuple[int, int, int, List[str], bool, Tuple[str, ...]]] = None
+        self.import_metadata_epoch = 0
+        self.import_task: Optional[asyncio.Task] = None
         self.rpc: Optional[str] = None
         self.rpc_task: Optional[asyncio.Task] = None
         self.node_handle: Optional[asyncio.TimerHandle] = None
@@ -947,6 +1079,10 @@ class LeanDriver(Driver):
         self.check_slots: Optional[asyncio.Semaphore] = None
         self.stderr_tail: List[str] = []
         self.build_task: Optional[asyncio.Task] = None
+        self.disk_task: Optional[asyncio.Task] = None
+        self.disk_pending: Dict[str, Dict[str, Tuple[LDoc, int]]] = {}
+        self.import_cache: Dict[Tuple[str, ...], Tuple[List[str], bool]] = {}
+        self.standalone_io: Optional[OrderedIO] = None
 
     # ----- discovery
 
@@ -1134,7 +1270,7 @@ class LeanDriver(Driver):
         code = await proc.wait()
         if code == 0:
             for doc in self.docs.values():
-                if doc.stale or doc.diags and any(d["message"].startswith("unknown module") for d in doc.diags[1]):
+                if doc.stale or doc.import_error or doc.diags and any(d["message"].startswith("unknown module") for d in doc.diags[1]):
                     self._reopen(doc)
         return {"ok": code == 0, "output_tail": "\n".join(tail)}
 
@@ -1225,10 +1361,16 @@ class LeanDriver(Driver):
     async def stop(self) -> None:
         self.stopping = True
         self.ready = False
+        self.disk_pending.clear()
+        if self.disk_task is not None:
+            self.disk_task.cancel()
+            await asyncio.gather(self.disk_task, return_exceptions=True)
         for task in list(self.queries.values()):
             task.cancel()
         for doc in self.docs.values():
             self._cancel_doc_tasks(doc)
+        if self.standalone_io is not None:
+            self.standalone_io.close()
         if self.client:
             await self.client.shutdown()
         elif self.proc:
@@ -1236,10 +1378,11 @@ class LeanDriver(Driver):
             await stop_process(self.proc)
 
     def _cancel_doc_tasks(self, doc: LDoc) -> None:
-        for t in (doc.rpc_task, doc.colour_task):
+        for t in (doc.rpc_task, doc.colour_task, doc.import_task):
             if t:
                 t.cancel()
         doc.rpc_task = doc.colour_task = None
+        doc.import_task = None
         doc.rpc = None
         if doc.node_handle:
             doc.node_handle.cancel()
@@ -1247,6 +1390,14 @@ class LeanDriver(Driver):
 
     def _on_exit(self, code: Optional[int]) -> None:
         self.ready = False
+        self.disk_pending.clear()
+        if self.disk_task is not None:
+            self.disk_task.cancel()
+        for doc in self.docs.values():
+            if doc.import_task:
+                doc.import_task.cancel()
+        if self.standalone_io is not None:
+            self.standalone_io.close()
         if not self.stopping:
             tail = "\n".join(self.stderr_tail[-8:])
             with contextlib.suppress(Exception):
@@ -1293,11 +1444,14 @@ class LeanDriver(Driver):
         doc = self.docs[path] = LDoc(path, obj["text"], int(obj.get("rev", 1)))
         self.by_uri[doc.uri] = doc
         doc.progress = (doc.version, [(0, len(doc.text))])
+        self._doc_import_header(doc, doc.version, doc.text)
         if not self.paused:
             self._did_open(doc)
         self._schedule_node(doc)
 
     def _did_open(self, doc: LDoc) -> None:
+        doc.import_generation += 1
+        doc.import_pending = False
         doc.server_open = True
         self._notify("textDocument/didOpen", {"textDocument": {
             "uri": doc.uri, "languageId": "lean4", "version": doc.version, "text": doc.text}})
@@ -1314,6 +1468,8 @@ class LeanDriver(Driver):
             return
         self._did_close(doc)
         doc.stale = False
+        doc.import_error = False
+        doc.import_pending = False
         doc.diags = None
         doc.progress = (doc.version, [(0, len(doc.text))])
         self._did_open(doc)
@@ -1333,6 +1489,7 @@ class LeanDriver(Driver):
             first = min(first, s)
         doc.version = int(obj.get("rev", doc.version + 1))
         doc.remember()
+        self._doc_import_header(doc, doc.version, doc.text)
         if doc.server_open and changes:
             self._notify("textDocument/didChange", {"textDocument": {"uri": doc.uri, "version": doc.version},
                                                     "contentChanges": changes})
@@ -1353,10 +1510,106 @@ class LeanDriver(Driver):
     def _send_disk_changed(self, obj: Dict[str, Any]) -> None:
         """Files changed on disk that the session has not open: tell the server, which marks the
         open files that import them (a sticky "imports are out of date" message)"""
-        changes = [{"uri": Path(p).as_uri(), "type": 2} for p in obj.get("files", [])
-                   if p.endswith(".lean") and p not in self.docs]
+        if self.stopping:
+            return
+        paths = {p for p in obj.get("files", []) if p.endswith(".lean") and p not in self.docs}
+        changes = [{"uri": Path(p).as_uri(), "type": 2} for p in sorted(paths)]
         if changes:
             self._notify("workspace/didChangeWatchedFiles", {"changes": changes})
+            for key in list(self.import_cache):
+                if paths.intersection(key):
+                    self.import_cache.pop(key, None)
+            # Lean registers importClosure on a separate task from progress.
+            # A checked file can therefore miss this one-shot notification.
+            targets = {}
+            for path, doc in self.docs.items():
+                if not doc.server_open:
+                    continue
+                imports, complete = self._doc_import_header(doc, doc.version, doc.text)
+                if not complete or paths.intersection(imports):
+                    doc.import_metadata_epoch += 1
+                    doc.import_metadata = None
+                    self._schedule_node(doc)
+                if paths.intersection(imports):
+                    doc.stale = True
+                    self._schedule_node(doc)
+                elif (imports or not complete) and not doc.stale:
+                    targets[path] = (doc, doc.import_generation)
+            if targets:
+                # Bound the retained change-to-target envelope while a mount
+                # is slow; overflow is explicitly unknown, never valid/fresh.
+                count = sum(len(targets) for targets in self.disk_pending.values())
+                if len(self.disk_pending.keys() | paths) > 128 or count + len(paths) * len(targets) > 4096:
+                    self.emit({"event": "log", "text": "Local import verification queue is full; rebuild imports"})
+                    for doc, _ in targets.values():
+                        doc.import_error = True
+                        self._schedule_node(doc)
+                    return
+                for path in paths:
+                    self.disk_pending.setdefault(path, {}).update(targets)
+                for doc, _ in targets.values():
+                    doc.import_pending = True
+                    self._schedule_node(doc)
+                if self.disk_task is None:
+                    self.disk_task = asyncio.create_task(self._check_disk_imports())
+
+    async def _project_work(self, root: str, operation: Callable[[], Any]):
+        host = getattr(self.session, "host", None)
+        if host is not None and getattr(host, "project_io", None) is not None:
+            return await host.project_read(root, operation)
+        # Standalone clients have the same bounded admission/cancellation
+        # semantics, rather than abandoning default-executor threads.
+        if self.standalone_io is None:
+            self.standalone_io = OrderedIO("lean-imports", workers=1, pending=128)
+        task = self.standalone_io.submit(root, operation)
+        return await self.standalone_io.wait(task, root, 10)
+
+    async def _check_disk_imports(self) -> None:
+        try:
+            while self.disk_pending and not self.stopping:
+                pending, self.disk_pending = self.disk_pending, {}
+                requested, generations = {}, {}
+                for changed, targets in pending.items():
+                    for path, (doc, generation) in targets.items():
+                        if self.docs.get(path) is doc and doc.server_open and doc.import_generation == generation and not doc.stale:
+                            requested.setdefault(path, set()).add(changed)
+                            generations[path] = generation
+                if not requested:
+                    continue
+                captured = {path: (doc, doc.version) for path, doc in self.docs.items()}
+                sources = {path: doc.text for path, doc in self.docs.items()}
+                root = self.lake_root
+                def scan(root=root, sources=sources, requested=requested):
+                    return local_import_effects(root, sources, requested)
+                try:
+                    result, errors, readsets = await self._project_work(root, scan)
+                except Exception as exn:
+                    result, errors = {path: None for path in requested}, [str(exn)]
+                    readsets = {path: {path} for path in requested}
+                if self.stopping:
+                    return
+                if errors:
+                    self.emit({"event": "log", "text": "Could not fully verify local import changes: " + "; ".join(errors[:5])})
+                for path, affected in result.items():
+                    doc = self.docs.get(path)
+                    if doc is None or doc.import_generation != generations[path] or not doc.server_open:
+                        continue
+                    if any(((self.docs[p], self.docs[p].version) if p in self.docs else None)
+                           != captured.get(p) for p in readsets[path]):
+                        # Retain the original target generation across a genuine
+                        # dependency-source edit, without waiting on unrelated text.
+                        for changed, targets in pending.items():
+                            if path in targets:
+                                self.disk_pending.setdefault(changed, {}).setdefault(path, targets[path])
+                        continue
+                    if affected is True:
+                        doc.stale = True
+                    elif affected is None:
+                        doc.import_error = True
+                    doc.import_pending = any(path in targets for targets in self.disk_pending.values())
+                    self._schedule_node(doc)
+        finally:
+            self.disk_task = None
 
     def _send_checking(self, obj: Dict[str, Any]) -> None:
         on = bool(obj.get("on"))
@@ -1509,8 +1762,75 @@ class LeanDriver(Driver):
         if doc.node_handle is None:
             doc.node_handle = asyncio.get_running_loop().call_later(self.NODE_DEBOUNCE, self._emit_node, doc)
 
+    def _doc_import_header(self, doc: LDoc, version: int, text: str) -> Tuple[List[str], bool]:
+        if doc.import_paths is None or doc.import_paths[:2] != (version, self.lake_root):
+            try:
+                paths, complete = local_import_header(self.lake_root, text, header_limit=8192, module_limit=256)
+            except ValueError:
+                paths, complete = [], False
+            doc.import_paths = (version, self.lake_root, paths, complete)
+        return doc.import_paths[2], doc.import_paths[3]
+
+    def _imports_ready(self, doc: LDoc, version: int) -> bool:
+        meta = doc.import_metadata
+        return meta is not None and meta[:3] == (version, doc.import_generation, doc.import_metadata_epoch)
+
+    async def _load_import_metadata(self, doc: LDoc, version: int, text: str) -> None:
+        generation, epoch, root = doc.import_generation, doc.import_metadata_epoch, self.lake_root
+        def resolve():
+            import_source_bytes(text, 64 * 1024 * 1024)
+            candidates = local_import_paths(root, text)
+            present = []
+            for path in candidates:
+                try:
+                    if stat.S_ISREG(os.stat(path).st_mode):
+                        present.append(path)
+                except FileNotFoundError:
+                    pass
+            return tuple(candidates), present
+        try:
+            try:
+                key, imports = await self._project_work(root, resolve)
+                failed = False
+            except Exception as exn:
+                key, imports, failed = (), [], True
+                self.emit({"event": "log", "text": "Could not verify local import metadata: " + str(exn)})
+            if (not self.stopping and self.docs.get(doc.path) is doc
+                    and doc.import_generation == generation and doc.import_metadata_epoch == epoch
+                    and doc.history.get(version) is text):
+                doc.import_metadata = (version, generation, epoch, imports, failed, key)
+                if not failed:
+                    if len(self.import_cache) >= 128:
+                        self.import_cache.pop(next(iter(self.import_cache)))
+                    self.import_cache[key] = (imports, False)
+                self._schedule_node(doc)
+        finally:
+            if doc.import_task is asyncio.current_task():
+                doc.import_task = None
+                if not self.stopping and self.docs.get(doc.path) is doc:
+                    self._schedule_node(doc)
+
     def _emit_node(self, doc: LDoc) -> None:
         doc.node_handle = None
+        if self.docs.get(doc.path) is not doc or self.stopping:
+            return
+        versions = [v for v in (doc.diags and doc.diags[0], doc.progress and doc.progress[0]) if v is not None]
+        if not versions:
+            return
+        version = max(versions)
+        text = doc.history.get(version)
+        if text is None:
+            return
+        if not self._imports_ready(doc, version):
+            paths, complete = self._doc_import_header(doc, version, text)
+            cached = self.import_cache.get(tuple(paths)) if complete else None
+            if cached is not None or (complete and not paths):
+                imports, failed = cached or ([], False)
+                doc.import_metadata = (version, doc.import_generation, doc.import_metadata_epoch, imports, failed, tuple(paths))
+            else:
+                if doc.import_task is None:
+                    doc.import_task = asyncio.create_task(self._load_import_metadata(doc, version, text))
+                return
         try:
             node = self.node_for(doc)
         except Exception as exn:  # a report that cannot be made must not stop the next
@@ -1565,9 +1885,14 @@ class LeanDriver(Driver):
         colours.sort(key=lambda c: (c[0], c[1]))
         theory = self.module_name(doc.path)
         header_errors = [STALE_HEADER_ERROR] if doc.stale else []
+        metadata = doc.import_metadata if self._imports_ready(doc, seq) else None
+        if (doc.import_error or doc.import_pending or metadata is None or metadata[4]) and not doc.stale:
+            header_errors.append(UNVERIFIED_IMPORTS)
+        if doc.import_pending:
+            rep["status"] = dict(rep["status"], consolidated=False)
         return {
             "event": "node", "file": doc.path, "theory": theory, "seq": seq, "status": rep["status"],
-            "header_errors": header_errors, "imports": self.imports_of(text), "commands": rep["commands"],
+            "header_errors": header_errors, "imports": metadata[3] if metadata else [], "commands": rep["commands"],
             "messages": [diag_message(d) for d in diags], "colours": colours,
         }
 
@@ -1579,14 +1904,10 @@ class LeanDriver(Driver):
         return os.path.splitext(os.path.basename(path))[0]
 
     def imports_of(self, text: str) -> List[str]:
-        """Paths of the local modules a file imports"""
-        out = []
-        for m in re.finditer(r"^import\s+([\w.«»]+)", text, re.M):
-            rel = m.group(1).replace(".", os.sep) + ".lean"
-            p = os.path.join(self.lake_root, rel)
-            if os.path.isfile(p):
-                out.append(p)
-        return out
+        """Previously verified local imports; node emission resolves misses off-loop."""
+        paths, complete = local_import_header(self.lake_root, text, header_limit=8192, module_limit=256)
+        cached = self.import_cache.get(tuple(paths)) if complete else None
+        return cached[0] if cached else []
 
     # ----- colours
 
