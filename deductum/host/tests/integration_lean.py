@@ -553,7 +553,7 @@ def run_core(path):
 
     app = H.SyncClient.local()
     try:
-        app.request("hello", client="app", label="lean test")
+        app.request("hello", client="app", label="lean test", concurrent_reads=True)
         detected = app.request("detect", folder=work) if False else None
         s = app.request("session_create", folder=work, backend="lean", new=True)["session"]
         sid = s["id"]

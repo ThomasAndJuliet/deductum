@@ -297,9 +297,9 @@ fn a_project_file_opens_in_the_source_view_and_a_document_again_literate() {
     assert!(super::sidebar::is_project_file(&app, ws, "/home/me/Research/Demo/ROOT"));
     assert!(!super::sidebar::is_project_file(&app, ws, "/home/me/Research/Demo/Demo.thy"));
     let read = |path: &str| json!({"ok": true, "doc": {"path": path, "text": "session Demo = HOL +\n  theories Demo\n", "revision": 1, "prover": null}});
-    let _ = app.on_reply("local".into(), super::Pending::Read("s1".into(), "/home/me/Research/Demo/ROOT".into()), read("/home/me/Research/Demo/ROOT"));
+    let _ = app.on_reply("local".into(), super::Pending::Read("s1".into(), "/home/me/Research/Demo/ROOT".into(), None), read("/home/me/Research/Demo/ROOT"));
     assert_eq!(app.workspace.as_ref().unwrap().theory.as_ref().unwrap().mode, Mode::Source);
-    let _ = app.on_reply("local".into(), super::Pending::Read("s1".into(), "/home/me/Research/Demo/Demo.thy".into()), read("/home/me/Research/Demo/Demo.thy"));
+    let _ = app.on_reply("local".into(), super::Pending::Read("s1".into(), "/home/me/Research/Demo/Demo.thy".into(), None), read("/home/me/Research/Demo/Demo.thy"));
     assert_eq!(app.workspace.as_ref().unwrap().theory.as_ref().unwrap().mode, Mode::Literate);
 }
 

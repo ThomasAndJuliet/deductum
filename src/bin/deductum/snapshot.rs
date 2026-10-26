@@ -111,6 +111,8 @@ pub fn demo_app(mode: Mode) -> App {
         sessions,
         next_id: 0,
         pending: HashMap::new(),
+        nav_serial: 0,
+        nav_latest: HashMap::new(),
         workspace: Some(Workspace {
             machine: "local".into(),
             sid: "s1".into(),
@@ -992,7 +994,7 @@ fn a_reference_window_shows_its_theory_and_moves_on_ctrl_click() {
     let doc = json!({"ok": true, "doc": {"path": "/isa/src/HOL/Lib.thy", "text": text, "revision": 0, "prover": null, "library": true}});
     let d = json!({"file": "/isa/src/HOL/Lib.thy", "line": 5, "name": "Lib.mirror"});
     let started = std::time::Instant::now();
-    let _ = app.on_reply("local".into(), Pending::RefRead(d, None), doc.clone());
+    let _ = app.on_reply("local".into(), Pending::RefRead(d, None, None), doc.clone());
     eprintln!("a 9000-line theory read for its window in {:?}", started.elapsed());
     assert_eq!(app.references.len(), 1);
     let id = app.references[0].0;
@@ -1006,10 +1008,10 @@ fn a_reference_window_shows_its_theory_and_moves_on_ctrl_click() {
     assert_eq!(super::prover::profile(None).name_at(&r.theory.local, hover_at).as_deref(), Some("mirror"));
     // Ctrl+click on a name found elsewhere: this window moves there, and Back knows where it was
     let info = super::editor::entity_info(&[json!({"raw": "#deductum:entity type\nLib.tree\n/isa/src/HOL/Lib.thy\n3\ntype tree"})]);
-    let _ = app.ref_found(id, RefUse::Goto(false), info);
+    let _ = app.ref_found(id, RefUse::Goto(false), info, None);
     let before = app.references[0].1.theory.highlight.0.generation;
     let d2 = json!({"file": "/isa/src/HOL/Lib.thy", "line": 3, "name": "Lib.tree"});
-    let _ = app.on_reply("local".into(), Pending::RefRead(d2, Some(id)), doc.clone());
+    let _ = app.on_reply("local".into(), Pending::RefRead(d2, Some(id), None), doc.clone());
     // (its editor keeps its highlighter while the number is the same: a new one, so the new
     // theory's colours, not the old one's)
     assert_ne!(app.references[0].1.theory.highlight.0.generation, before);
@@ -1019,7 +1021,7 @@ fn a_reference_window_shows_its_theory_and_moves_on_ctrl_click() {
     assert_eq!(r.back[0]["name"], "Lib.mirror");
     // Alt+click: another window
     let d3 = json!({"file": "/isa/src/HOL/Lib.thy", "line": 12, "name": "Lib.filler_1"});
-    let _ = app.on_reply("local".into(), Pending::RefRead(d3, None), doc);
+    let _ = app.on_reply("local".into(), Pending::RefRead(d3, None, None), doc);
     assert_eq!(app.references.len(), 2);
     // Typing in it does nothing
     let before = app.references[0].1.theory.local.clone();
@@ -1189,7 +1191,7 @@ fn a_utp_reference_window_with_the_real_symbols() {
     }
     let doc = json!({"ok": true, "doc": {"path": "/isa/utp_rea_prog.thy", "text": text, "revision": 0, "prover": null, "library": true}});
     let d = json!({"file": "/isa/utp_rea_prog.thy", "line": 203, "name": "utp_rea_prog.lift_cond_srea_def"});
-    let _ = app.on_reply("local".into(), super::Pending::RefRead(d, None), doc);
+    let _ = app.on_reply("local".into(), super::Pending::RefRead(d, None, None), doc);
     let (id, r) = (app.references[0].0, &app.references[0].1);
     let t = &r.theory;
     // the keyword `lemma` of `lemma unrest_lift_cond_srea`: classed as a keyword at its own characters
@@ -2084,22 +2086,117 @@ fn frame_matrix() {
     }
 }
 
+#[test]
+fn an_old_proof_state_error_does_not_replace_the_current_output() {
+    let mut app = demo_app(Mode::Source);
+    app.state_gen = 8;
+    let ws = app.workspace.as_ref().unwrap();
+    let t = ws.theory.as_ref().unwrap();
+    let mut request = super::StateRequest { generation: 7, session: ws.sid.clone(), path: t.path.clone(), revision: t.confirmed_rev };
+    let before = app.workspace.as_ref().unwrap().output.clone();
+    let error = json!({"ok": false, "error": "the old read failed", "code": "prover_error"});
+    let _ = app.on_reply("local".into(), super::Pending::State(request.clone()), error.clone());
+    assert_eq!(app.workspace.as_ref().unwrap().output, before);
+
+    request.generation = 8;
+    let _ = app.on_reply("local".into(), super::Pending::State(request), error);
+    assert_eq!(app.workspace.as_ref().unwrap().output.as_ref().unwrap()["error"], "the old read failed");
+}
+
+#[test]
+fn a_connection_opts_in_to_concurrent_document_reads() {
+    let mut app = demo_app(Mode::Source);
+    let (sender, mut commands) = tokio::sync::mpsc::unbounded_channel();
+    let _ = app.on_link("local".into(), link::Event::Connected(sender));
+    let hello = std::iter::from_fn(|| commands.try_recv().ok())
+        .map(|line| serde_json::from_str::<serde_json::Value>(&line).unwrap())
+        .find(|message| message["op"] == "hello").expect("the new connection identifies the client");
+    assert_eq!(hello["concurrent_reads"], true);
+}
+
+#[test]
+fn a_stale_proof_state_requests_the_current_revision_again() {
+    let mut app = demo_app(Mode::Source);
+    let before = app.workspace.as_ref().unwrap().output.clone();
+    let ws = app.workspace.as_ref().unwrap();
+    let t = ws.theory.as_ref().unwrap();
+    let generation = app.state_gen;
+    let request = super::StateRequest { generation, session: ws.sid.clone(), path: t.path.clone(), revision: t.confirmed_rev };
+    let _ = app.on_reply("local".into(), super::Pending::State(request), json!({"ok": false, "code": "stale_snapshot"}));
+    assert_eq!(app.state_gen, generation + 1, "retry through the existing debounce");
+    assert_eq!(app.workspace.as_ref().unwrap().output, before);
+}
+
+#[tokio::test]
+async fn a_busy_proof_state_recovers_when_read_capacity_returns() {
+    use cosmic::iced::futures::StreamExt;
+    let mut app = demo_app(Mode::Source);
+    let (sender, mut commands) = tokio::sync::mpsc::unbounded_channel();
+    app.links[0].sender = Some(sender);
+    let before = app.workspace.as_ref().unwrap().output.clone();
+    let ws = app.workspace.as_ref().unwrap();
+    let t = ws.theory.as_ref().unwrap();
+    let request = super::StateRequest { generation: app.state_gen, session: ws.sid.clone(), path: t.path.clone(), revision: t.confirmed_rev };
+    let task = app.on_reply("local".into(), super::Pending::State(request), json!({"ok": false, "code": "busy", "error": "pending reads"}));
+    assert_eq!(app.workspace.as_ref().unwrap().output, before, "saturation keeps the existing output");
+
+    // Run the retry the app actually scheduled, then accept a fresh reply once
+    // the host has finished its older reads. No further user event is needed.
+    let mut retry = cosmic::iced::runtime::task::into_stream(task).expect("a retry task");
+    let action = tokio::time::timeout(std::time::Duration::from_secs(2), retry.next()).await.unwrap().unwrap();
+    let cosmic::iced::runtime::Action::Output(cosmic::Action::App(super::Message::StateTick(generation))) = action else {
+        panic!("a busy read must schedule a new state tick");
+    };
+    assert_eq!(generation, app.state_gen);
+    let _ = cosmic::Application::update(&mut app, super::Message::StateTick(generation));
+    let sent = std::iter::from_fn(|| commands.try_recv().ok())
+        .map(|line| serde_json::from_str::<serde_json::Value>(&line).unwrap())
+        .find(|message| message["op"] == "state").expect("the retry sends a proof-state request");
+    let reply = json!({"id": sent["id"], "ok": true, "revision": sent["revision"], "messages": [], "fresh": true});
+    let _ = app.on_link("local".into(), link::Event::Line(reply));
+    assert_eq!(app.workspace.as_ref().unwrap().output.as_ref().unwrap()["fresh"], true);
+}
+
+#[test]
+fn proof_state_replies_belong_to_the_requested_machine_session_document_and_revision() {
+    for changed in ["machine", "session", "document", "revision"] {
+        for ok in [true, false] {
+            let mut app = demo_app(Mode::Source);
+            let before = app.workspace.as_ref().unwrap().output.clone();
+            let ws = app.workspace.as_mut().unwrap();
+            let t = ws.theory.as_mut().unwrap();
+            let request = super::StateRequest { generation: app.state_gen, session: ws.sid.clone(), path: t.path.clone(), revision: t.confirmed_rev };
+            match changed {
+                "machine" => ws.machine = "another machine".into(),
+                "session" => ws.sid = "another session".into(),
+                "document" => t.path = "/another.thy".into(),
+                "revision" => t.confirmed_rev += 1,
+                _ => unreachable!(),
+            }
+            let reply = json!({"ok": ok, "messages": [], "error": "a different context"});
+            let _ = app.on_reply("local".into(), super::Pending::State(request), reply);
+            assert_eq!(app.workspace.as_ref().unwrap().output, before, "{changed}, ok={ok}");
+        }
+    }
+}
+
 /// A tool typed where the prover has not got to yet (its imports still being checked, as when a
 /// session has just started) says what it waits for, not that there is no proof state
 #[test]
 fn a_tool_waiting_for_imports_says_so() {
     let mut app = demo_app(Mode::Literate);
+    let table = Table::fallback();
     {
         let ws = app.workspace.as_mut().unwrap();
         let t = ws.theory.as_mut().unwrap();
         let at = t.local.find("sorry").expect("the demo has a sorry");
-        let text = format!("{}sledgehammer{}", &t.local[..at], &t.local[at + 5..]);
-        let len = text.chars().count();
-        t.local = text.clone();
-        t.confirmed = text;
+        t.replace(at, at + 5, "sledgehammer", &table);
+        let len = t.local.chars().count();
+        t.confirmed = t.local.clone();
         let start = t.local[..at].chars().count();
         t.prover.commands = vec![super::theory::Command { start, end: start + 12, name: "sledgehammer".into(), status: super::theory::Status::Unprocessed }];
         t.cursor = (start + 12).min(len);
+        t.refresh(&table);
         ws.output = None;
         ws.goals.messages.clear();
     }
@@ -2338,4 +2435,159 @@ fn opening_a_selected_block_keeps_the_goal_where_it_was() {
         assert!((closed.y - open.y).abs() <= 2.0 && (closed.height - open.height).abs() <= 2.0, "beside={beside}: {closed:?} → {open:?}");
     }
     super::view::set_goal_beside(true);
+}
+
+#[test]
+fn definition_navigation_ignores_old_replies_and_changed_context() {
+    use super::{link, Pending};
+    for change in ["newer", "machine", "session", "document", "revision", "cursor"] {
+        let mut app = demo_app(Mode::Source);
+        let (sender, _receiver) = tokio::sync::mpsc::unbounded_channel();
+        app.links[0].sender = Some(sender);
+        let _ = app.goto_definition();
+        let old = app.next_id;
+        let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+        let (path, at) = (t.path.clone(), t.cursor);
+        if change == "newer" {
+            let _ = app.goto_definition();
+            let new = app.next_id;
+            // The newer target is the same caret in the same file: context alone
+            // cannot distinguish these two requests.
+            let reply = json!({"id": new, "ok": true, "info": {"definition": {"file": path, "offset": at}}});
+            let _ = app.on_link("local".into(), link::Event::Line(reply));
+            assert_eq!(app.back.len(), 1);
+        } else {
+            let ws = app.workspace.as_mut().unwrap();
+            let t = ws.theory.as_mut().unwrap();
+            match change {
+                "machine" => ws.machine = "other".into(),
+                "session" => ws.sid = "other".into(),
+                "document" => t.path = "/other.thy".into(),
+                "revision" => t.confirmed_rev += 1,
+                "cursor" => t.cursor += 1,
+                _ => unreachable!(),
+            }
+        }
+        let before = app.back.len();
+        let reply = json!({"id": old, "ok": true, "info": {"definition": {"file": path, "offset": at + 1}}});
+        let _ = app.on_link("local".into(), link::Event::Line(reply));
+        assert_eq!(app.back.len(), before, "{change}");
+        // Errors from an obsolete navigation must not replace the status either.
+        let nav = app.navigation(None, true, true).unwrap();
+        app.workspace.as_mut().unwrap().sid = "changed".into();
+        app.status = None;
+        let _ = app.on_reply("local".into(), Pending::Definition(false, nav), json!({"ok": false, "error": "old failure"}));
+        assert_eq!(app.status, None);
+    }
+}
+
+#[test]
+fn reference_navigation_discards_superseded_or_closed_chained_reads() {
+    use super::{link, Pending, RefUse};
+    let mut app = demo_app(Mode::Source);
+    let (sender, _receiver) = tokio::sync::mpsc::unbounded_channel();
+    app.links[0].sender = Some(sender);
+    let d = json!({"file": "/reference.thy", "line": 1, "offset": 0});
+    let doc = json!({"ok": true, "doc": {"path": "/reference.thy", "text": "lemma one\nlemma two\n", "revision": 1, "prover": {}, "library": false}});
+    let _ = app.on_reply("local".into(), Pending::RefRead(d.clone(), None, None), doc.clone());
+    let id = app.references[0].0;
+    let _ = app.ref_lookup(id, 0, RefUse::Goto(false));
+    let old_info = app.next_id;
+    let info = json!({"id": old_info, "ok": true, "info": {"definition": d}});
+    let _ = app.on_link("local".into(), link::Event::Line(info));
+    let old_read = app.next_id;
+    let _ = app.ref_lookup(id, 0, RefUse::Goto(false));
+    let new_info = app.next_id;
+    let info = json!({"id": new_info, "ok": true, "info": {"definition": {"file": "/reference.thy", "line": 2, "offset": 10}}});
+    let _ = app.on_link("local".into(), link::Event::Line(info));
+    let new_read = app.next_id;
+    let mut reply = doc.clone();
+    reply["id"] = json!(new_read);
+    let _ = app.on_link("local".into(), link::Event::Line(reply));
+    assert_eq!(app.references[0].1.start, 10);
+    let mut reply = doc.clone();
+    reply["id"] = json!(old_read);
+    let _ = app.on_link("local".into(), link::Event::Line(reply));
+    assert_eq!(app.references[0].1.start, 10);
+    assert_eq!(app.references[0].1.back.len(), 1);
+
+    let _ = app.ref_lookup(id, 10, RefUse::Goto(false));
+    let info_id = app.next_id;
+    let _ = app.on_link("local".into(), link::Event::Line(json!({"id": info_id, "ok": true, "info": {"definition": {"file": "/reference.thy", "line": 1}}})));
+    let read_id = app.next_id;
+    app.references.clear();
+    let mut reply = doc;
+    reply["id"] = json!(read_id);
+    let _ = app.on_link("local".into(), link::Event::Line(reply));
+    assert!(app.references.is_empty(), "a closed reference must not reopen");
+}
+
+#[test]
+fn newer_definition_supersedes_an_older_cross_file_read() {
+    use super::link;
+    let mut app = demo_app(Mode::Source);
+    let (sender, _receiver) = tokio::sync::mpsc::unbounded_channel();
+    app.links[0].sender = Some(sender);
+    let original = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().path.clone();
+    let _ = app.goto_definition();
+    let old_info = app.next_id;
+    let _ = app.on_link("local".into(), link::Event::Line(json!({"id": old_info, "ok": true, "info": {"definition": {"file": "/old.thy", "offset": 1}}})));
+    let old_read = app.next_id;
+    assert!(app.back.is_empty(), "a pending read must not add Back history");
+    let _ = app.goto_definition();
+    let new_info = app.next_id;
+    let _ = app.on_link("local".into(), link::Event::Line(json!({"id": new_info, "ok": true, "info": {"definition": {"file": "/new.thy", "offset": 2}}})));
+    let new_read = app.next_id;
+    let old_doc = json!({"id": old_read, "ok": true, "doc": {"path": "/old.thy", "text": "old", "revision": 1, "prover": {}}});
+    let _ = app.on_link("local".into(), link::Event::Line(old_doc));
+    let ws = app.workspace.as_ref().unwrap();
+    assert_eq!(ws.theory.as_ref().unwrap().path, original);
+    assert_eq!(ws.opening.as_deref(), Some("/new.thy"));
+    assert_eq!(ws.pending_goto, Some(2));
+    let new_doc = json!({"id": new_read, "ok": true, "doc": {"path": "/new.thy", "text": "new", "revision": 1, "prover": {}}});
+    let _ = app.on_link("local".into(), link::Event::Line(new_doc));
+    let theory = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+    assert_eq!(theory.path, "/new.thy");
+    assert_eq!(theory.cursor, 2);
+    assert_eq!(app.back.len(), 1, "only the accepted navigation adds history");
+    assert_eq!(app.back[0].0, original);
+}
+
+#[test]
+fn explicit_theory_open_invalidates_an_older_definition_read() {
+    use super::{link, Message};
+    let mut app = demo_app(Mode::Source);
+    let (sender, _receiver) = tokio::sync::mpsc::unbounded_channel();
+    app.links[0].sender = Some(sender);
+    let original = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().path.clone();
+    let _ = app.goto_definition();
+    let info = app.next_id;
+    let _ = app.on_link("local".into(), link::Event::Line(json!({"id": info, "ok": true, "info": {"definition": {"file": "/old.thy", "offset": 1}}})));
+    let old_read = app.next_id;
+    let _ = cosmic::Application::update(&mut app, Message::OpenTheory("/chosen.thy".into()));
+    assert_eq!(app.workspace.as_ref().unwrap().pending_goto, None);
+    let _ = app.on_link("local".into(), link::Event::Line(json!({"id": old_read, "ok": true, "doc": {"path": "/old.thy", "text": "old", "revision": 1, "prover": {}}})));
+    assert_eq!(app.workspace.as_ref().unwrap().theory.as_ref().unwrap().path, original);
+    assert_eq!(app.workspace.as_ref().unwrap().opening.as_deref(), Some("/chosen.thy"));
+}
+
+#[test]
+fn cancelled_definition_read_releases_only_its_own_loading_state() {
+    use super::link;
+    for change in ["cursor", "revision"] {
+        let mut app = demo_app(Mode::Source);
+        let (sender, _receiver) = tokio::sync::mpsc::unbounded_channel();
+        app.links[0].sender = Some(sender);
+        let _ = app.goto_definition();
+        let info = app.next_id;
+        let _ = app.on_link("local".into(), link::Event::Line(json!({"id": info, "ok": true, "info": {"definition": {"file": "/target.thy", "offset": 1}}})));
+        let read = app.next_id;
+        let t = app.workspace.as_mut().unwrap().theory.as_mut().unwrap();
+        if change == "cursor" { t.cursor += 1; } else { t.confirmed_rev += 1; }
+        let _ = app.on_link("local".into(), link::Event::Line(json!({"id": read, "ok": true, "doc": {"path": "/target.thy", "text": "target", "revision": 1, "prover": {}}})));
+        let ws = app.workspace.as_ref().unwrap();
+        assert_eq!(ws.opening, None, "{change}");
+        assert_eq!(ws.pending_goto, None, "{change}");
+        assert!(app.back.is_empty());
+    }
 }
