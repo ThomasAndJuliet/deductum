@@ -1569,7 +1569,8 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
         cosmic::iced::advanced::graphics::text::font_system().read().unwrap().version().hash(&mut hasher);
         hasher.finish()
     };
-    let col = super::viewport::Column::new(indices.clone(), t.page_scope, source, style, t.page_viewport.get(), build, estimate, Message::LiterateAdjust)
+    let scope = t.page_scope;
+    let col = super::viewport::Column::new(indices.clone(), scope, source, style, t.page_viewport.get(), build, estimate, move |delta| Message::LiterateAdjust(scope, delta))
         .padding([sp.space_s, gutter]).editor(open_item).pin(t.selected).pin(anchor.map(|a| a.0));
     // Clicking outside every block finishes the one being edited
     // (its side margins included, so that the page is centred, the same room on either side)
@@ -1602,7 +1603,7 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
     };
     let laid = super::gap::GoalLayer::new(col, goal, anchor, GOAL_GAP).indices(indices);
     let page = widget::container(widget::container(laid).max_width(page_width).width(Length::Fill)).center_x(Length::Fill);
-    widget::mouse_area(thin(page).id(literate_scroll_id()).height(Length::Fill).on_scroll(|v| Message::LiterateScrolled(v.absolute_offset().y, v.bounds().height))).on_press(Message::CloseBlock).into()
+    widget::mouse_area(thin(page).id(literate_scroll_id()).height(Length::Fill).on_scroll(move |v| Message::LiterateScrolled(scope, v.absolute_offset().y, v.bounds().height))).on_press(Message::CloseBlock).into()
 }
 
 /// Where a scroll view is (the source view's, the proof window's), to keep the caret in sight there

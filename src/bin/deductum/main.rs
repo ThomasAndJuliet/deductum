@@ -240,8 +240,8 @@ pub enum Message {
     ProsePointer(usize, cosmic::iced::Point),
     /// Where in a rendered prose block's text (its Markdown block and offset in it) the pointer is
     ProseHover(usize, prose_render::rich::Pos),
-    LiterateScrolled(f32, f32),
-    LiterateAdjust(f32),
+    LiterateScrolled(u64, f32, f32),
+    LiterateAdjust(u64, f32),
     /// A click replayed in the block editor once it is laid out (opening prose where it was clicked)
     BlockClickAt(cosmic::iced::Point),
     /// Ctrl and Alt held or not, for Ctrl+click and Alt+click
@@ -3220,11 +3220,13 @@ impl cosmic::Application for App {
                 self.status = Some("Block deleted (Ctrl+Z brings it back)".into());
                 return Task::batch([self.flush_edits(), view::centre_selected(), Self::unfocus_all()]);
             }
-            Message::LiterateScrolled(top, height) => {
-                if let Some(t) = self.workspace.as_ref().and_then(|w| w.theory.as_ref()) { t.page_viewport.set((top, height)); }
+            Message::LiterateScrolled(scope, top, height) => {
+                if let Some(t) = self.workspace.as_ref().and_then(|w| w.theory.as_ref()).filter(|t| t.page_scope == scope) { t.page_viewport.set((top, height)); }
             }
-            Message::LiterateAdjust(delta) => {
-                return cosmic::iced::widget::scrollable::scroll_by(view::literate_scroll_id(), cosmic::iced::widget::scrollable::AbsoluteOffset { x: 0.0, y: delta });
+            Message::LiterateAdjust(scope, delta) => {
+                if self.workspace.as_ref().and_then(|w| w.theory.as_ref()).is_some_and(|t| t.page_scope == scope) {
+                    return cosmic::iced::widget::scrollable::scroll_by(view::literate_scroll_id(), cosmic::iced::widget::scrollable::AbsoluteOffset { x: 0.0, y: delta });
+                }
             }
             Message::ProseHover(i, pos) => {
                 self.prose_hover = Some((i, pos));

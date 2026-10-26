@@ -320,7 +320,8 @@ fn duplicate_rows_do_not_reuse_unproven_identity_after_remote_edit() {
         .iter()
         .find(|(text, v)| v.len() >= 2 && text.contains("marker_0"))
         .expect("fixture has repeated proof blocks")
-        .1.clone();
+        .1
+        .clone();
     let unique = groups
         .iter()
         .find(|(text, v)| v.len() == 1 && text.contains("marker_40"))
@@ -343,4 +344,60 @@ fn duplicate_rows_do_not_reuse_unproven_identity_after_remote_edit() {
             "duplicate occurrence must not claim identity after edit"
         );
     }
+}
+
+#[test]
+fn old_page_scroll_messages_do_not_affect_the_new_theory() {
+    let old = super::snapshot_lean::lean_app(Mode::Literate);
+    let old_scope = old
+        .workspace
+        .as_ref()
+        .unwrap()
+        .theory
+        .as_ref()
+        .unwrap()
+        .page_scope;
+    let mut app = super::snapshot_lean::lean_app(Mode::Literate);
+    let theory = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+    let scope = theory.page_scope;
+    assert_ne!(old_scope, scope);
+    let initial = theory.page_viewport.get();
+    let task = cosmic::Application::update(
+        &mut app,
+        Message::LiterateScrolled(old_scope, 4321.0, 500.0),
+    );
+    assert!(cosmic::iced::runtime::task::into_stream(task).is_none());
+    assert_eq!(
+        app.workspace
+            .as_ref()
+            .unwrap()
+            .theory
+            .as_ref()
+            .unwrap()
+            .page_viewport
+            .get(),
+        initial
+    );
+    let task = cosmic::Application::update(&mut app, Message::LiterateAdjust(old_scope, 500.0));
+    assert!(
+        cosmic::iced::runtime::task::into_stream(task).is_none(),
+        "an old adjustment must not scroll the new page"
+    );
+    let _ = cosmic::Application::update(&mut app, Message::LiterateScrolled(scope, 123.0, 600.0));
+    assert_eq!(
+        app.workspace
+            .as_ref()
+            .unwrap()
+            .theory
+            .as_ref()
+            .unwrap()
+            .page_viewport
+            .get(),
+        (123.0, 600.0)
+    );
+    let task = cosmic::Application::update(&mut app, Message::LiterateAdjust(scope, 25.0));
+    assert!(
+        cosmic::iced::runtime::task::into_stream(task).is_some(),
+        "the current page can still scroll"
+    );
 }
