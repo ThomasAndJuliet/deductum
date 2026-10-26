@@ -14,7 +14,7 @@ use std::time::Duration;
 use cosmic::iced::futures::channel::mpsc::Sender;
 use cosmic::iced::futures::{SinkExt, Stream};
 use serde::Deserialize;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
+use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt};
 use tokio::sync::mpsc;
 
 /// Where the host runs
@@ -269,69 +269,119 @@ fn connect_command(target: &Target) -> tokio::process::Command {
     cmd
 }
 
+/// Read host events and write commands independently. Delivering an event can
+/// wait for the UI's bounded queue without holding up edits or cancellation.
+/// Both pumps belong to this future: ending either drops the other and closes
+/// its pipe, including when the subscription itself is dropped.
+async fn exchange<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
+    stdout: R,
+    mut stdin: W,
+    mut lines_out: mpsc::UnboundedReceiver<String>,
+    key: &str,
+    output: &mut Sender<(String, Event)>,
+) -> std::io::Result<()> {
+    let read = async {
+        let mut lines = tokio::io::BufReader::with_capacity(1 << 20, stdout).lines();
+        while let Some(line) = lines.next_line().await? {
+            if let Ok(value) = serde_json::from_str(&line) {
+                output.send((key.to_string(), Event::Line(value))).await.map_err(|_| {
+                    std::io::Error::new(std::io::ErrorKind::BrokenPipe, "the UI connection closed")
+                })?;
+            }
+        }
+        Ok(())
+    };
+    let write = async {
+        while let Some(mut line) = lines_out.recv().await {
+            line.push('\n');
+            stdin.write_all(line.as_bytes()).await?;
+            stdin.flush().await?;
+        }
+        Ok(())
+    };
+    tokio::select! {
+        result = read => result,
+        result = write => result,
+    }
+}
+
 /// The link to `target`'s host, reconnecting after a pause when it drops
 pub fn run(target: &Target) -> impl Stream<Item = (String, Event)> + use<> {
     let target = target.clone();
     cosmic::iced::stream::channel(64, move |mut output: Sender<(String, Event)>| async move {
         let key = target.key.clone();
         loop {
-            let _ = output.send((key.clone(), Event::Connecting("installing".into()))).await;
+            if output.send((key.clone(), Event::Connecting("installing".into()))).await.is_err() {
+                return;
+            }
             if let Err(err) = install(&target).await {
-                let _ = output.send((key.clone(), Event::Disconnected(err))).await;
+                if output.send((key.clone(), Event::Disconnected(err))).await.is_err() {
+                    return;
+                }
                 tokio::time::sleep(Duration::from_secs(20)).await;
                 continue;
             }
-            let _ = output.send((key.clone(), Event::Connecting("connecting".into()))).await;
+            if output.send((key.clone(), Event::Connecting("connecting".into()))).await.is_err() {
+                return;
+            }
             let mut child = match connect_command(&target).spawn() {
                 Ok(child) => child,
                 Err(err) => {
-                    let _ = output.send((key.clone(), Event::Disconnected(err.to_string()))).await;
+                    if output.send((key.clone(), Event::Disconnected(err.to_string()))).await.is_err() {
+                        return;
+                    }
                     tokio::time::sleep(Duration::from_secs(10)).await;
                     continue;
                 }
             };
-            let (Some(mut stdin), Some(stdout), Some(stderr)) = (child.stdin.take(), child.stdout.take(), child.stderr.take()) else {
+            let (Some(stdin), Some(stdout), Some(stderr)) = (child.stdin.take(), child.stdout.take(), child.stderr.take()) else {
                 continue;
             };
-            let (to_host, mut lines_out) = mpsc::unbounded_channel::<String>();
-            let _ = output.send((key.clone(), Event::Connected(to_host))).await;
-            let stderr_task = tokio::spawn(async move {
-                let mut tail = Vec::new();
-                let mut lines = tokio::io::BufReader::new(stderr).lines();
-                while let Ok(Some(line)) = lines.next_line().await {
-                    tail.push(line);
-                    if tail.len() > 10 {
-                        tail.remove(0);
-                    }
-                }
-                tail.join("\n")
-            });
-            let mut lines = tokio::io::BufReader::with_capacity(1 << 20, stdout).lines();
-            loop {
-                tokio::select! {
-                    line = lines.next_line() => match line {
-                        Ok(Some(line)) => {
-                            if let Ok(value) = serde_json::from_str(&line) {
-                                let _ = output.send((key.clone(), Event::Line(value))).await;
-                            }
-                        }
-                        _ => break,
-                    },
-                    out = lines_out.recv() => match out {
-                        Some(mut line) => {
-                            line.push('\n');
-                            if stdin.write_all(line.as_bytes()).await.is_err() || stdin.flush().await.is_err() {
-                                break;
-                            }
-                        }
-                        None => break,
-                    },
-                }
+            let (to_host, lines_out) = mpsc::unbounded_channel::<String>();
+            if output.send((key.clone(), Event::Connected(to_host))).await.is_err() {
+                return;
             }
-            let _ = child.kill().await;
-            let tail = stderr_task.await.unwrap_or_default();
-            let reason = if tail.trim().is_empty() { "the connection closed".to_string() } else { tail };
-            let _ = output.send((key.clone(), Event::Disconnected(reason))).await;
+            let mut tail = std::collections::VecDeque::new();
+            let result = {
+                // Keep stderr owned by the connection as well: a cancelled
+                // subscription must not leave a detached reader behind.
+                let drain_stderr = async {
+                    let mut lines = tokio::io::BufReader::new(stderr).lines();
+                    while let Ok(Some(line)) = lines.next_line().await {
+                        tail.push_back(line);
+                        if tail.len() > 10 {
+                            tail.pop_front();
+                        }
+                    }
+                };
+                let exchange = exchange(stdout, stdin, lines_out, &key, &mut output);
+                tokio::pin!(drain_stderr, exchange);
+                let mut stderr_finished = false;
+                let result = loop {
+                    tokio::select! {
+                        result = &mut exchange => break result,
+                        _ = &mut drain_stderr, if !stderr_finished => stderr_finished = true,
+                    }
+                };
+                let _ = child.kill().await;
+                // A descendant can inherit the pipe; it must not hold up a
+                // reconnect forever after the connection process has exited.
+                if !stderr_finished {
+                    let _ = tokio::time::timeout(Duration::from_secs(1), &mut drain_stderr).await;
+                }
+                result
+            };
+            let tail = tail.into_iter().collect::<Vec<_>>().join("\n");
+            let reason = if !tail.trim().is_empty() {
+                tail
+            } else if let Err(error) = result {
+                format!("the connection closed: {error}")
+            } else {
+                "the connection closed".to_string()
+            };
+            if output.send((key.clone(), Event::Disconnected(reason))).await.is_err() {
+                return;
+            }
             tokio::time::sleep(Duration::from_secs(5)).await;
         }
     })
@@ -407,6 +457,179 @@ pub async fn open_folder(opener: Opener, target: Target, folder: String) -> Resu
 
 #[cfg(test)]
 mod tests {
+    use std::pin::Pin;
+    use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
+    use std::task::{Context, Poll};
+
+    use cosmic::iced::futures::{StreamExt, channel::mpsc, poll};
+    use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
+
+    use super::{Event, exchange};
+
+    struct Tracked<T> {
+        inner: T,
+        dropped: Arc<AtomicBool>,
+    }
+
+    impl<T> Drop for Tracked<T> {
+        fn drop(&mut self) {
+            self.dropped.store(true, Ordering::SeqCst);
+        }
+    }
+
+    impl<T: AsyncRead + Unpin> AsyncRead for Tracked<T> {
+        fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<std::io::Result<()>> {
+            Pin::new(&mut self.inner).poll_read(cx, buf)
+        }
+    }
+
+    impl<T: AsyncWrite + Unpin> AsyncWrite for Tracked<T> {
+        fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<std::io::Result<usize>> {
+            Pin::new(&mut self.inner).poll_write(cx, buf)
+        }
+
+        fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+            Pin::new(&mut self.inner).poll_flush(cx)
+        }
+
+        fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+            Pin::new(&mut self.inner).poll_shutdown(cx)
+        }
+    }
+
+    #[tokio::test]
+    async fn blocked_ui_delivery_does_not_hold_up_ordered_edits_and_cancel() {
+        let (mut host, client) = tokio::io::duplex(4096);
+        let (stdout, stdin) = tokio::io::split(client);
+        let (commands, lines_out) = tokio::sync::mpsc::unbounded_channel();
+        let (mut output, mut events) = mpsc::channel(1);
+        let mut queued = 0;
+        while output.try_send(("test".into(), Event::Connecting("queued".into()))).is_ok() {
+            queued += 1;
+        }
+        assert!(queued > 0);
+        host.write_all(b"{\"revision\":1}\nnot json\n{\"revision\":2}\n").await.unwrap();
+        let transfer = exchange(stdout, stdin, lines_out, "test", &mut output);
+        tokio::pin!(transfer);
+        // Enter the read pump while the event queue is full, before there is
+        // anything to write. The old shared select loop remains in send here.
+        assert!(poll!(&mut transfer).is_pending());
+        let expected = "{\"edit\":1}\n{\"edit\":2}\n{\"cancel\":3}\n";
+        for line in expected.lines() {
+            commands.send(line.to_string()).unwrap();
+        }
+        let outgoing = async {
+            let mut actual = vec![0; expected.len()];
+            host.read_exact(&mut actual).await.unwrap();
+            assert_eq!(actual, expected.as_bytes(), "edits and cancellation must retain their order");
+        };
+        tokio::select! {
+            result = &mut transfer => panic!("connection ended with commands pending: {result:?}"),
+            result = tokio::time::timeout(std::time::Duration::from_secs(2), outgoing) => {
+                result.expect("a full UI event queue must not block commands to the host");
+            }
+        }
+        let incoming = async {
+            for _ in 0..queued {
+                assert!(matches!(events.next().await, Some((_, Event::Connecting(_)))));
+            }
+            for revision in [1, 2] {
+                match events.next().await {
+                    Some((key, Event::Line(value))) => {
+                        assert_eq!(key, "test");
+                        assert_eq!(value["revision"], revision);
+                    }
+                    other => panic!("expected host revision {revision}, got {other:?}"),
+                }
+            }
+        };
+        tokio::select! {
+            result = &mut transfer => panic!("connection ended before queued events were delivered: {result:?}"),
+            result = tokio::time::timeout(std::time::Duration::from_secs(2), incoming) => {
+                result.expect("host events must be delivered in order after the UI catches up");
+            }
+        }
+        drop(commands);
+        tokio::time::timeout(std::time::Duration::from_secs(2), transfer).await.unwrap().unwrap();
+    }
+
+    #[tokio::test]
+    async fn host_eof_closes_the_command_receiver_and_both_pipes() {
+        let (host, client) = tokio::io::duplex(64);
+        let (stdout, stdin) = tokio::io::split(client);
+        let read_dropped = Arc::new(AtomicBool::new(false));
+        let write_dropped = Arc::new(AtomicBool::new(false));
+        let (commands, lines_out) = tokio::sync::mpsc::unbounded_channel();
+        let (mut output, _events) = mpsc::channel(1);
+        drop(host);
+        exchange(
+            Tracked { inner: stdout, dropped: read_dropped.clone() },
+            Tracked { inner: stdin, dropped: write_dropped.clone() },
+            lines_out, "test", &mut output,
+        ).await.unwrap();
+        assert!(commands.is_closed());
+        assert!(read_dropped.load(Ordering::SeqCst));
+        assert!(write_dropped.load(Ordering::SeqCst));
+    }
+
+    #[tokio::test]
+    async fn ui_disconnect_stops_both_pumps() {
+        let (mut host, client) = tokio::io::duplex(64);
+        let (stdout, stdin) = tokio::io::split(client);
+        let (commands, lines_out) = tokio::sync::mpsc::unbounded_channel();
+        let (mut output, events) = mpsc::channel(1);
+        drop(events);
+        host.write_all(b"{}\n").await.unwrap();
+        let error = exchange(stdout, stdin, lines_out, "test", &mut output).await.unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::BrokenPipe);
+        assert!(commands.is_closed());
+        let mut byte = [0];
+        assert_eq!(host.read(&mut byte).await.unwrap(), 0, "the writer must close when event delivery fails");
+    }
+
+    #[tokio::test]
+    async fn failed_command_write_stops_the_pending_host_reader() {
+        let (_host, client) = tokio::io::duplex(64);
+        let (stdout, _stdin) = tokio::io::split(client);
+        // A separate closed pipe fails writes without making the pending host
+        // reader complete, so only the write failure can end this exchange.
+        let (closed_host, broken_stdin) = tokio::io::duplex(64);
+        drop(closed_host);
+        let read_dropped = Arc::new(AtomicBool::new(false));
+        let (commands, lines_out) = tokio::sync::mpsc::unbounded_channel();
+        let (mut output, _events) = mpsc::channel(1);
+        commands.send("cancel".to_string()).unwrap();
+        let result = tokio::time::timeout(std::time::Duration::from_secs(2), exchange(
+            Tracked { inner: stdout, dropped: read_dropped.clone() },
+            broken_stdin, lines_out, "test", &mut output,
+        )).await.expect("write failure must stop the pending reader");
+        assert_eq!(result.unwrap_err().kind(), std::io::ErrorKind::BrokenPipe);
+        assert!(commands.is_closed());
+        assert!(read_dropped.load(Ordering::SeqCst));
+    }
+
+    #[tokio::test]
+    async fn dropping_connection_drops_the_pipes_and_queued_commands() {
+        let (_host, client) = tokio::io::duplex(64);
+        let (stdout, stdin) = tokio::io::split(client);
+        let read_dropped = Arc::new(AtomicBool::new(false));
+        let write_dropped = Arc::new(AtomicBool::new(false));
+        let (commands, lines_out) = tokio::sync::mpsc::unbounded_channel();
+        let (mut output, _events) = mpsc::channel(1);
+        {
+            let transfer = exchange(
+                Tracked { inner: stdout, dropped: read_dropped.clone() },
+                Tracked { inner: stdin, dropped: write_dropped.clone() },
+                lines_out, "test", &mut output,
+            );
+            tokio::pin!(transfer);
+            assert!(poll!(&mut transfer).is_pending());
+        }
+        assert!(commands.is_closed());
+        assert!(read_dropped.load(Ordering::SeqCst));
+        assert!(write_dropped.load(Ordering::SeqCst));
+    }
+
     #[test]
     fn terminal_agents_machines_parse() {
         let text = "{\n    (0): (\n        name: \"neo\",\n        host: \"neo\",\n        user: \"twright\",\n        hostname: \"\",\n        home: \"\",\n        host_id: \"\",\n    ),\n}";

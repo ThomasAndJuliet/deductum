@@ -38,7 +38,7 @@ import sys
 import time
 import uuid
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import deductum_ot as ot  # noqa: E402
@@ -62,6 +62,7 @@ ISABELLUM_STATE_DIR = Path(os.environ.get("XDG_STATE_HOME") or HOME / ".local/st
 AUTOSAVE_DELAY = 2.0
 WATCH_INTERVAL = 1.0
 MEMORY_ENTRIES = 5000
+MAX_SNAPSHOT_REQUESTS = 4  # per connection; never queue reads ahead of edits or Stop
 LIFECYCLES = ("Starting", "Running", "Paused", "Stopping", "Stopped", "Failed")
 
 
@@ -1679,18 +1680,67 @@ class Session:
 
     # ----- queries (state, Sledgehammer, find theorems)
 
-    async def state_query(self, client: "Client", path: str, offset: int, revision: Optional[int],
-                          margin: float) -> Dict[str, Any]:
+    def prepare_snapshot(self, client: "Client", operation: str, path: str, offset: int,
+                         revision: Optional[int], margin: float = 100) -> Callable[[], Awaitable[Dict[str, Any]]]:
+        """Capture a read in input order; only its prover wait runs outside mutation dispatch.
+
+        A prover read may finish after edits, a restart or a discarded session. Its offsets
+        must never be labelled with a newer revision, or applied to a replacement prover.
+        """
         backend = self.require_checking()
         doc = self.get_doc(path)
         pos = doc.map_offset(offset, revision)
-        client.note_position(self, doc, pos)
-        r = await backend.request({"op": "state", "file": doc.path, "offset": pos, "margin": margin})
-        if "error" in r:
-            raise HostError(r["error"])
-        r.pop("reply", None)
-        r["revision"] = doc.revision
-        return r
+        captured_revision = doc.revision
+        epoch = self.meta["epoch"]
+        # A definition can point into another open document. Its line/column is just as
+        # stale if that target changes while the source document remains unchanged.
+        targets = {p: (d, d.revision) for p, d in self.docs.items()} if operation == "info" else {}
+        if operation == "state":
+            client.note_position(self, doc, pos)
+
+        def check_current() -> None:
+            if (self.host.sessions.get(self.id) is not self or self.driver is not backend
+                    or self.meta["epoch"] != epoch or self.docs.get(doc.path) is not doc
+                    or doc.revision != captured_revision
+                    or self.lifecycle in ("Paused", "Stopped", "Stopping", "Failed")):
+                raise HostError("The document or prover changed while reading its state", "stale_snapshot",
+                                revision=captured_revision)
+
+        async def read() -> Dict[str, Any]:
+            check_current()
+            request = {"op": operation, "file": doc.path, "offset": pos}
+            if operation == "state":
+                request["margin"] = margin
+            r = await backend.request(request)
+            check_current()
+            if "error" in r:
+                raise HostError(r["error"])
+            if operation == "info":
+                info = r.get("info") or {}
+                d = info.get("definition")
+                if d and d.get("file"):
+                    target_path = os.path.realpath(d["file"])
+                    target = self.docs.get(target_path)
+                    current = (target, target.revision) if target else None
+                    if targets.get(target_path) != current:
+                        raise HostError("The definition's document changed while reading it", "stale_snapshot",
+                                        revision=captured_revision)
+                    text = target.text if target else None
+                    if text is None:
+                        with contextlib.suppress(OSError):
+                            text = Path(d["file"]).read_text()
+                    if text is not None:
+                        d["offset"] = ot.offset_of(text, int(d.get("line", 1)), int(d.get("column", 0)))
+                return {"info": info, "revision": captured_revision}
+            r.pop("reply", None)
+            r["revision"] = captured_revision
+            return r
+
+        return read
+
+    async def state_query(self, client: "Client", path: str, offset: int, revision: Optional[int],
+                          margin: float) -> Dict[str, Any]:
+        return await self.prepare_snapshot(client, "state", path, offset, revision, margin)()
 
     def start_query(self, client: "Client", path: str, offset: int, revision: Optional[int],
                     operation: str, args: List[str]) -> Dict[str, Any]:
@@ -2153,6 +2203,8 @@ class Client:
         # its keyword lines ask at all, the models to ask when a line names none, Loogle
         self.settings: Dict[str, Any] = {}
         self.closed = False
+        # Older GUIs depend on reads and mutations completing in request order.
+        self.concurrent_reads = False
 
     def author(self) -> Dict[str, Any]:
         if self.kind == "agent":
@@ -2500,10 +2552,21 @@ class Host:
                 raise HostError("Only the human controls this session's prover; you can control your "
                                 "own independent sessions", "forbidden")
 
+    def prepare_snapshot(self, client: Client, req: Dict[str, Any]) -> Callable[[], Awaitable[Dict[str, Any]]]:
+        path = translate_path(req["path"], client.location.get("machine"))
+        s = self.session(req.get("session"))
+        if client.kind == "agent":
+            s.note_agent_query(path)
+        return s.prepare_snapshot(client, req["op"], path, int(req.get("offset", 0)),
+                                  req.get("revision"), float(req.get("margin", 100)))
+
     async def handle(self, client: Client, req: Dict[str, Any]) -> Dict[str, Any]:
         op = req.get("op")
         p = req
+        if op in ("state", "info"):
+            return await self.prepare_snapshot(client, req)()
         if op == "hello":
+            client.concurrent_reads = p.get("concurrent_reads") is True
             client.kind = p.get("client", "cli")
             client.label = p.get("label") or client.kind
             ident = p.get("identity") or None
@@ -2706,26 +2769,6 @@ class Host:
             doc.alternatives = [a for a in doc.alternatives if a["id"] != p["id"]]
             s.persist(doc)
             return {}
-        if op == "info":
-            # Hover information and the definition at a position
-            backend = s.require_checking()
-            doc = s.get_doc(p["path"])
-            pos = doc.map_offset(int(p.get("offset", 0)), p.get("revision"))
-            r = (await backend.request({"op": "info", "file": doc.path, "offset": pos})).get("info") or {}
-            d = r.get("definition")
-            if d and d.get("file"):
-                # A place in a theory of the session: as an offset there too
-                target = s.docs.get(os.path.realpath(d["file"]))
-                text = target.text if target else None
-                if text is None:
-                    with contextlib.suppress(OSError):
-                        text = Path(d["file"]).read_text()
-                if text is not None:
-                    d["offset"] = ot.offset_of(text, int(d.get("line", 1)), int(d.get("column", 0)))
-            return {"info": r, "revision": doc.revision}
-        if op == "state":
-            return await s.state_query(client, p["path"], int(p.get("offset", 0)), p.get("revision"),
-                                       float(p.get("margin", 100)))
         if op == "query":
             return s.start_query(client, p["path"], int(p.get("offset", 0)), p.get("revision"),
                                  p["operation"], [str(a) for a in p.get("args", [])])
@@ -2898,34 +2941,93 @@ class Host:
     async def serve_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         client = Client(self, reader, writer)
         self.clients.append(client)
+        snapshots: set = set()
+        transport_closed = asyncio.create_task(writer.wait_closed())
+        reading: Optional[asyncio.Task] = None
+
+        def error_reply(req: Dict[str, Any], exn: Exception) -> None:
+            if isinstance(exn, HostError):
+                client.push({"id": req.get("id"), "ok": False, "error": str(exn),
+                             "code": exn.code, **exn.data})
+            else:
+                log("request failed", req.get("op"), repr(exn))
+                import traceback
+                traceback.print_exc()
+                client.push({"id": req.get("id"), "ok": False,
+                             "error": f"{type(exn).__name__}: {exn}", "code": "internal"})
+
+        async def drain() -> None:
+            try:
+                await writer.drain()
+            except (ConnectionError, OSError):
+                client.closed = True
+                writer.close()
+
+        async def respond(req: Dict[str, Any], work: Callable[[], Awaitable[Dict[str, Any]]]) -> None:
+            try:
+                result = await work()
+                client.push({"id": req.get("id"), "ok": True, **result})
+            except Exception as exn:
+                error_reply(req, exn)
+            await drain()
+
         try:
-            while True:
-                line = await reader.readline()
+            while not client.closed:
+                reading = asyncio.create_task(reader.readline())
+                done, _ = await asyncio.wait((reading, transport_closed), return_when=asyncio.FIRST_COMPLETED)
+                if transport_closed in done:
+                    break
+                line = reading.result()
+                reading = None
                 if not line:
+                    # The stdio bridge half-closes its input after its final request. It must
+                    # still receive pending replies; transport loss below cancels them instead.
+                    if snapshots:
+                        pending = asyncio.gather(*snapshots)
+                        try:
+                            await asyncio.wait((pending, transport_closed), return_when=asyncio.FIRST_COMPLETED)
+                        finally:
+                            if not pending.done():
+                                pending.cancel()
+                            await asyncio.gather(pending, return_exceptions=True)
                     break
                 try:
                     req = json.loads(line)
+                    if not isinstance(req, dict):
+                        raise ValueError("request must be an object")
                 except ValueError:
                     client.push({"error": "bad json", "code": "bad_request"})
+                    await drain()
                     continue
-                rid = req.get("id")
-                try:
-                    result = await self.handle(client, req)
-                    client.push({"id": rid, "ok": True, **result})
-                except HostError as exn:
-                    client.push({"id": rid, "ok": False, "error": str(exn), "code": exn.code, **exn.data})
-                except Exception as exn:
-                    log("request failed", req.get("op"), repr(exn))
-                    import traceback
-                    traceback.print_exc()
-                    client.push({"id": rid, "ok": False, "error": f"{type(exn).__name__}: {exn}",
-                                 "code": "internal"})
-                with contextlib.suppress(Exception):
-                    await writer.drain()
+                if client.concurrent_reads and req.get("op") in ("state", "info"):
+                    # Refuse saturation immediately: waiting for a semaphore here would put
+                    # the next edit or Stop back behind the very reads we are separating.
+                    if len(snapshots) >= MAX_SNAPSHOT_REQUESTS:
+                        error_reply(req, HostError("Too many pending document reads; try again", "busy"))
+                        await drain()
+                        continue
+                    try:
+                        work = self.prepare_snapshot(client, req)
+                    except Exception as exn:
+                        error_reply(req, exn)
+                        await drain()
+                        continue
+                    task = asyncio.create_task(respond(req, work))
+                    snapshots.add(task)
+                    task.add_done_callback(snapshots.discard)
+                else:
+                    # Edits, lifecycle changes and all other mutations retain input order.
+                    await respond(req, lambda: self.handle(client, req))
         except (ConnectionError, asyncio.IncompleteReadError):
             pass
         finally:
             client.closed = True
+            if reading is not None:
+                reading.cancel()
+                await asyncio.gather(reading, return_exceptions=True)
+            for task in snapshots:
+                task.cancel()
+            await asyncio.gather(*snapshots, return_exceptions=True)
             self.clients.remove(client)
             for sid in list(client.sessions):
                 s = self.sessions.get(sid)
@@ -2935,6 +3037,8 @@ class Host:
                     self.broadcast_session(s)
             with contextlib.suppress(Exception):
                 writer.close()
+            transport_closed.cancel()
+            await asyncio.gather(transport_closed, return_exceptions=True)
 
     async def watch_loop(self) -> None:
         tick = 0

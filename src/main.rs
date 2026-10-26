@@ -314,6 +314,57 @@ pub enum Message {
     Noop,
 }
 
+/// The context a delayed proof-state reply must still belong to.
+#[derive(Clone, Debug)]
+struct StateRequest {
+    generation: u64,
+    session: String,
+    path: String,
+    revision: u64,
+}
+
+impl StateRequest {
+    fn same_document(&self, app: &App, machine: &str) -> bool {
+        self.generation == app.state_gen && app.workspace.as_ref().is_some_and(|ws| {
+            ws.machine == machine && ws.sid == self.session
+                && ws.theory.as_ref().is_some_and(|t| t.path == self.path)
+        })
+    }
+
+    fn is_current(&self, app: &App, machine: &str) -> bool {
+        self.same_document(app, machine) && app.workspace.as_ref()
+            .and_then(|ws| ws.theory.as_ref()).is_some_and(|t| t.confirmed_rev == self.revision)
+    }
+}
+
+/// Origin and ordering of an asynchronous navigation, including its chained read.
+#[derive(Clone, Debug)]
+struct Navigation {
+    machine: String,
+    session: String,
+    path: String,
+    revision: u64,
+    cursor: Option<usize>,
+    source: Option<cosmic::iced::window::Id>,
+    serial: Option<u64>,
+    record_back: bool,
+}
+
+impl Navigation {
+    fn current(&self, app: &App, machine: &str) -> bool {
+        if self.machine != machine || self.serial.is_some_and(|n| app.nav_latest.get(&self.source) != Some(&n)) {
+            return false;
+        }
+        let Some(ws) = app.workspace.as_ref().filter(|w| w.machine == machine && w.sid == self.session) else { return false };
+        let theory = match self.source {
+            Some(id) => app.references.iter().find(|(w, _)| *w == id).map(|(_, r)| &r.theory),
+            None => ws.theory.as_ref(),
+        };
+        theory.is_some_and(|t| t.path == self.path && t.confirmed_rev == self.revision
+            && self.cursor.is_none_or(|cursor| t.cursor == cursor))
+    }
+}
+
 /// What a reply is for
 #[derive(Clone, Debug)]
 enum Pending {
@@ -321,9 +372,9 @@ enum Pending {
     Sessions,
     Symbols,
     SessionInfo(String),
-    Read(String, String),
+    Read(String, String, Option<Navigation>),
     Edit(String),
-    State(u64),
+    State(StateRequest),
     Query(&'static str),
     Fill,
     History(String),
@@ -337,11 +388,11 @@ enum Pending {
     /// Hover information for this generation of the pointer's place
     Info(u64),
     /// The definition at the caret, to go to (Ctrl+click), or to show in a window (Alt+click)
-    Definition(bool),
+    Definition(bool, Navigation),
     /// A definition's theory, read for a window: a new one, or this one (Ctrl+click in it)
-    RefRead(Value, Option<cosmic::iced::window::Id>),
+    RefRead(Value, Option<cosmic::iced::window::Id>, Option<Navigation>),
     /// What the prover says about a place in a reference window's theory
-    RefInfo(cosmic::iced::window::Id, RefUse),
+    RefInfo(cosmic::iced::window::Id, RefUse, Navigation),
     /// A name in a reference window's library theory, looked up in the main theory's context
     Entity(cosmic::iced::window::Id, RefUse),
     /// A project action of this session, by name
@@ -539,6 +590,8 @@ pub struct App {
     pub show_sidebar: bool,
     pub status: Option<String>,
     state_gen: u64,
+    nav_serial: u64,
+    nav_latest: HashMap<Option<cosmic::iced::window::Id>, u64>,
     request: Option<cli::OpenRequest>,
     kinds: Arc<HashMap<String, String>>,
     /// The window a proof was popped out into
@@ -784,7 +837,7 @@ impl App {
                     l.sender = Some(sender);
                     l.status = "connected".into();
                 }
-                self.send(&key, "hello", json!({"client": "app", "label": "Deductum"}), Pending::Hello);
+                self.send(&key, "hello", json!({"client": "app", "label": "Deductum", "concurrent_reads": true}), Pending::Hello);
                 // (what this app wants of keyword lines and searches: its settings)
                 self.tell_host(&key);
                 self.send(&key, "sessions", json!({}), Pending::Sessions);
@@ -796,7 +849,7 @@ impl App {
                     let (sid, path) = (ws.sid.clone(), ws.theory.as_ref().map(|t| t.path.clone()));
                     self.send(&key, "session_info", json!({"session": sid}), Pending::SessionInfo(sid.clone()));
                     if let Some(path) = path {
-                        self.send(&key, "read", json!({"session": sid, "path": path}), Pending::Read(sid, path));
+                        self.send(&key, "read", json!({"session": sid, "path": path}), Pending::Read(sid, path, None));
                     }
                 }
             }
@@ -824,7 +877,32 @@ impl App {
     }
 
     fn on_reply(&mut self, machine: String, pending: Pending, v: Value) -> Task<Message> {
+        let navigation = match &pending {
+            Pending::Definition(_, nav) | Pending::RefInfo(_, _, nav) => Some(nav),
+            Pending::RefRead(_, _, nav) | Pending::Read(_, _, nav) => nav.as_ref(),
+            _ => None,
+        };
+        if navigation.is_some_and(|nav| !nav.current(self, &machine)) {
+            if let Pending::Read(_, path, Some(nav)) = &pending {
+                self.clear_navigation_loading(&machine, path, nav);
+            }
+            return Task::none();
+        }
+        if let Pending::State(request) = &pending {
+            if !request.same_document(self, &machine) {
+                return Task::none();
+            }
+            if !request.is_current(self, &machine) || v["code"] == "stale_snapshot" {
+                return self.schedule_state();
+            }
+            if v["code"] == "busy" {
+                return self.schedule_state_after(Duration::from_millis(500));
+            }
+        }
         if v["ok"] != json!(true) {
+            if let Pending::Read(_, path, Some(nav)) = &pending {
+                self.clear_navigation_loading(&machine, path, nav);
+            }
             let error = v["error"].as_str().unwrap_or("error").to_string();
             match pending {
                 Pending::Edit(_) => {
@@ -833,12 +911,12 @@ impl App {
                         && let Some(t) = &ws.theory
                     {
                         let (sid, path) = (ws.sid.clone(), t.path.clone());
-                        self.send(&machine, "read", json!({"session": sid, "path": path}), Pending::Read(sid, path));
+                        self.send(&machine, "read", json!({"session": sid, "path": path}), Pending::Read(sid, path, None));
                     }
                     self.status = Some(error);
                 }
-                Pending::State(_) => {
-                    if let Some(ws) = &mut self.workspace {
+                Pending::State(request) => {
+                    if request.is_current(self, &machine) && let Some(ws) = &mut self.workspace {
                         ws.output = Some(json!({"error": error, "code": v["code"]}));
                     }
                 }
@@ -923,7 +1001,12 @@ impl App {
                     return self.update(Message::OpenTheory(first));
                 }
             }
-            Pending::Read(sid, path) => {
+            Pending::Read(sid, path, nav) => {
+                if nav.as_ref().is_some_and(|n| n.record_back)
+                    && let Some(t) = self.workspace.as_ref().and_then(|w| w.theory.as_ref())
+                {
+                    self.back.push((t.path.clone(), Self::host_offset(t, t.cursor)));
+                }
                 let table = self.table(&machine);
                 let kinds = self.kinds.clone();
                 // A project file (a ROOT, a lakefile) is not a literate document: the source view
@@ -970,8 +1053,8 @@ impl App {
                 return Task::batch([self.flush_edits(), self.retitle()]);
             }
             Pending::Edit(_) => {}
-            Pending::State(generation) => {
-                if generation == self.state_gen
+            Pending::State(request) => {
+                if request.is_current(self, &machine)
                     && let Some(ws) = &mut self.workspace
                 {
                     // (decoded with the session's symbols, once its machine is known)
@@ -1055,7 +1138,7 @@ impl App {
                     ws.rebuild_views(&*table);
                 }
             }
-            Pending::Definition(window) => {
+            Pending::Definition(window, mut nav) => {
                 let d = v["info"]["definition"].clone();
                 if !(d.is_object() && d["file"].is_string()) {
                     self.status = Some("No definition there".into());
@@ -1063,18 +1146,22 @@ impl App {
                 }
                 if window {
                     if let Some(sid) = self.workspace.as_ref().map(|w| w.sid.clone()) {
-                        self.send(&machine, "read", json!({"session": sid, "path": d["file"], "peek": true}), Pending::RefRead(d, None));
+                        self.send(&machine, "read", json!({"session": sid, "path": d["file"], "peek": true}), Pending::RefRead(d, None, Some(nav)));
                     }
                     return Task::none();
                 }
-                // Remember where this was, for Back
+                // A cross-file move is recorded only when its read is accepted.
                 if let Some(t) = self.workspace.as_ref().and_then(|w| w.theory.as_ref()) {
-                    self.back.push((t.path.clone(), Self::host_offset(t, t.cursor)));
+                    if d["file"].as_str() == Some(t.path.as_str()) {
+                        self.back.push((t.path.clone(), Self::host_offset(t, t.cursor)));
+                    } else {
+                        nav.record_back = true;
+                    }
                 }
                 let place = json!({"path": d["file"], "start": d["offset"].as_u64().unwrap_or(0)});
-                return self.go_to_place(&place);
+                return self.go_to_place_with_navigation(&place, Some(nav));
             }
-            Pending::RefRead(d, target) => {
+            Pending::RefRead(d, target, nav) => {
                 let doc = &v["doc"];
                 let path = doc["path"].as_str().or(d["file"].as_str()).unwrap_or("").to_string();
                 let table = self.table(&machine);
@@ -1095,9 +1182,11 @@ impl App {
                 let title = format!("{name} — {}, line {}", file_name(&path), line + 1);
                 let library = doc["library"].as_bool().unwrap_or(false);
                 let r = Reference { title: title.clone(), path, start, line, theory, library, place: d.clone(), back: Vec::new() };
-                if let Some(id) = target
-                    && let Some((_, slot)) = self.references.iter_mut().find(|(w, _)| *w == id)
-                {
+                if let Some(id) = target {
+                    let Some((_, slot)) = self.references.iter_mut().find(|(w, _)| *w == id) else { return Task::none() };
+                    if nav.as_ref().is_some_and(|n| n.record_back) {
+                        slot.back.push(slot.place.clone());
+                    }
                     let back = std::mem::take(&mut slot.back);
                     *slot = r;
                     slot.back = back;
@@ -1114,8 +1203,8 @@ impl App {
                 let scroll = Task::perform(async { tokio::time::sleep(Duration::from_millis(150)).await }, move |_| cosmic::Action::App(Message::RefScroll(id)));
                 return Task::batch([open.map(|_| cosmic::Action::None), self.set_window_title(title, id), scroll]);
             }
-            Pending::RefInfo(id, how) => {
-                return self.ref_found(id, how, v["info"].clone());
+            Pending::RefInfo(id, how, nav) => {
+                return self.ref_found(id, how, v["info"].clone(), Some(nav));
             }
             Pending::Entity(id, how) => {
                 self.entity = v["query"].as_str().map(|q| (q.to_string(), id, how));
@@ -1221,7 +1310,7 @@ impl App {
                     }
                 }
                 if let Some((sid, path)) = resync {
-                    self.send(&machine, "read", json!({"session": sid, "path": path}), Pending::Read(sid, path));
+                    self.send(&machine, "read", json!({"session": sid, "path": path}), Pending::Read(sid, path, None));
                 }
                 if let Some((sid, path)) = refresh_history {
                     self.send(&machine, "history", json!({"session": sid, "path": path, "limit": 60}), Pending::History(sid));
@@ -1268,7 +1357,7 @@ impl App {
                 {
                     self.entity = None;
                     let messages = v["messages"].as_array().cloned().unwrap_or_default();
-                    return self.ref_found(window, how, editor::entity_info(&messages));
+                    return self.ref_found(window, how, editor::entity_info(&messages), None);
                 }
                 if let Some(ws) = &mut self.workspace {
                     let id = v["id"].as_str();
@@ -1439,6 +1528,10 @@ impl App {
 
     /// A caret moved: ask for the proof state there shortly
     fn schedule_state(&mut self) -> Task<Message> {
+        self.schedule_state_after(Duration::from_millis(220))
+    }
+
+    fn schedule_state_after(&mut self, delay: Duration) -> Task<Message> {
         // What the prover said for another cell (a tool's findings, the goal) is not shown in
         // this one while its own state comes
         if let Some(ws) = &mut self.workspace
@@ -1457,7 +1550,7 @@ impl App {
         let generation = self.state_gen;
         Task::perform(
             async move {
-                tokio::time::sleep(Duration::from_millis(220)).await;
+                tokio::time::sleep(delay).await;
                 generation
             },
             |generation| cosmic::Action::App(Message::StateTick(generation)),
@@ -1621,6 +1714,39 @@ impl App {
         cosmic::iced::advanced::widget::operate(cosmic::iced::advanced::widget::operation::focusable::unfocus())
     }
 
+    /// A rejected read releases loading only while it still owns the pending opening.
+    fn clear_navigation_loading(&mut self, machine: &str, path: &str, nav: &Navigation) {
+        if nav.source.is_none() && nav.serial.is_some_and(|serial| self.nav_latest.get(&None) == Some(&serial))
+            && let Some(ws) = self.workspace.as_mut().filter(|ws| ws.machine == machine && ws.sid == nav.session
+                && ws.opening.as_deref() == Some(path))
+        {
+            ws.opening = None;
+            ws.pending_goto = None;
+        }
+    }
+
+    /// Capture a source for a delayed navigation. In-place requests supersede earlier
+    /// requests from the same view; separate-window requests remain independent.
+    fn navigation(&mut self, source: Option<cosmic::iced::window::Id>, ordered: bool, check_cursor: bool) -> Option<Navigation> {
+        let ws = self.workspace.as_ref()?;
+        let t = match source {
+            Some(id) => &self.references.iter().find(|(w, _)| *w == id)?.1.theory,
+            None => ws.theory.as_ref()?,
+        };
+        let mut nav = Navigation { machine: ws.machine.clone(), session: ws.sid.clone(), path: t.path.clone(),
+            revision: t.confirmed_rev, cursor: check_cursor.then_some(t.cursor), source, serial: None, record_back: false };
+        if ordered {
+            if source.is_none() && let Some(ws) = &mut self.workspace {
+                ws.opening = None;
+                ws.pending_goto = None;
+            }
+            self.nav_serial += 1;
+            nav.serial = Some(self.nav_serial);
+            self.nav_latest.insert(source, self.nav_serial);
+        }
+        Some(nav)
+    }
+
     /// What is at a place in a reference window's theory: from the prover's markup when the
     /// session checks that theory, else the name there looked up in the main theory's context
     fn ref_lookup(&mut self, id: cosmic::iced::window::Id, at: usize, how: RefUse) -> Task<Message> {
@@ -1629,7 +1755,9 @@ impl App {
         let (machine, sid) = (ws.machine.clone(), ws.sid.clone());
         if !r.library {
             let (path, rev) = (r.path.clone(), r.theory.confirmed_rev);
-            self.send(&machine, "info", json!({"session": sid, "path": path, "offset": at, "revision": rev}), Pending::RefInfo(id, how));
+            let ordered = matches!(how, RefUse::Goto(false));
+            let Some(nav) = self.navigation(Some(id), ordered, ordered) else { return Task::none() };
+            self.send(&machine, "info", json!({"session": sid, "path": path, "offset": at, "revision": rev}), Pending::RefInfo(id, how, nav));
             return Task::none();
         }
         let Some(name) = r.theory.profile.name_at(&r.theory.local, at) else { return Task::none() };
@@ -1645,7 +1773,7 @@ impl App {
     }
 
     /// What a look-up in a reference window found: the tooltip, or the definition to go to
-    fn ref_found(&mut self, id: cosmic::iced::window::Id, how: RefUse, info: Value) -> Task<Message> {
+    fn ref_found(&mut self, id: cosmic::iced::window::Id, how: RefUse, info: Value, nav: Option<Navigation>) -> Task<Message> {
         match how {
             RefUse::Hover(generation) => {
                 let Some(machine) = self.workspace.as_ref().map(|w| w.machine.clone()) else { return Task::none() };
@@ -1667,11 +1795,16 @@ impl App {
                 let (machine, sid) = (ws.machine.clone(), ws.sid.clone());
                 // Alt+click: another window; Ctrl+click: this window moves there (Back returns)
                 let target = (!window).then_some(id);
-                if let Some((_, r)) = self.references.iter_mut().find(|(w, _)| Some(*w) == target) {
-                    let here = r.place.clone();
-                    r.back.push(here);
-                }
-                self.send(&machine, "read", json!({"session": sid, "path": d["file"], "peek": true}), Pending::RefRead(d, target));
+                let nav = if let Some(mut nav) = nav {
+                    nav.record_back = target.is_some();
+                    Some(nav)
+                } else {
+                    if let Some((_, r)) = self.references.iter_mut().find(|(w, _)| Some(*w) == target) {
+                        r.back.push(r.place.clone());
+                    }
+                    None
+                };
+                self.send(&machine, "read", json!({"session": sid, "path": d["file"], "peek": true}), Pending::RefRead(d, target, nav));
             }
         }
         Task::none()
@@ -1747,12 +1880,17 @@ impl App {
         let Some(t) = &ws.theory else { return Task::none() };
         let at = Self::host_offset(t, t.cursor);
         let (machine, sid, path, rev) = (ws.machine.clone(), ws.sid.clone(), t.path.clone(), t.confirmed_rev);
-        self.send(&machine, "info", json!({"session": sid, "path": path, "offset": at, "revision": rev}), Pending::Definition(window));
+        let Some(nav) = self.navigation(None, !window, !window) else { return Task::none() };
+        self.send(&machine, "info", json!({"session": sid, "path": path, "offset": at, "revision": rev}), Pending::Definition(window, nav));
         Task::none()
     }
 
     /// Go to a place a host event names (path, start as a host offset), opening its theory first
     fn go_to_place(&mut self, place: &Value) -> Task<Message> {
+        self.go_to_place_with_navigation(place, None)
+    }
+
+    fn go_to_place_with_navigation(&mut self, place: &Value, nav: Option<Navigation>) -> Task<Message> {
         let (Some(path), Some(start)) = (place["path"].as_str(), place["start"].as_u64()) else { return Task::none() };
         let Some(ws) = &mut self.workspace else { return Task::none() };
         if ws.theory.as_ref().is_some_and(|t| t.path == path) {
@@ -1760,8 +1898,25 @@ impl App {
             let at = Self::local_offset(t, start as usize);
             return self.update(Message::Goto(at));
         }
-        ws.pending_goto = Some(start as usize);
-        self.update(Message::OpenTheory(path.to_string()))
+        self.open_theory(path.to_string(), nav, Some(start as usize))
+    }
+
+    /// Read a theory while retaining the originating navigation until the reply arrives.
+    fn open_theory(&mut self, path: String, nav: Option<Navigation>, goto: Option<usize>) -> Task<Message> {
+        let Some((machine, sid)) = self.workspace_ids() else { return Task::none() };
+        if nav.is_none() {
+            self.nav_serial += 1;
+            self.nav_latest.insert(None, self.nav_serial);
+        }
+        if let Some(old) = self.workspace.as_ref().and_then(|ws| ws.theory.as_ref()).map(|t| t.path.clone()) {
+            self.send(&machine, "close", json!({"session": sid, "path": old}), Pending::Plain);
+        }
+        if let Some(ws) = &mut self.workspace {
+            ws.opening = Some(path.clone());
+            ws.pending_goto = goto;
+        }
+        self.send(&machine, "read", json!({"session": sid, "path": path}), Pending::Read(sid, path, nav));
+        Task::none()
     }
 
     fn workspace_ids(&self) -> Option<(String, String)> {
@@ -1931,6 +2086,8 @@ impl cosmic::Application for App {
             show_sidebar: false,
             status: None,
             state_gen: 0,
+            nav_serial: 0,
+            nav_latest: HashMap::new(),
             request: flags.request,
             kinds: Arc::new(HashMap::new()),
             popout: None,
@@ -2111,17 +2268,7 @@ impl cosmic::Application for App {
                 return self.retitle();
             }
             Message::OpenTheory(path) => {
-                let Some((machine, sid)) = self.workspace_ids() else { return Task::none() };
-                if let Some(ws) = &mut self.workspace {
-                    if let Some(old) = &ws.theory {
-                        let old = old.path.clone();
-                        self.send(&machine, "close", json!({"session": sid, "path": old}), Pending::Plain);
-                    }
-                }
-                if let Some(ws) = &mut self.workspace {
-                    ws.opening = Some(path.clone());
-                }
-                self.send(&machine, "read", json!({"session": sid, "path": path}), Pending::Read(sid, path));
+                return self.open_theory(path, None, None);
             }
             Message::SetMode(mode) => {
                 self.mode_model.activate(self.mode_entities[if mode == Mode::Source { 1 } else { 0 }]);
@@ -2356,7 +2503,8 @@ impl cosmic::Application for App {
                     .filter(|(q, _)| matches!(q.status.as_str(), "waiting" | "running"))
                     .filter_map(|(q, tag)| Some((q.id.clone()?, tag)))
                     .collect();
-                self.send(&machine, "state", json!({"session": sid, "path": path, "offset": offset, "revision": rev, "margin": 90}), Pending::State(generation));
+                let request = StateRequest { generation, session: sid.clone(), path: path.clone(), revision: rev };
+                self.send(&machine, "state", json!({"session": sid, "path": path, "offset": offset, "revision": rev, "margin": 90}), Pending::State(request));
                 // Where the human is, for agents asked about "this"
                 let selection = self.workspace.as_ref().and_then(|w| w.theory.as_ref()).and_then(|t| match &t.block_editor {
                     Some(be) if t.mode == Mode::Literate => be.content.selection(),
@@ -2946,7 +3094,9 @@ impl cosmic::Application for App {
                 let Some(ws) = &self.workspace else { return Task::none() };
                 let (machine, sid) = (ws.machine.clone(), ws.sid.clone());
                 let Some(d) = self.references.iter_mut().find(|(w, _)| *w == id).and_then(|(_, r)| r.back.pop()) else { return Task::none() };
-                self.send(&machine, "read", json!({"session": sid, "path": d["file"], "peek": true}), Pending::RefRead(d, Some(id)));
+                let Some(mut nav) = self.navigation(Some(id), true, true) else { return Task::none() };
+                nav.cursor = None;
+                self.send(&machine, "read", json!({"session": sid, "path": d["file"], "peek": true}), Pending::RefRead(d, Some(id), Some(nav)));
             }
             Message::RefAction(id, action) => {
                 // Read-only: the caret moves and text is selected and copied, nothing is typed

@@ -80,7 +80,7 @@ def main():
     thy = folder / "Demo.thy"
     thy.write_text(THY)
     app = H.SyncClient.local()
-    app.request("hello", client="app", label="test app")
+    app.request("hello", client="app", label="test app", concurrent_reads=True)
     agent = H.SyncClient.local()
     agent.request("hello", client="agent", label="Claude (test)",
                   identity={"provider": "claude", "conversation": "conv-1"},
