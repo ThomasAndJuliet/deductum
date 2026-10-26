@@ -17,6 +17,29 @@ cargo --offline --locked test --workspace --all-targets --all-features
 python3 -m unittest discover -s deductum/host/tests -p "test_*.py"
 ```
 
+The app opts into concurrent proof-state and hover/definition reads with
+`concurrent_reads: true` in its `hello` request. The host dispatches these reads
+independently of ordered edits and control requests, allowing four pending
+reads per opted-in connection; excess requests receive `busy`. Legacy clients
+retain serial dispatch. Concurrent replies carry their request IDs and may
+arrive out of order. A read whose document or prover changed receives
+`stale_snapshot` instead of offsets labelled with a newer revision. Closing the
+input half of a connection still drains pending replies.
+
+The app reads host events and writes commands independently, so a full UI event
+queue does not prevent outgoing edits or cancellation. Views share one prover
+report mapped to the local text. Prover progress retains unchanged prose maps,
+rendered documents and highlighting; source edits explicitly refresh them.
+Current proof-state requests retry after saturation or stale results, and
+delayed navigation replies retain their source context through file reads.
+The focused regressions are:
+
+```sh
+python3 -m unittest discover -s deductum/host/tests -p "test_responsiveness.py"
+cargo --offline --locked test --bin deductum link::tests
+cargo --offline --locked test --bin deductum prover_view_tests
+```
+
 A separate hosted job installs Lean 4.19.0 and the checksum-pinned official
 Isabelle2025 distribution. It runs the existing real backend integrations:
 

@@ -34,7 +34,7 @@ pub struct ProverMessage {
 }
 
 /// What the prover last said about the theory, in confirmed-text offsets
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct Prover {
     pub commands: Vec<Command>,
     pub messages: Vec<ProverMessage>,
@@ -633,6 +633,12 @@ pub struct Theory {
     pub lines: LineIndex,
     pub source: text_editor::Content,
     pub prover: Prover,
+    /// The report mapped to local text by refresh, shared by every view query.
+    /// Source/prover mutations must refresh before exposing the theory again.
+    local_prover: Arc<Prover>,
+    /// The text delta is unchanged by prover progress, even with typing pending.
+    local_change: Change,
+    local_unchecked: Option<usize>,
     pub blocks: Vec<Block>,
     pub docs: Vec<Option<Arc<Doc>>>,
     /// Each prose block's Markdown offsets mapped to the source, where the profile can say
@@ -891,6 +897,9 @@ impl Theory {
             source: text_editor::Content::with_text(&decoded.text),
             decoded,
             prover: Prover::from_json(&doc["prover"]),
+            local_prover: Arc::new(Prover::default()),
+            local_change: Vec::new(),
+            local_unchecked: None,
             stale_from: None,
             blocks: Vec::new(),
             docs: Vec::new(),
@@ -1090,8 +1099,10 @@ impl Theory {
         if let Some((s, h)) = current {
             lines.last_mut().unwrap().push((s..byte, h));
         }
-        self.generation = next_generation();
-        self.block_highlight = HighlightSettings(Arc::new(HighlightData { generation: self.generation, lines }), false);
+        if self.block_highlight.0.lines != lines {
+            self.generation = next_generation();
+            self.block_highlight = HighlightSettings(Arc::new(HighlightData { generation: self.generation, lines }), false);
+        }
     }
 
     /// The source construct the caret is in, within `start..end` (a proof), as the profile finds
@@ -1124,10 +1135,20 @@ impl Theory {
         out
     }
 
-    /// The prover's data against the local text
-    fn local_prover(&self) -> Prover {
-        let delta = ot::diff(&self.confirmed, &self.local);
-        let mut prover = if delta.is_empty() { self.prover.clone() } else { self.prover.mapped(&delta) };
+    /// The prover's data against the local text, retained until the next refresh.
+    fn local_prover(&self) -> &Prover {
+        &self.local_prover
+    }
+
+    fn map_prover(&mut self, prover_only: bool) {
+        if !prover_only {
+            self.local_change = ot::diff(&self.confirmed, &self.local);
+        }
+        let delta = &self.local_change;
+        let typed = delta.first().map(|(s, _, _)| *s);
+        let stale = self.stale_from.map(|s| ot::map_pos(s, delta, false));
+        self.local_unchecked = typed.into_iter().chain(stale).min();
+        let mut prover = if delta.is_empty() { self.prover.clone() } else { self.prover.mapped(delta) };
         // A keyword line (`claude[haiku] hint`) reaches the prover as a `sorry` padded to its
         // length, and the prover's command ends with the `sorry`: here it covers the line as typed
         // (else the rest of the keyword was text of its own after the cell, and the caret at the
@@ -1150,21 +1171,18 @@ impl Theory {
         }
         // What the prover has not seen yet (typing not sent, or changes it has not reported on)
         // and everything after it is being checked again: waiting, not as it was
-        if let Some(from) = self.unchecked_from() {
+        if let Some(from) = self.local_unchecked {
             for c in prover.commands.iter_mut().filter(|c| c.end > from) {
                 c.status = Status::Unprocessed;
             }
         }
-        prover
+        self.local_prover = Arc::new(prover);
     }
 
     /// Where, in the local text, the prover's report stops covering the text: the earliest change
     /// it has not seen
     pub fn unchecked_from(&self) -> Option<usize> {
-        let delta = ot::diff(&self.confirmed, &self.local);
-        let typed = delta.first().map(|(s, _, _)| *s);
-        let stale = self.stale_from.map(|s| ot::map_pos(s, &delta, false));
-        typed.into_iter().chain(stale).min()
+        self.local_unchecked
     }
 
     /// The source offset standing for byte `md` of the Markdown that block `i` renders as, if the
@@ -1250,12 +1268,40 @@ impl Theory {
 
     /// Recompute blocks, rendered prose and highlighting after the text or the prover changed
     pub fn refresh(&mut self, table: &dyn Symbols) {
-        let prover = self.local_prover();
-        self.blocks = self.profile.blocks(&self.local, &prover.commands, &self.kinds);
+        self.refresh_views(table, false);
+    }
+
+    fn refresh_views(&mut self, table: &dyn Symbols, prover_only: bool) {
+        let previous = self.local_prover.clone();
+        self.map_prover(prover_only);
+        let prover = self.local_prover.clone();
+        let same_commands = prover_only && previous.commands == prover.commands;
+        let blocks = (!same_commands).then(|| self.profile.blocks(&self.local, &prover.commands, &self.kinds));
+        // The profiles own block splitting and status aggregation. Even when
+        // command status changes, unchanged prose keeps its source maps and Doc.
+        let keep_prose = prover_only && blocks.as_ref().is_none_or(|blocks| {
+            blocks.len() == self.blocks.len() && blocks.iter().zip(&self.blocks).all(|(a, b)| {
+                (a.kind, a.start, a.end, a.body) == (b.kind, b.start, b.end, b.body)
+            })
+        });
+        if let Some(blocks) = blocks {
+            self.blocks = blocks;
+        }
+        if !keep_prose {
+            self.compute_prose(table);
+        }
+        let repaint = !same_commands || previous.messages != prover.messages || previous.colours != prover.colours;
+        let colours_changed = repaint && self.compute_highlight(&prover);
+        if !prover_only || !keep_prose || colours_changed {
+            self.compute_block_views();
+        }
+    }
+
+    fn compute_prose(&mut self, table: &dyn Symbols) {
         let chars: Vec<char> = self.local.chars().collect();
         let mut docs = Vec::with_capacity(self.blocks.len());
         let mut maps = Vec::with_capacity(self.blocks.len());
-        let mut cache = std::mem::take(&mut self.doc_cache);
+        let cache = std::mem::take(&mut self.doc_cache);
         let mut used = HashMap::new();
         for block in &self.blocks {
             maps.push(match (block.kind, block.body) {
@@ -1277,7 +1323,7 @@ impl Theory {
                 _ => None,
             }
             .map(|md| {
-                let doc = cache.remove(&md).unwrap_or_else(|| Arc::new(markdown::parse(&md)));
+                let doc = cache.get(&md).or_else(|| used.get(&md)).cloned().unwrap_or_else(|| Arc::new(markdown::parse(&md)));
                 used.insert(md, doc.clone());
                 doc
             });
@@ -1286,8 +1332,6 @@ impl Theory {
         self.doc_cache = used;
         self.docs = docs;
         self.prose_maps = maps;
-        self.compute_highlight(&prover);
-        self.compute_block_views();
     }
 
     /// The formal blocks' read-only editors: kept while their text is unchanged (a block's
@@ -1340,7 +1384,7 @@ impl Theory {
         self.block_views = views;
     }
 
-    fn compute_highlight(&mut self, prover: &Prover) {
+    fn compute_highlight(&mut self, prover: &Prover) -> bool {
         let text = &self.decoded.text;
         let n = self.decoded.src_of.len() - 1;
         let mut class: Vec<Option<Hl>> = vec![None; n];
@@ -1449,10 +1493,14 @@ impl Theory {
         if let Some((s, h)) = current {
             lines.last_mut().unwrap().push((s..byte_in_line, h));
         }
-        self.generation = next_generation();
-        self.highlight = HighlightSettings(Arc::new(HighlightData { generation: self.generation, lines }), false);
+        if self.highlight.0.lines != lines {
+            self.generation = next_generation();
+            self.highlight = HighlightSettings(Arc::new(HighlightData { generation: self.generation, lines }), false);
+        }
+        let changed = self.classes != class;
         self.classes = class;
         self.compute_block_highlight();
+        changed
     }
 
     /// Messages of the local text in a source span
@@ -1460,8 +1508,9 @@ impl Theory {
         let prover = self.local_prover();
         prover
             .messages
-            .into_iter()
+            .iter()
             .filter(|m| m.start < end.max(start + 1) && m.end > start || m.start == start)
+            .cloned()
             .collect()
     }
 
@@ -1953,12 +2002,15 @@ impl Theory {
 
     pub fn prover_update(&mut self, prover: &serde_json::Value, table: &dyn Symbols) {
         if prover["revision"].as_u64() == Some(self.confirmed_rev) {
-            self.prover = Prover::from_json(prover);
+            let report = Prover::from_json(prover);
             // A report on the text as it is now: nothing it has not seen
-            if prover["backend_revision"].as_u64().is_some_and(|b| b >= self.confirmed_rev) {
-                self.stale_from = None;
+            let covered = prover["backend_revision"].as_u64().is_some_and(|b| b >= self.confirmed_rev);
+            let stale_changed = covered && self.stale_from.take().is_some();
+            if report == self.prover && !stale_changed {
+                return;
             }
-            self.refresh(table);
+            self.prover = report;
+            self.refresh_views(table, true);
         }
     }
 
@@ -2107,6 +2159,139 @@ mod staleness_tests {
         t.prover_update(&seen, &table);
         assert_eq!(t.status_in(b, b + 20), Some(Status::Finished));
         assert!(t.unchecked_from().is_none());
+    }
+}
+
+#[cfg(test)]
+mod prover_view_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn prover_reports_keep_the_prose_maps_and_unchanged_highlighting() {
+        let profile = &crate::prover::LEAN;
+        let table = profile.symbols(None);
+        let text = "/-- A paragraph with **markup** and $x$. -/\ntheorem one : True := by\n  trivial\n";
+        let commands: Vec<_> = profile.lexical_commands(text, &HashMap::new()).into_iter()
+            .map(|c| json!([c.start, c.end, c.name, "finished"])).collect();
+        let report = json!({"revision": 1, "backend_revision": 1, "commands": commands});
+        let doc = json!({"text": text, "revision": 1, "prover": report});
+        let mut t = Theory::new("/one.lean".into(), &doc, &*table, Arc::new(HashMap::new()), Mode::Literate, profile);
+        let prose = t.blocks.iter().position(|b| b.kind == theory::Kind::Text).expect("a docstring");
+        let rendered = t.docs[prose].as_ref().unwrap().clone();
+        let maps = t.prose_maps.as_ptr();
+        let runs = t.prose_maps[prose].as_ref().unwrap().runs.as_ptr();
+        let highlight = t.highlight.0.clone();
+        let formal = t.block_views.iter().flatten().next().unwrap().highlight.0.clone();
+        let views = t.block_views.as_ptr();
+
+        // Activity counters do not change the text, its mapping or its colours.
+        let mut progress = report.clone();
+        progress["status"] = json!({"finished": 1});
+        t.prover_update(&progress, &*table);
+        assert!(Arc::ptr_eq(&rendered, t.docs[prose].as_ref().unwrap()));
+        assert_eq!(maps, t.prose_maps.as_ptr(), "a prover report must retain the prose maps");
+        assert_eq!(runs, t.prose_maps[prose].as_ref().unwrap().runs.as_ptr());
+        assert!(Arc::ptr_eq(&highlight, &t.highlight.0), "unchanged highlighting keeps its generation");
+        assert!(Arc::ptr_eq(&formal, &t.block_views.iter().flatten().next().unwrap().highlight.0));
+        assert_eq!(views, t.block_views.as_ptr(), "aggregate progress retains the formal views themselves");
+
+        // A real colour/status change must still reach both editors.
+        progress["commands"][0][3] = json!("running");
+        t.prover_update(&progress, &*table);
+        assert_eq!(maps, t.prose_maps.as_ptr());
+        assert_eq!(runs, t.prose_maps[prose].as_ref().unwrap().runs.as_ptr());
+        assert!(t.blocks.iter().any(|b| b.status == Status::Running));
+        assert!(!Arc::ptr_eq(&highlight, &t.highlight.0));
+        assert!(!Arc::ptr_eq(&formal, &t.block_views.iter().flatten().next().unwrap().highlight.0));
+    }
+
+    #[test]
+    fn prover_messages_follow_remote_edits_while_local_edits_are_pending() {
+        let table = Table::fallback();
+        let text = "lemma a: \"True\"\n  by simp\n";
+        let report = json!({"revision": 1, "backend_revision": 1,
+            "commands": [[0, 16, "lemma", "finished"], [16, text.len(), "by", "finished"]],
+            "messages": [{"start": 18, "end": 20, "kind": "warning", "text": "at by"}]});
+        let doc = json!({"text": text, "revision": 1, "prover": report});
+        let mut t = Theory::new("/a.thy".into(), &doc, &table, Arc::new(HashMap::new()), Mode::Source, crate::prover::profile(None));
+        t.replace(0, 0, "(* local *)\n", &table);
+        let local_shift = "(* local *)\n".chars().count();
+        assert_eq!(t.messages_in(0, usize::MAX)[0].start, 18 + local_shift);
+        assert_eq!(t.unchecked_from(), Some(0));
+
+        // Another author adds text to the confirmed document before the same command.
+        let remote = vec![(0, 0, "(* remote *)\n".to_string())];
+        assert!(t.committed(2, &remote, None, false, &table));
+        let remote_shift = "(* remote *)\n".chars().count();
+        let messages = t.messages_in(0, usize::MAX);
+        assert_eq!(messages[0].start, 18 + local_shift + remote_shift);
+        assert!(t.local.contains("(* local *)") && t.local.contains("(* remote *)"));
+        assert_eq!(t.caret_command().map(|c| c.2), Some("lemma".into()));
+
+        // Repeated reads must keep reporting the same mapped positions.
+        assert_eq!(messages, t.messages_in(0, usize::MAX));
+        assert_eq!(t.status_in(0, usize::MAX), Some(Status::Unprocessed));
+    }
+
+    #[test]
+    fn source_edits_refresh_duplicate_prose_and_drop_removed_cache_entries() {
+        let profile = &crate::prover::LEAN;
+        let table = profile.symbols(None);
+        let text = "/-! Repeated paragraph. -/\ntheorem one : True := by trivial\n\n/-! Repeated paragraph. -/\ntheorem two : True := by trivial\n";
+        let doc = json!({"text": text, "revision": 1, "prover": {}});
+        let mut t = Theory::new("/duplicates.lean".into(), &doc, &*table, Arc::new(HashMap::new()), Mode::Literate, profile);
+        let prose_indices = |t: &Theory| t.blocks.iter().enumerate().filter_map(|(i, b)| (b.kind == theory::Kind::Text).then_some(i)).collect::<Vec<_>>();
+        let indices = prose_indices(&t);
+        assert_eq!(indices.len(), 2);
+        let repeated = t.docs[indices[0]].as_ref().unwrap().clone();
+        assert!(Arc::ptr_eq(&repeated, t.docs[indices[1]].as_ref().unwrap()), "duplicate paragraphs share their parsed Doc");
+
+        let start = text.find("Repeated").unwrap();
+        t.replace(start, start + "Repeated".len(), "Changed and longer", &*table);
+        let indices = prose_indices(&t);
+        assert!(!Arc::ptr_eq(&repeated, t.docs[indices[0]].as_ref().unwrap()));
+        assert!(Arc::ptr_eq(&repeated, t.docs[indices[1]].as_ref().unwrap()));
+        let map = t.prose_maps[indices[0]].as_ref().unwrap();
+        assert!(map.markdown.contains("Changed and longer"), "the source map must follow the edit");
+        let md = map.markdown.find("longer").unwrap();
+        let source = t.source_of_markdown(indices[0], md).unwrap();
+        assert!(t.local.chars().skip(source).collect::<String>().starts_with("longer"));
+
+        // Removing the other prose block changes topology and leaves no user of its Doc.
+        let removed = t.blocks[indices[1]].clone();
+        t.replace(removed.start, removed.end, "", &*table);
+        assert_eq!(prose_indices(&t).len(), 1);
+        assert!(!t.doc_cache.values().any(|doc| Arc::ptr_eq(doc, &repeated)), "removed prose must not stay in the document cache");
+        assert_eq!(t.docs.len(), t.blocks.len());
+        assert_eq!(t.prose_maps.len(), t.blocks.len());
+        assert_eq!(t.block_views.len(), t.blocks.len());
+    }
+
+    #[test]
+    fn messages_and_semantic_colours_refresh_views_without_command_changes() {
+        let profile = &crate::prover::LEAN;
+        let table = profile.symbols(None);
+        let text = "theorem one : True := by trivial\n";
+        let commands: Vec<_> = profile.lexical_commands(text, &HashMap::new()).into_iter()
+            .map(|c| json!([c.start, c.end, c.name, "finished"])).collect();
+        let mut report = json!({"revision": 1, "backend_revision": 1, "commands": commands});
+        let doc = json!({"text": text, "revision": 1, "prover": report});
+        let mut t = Theory::new("/colours.lean".into(), &doc, &*table, Arc::new(HashMap::new()), Mode::Literate, profile);
+        let at = text.find("one").unwrap();
+        let initial = t.highlight.0.clone();
+        report["messages"] = json!([{"start": at, "end": at + 3, "kind": "error", "text": "a diagnostic"}]);
+        t.prover_update(&report, &*table);
+        assert_eq!(t.classes[t.decoded.to_decoded(at)], Some(Hl::Error));
+        assert!(!Arc::ptr_eq(&initial, &t.highlight.0));
+        let diagnostic = t.block_views.iter().flatten().next().unwrap().highlight.0.clone();
+
+        report["messages"] = json!([]);
+        report["colours"] = json!([[at, at + 3, "free"]]);
+        t.prover_update(&report, &*table);
+        assert_eq!(t.classes[t.decoded.to_decoded(at)], Some(Hl::Sem(Sem::Free)));
+        assert!(!Arc::ptr_eq(&diagnostic, &t.block_views.iter().flatten().next().unwrap().highlight.0));
+        assert!(t.messages_in(0, usize::MAX).is_empty());
     }
 }
 
