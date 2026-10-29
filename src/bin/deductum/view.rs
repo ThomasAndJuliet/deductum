@@ -3448,7 +3448,7 @@ fn fill_section<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Ele
 
 /// Where `claude` and `codex` queries go: the session's helper conversation (it remembers), a
 /// fresh request each time, or a listening agent; the helper's conversation, to open or start again
-fn query_route_row<'a>(ws: &'a Workspace) -> Element<'a, Message> {
+pub(super) fn query_route_row<'a>(ws: &'a Workspace) -> Element<'a, Message> {
     let sp = spacing();
     let route = ws.activity.as_ref().and_then(|a| a["route"].as_str()).unwrap_or("helper").to_string();
     let listeners: Vec<(String, String)> = ws

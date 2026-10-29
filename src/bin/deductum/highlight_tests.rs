@@ -950,3 +950,79 @@ fn the_vim_badge_text_reads() {
         assert!(ratio >= 4.5, "the vim badge ({}): {} on {} is {ratio:.2}:1", theme.name(), hex(furthest), hex(fill));
     }
 }
+
+// ---- added by the builder (TESTING.md section 5, step 2): the two chosen parts the headless
+// window does not show, the header's Literate/Source switch and the "Queries go to" choice, drawn
+// on their own from the code that builds them
+
+/// Where the muted accent fills `frame`: the bounding box of the pixels of that colour, and how
+/// many there are
+fn muted_area(frame: &Frame, muted: V) -> Option<(Rectangle, usize)> {
+    let (mut x0, mut y0, mut x1, mut y1, mut n) = (u32::MAX, u32::MAX, 0, 0, 0usize);
+    for (x, y, p) in frame.pixels((0, 0, frame.width, frame.height)) {
+        if off(p, muted) <= 3.0 {
+            (x0, y0, x1, y1, n) = (x0.min(x), y0.min(y), x1.max(x + 1), y1.max(y + 1), n + 1);
+        }
+    }
+    (n > 0).then(|| (Rectangle { x: x0 as f32, y: y0 as f32, width: (x1 - x0) as f32, height: (y1 - y0) as f32 }, n))
+}
+
+/// The one chosen part of a control drawn alone in `frame`: filled with the muted accent, what is
+/// on it in the on colour at 4.5:1 or more; where it is
+fn chosen_part(theme: &Themed, frame: &Frame, what: &str) -> Rectangle {
+    let (muted, _) = muted_of(theme);
+    let (b, n) = muted_area(frame, muted).unwrap_or_else(|| panic!("{what} ({}): no part filled with the muted accent {}", theme.name(), hex(muted)));
+    assert!(n > 300, "{what} ({}): only {n} pixels of the muted accent {}", theme.name(), hex(muted));
+    assert_muted_fill(theme, frame, b, what);
+    b
+}
+
+/// The header's Literate/Source switch (libcosmic's segmented control): its chosen part is the
+/// muted accent, and it is the part of the view shown (Literate on the left, Source on the right)
+#[test]
+fn the_chosen_part_of_the_header_view_switch_is_the_muted_accent() {
+    use cosmic::iced::{Alignment, Length};
+    use cosmic::widget;
+    for dark in [true, false] {
+        let mut parts = Vec::new();
+        for mode in [Mode::Literate, Mode::Source] {
+            let turn = super::snapshot::ui_turn();
+            let theme = Themed::set(dark);
+            let app = demo_app(mode);
+            let row = widget::row::with_children(super::shell::header_start(&app)).align_y(Alignment::Center);
+            let element: cosmic::Element<'_, super::Message> = widget::container(row).padding(20).width(Length::Fixed(600.0)).into();
+            let rgba = super::snapshot::render(element, &format!("hl-header-switch-{}-{mode:?}", theme.name()), Size::new(600.0, 80.0));
+            let f = Frame { width: 600, height: 80, rgba };
+            parts.push(chosen_part(&theme, &f, &format!("the chosen part of the header's view switch ({mode:?})")));
+            drop(theme);
+            drop(turn);
+        }
+        // (the two parts meet, so their fills may share a column of blended pixels)
+        assert!(parts[0].x + parts[0].width < parts[1].center_x() && parts[0].center_x() < parts[1].x, "the chosen part should be Literate (left) in the literate view and Source (right) in the source view: {parts:?}");
+    }
+}
+
+/// Where `claude` and `codex` queries go: the chosen one is the muted accent, and it is the route
+/// the session has
+#[test]
+fn the_chosen_query_route_is_the_muted_accent() {
+    use cosmic::iced::Length;
+    use cosmic::widget;
+    for dark in [true, false] {
+        let mut parts = Vec::new();
+        for route in ["helper", "fresh"] {
+            let turn = super::snapshot::ui_turn();
+            let theme = Themed::set(dark);
+            let mut app = demo_app(Mode::Literate);
+            app.workspace.as_mut().unwrap().activity = Some(serde_json::json!({"route": route}));
+            let ws = app.workspace.as_ref().unwrap();
+            let element: cosmic::Element<'_, super::Message> = widget::container(super::view::query_route_row(ws)).padding(20).width(Length::Fixed(700.0)).into();
+            let rgba = super::snapshot::render(element, &format!("hl-query-route-{}-{route}", theme.name()), Size::new(700.0, 90.0));
+            let f = Frame { width: 700, height: 90, rgba };
+            parts.push(chosen_part(&theme, &f, &format!("the chosen query route ({route})")));
+            drop(theme);
+            drop(turn);
+        }
+        assert!(parts[0].x + parts[0].width < parts[1].center_x() && parts[0].center_x() < parts[1].x, "the chosen route should be \"the helper\", then \"a fresh request\" right of it: {parts:?}");
+    }
+}
