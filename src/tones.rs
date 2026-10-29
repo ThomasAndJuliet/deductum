@@ -10,7 +10,8 @@
 
 use std::rc::Rc;
 
-use cosmic::iced::Color;
+use cosmic::iced::{Background, Color};
+use cosmic::widget::button;
 use household_tones::{Mode, Role, Srgb, Srgba};
 
 fn srgb(c: Color) -> Srgb {
@@ -93,4 +94,85 @@ where
     editor
         .selection_fill(move |theme, _| tint(theme, beneath.color(theme)))
         .selected_text_color(move |theme, style| on_tint(theme, style.value, under.color(theme)))
+}
+
+// ----- the muted accent
+
+/// The muted accent of the theme's accent, and the colour of text and symbolic icons on it
+/// (`household_tones::{muted_accent, on_muted}`)
+pub fn muted(theme: &cosmic::Theme) -> (Color, Color) {
+    let fill = household_tones::muted_accent(accent(theme), theme.cosmic().is_dark);
+    (color(fill), color(household_tones::on_muted(fill)))
+}
+
+/// `wash`, one of COSMIC's translucent hover or pressed washes, laid over the muted accent: how a
+/// chosen part hovers and is pressed ("hover and selected are cosmic choices", rule 6a)
+pub fn muted_washed(theme: &cosmic::Theme, wash: impl Into<Color>) -> Color {
+    over(wash.into(), muted(theme).0)
+}
+
+/// What a label or icon is drawn in on the full accent: the fill rule on a solid fill, greys going
+/// to its on colour (`household_tones::on_solid`)
+pub fn on_accent(theme: &cosmic::Theme, text: Color) -> Color {
+    color(household_tones::on_solid(srgb(text), accent(theme)))
+}
+
+/// A button filled with the muted accent, its label and icon in the fill's on colour: the chosen
+/// tab or segment of a row, a toggle that is on. It keeps `class`'s shape, padding and focus ring;
+/// hovered and pressed, COSMIC's washes for that class lie over the fill; disabled, fill and
+/// label are faded as every disabled control is
+pub fn muted_button(class: cosmic::theme::Button) -> cosmic::theme::Button {
+    use button::Catalog as _;
+    let class = Rc::new(class);
+    fn filled(mut style: button::Style, fill: Color, on: Color) -> button::Style {
+        style.background = Some(Background::Color(fill));
+        style.text_color = Some(on);
+        style.icon_color = Some(on);
+        style
+    }
+    // The wash COSMIC lays over a button of the class when it is hovered and pressed
+    fn washes(theme: &cosmic::Theme, class: &cosmic::theme::Button) -> (Color, Color) {
+        let c = theme.cosmic();
+        let component = match class {
+            cosmic::theme::Button::Text => &c.text_button,
+            cosmic::theme::Button::Standard => &c.button,
+            _ => &c.icon_button,
+        };
+        (component.hover.into(), component.pressed.into())
+    }
+    let (active, disabled, hovered, pressed) = (class.clone(), class.clone(), class.clone(), class);
+    cosmic::theme::Button::Custom {
+        active: Box::new(move |focused, theme| {
+            let (fill, on) = muted(theme);
+            filled(theme.active(focused, false, &active), fill, on)
+        }),
+        disabled: Box::new(move |theme| {
+            let (fill, on) = muted(theme);
+            let page: Color = theme.cosmic().bg_color().into();
+            let faded = |c: Color, under: Color| color(household_tones::dimmed_over(srgb(c), srgb(under)));
+            filled(theme.disabled(&disabled), faded(fill, page), faded(on, fill))
+        }),
+        hovered: Box::new(move |focused, theme| {
+            let fill = muted_washed(theme, washes(theme, &hovered).0);
+            filled(theme.hovered(focused, false, &hovered), fill, muted(theme).1)
+        }),
+        pressed: Box::new(move |focused, theme| {
+            let fill = muted_washed(theme, washes(theme, &pressed).1);
+            filled(theme.pressed(focused, false, &pressed), fill, muted(theme).1)
+        }),
+    }
+}
+
+/// A segmented control in COSMIC's Control look, its chosen part filled with the muted accent and
+/// labelled in the fill's on colour (rules 5 and 6); the other parts, the bar and the hover and
+/// pressed washes are COSMIC's
+pub fn muted_segmented() -> cosmic::theme::SegmentedButton {
+    use cosmic::widget::segmented_button::StyleSheet as _;
+    cosmic::theme::SegmentedButton::Custom(Box::new(|theme| {
+        let mut appearance = theme.horizontal(&cosmic::theme::SegmentedButton::Control);
+        let (fill, on) = muted(theme);
+        appearance.active.background = Some(Background::Color(fill));
+        appearance.active.text_color = on;
+        appearance
+    }))
 }

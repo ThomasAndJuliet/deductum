@@ -452,8 +452,10 @@ pub fn header_start(app: &App) -> Vec<Element<'_, Message>> {
     }
     if let Some(t) = app.workspace.as_ref().and_then(|w| w.theory.as_ref()) {
         items.push(widget::Space::new().width(Length::Fixed(4.0)).into());
+        // (its chosen part in the muted accent, household rule 6)
         items.push(widget::segmented_control::horizontal(&app.mode_model)
             .width(Length::Shrink)
+            .style(super::tones::muted_segmented())
             .on_activate(Message::SetModeEntity)
             .into());
         items.push(widget::Space::new().width(Length::Fixed(sp().space_s as f32)).into());
@@ -466,7 +468,9 @@ pub fn header_start(app: &App) -> Vec<Element<'_, Message>> {
     items
 }
 
-/// A segment of a switch or a tab: filled with the accent when it is the current one
+/// A segment of a switch or a tab: filled with the muted accent when it is the current one, its
+/// icon in the fill's on colour, hovered with COSMIC's wash over the fill (household-ui RULES.md
+/// rule 6: the chosen tab of a row does not catch the eye as a Primary button does)
 pub fn segment_style(on: bool) -> theme::Button {
     fn style(theme: &cosmic::Theme, on: bool, hover: bool) -> button::Style {
         let c = theme.cosmic();
@@ -474,9 +478,10 @@ pub fn segment_style(on: bool) -> theme::Button {
         let mut s = button::Style::new();
         s.border_radius = 14.0.into();
         if on {
-            s.background = Some(Color::from(c.accent_color()).into());
-            s.text_color = Some(c.on_accent_color().into());
-            s.icon_color = Some(c.on_accent_color().into());
+            let (fill, label) = super::tones::muted(theme);
+            s.background = Some(if hover { super::tones::muted_washed(theme, c.icon_button.hover) } else { fill }.into());
+            s.text_color = Some(label);
+            s.icon_color = Some(label);
         } else {
             s.background = hover.then(|| Color { a: 0.08, ..text }.into());
             s.text_color = Some(text);
@@ -931,7 +936,8 @@ fn fields_row<'a>(fields: Vec<Element<'a, Message>>) -> iced::widget::Row<'a, Me
     row
 }
 
-/// Vim's mode, as a badge
+/// Vim's mode, as a badge: a status, so the full accent (not a chosen part of a row), its text
+/// through the fill rule on it (household rule 6)
 fn vim_badge<'a>(mode: super::vim::Mode) -> Element<'a, Message> {
     widget::container(widget::text::caption(mode.label()).font(cosmic::font::semibold()))
         .padding([1, 8])
@@ -939,7 +945,7 @@ fn vim_badge<'a>(mode: super::vim::Mode) -> Element<'a, Message> {
             let c = theme.cosmic();
             iced::widget::container::Style {
                 background: Some(Color::from(c.accent_color()).into()),
-                text_color: Some(c.on_accent_color().into()),
+                text_color: Some(super::tones::on_accent(theme, c.on_bg_color().into())),
                 border: Border { radius: 4.0.into(), ..Default::default() },
                 ..Default::default()
             }
