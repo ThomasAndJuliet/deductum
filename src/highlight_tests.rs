@@ -1026,3 +1026,35 @@ fn the_chosen_query_route_is_the_muted_accent() {
         assert!(parts[0].x + parts[0].width < parts[1].center_x() && parts[0].center_x() < parts[1].x, "the chosen route should be \"the helper\", then \"a fresh request\" right of it: {parts:?}");
     }
 }
+
+/// The header's toggle for the goal beside the text, a toggle that is on: filled with the muted
+/// accent, its icon in the on colour; off, no fill at all (rule 6: "never rely on `.selected()`
+/// on an Icon-class button")
+#[test]
+fn the_goal_beside_toggle_is_the_muted_accent_when_on() {
+    use cosmic::iced::{Alignment, Length};
+    use cosmic::widget;
+    for dark in [true, false] {
+        let mut app = demo_app(Mode::Literate);
+        assert!(super::view::goal_beside_on(), "the goal beside the text is on by default");
+        for on in [true, false] {
+            let turn = super::snapshot::ui_turn();
+            let theme = Themed::set(dark);
+            let row = widget::row::with_children(super::shell::header_end(&app)).align_y(Alignment::Center);
+            let element: cosmic::Element<'_, super::Message> = widget::container(row).padding(20).width(Length::Fixed(500.0)).into();
+            let rgba = super::snapshot::render(element, &format!("hl-goal-beside-{}-{on}", theme.name()), Size::new(500.0, 80.0));
+            let f = Frame { width: 500, height: 80, rgba };
+            if on {
+                let b = chosen_part(&theme, &f, "the goal-beside toggle, on");
+                assert!(b.width < 48.0 && b.height < 48.0, "only the toggle is filled: {b:?}");
+            } else {
+                let (muted, _) = muted_of(&theme);
+                assert!(muted_area(&f, muted).is_none_or(|(_, n)| n < 20), "the goal-beside toggle, off ({}): filled with the muted accent", theme.name());
+            }
+            drop(theme);
+            drop(turn);
+            let _ = cosmic::Application::update(&mut app, super::Message::ToggleGoalBeside);
+        }
+        assert!(super::view::goal_beside_on(), "put back on");
+    }
+}

@@ -544,8 +544,9 @@ pub fn header_end(app: &App) -> Vec<Element<'_, Message>> {
         let beside = super::view::goal_beside_on();
         items.push(
             widget::tooltip(
+                // (a toggle: on, filled with the muted accent, household rule 6)
                 widget::button::icon(widget::icon::from_name(if beside { "view-dual-symbolic" } else { "view-paged-symbolic" }))
-                    .selected(beside)
+                    .class(if beside { super::tones::muted_button(theme::Button::Icon) } else { theme::Button::Icon })
                     .on_press(Message::ToggleGoalBeside),
                 widget::text(if beside {
                     "The goal beside the text when there is room: click to keep it under the proof, the page centred"
