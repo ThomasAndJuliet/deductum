@@ -14,8 +14,8 @@
     {
         "type": "git",
         "url": "ssh://git@github.com/ThomasAndJuliet/libcosmic.git",
-        "commit": "2b62bc9b60351afd66aaee36a4192a298ae1cc4d",
-        "dest": "flatpak-cargo/git/libcosmic-2b62bc9"
+        "commit": "f05807cba6711d0ad0b833de2feb00f8a97f6318",
+        "dest": "flatpak-cargo/git/libcosmic-f05807c"
     },
     {
         "type": "git",
@@ -1290,7 +1290,7 @@
     {
         "type": "shell",
         "commands": [
-            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-2b62bc9/iced/build_helpers\" \"cargo/vendor/build_helpers\""
+            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-f05807c/iced/build_helpers\" \"cargo/vendor/build_helpers\""
         ]
     },
     {
@@ -2069,7 +2069,7 @@
     {
         "type": "shell",
         "commands": [
-            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-2b62bc9/cosmic-config\" \"cargo/vendor/cosmic-config\""
+            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-f05807c/cosmic-config\" \"cargo/vendor/cosmic-config\""
         ]
     },
     {
@@ -2087,7 +2087,7 @@
     {
         "type": "shell",
         "commands": [
-            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-2b62bc9/cosmic-config-derive\" \"cargo/vendor/cosmic-config-derive\""
+            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-f05807c/cosmic-config-derive\" \"cargo/vendor/cosmic-config-derive\""
         ]
     },
     {
@@ -2190,7 +2190,7 @@
     {
         "type": "shell",
         "commands": [
-            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-2b62bc9/cosmic-theme\" \"cargo/vendor/cosmic-theme\""
+            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-f05807c/cosmic-theme\" \"cargo/vendor/cosmic-theme\""
         ]
     },
     {
@@ -2907,7 +2907,7 @@
     {
         "type": "shell",
         "commands": [
-            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-2b62bc9/winit/dpi\" \"cargo/vendor/dpi\""
+            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-f05807c/winit/dpi\" \"cargo/vendor/dpi\""
         ]
     },
     {
@@ -4477,7 +4477,7 @@
     {
         "type": "shell",
         "commands": [
-            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-2b62bc9/iced\" \"cargo/vendor/iced\""
+            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-f05807c/iced\" \"cargo/vendor/iced\""
         ]
     },
     {
@@ -4495,7 +4495,7 @@
     {
         "type": "shell",
         "commands": [
-            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-2b62bc9/iced/accessibility\" \"cargo/vendor/iced_accessibility\""
+            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-f05807c/iced/accessibility\" \"cargo/vendor/iced_accessibility\""
         ]
     },
     {
@@ -4513,7 +4513,7 @@
     {
         "type": "shell",
         "commands": [
-            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-2b62bc9/iced/core\" \"cargo/vendor/iced_core\""
+            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-f05807c/iced/core\" \"cargo/vendor/iced_core\""
         ]
     },
     {
@@ -4531,7 +4531,7 @@
     {
         "type": "shell",
         "commands": [
-            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-2b62bc9/iced/debug\" \"cargo/vendor/iced_debug\""
+            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-f05807c/iced/debug\" \"cargo/vendor/iced_debug\""
         ]
     },
     {
@@ -4549,7 +4549,7 @@
     {
         "type": "shell",
         "commands": [
-            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-2b62bc9/iced/futures\" \"cargo/vendor/iced_futures\""
+            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-f05807c/iced/futures\" \"cargo/vendor/iced_futures\""
         ]
     },
     {
@@ -4567,7 +4567,7 @@
     {
         "type": "shell",
         "commands": [
-            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-2b62bc9/iced/graphics\" \"cargo/vendor/iced_graphics\""
+            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-f05807c/iced/graphics\" \"cargo/vendor/iced_graphics\""
         ]
     },
     {
@@ -4585,7 +4585,7 @@
     {
         "type": "shell",
         "commands": [
-            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-2b62bc9/iced/program\" \"cargo/vendor/iced_program\""
+            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-f05807c/iced/program\" \"cargo/vendor/iced_program\""
         ]
     },
     {
@@ -4603,7 +4603,7 @@
     {
         "type": "shell",
         "commands": [
-            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-2b62bc9/iced/renderer\" \"cargo/vendor/iced_renderer\""
+            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-f05807c/iced/renderer\" \"cargo/vendor/iced_renderer\""
         ]
     },
     {
@@ -4621,7 +4621,7 @@
     {
         "type": "shell",
         "commands": [
-            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-2b62bc9/iced/runtime\" \"cargo/vendor/iced_runtime\""
+            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-f05807c/iced/runtime\" \"cargo/vendor/iced_runtime\""
         ]
     },
     {
@@ -4639,7 +4639,7 @@
     {
         "type": "shell",
         "commands": [
-            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-2b62bc9/iced/tiny_skia\" \"cargo/vendor/iced_tiny_skia\""
+            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-f05807c/iced/tiny_skia\" \"cargo/vendor/iced_tiny_skia\""
         ]
     },
     {
@@ -4657,7 +4657,7 @@
     {
         "type": "shell",
         "commands": [
-            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-2b62bc9/iced/wgpu\" \"cargo/vendor/iced_wgpu\""
+            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-f05807c/iced/wgpu\" \"cargo/vendor/iced_wgpu\""
         ]
     },
     {
@@ -4675,7 +4675,7 @@
     {
         "type": "shell",
         "commands": [
-            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-2b62bc9/iced/widget\" \"cargo/vendor/iced_widget\""
+            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-f05807c/iced/widget\" \"cargo/vendor/iced_widget\""
         ]
     },
     {
@@ -4693,7 +4693,7 @@
     {
         "type": "shell",
         "commands": [
-            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-2b62bc9/iced/winit\" \"cargo/vendor/iced_winit\""
+            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-f05807c/iced/winit\" \"cargo/vendor/iced_winit\""
         ]
     },
     {
@@ -5972,7 +5972,7 @@
     {
         "type": "shell",
         "commands": [
-            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-2b62bc9/.\" \"cargo/vendor/libcosmic\""
+            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-f05807c/.\" \"cargo/vendor/libcosmic\""
         ]
     },
     {
@@ -12042,7 +12042,7 @@
     {
         "type": "shell",
         "commands": [
-            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-2b62bc9/winit/winit\" \"cargo/vendor/winit\""
+            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-f05807c/winit/winit\" \"cargo/vendor/winit\""
         ]
     },
     {
@@ -12060,7 +12060,7 @@
     {
         "type": "shell",
         "commands": [
-            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-2b62bc9/winit/winit-android\" \"cargo/vendor/winit-android\""
+            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-f05807c/winit/winit-android\" \"cargo/vendor/winit-android\""
         ]
     },
     {
@@ -12078,7 +12078,7 @@
     {
         "type": "shell",
         "commands": [
-            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-2b62bc9/winit/winit-appkit\" \"cargo/vendor/winit-appkit\""
+            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-f05807c/winit/winit-appkit\" \"cargo/vendor/winit-appkit\""
         ]
     },
     {
@@ -12096,7 +12096,7 @@
     {
         "type": "shell",
         "commands": [
-            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-2b62bc9/winit/winit-common\" \"cargo/vendor/winit-common\""
+            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-f05807c/winit/winit-common\" \"cargo/vendor/winit-common\""
         ]
     },
     {
@@ -12114,7 +12114,7 @@
     {
         "type": "shell",
         "commands": [
-            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-2b62bc9/winit/winit-core\" \"cargo/vendor/winit-core\""
+            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-f05807c/winit/winit-core\" \"cargo/vendor/winit-core\""
         ]
     },
     {
@@ -12132,7 +12132,7 @@
     {
         "type": "shell",
         "commands": [
-            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-2b62bc9/winit/winit-orbital\" \"cargo/vendor/winit-orbital\""
+            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-f05807c/winit/winit-orbital\" \"cargo/vendor/winit-orbital\""
         ]
     },
     {
@@ -12150,7 +12150,7 @@
     {
         "type": "shell",
         "commands": [
-            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-2b62bc9/winit/winit-uikit\" \"cargo/vendor/winit-uikit\""
+            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-f05807c/winit/winit-uikit\" \"cargo/vendor/winit-uikit\""
         ]
     },
     {
@@ -12168,7 +12168,7 @@
     {
         "type": "shell",
         "commands": [
-            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-2b62bc9/winit/winit-wayland\" \"cargo/vendor/winit-wayland\""
+            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-f05807c/winit/winit-wayland\" \"cargo/vendor/winit-wayland\""
         ]
     },
     {
@@ -12186,7 +12186,7 @@
     {
         "type": "shell",
         "commands": [
-            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-2b62bc9/winit/winit-web\" \"cargo/vendor/winit-web\""
+            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-f05807c/winit/winit-web\" \"cargo/vendor/winit-web\""
         ]
     },
     {
@@ -12204,7 +12204,7 @@
     {
         "type": "shell",
         "commands": [
-            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-2b62bc9/winit/winit-win32\" \"cargo/vendor/winit-win32\""
+            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-f05807c/winit/winit-win32\" \"cargo/vendor/winit-win32\""
         ]
     },
     {
@@ -12222,7 +12222,7 @@
     {
         "type": "shell",
         "commands": [
-            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-2b62bc9/winit/winit-x11\" \"cargo/vendor/winit-x11\""
+            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-f05807c/winit/winit-x11\" \"cargo/vendor/winit-x11\""
         ]
     },
     {
@@ -12985,7 +12985,7 @@
     },
     {
         "type": "inline",
-        "contents": "[source.vendored-sources]\ndirectory = \"cargo/vendor\"\n\n[source.crates-io]\nreplace-with = \"vendored-sources\"\n\n[source.\"https://github.com/wash2/accesskit\"]\ngit = \"https://github.com/wash2/accesskit\"\nreplace-with = \"vendored-sources\"\nrev = \"6c20249\"\n\n[source.\"https://github.com/jackpot51/rust-atomicwrites\"]\ngit = \"https://github.com/jackpot51/rust-atomicwrites\"\nreplace-with = \"vendored-sources\"\n\n[source.\"git+ssh://git@github.com/ThomasAndJuliet/libcosmic\"]\ngit = \"ssh://git@github.com/ThomasAndJuliet/libcosmic.git\"\nreplace-with = \"vendored-sources\"\nrev = \"2b62bc9b60351afd66aaee36a4192a298ae1cc4d\"\n\n[source.\"https://github.com/pop-os/window_clipboard\"]\ngit = \"https://github.com/pop-os/window_clipboard\"\nreplace-with = \"vendored-sources\"\ntag = \"sctk-0.20\"\n\n[source.\"https://github.com/pop-os/cosmic-protocols\"]\ngit = \"https://github.com/pop-os/cosmic-protocols\"\nreplace-with = \"vendored-sources\"\nrev = \"c0cff4d\"\n\n[source.\"https://github.com/pop-os/cosmic-files\"]\ngit = \"https://github.com/pop-os/cosmic-files\"\nreplace-with = \"vendored-sources\"\n\n[source.\"https://github.com/pop-os/freedesktop-icons\"]\ngit = \"https://github.com/pop-os/freedesktop-icons\"\nreplace-with = \"vendored-sources\"\n\n[source.\"https://github.com/pop-os/dbus-settings-bindings\"]\ngit = \"https://github.com/pop-os/dbus-settings-bindings\"\nreplace-with = \"vendored-sources\"\n\n[source.\"https://github.com/iced-rs/cryoglyph\"]\ngit = \"https://github.com/iced-rs/cryoglyph\"\nreplace-with = \"vendored-sources\"\nrev = \"e429a025df36ab8145708acb309080ae3deec17a\"\n\n[source.\"git+ssh://git@github.com/ThomasAndJuliet/household-kit\"]\ngit = \"ssh://git@github.com/ThomasAndJuliet/household-kit.git\"\nreplace-with = \"vendored-sources\"\n\n[source.\"https://github.com/pop-os/smithay-clipboard\"]\ngit = \"https://github.com/pop-os/smithay-clipboard\"\nreplace-with = \"vendored-sources\"\ntag = \"sctk-0.20\"\n\n[source.\"https://github.com/pop-os/softbuffer\"]\ngit = \"https://github.com/pop-os/softbuffer\"\nreplace-with = \"vendored-sources\"\ntag = \"cosmic-4.0\"\n\n[source.\"https://github.com/ebassi/xdg-mime-rs\"]\ngit = \"https://github.com/ebassi/xdg-mime-rs\"\nreplace-with = \"vendored-sources\"\n",
+        "contents": "[source.vendored-sources]\ndirectory = \"cargo/vendor\"\n\n[source.crates-io]\nreplace-with = \"vendored-sources\"\n\n[source.\"https://github.com/wash2/accesskit\"]\ngit = \"https://github.com/wash2/accesskit\"\nreplace-with = \"vendored-sources\"\nrev = \"6c20249\"\n\n[source.\"https://github.com/jackpot51/rust-atomicwrites\"]\ngit = \"https://github.com/jackpot51/rust-atomicwrites\"\nreplace-with = \"vendored-sources\"\n\n[source.\"git+ssh://git@github.com/ThomasAndJuliet/libcosmic\"]\ngit = \"ssh://git@github.com/ThomasAndJuliet/libcosmic.git\"\nreplace-with = \"vendored-sources\"\nrev = \"f05807cba6711d0ad0b833de2feb00f8a97f6318\"\n\n[source.\"https://github.com/pop-os/window_clipboard\"]\ngit = \"https://github.com/pop-os/window_clipboard\"\nreplace-with = \"vendored-sources\"\ntag = \"sctk-0.20\"\n\n[source.\"https://github.com/pop-os/cosmic-protocols\"]\ngit = \"https://github.com/pop-os/cosmic-protocols\"\nreplace-with = \"vendored-sources\"\nrev = \"c0cff4d\"\n\n[source.\"https://github.com/pop-os/cosmic-files\"]\ngit = \"https://github.com/pop-os/cosmic-files\"\nreplace-with = \"vendored-sources\"\n\n[source.\"https://github.com/pop-os/freedesktop-icons\"]\ngit = \"https://github.com/pop-os/freedesktop-icons\"\nreplace-with = \"vendored-sources\"\n\n[source.\"https://github.com/pop-os/dbus-settings-bindings\"]\ngit = \"https://github.com/pop-os/dbus-settings-bindings\"\nreplace-with = \"vendored-sources\"\n\n[source.\"https://github.com/iced-rs/cryoglyph\"]\ngit = \"https://github.com/iced-rs/cryoglyph\"\nreplace-with = \"vendored-sources\"\nrev = \"e429a025df36ab8145708acb309080ae3deec17a\"\n\n[source.\"git+ssh://git@github.com/ThomasAndJuliet/household-kit\"]\ngit = \"ssh://git@github.com/ThomasAndJuliet/household-kit.git\"\nreplace-with = \"vendored-sources\"\n\n[source.\"https://github.com/pop-os/smithay-clipboard\"]\ngit = \"https://github.com/pop-os/smithay-clipboard\"\nreplace-with = \"vendored-sources\"\ntag = \"sctk-0.20\"\n\n[source.\"https://github.com/pop-os/softbuffer\"]\ngit = \"https://github.com/pop-os/softbuffer\"\nreplace-with = \"vendored-sources\"\ntag = \"cosmic-4.0\"\n\n[source.\"https://github.com/ebassi/xdg-mime-rs\"]\ngit = \"https://github.com/ebassi/xdg-mime-rs\"\nreplace-with = \"vendored-sources\"\n",
         "dest": "cargo",
         "dest-filename": "config"
     }
