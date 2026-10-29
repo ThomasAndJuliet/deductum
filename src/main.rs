@@ -54,6 +54,8 @@ mod ui_vnc;
 #[cfg(test)]
 mod ui_style_review;
 #[cfg(test)]
+mod highlight_tests;
+#[cfg(test)]
 mod live;
 #[cfg(test)]
 mod live_lean;
