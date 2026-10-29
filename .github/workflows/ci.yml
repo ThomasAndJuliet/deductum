@@ -6,9 +6,10 @@ permissions:
   contents: read
 # Every release-branch push keeps its own slot, including pending runs.
 # PRs and feature branches replace only superseded work for the same ref.
-# libcosmic comes from the household's private fork, fetched over ssh. The
-# Flatpak job runs scripts/ci-private-crates.sh with its read-only deploy-key
-# secret first. Fork PRs and other untrusted actors receive no secrets: the
+# libcosmic comes from the household's private fork (ThomasAndJuliet/libcosmic)
+# and household-tones from ThomasAndJuliet/household-kit, fetched over ssh. The
+# Flatpak job runs scripts/ci-private-crates.sh with their read-only deploy-key
+# secrets first. Fork PRs and other untrusted actors receive no secrets: the
 # step then fails at once with a message naming the missing secret, instead of
 # a later git authentication error.
 concurrency:
@@ -60,11 +61,12 @@ jobs:
       - name: Share neo's compilation cache with the Flatpak build
         if: (runner.environment == 'self-hosted') && steps.reuse.outputs.reused != 'true'
         run: neo-ci-sccache-manifest packaging/flatpak/dev.twright.Deductum.ci.yml
-      - name: Let git and cargo fetch the household libcosmic fork
+      - name: Let git and cargo fetch the household libcosmic fork and household-kit
         if: steps.reuse.outputs.reused != 'true'
         env:
           LIBCOSMIC_DEPLOY_KEY: ${{ secrets.LIBCOSMIC_DEPLOY_KEY }}
-        run: scripts/ci-private-crates.sh libcosmic
+          HOUSEHOLD_KIT_DEPLOY_KEY: ${{ secrets.HOUSEHOLD_KIT_DEPLOY_KEY }}
+        run: scripts/ci-private-crates.sh libcosmic household-kit
       - name: Check all targets, test the complete workspace and build Deductum
         if: steps.reuse.outputs.reused != 'true'
         uses: flatpak/flatpak-github-actions/flatpak-builder@0fadf5d65cdfbdb9c94c7a2f3637c41206cc1a70 # v6
