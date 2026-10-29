@@ -35,6 +35,7 @@ mod settings_page;
 mod shell;
 mod sidebar;
 mod theory;
+mod tones;
 mod view;
 mod viewport;
 mod vim;

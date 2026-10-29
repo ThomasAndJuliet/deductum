@@ -17,6 +17,7 @@ use serde_json::Value;
 use super::editor::{Mode, Theory, highlight_format};
 use super::prover::{GoalBody, Setting, Tool};
 use super::theory::{Block, Kind, Status};
+use super::tones::{Beneath, code_selection};
 use prose_render::rich::{Typography, rich_text};
 use super::{App, LeftMode, Message, Panel, Workspace, file_name};
 
@@ -799,7 +800,7 @@ fn counterexamples_panel<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbol
         col = col.push(widget::text::body(err.clone()));
     }
     for m in &q.messages {
-        col = col.push(message_view(ws, m, table));
+        col = col.push(message_view(ws, m, table, &on_panel()));
         for sb in m["sendbacks"].as_array().into_iter().flatten().filter_map(|s| s.as_str()) {
             col = col.push(
                 widget::row::with_capacity(2)
@@ -911,25 +912,38 @@ pub fn last_column() -> f32 {
 fn code_style(marked: bool) -> impl Fn(&cosmic::Theme, iced::widget::text_editor::Status) -> iced::widget::text_editor::Style {
     move |theme: &cosmic::Theme, _status| {
         let c = theme.cosmic();
-        let accent = Color::from(c.accent_color());
         iced::widget::text_editor::Style {
-            // The current block: darker in a dark theme; in a light one a wash of the accent (a
-            // darker grey reads as dull there, not as current); its strip takes the accent
-            background: if marked {
-                if c.is_dark {
-                    blend(cell_color(theme), Color::BLACK, 0.32).into()
-                } else {
-                    blend(cell_color(theme), accent, 0.10).into()
-                }
-            } else {
-                cell_color(theme).into()
-            },
-            border: Border { radius: 4.0.into(), width: 0.0, color: Color::TRANSPARENT },
+            background: code_background(theme, marked).into(),
+            border: Border { radius: CODE_RADIUS.into(), width: 0.0, color: Color::TRANSPARENT },
             placeholder: Color { a: 0.5, ..Color::from(c.on_bg_color()) },
             value: c.on_bg_color().into(),
             selection: Color { a: 0.32, ..Color::from(c.accent.base) },
         }
     }
+}
+
+/// A block of code's corners
+const CODE_RADIUS: f32 = 4.0;
+
+/// A block of code's background. The current block: darker in a dark theme; in a light one a wash
+/// of the accent (a darker grey reads as dull there, not as current); its strip takes the accent
+fn code_background(theme: &cosmic::Theme, marked: bool) -> Color {
+    let c = theme.cosmic();
+    match (marked, c.is_dark) {
+        (false, _) => cell_color(theme),
+        (true, true) => blend(cell_color(theme), Color::BLACK, 0.32),
+        (true, false) => blend(cell_color(theme), Color::from(c.accent_color()), 0.10),
+    }
+}
+
+/// What code on a block's background has beneath it, for its selection's tint
+fn on_code(marked: bool) -> Beneath {
+    Beneath::new(move |theme| code_background(theme, marked))
+}
+
+/// What code on the page has beneath it, for its selection's tint
+fn on_page() -> Beneath {
+    Beneath::new(page_color)
 }
 
 fn blend(a: Color, b: Color, t: f32) -> Color {
@@ -1158,6 +1172,7 @@ fn block_code<'a>(ws: Option<&'a Workspace>, t: &'a Theory, i: usize, block: &Bl
         .key_binding(|_| None)
         .style(code_style(marked))
         .highlight_with::<super::editor::Highlighter>(v.highlight.themed(), highlight_format);
+    let editor = code_selection(editor, on_code(marked));
     let cell = framed(
         hoverable_press(ws, super::HoverTarget::View(i), CODE_PADDING, editor.into(), Some(Message::ViewPress(i))),
         t.shown_status(block.start, block.end, block.status),
@@ -1391,19 +1406,25 @@ fn inline_goal<'a>(ws: Option<&'a Workspace>, table: &dyn super::codec::Symbols)
     let content: Element<'a, Message> = if ws.output.is_none() && !fill_here(ws) {
         widget::text::caption(waiting_note(ws).unwrap_or_else(|| "Checking…".into())).into()
     } else {
-        state_view(ws, table)
+        // (on the page, under this card's wash)
+        state_view(ws, table, &on_page().under(inline_goal_wash))
     };
     Some(
         widget::container(content)
             .padding([6, 10])
             .width(Length::Fill)
             .class(theme::Container::custom(|theme| iced::widget::container::Style {
-                background: Some(Color { a: 0.05, ..Color::from(theme.cosmic().accent_color()) }.into()),
+                background: Some(inline_goal_wash(theme).into()),
                 border: Border { radius: 6.0.into(), ..Default::default() },
                 ..Default::default()
             }))
             .into(),
     )
+}
+
+/// The wash of the goal's card on the page
+fn inline_goal_wash(theme: &cosmic::Theme) -> Color {
+    Color { a: 0.05, ..Color::from(theme.cosmic().accent_color()) }
 }
 
 #[allow(dead_code)]
@@ -1419,7 +1440,7 @@ fn inline_goal_text<'a>(ws: Option<&'a Workspace>, table: &dyn super::codec::Sym
         col = col.push(widget::text::caption("No goal here."));
     }
     for m in msgs {
-        col = col.push(message_view(ws, m, table));
+        col = col.push(message_view(ws, m, table, &on_page().under(|theme| Color { a: 0.08, ..Color::from(theme.cosmic().accent_color()) })));
         for sb in m["sendbacks"].as_array().into_iter().flatten().filter_map(|s| s.as_str()) {
             col = col.push(
                 widget::row::with_capacity(2)
@@ -1870,8 +1891,11 @@ fn block_editor_in<'a>(ws: Option<&'a Workspace>, t: &'a Theory, window: bool, i
         .padding(CODE_PADDING)
         .on_action(Message::BlockAction)
         .key_binding(key_bindings(!t.completions.is_empty(), vim_mode, super::EditorTarget::Block))
-        .style(code_style(true))
+        // (its background drawn by the gap round it, under the construct's band, so that a
+        // selection covers the band)
+        .style(|theme: &cosmic::Theme, status| iced::widget::text_editor::Style { background: Color::TRANSPARENT.into(), ..code_style(true)(theme, status) })
         .highlight_with::<super::editor::Highlighter>(t.block_highlight.themed(), highlight_format);
+    let editor = code_selection(editor, on_code(true));
     // A long proof in a narrow window: the goal opens a gap in the editor just after the construct
     // the caret is in (the proof stays one editor; what follows moves down, nothing is covered)
     let lines = be.content.line_count();
@@ -1895,9 +1919,12 @@ fn block_editor_in<'a>(ws: Option<&'a Workspace>, t: &'a Theory, window: bool, i
         (from, to)
     });
     let tint = construct_tint();
-    let banded = move |g: super::gap::Gap<'a, Message, cosmic::Theme, cosmic::Renderer>| match band {
-        Some((from, to)) => g.band(from, to, tint),
-        None => g,
+    let banded = move |g: super::gap::Gap<'a, Message, cosmic::Theme, cosmic::Renderer>| {
+        let g = g.background(|theme| code_background(theme, true), CODE_RADIUS);
+        match band {
+            Some((from, to)) => g.band(from, to, tint),
+            None => g,
+        }
     };
     let editor: Element<'_, Message> = if window {
         // At its full height in a scroll view that keeps the caret in sight, so that where its
@@ -2031,6 +2058,8 @@ fn prose_editor<'a>(t: &'a Theory, be: &'a super::editor::BlockEditor, vim_mode:
             }
         })
         .highlight_with::<super::editor::Highlighter>(t.block_highlight.themed(), prose_format);
+    // (on the page, under the wash of the region marking the paragraph being edited)
+    let editor = code_selection(editor, on_page().under(|theme| marked_region(theme).0));
     let editor: Element<'a, Message> = super::gap::Halo::new(editor, (z(10.0), z(2.0), z(4.0)), marked_region).into();
     // The block's other paragraphs stay as they read, above and below the one being edited
     let (before, after) = t
@@ -2165,6 +2194,7 @@ pub fn reference_window(app: &App, id: iced::window::Id) -> Element<'_, Message>
                 }
             })
             .highlight_with::<super::editor::Highlighter>(t.highlight.themed(), highlight_format);
+        let code = code_selection(code, on_page());
         let (l0, l1) = reference_lines(r);
         let row_top = reference_rows(r, size.width - pad.left - pad.right);
         let band = construct_tint();
@@ -2276,7 +2306,7 @@ pub fn proof_window(app: &App) -> Element<'_, Message> {
         super::insert::set_popout_open(app.popout.is_some());
         let table = app.table(&ws.machine);
         // (the state on the page, so that its subgoal cards stand out from it as they do there)
-        let state = widget::container(thin(widget::container(state_view(ws, &*table)).padding(Padding { right: z(10.0), ..Padding::ZERO }))).padding([sp.space_xs, sp.space_xs]).class(theme::Container::custom(|theme| iced::widget::container::Style {
+        let state = widget::container(thin(widget::container(state_view(ws, &*table, &on_page())).padding(Padding { right: z(10.0), ..Padding::ZERO }))).padding([sp.space_xs, sp.space_xs]).class(theme::Container::custom(|theme| iced::widget::container::Style {
             background: Some(page_color(theme).into()),
             border: Border { radius: 8.0.into(), width: 1.0, color: Color { a: 0.12, ..Color::from(theme.cosmic().on_bg_color()) } },
             ..Default::default()
@@ -2677,7 +2707,7 @@ fn source_editor(t: &Theory, height: Length) -> Element<'_, Message> {
     let vim_mode = vim_mode_now();
     let scope = t.page_scope;
     let completing = !t.completions.is_empty();
-    iced::widget::text_editor(&t.source)
+    let editor = iced::widget::text_editor(&t.source)
         .id(source_editor_id())
         .font(cosmic::font::mono())
         .size(z(14.0))
@@ -2711,8 +2741,8 @@ fn source_editor(t: &Theory, height: Length) -> Element<'_, Message> {
                 selection: Color { a: 0.32, ..Color::from(c.accent.base) },
             }
         })
-        .highlight_with::<super::editor::Highlighter>(t.highlight.themed(), highlight_format)
-        .into()
+        .highlight_with::<super::editor::Highlighter>(t.highlight.themed(), highlight_format);
+    code_selection(editor, on_page()).into()
 }
 
 // ----- the side panel
@@ -2831,51 +2861,72 @@ fn tinted<'a>(kind: String, inner: Element<'a, Message>) -> Element<'a, Message>
         "error" | "warning" | "legacy" => widget::container(inner)
             .padding([2, 6])
             .width(Length::Fill)
-            .class(theme::Container::custom(move |theme| {
-                let c = theme.cosmic();
-                let color: Color = if kind == "error" { c.destructive_color().into() } else { c.warning_color().into() };
-                iced::widget::container::Style { background: Some(Color { a: 0.15, ..color }.into()), ..Default::default() }
-            }))
+            .class(theme::Container::custom(move |theme| iced::widget::container::Style { background: Some(message_wash(theme, kind == "error").into()), ..Default::default() }))
             .into(),
         _ => inner,
     }
 }
 
+/// The tint behind an error (or a warning)
+fn message_wash(theme: &cosmic::Theme, error: bool) -> Color {
+    let c = theme.cosmic();
+    let color: Color = if error { c.destructive_color().into() } else { c.warning_color().into() };
+    Color { a: 0.15, ..color }
+}
+
+/// What code in the side panel has beneath it, for its selection's tint: the panel's card
+fn on_panel() -> Beneath {
+    Beneath::new(|theme| match iced::widget::container::Catalog::style(theme, &theme::Container::Card).background {
+        Some(iced::Background::Color(c)) => c,
+        _ => page_color(theme),
+    })
+}
+
 /// A message as code: highlighted with the prover's markup, selectable and copyable
-fn message_view<'a>(ws: &'a Workspace, m: &Value, table: &dyn super::codec::Symbols) -> Element<'a, Message> {
+fn message_view<'a>(ws: &'a Workspace, m: &Value, table: &dyn super::codec::Symbols, on: &Beneath) -> Element<'a, Message> {
     let key = super::message_key(m);
     let kind = m["kind"].as_str().unwrap_or("").to_string();
+    // (an error or a warning on its own tint, as `tinted` lays it)
+    let on = match kind.as_str() {
+        "error" | "warning" | "legacy" => {
+            let error = kind == "error";
+            on.under(move |theme| message_wash(theme, error))
+        }
+        _ => on.clone(),
+    };
     match ws.views.get(&key) {
         Some(v) => tinted(
             kind,
-            hoverable(Some(ws), super::HoverTarget::Message(key), Padding::from(2.0), iced::widget::text_editor(&v.content)
-                .font(cosmic::font::mono())
-                .size(z(13.0))
-                .padding(2)
-                .on_action(move |a| Message::ViewAction(key, a))
-                // Read-only: copying and selecting only, so that every other key (j, k, the
-                // arrows, d, Enter) goes on to the page's block navigation even when a click
-                // has left this view focused
-                .key_binding(read_only_binding)
-                .style(|theme: &cosmic::Theme, _status| {
-                    let c = theme.cosmic();
-                    iced::widget::text_editor::Style {
-                        background: Color::TRANSPARENT.into(),
-                        border: Border::default(),
-                        placeholder: Color::TRANSPARENT,
-                        value: c.on_bg_color().into(),
-                        selection: Color { a: 0.32, ..Color::from(c.accent.base) },
-                    }
-                })
-                .highlight_with::<super::editor::Highlighter>(v.highlight.themed(), highlight_format)
-                .into()),
+            hoverable(Some(ws), super::HoverTarget::Message(key), Padding::from(2.0), {
+                let editor = iced::widget::text_editor(&v.content)
+                    .font(cosmic::font::mono())
+                    .size(z(13.0))
+                    .padding(2)
+                    .on_action(move |a| Message::ViewAction(key, a))
+                    // Read-only: copying and selecting only, so that every other key (j, k, the
+                    // arrows, d, Enter) goes on to the page's block navigation even when a click
+                    // has left this view focused
+                    .key_binding(read_only_binding)
+                    .style(|theme: &cosmic::Theme, _status| {
+                        let c = theme.cosmic();
+                        iced::widget::text_editor::Style {
+                            background: Color::TRANSPARENT.into(),
+                            border: Border::default(),
+                            placeholder: Color::TRANSPARENT,
+                            value: c.on_bg_color().into(),
+                            selection: Color { a: 0.32, ..Color::from(c.accent.base) },
+                        }
+                    })
+                    .highlight_with::<super::editor::Highlighter>(v.highlight.themed(), highlight_format);
+                code_selection(editor, on).into()
+            }),
         ),
         None => message_text(m, table),
     }
 }
 
 fn output_panel<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Element<'a, Message> {
-    thin(state_view(ws, table)).height(Length::Fill).into()
+    thin(state_view(ws, table, &on_panel())).height(Length::Fill).into()
 }
 
 /// Why there is no proof state at the caret yet, when the prover has not reached its command:
@@ -2912,8 +2963,8 @@ pub fn waiting_note(ws: &Workspace) -> Option<String> {
 
 /// The goal panel: the insert bar (symbols, steps or markup for the caret, above the first
 /// subgoal, where they are wanted while the goal is shown), then the proof state
-fn state_view<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Element<'a, Message> {
-    let state = state_body(ws, table);
+fn state_view<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols, on: &Beneath) -> Element<'a, Message> {
+    let state = state_body(ws, table, on);
     match super::insert::insert_bar(ws, table) {
         Some(bar) => widget::column::with_capacity(2).spacing(spacing().space_xs).push(bar).push(state).into(),
         None => state,
@@ -2922,7 +2973,7 @@ fn state_view<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Eleme
 
 /// The proof state: as parts (the chained facts, then each subgoal as fix, assume and show,
 /// with what the command changed), or as Isabelle prints it; then any other output
-fn state_body<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Element<'a, Message> {
+fn state_body<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols, on: &Beneath) -> Element<'a, Message> {
     let sp = spacing();
     // While Isabelle has yet to check what changed at the caret, output about another command
     // (the one that was there before the edit) is not shown as if it were this one's
@@ -2965,7 +3016,7 @@ fn state_body<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Eleme
     // found, as they come, above the goal it works on, with its settings
     let tool = ws.output.as_ref().and_then(|o| o["command"]["name"].as_str()).and_then(|n| ws.caps.typed_tool(n));
     let tool_section: Option<Element<'a, Message>> = match (tool, super::flow::report(ws)) {
-        (Some(tool), Some(report)) => Some(tool_section(ws, tool, report, table)),
+        (Some(tool), Some(report)) => Some(tool_section(ws, tool, report, table, on)),
         _ => None,
     };
     // Only a message (no proof here, or the session stopped): just the message
@@ -2994,16 +3045,16 @@ fn state_body<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Eleme
     if ws.state_text && let Some(text) = &g.text {
         // Isabelle's own text of the state, printed with the Types setting
         if !in_tool {
-            col = col.push(tool_output(ws, table));
+            col = col.push(tool_output(ws, table, on));
         }
-        col = col.push(message_view(ws, text, table));
+        col = col.push(message_view(ws, text, table, on));
         return col.into();
     }
     if ws.state_text || !have_parts {
         // (Text shows the command's output as it is; with no goal in parts, the tool's section
         // has said it already)
         if ws.state_text || !in_tool {
-            col = col.push(state_text(ws, table));
+            col = col.push(state_text(ws, table, on));
         }
         if fill_here(ws) {
             col = col.push(fill_results(ws, table));
@@ -3029,7 +3080,7 @@ fn state_body<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Eleme
     // The command's own output (a theorem it proved, a value, a warning) comes first: it is
     // what the step did
     if !in_tool {
-        col = col.push(tool_output(ws, table));
+        col = col.push(tool_output(ws, table, on));
     }
     let mut head = widget::row::with_capacity(3).spacing(sp.space_s).align_y(Alignment::Center).push(widget::text::heading(headline));
     if matches!(ws.goals.status.as_str(), "waiting" | "running") {
@@ -3049,7 +3100,7 @@ fn state_body<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Eleme
     if !g.facts.is_empty() {
         let mut facts = widget::column::with_capacity(g.facts.len()).spacing(2);
         for f in &g.facts {
-            facts = facts.push(message_view(ws, f, table));
+            facts = facts.push(message_view(ws, f, table, on));
         }
         // (inset as the subgoal cards' contents are, so that all the labels are in one column)
         col = col.push(widget::container(labelled(ws.profile.facts_label(), facts.into())).padding(Padding { left: sp.space_xs as f32, right: sp.space_xs as f32, ..Padding::ZERO }));
@@ -3071,7 +3122,9 @@ fn state_body<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Eleme
 /// it, with Stop, which Esc also does), then what it came to (see [`super::flow`]): the proofs it
 /// found, a counterexample as a table, or a plain sentence and what to do next. What else it said
 /// follows, then its settings, folded
-fn tool_section<'a>(ws: &'a Workspace, tool: &'a Tool, r: super::flow::Report, table: &dyn super::codec::Symbols) -> Element<'a, Message> {
+fn tool_section<'a>(ws: &'a Workspace, tool: &'a Tool, r: super::flow::Report, table: &dyn super::codec::Symbols, on: &Beneath) -> Element<'a, Message> {
+    // (on its own wash)
+    let on = &on.under(tool_wash);
     use super::flow::Outcome;
     let sp = spacing();
     let secs = ws.tool_started.map_or(0, |s| s.elapsed().as_secs());
@@ -3145,7 +3198,7 @@ fn tool_section<'a>(ws: &'a Workspace, tool: &'a Tool, r: super::flow::Report, t
         col = col.push(offer_list(ws, &r.offers, true, table));
     }
     for m in &r.notes {
-        col = col.push(message_view(ws, m, table));
+        col = col.push(message_view(ws, m, table, on));
     }
     if tool.settings.iter().any(|s| !s.option.is_empty()) {
         col = col.push(tool_settings(ws, tool));
@@ -3154,11 +3207,16 @@ fn tool_section<'a>(ws: &'a Workspace, tool: &'a Tool, r: super::flow::Report, t
         .padding([sp.space_xxs, sp.space_xs])
         .width(Length::Fill)
         .class(theme::Container::custom(|theme| iced::widget::container::Style {
-            background: Some(Color { a: 0.06, ..Color::from(theme.cosmic().accent_color()) }.into()),
+            background: Some(tool_wash(theme).into()),
             border: Border { radius: 6.0.into(), ..Default::default() },
             ..Default::default()
         }))
         .into()
+}
+
+/// The wash behind a proof tool's section
+fn tool_wash(theme: &cosmic::Theme) -> Color {
+    Color { a: 0.06, ..Color::from(theme.cosmic().accent_color()) }
 }
 
 /// The offers of a tool or an LLM, each a row: whether it was checked, what it is (in the code
@@ -3293,13 +3351,13 @@ fn tool_settings<'a>(ws: &'a Workspace, tool: &'a Tool) -> Element<'a, Message> 
 /// What the command at the caret printed besides the state (a theorem, sledgehammer's or
 /// nitpick's findings typed in the text, a warning), with Insert for the proofs it offers; then
 /// an LLM's proofs for a hole, when one was asked for (typing `claude` or `codex`)
-fn tool_output<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Element<'a, Message> {
+fn tool_output<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols, on: &Beneath) -> Element<'a, Message> {
     let sp = spacing();
     let mut col = widget::column::with_capacity(8).spacing(sp.space_xxs);
     if let Some(out) = ws.output.as_ref().filter(|_| !super::flow::stale_tool_output(ws)) {
         // (a tool's Interrupt is its being stopped: said in its heading, not as an error)
         for m in out["messages"].as_array().into_iter().flatten().filter(|m| m["kind"] != "state" && !(m["kind"] == "error" && m["text"].as_str().is_some_and(|t| ws.profile.interrupted(t)))) {
-            col = col.push(message_view(ws, m, table));
+            col = col.push(message_view(ws, m, table, on));
             for sb in m["sendbacks"].as_array().into_iter().flatten().filter_map(|s| s.as_str()) {
                 col = col.push(
                     widget::row::with_capacity(2)
@@ -3461,10 +3519,12 @@ fn subgoal_card<'a>(ws: &'a Workspace, sg: &super::goals::Subgoal, first: bool, 
         head = head.push(widget::text::caption("· new").class(theme::Text::Accent));
     }
     let mut col = widget::column::with_capacity(4).spacing(2).push(head);
+    // (its code on the card)
+    let on = &Beneath::new(move |theme| subgoal_background(theme, first));
     let stack = |parts: &[Value]| -> Element<'a, Message> {
         let mut c = widget::column::with_capacity(parts.len()).spacing(2);
         for p in parts {
-            c = c.push(message_view(ws, p, table));
+            c = c.push(message_view(ws, p, table, on));
         }
         c.into()
     };
@@ -3474,7 +3534,7 @@ fn subgoal_card<'a>(ws: &'a Workspace, sg: &super::goals::Subgoal, first: bool, 
     }
     for section in shown.sections {
         let body = match section.body {
-            GoalBody::One(part) => message_view(ws, part, table),
+            GoalBody::One(part) => message_view(ws, part, table, on),
             GoalBody::Many(parts) => stack(parts),
         };
         col = col.push(match section.label {
@@ -3485,22 +3545,25 @@ fn subgoal_card<'a>(ws: &'a Workspace, sg: &super::goals::Subgoal, first: bool, 
     widget::container(col)
         .padding([sp.space_xxs, sp.space_xs])
         .width(Length::Fill)
-        .class(theme::Container::custom(move |theme| {
-            let c = theme.cosmic();
-            let base = cell_color(theme);
-            iced::widget::container::Style {
-                // (a later card is a little lighter (darker) than what is round it, so that it reads as a card
-                // in either theme; the first, the one the next step works on, is tinted)
-                background: Some(if first { blend(base, Color::from(c.accent_color()), 0.08) } else { blend(base, Color::from(c.on_bg_color()), 0.06) }.into()),
-                border: Border { radius: 6.0.into(), ..Default::default() },
-                ..Default::default()
-            }
+        .class(theme::Container::custom(move |theme| iced::widget::container::Style {
+            background: Some(subgoal_background(theme, first).into()),
+            border: Border { radius: 6.0.into(), ..Default::default() },
+            ..Default::default()
         }))
         .into()
 }
 
+/// A subgoal card's background: a later card is a little lighter (darker) than what is round it,
+/// so that it reads as a card in either theme; the first, the one the next step works on, is
+/// tinted
+fn subgoal_background(theme: &cosmic::Theme, first: bool) -> Color {
+    let c = theme.cosmic();
+    let base = cell_color(theme);
+    if first { blend(base, Color::from(c.accent_color()), 0.08) } else { blend(base, Color::from(c.on_bg_color()), 0.06) }
+}
+
 /// The state as Isabelle prints it, with the command's other output
-fn state_text<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Element<'a, Message> {
+fn state_text<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols, on: &Beneath) -> Element<'a, Message> {
     let mut col = widget::column::with_capacity(8).spacing(6);
     match &ws.output {
         None => col = col.push(widget::text::caption("Move the caret into a proof to see its state.")),
@@ -3520,7 +3583,7 @@ fn state_text<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Eleme
                 col = col.push(widget::text::caption("No output."));
             }
             for m in msgs {
-                col = col.push(message_view(ws, &m, table));
+                col = col.push(message_view(ws, &m, table, on));
                 for sb in m["sendbacks"].as_array().into_iter().flatten().filter_map(|s| s.as_str()) {
                     col = col.push(
                         widget::row::with_capacity(2)
@@ -3674,7 +3737,7 @@ fn tool_panel<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Eleme
             if text.contains("found a proof") || m["sendbacks"].as_array().is_some_and(|s| !s.is_empty()) {
                 continue;
             }
-            col = col.push(message_view(ws, m, table));
+            col = col.push(message_view(ws, m, table, &on_panel()));
         }
         col = col.push(widget::container(widget::divider::horizontal::default()).padding([sp.space_xxs, 0]));
     }
