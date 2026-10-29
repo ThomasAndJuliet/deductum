@@ -914,16 +914,13 @@ fn code_style(marked: bool) -> impl Fn(&cosmic::Theme, iced::widget::text_editor
         let c = theme.cosmic();
         iced::widget::text_editor::Style {
             background: code_background(theme, marked).into(),
-            border: Border { radius: CODE_RADIUS.into(), width: 0.0, color: Color::TRANSPARENT },
+            border: Border { radius: 4.0.into(), width: 0.0, color: Color::TRANSPARENT },
             placeholder: Color { a: 0.5, ..Color::from(c.on_bg_color()) },
             value: c.on_bg_color().into(),
             selection: Color { a: 0.32, ..Color::from(c.accent.base) },
         }
     }
 }
-
-/// A block of code's corners
-const CODE_RADIUS: f32 = 4.0;
 
 /// A block of code's background. The current block: darker in a dark theme; in a light one a wash
 /// of the accent (a darker grey reads as dull there, not as current); its strip takes the accent
@@ -1891,9 +1888,7 @@ fn block_editor_in<'a>(ws: Option<&'a Workspace>, t: &'a Theory, window: bool, i
         .padding(CODE_PADDING)
         .on_action(Message::BlockAction)
         .key_binding(key_bindings(!t.completions.is_empty(), vim_mode, super::EditorTarget::Block))
-        // (its background drawn by the gap round it, under the construct's band, so that a
-        // selection covers the band)
-        .style(|theme: &cosmic::Theme, status| iced::widget::text_editor::Style { background: Color::TRANSPARENT.into(), ..code_style(true)(theme, status) })
+        .style(code_style(true))
         .highlight_with::<super::editor::Highlighter>(t.block_highlight.themed(), highlight_format);
     let editor = code_selection(editor, on_code(true));
     // A long proof in a narrow window: the goal opens a gap in the editor just after the construct
@@ -1919,12 +1914,9 @@ fn block_editor_in<'a>(ws: Option<&'a Workspace>, t: &'a Theory, window: bool, i
         (from, to)
     });
     let tint = construct_tint();
-    let banded = move |g: super::gap::Gap<'a, Message, cosmic::Theme, cosmic::Renderer>| {
-        let g = g.background(|theme| code_background(theme, true), CODE_RADIUS);
-        match band {
-            Some((from, to)) => g.band(from, to, tint),
-            None => g,
-        }
+    let banded = move |g: super::gap::Gap<'a, Message, cosmic::Theme, cosmic::Renderer>| match band {
+        Some((from, to)) => g.band(from, to, tint),
+        None => g,
     };
     let editor: Element<'_, Message> = if window {
         // At its full height in a scroll view that keeps the caret in sight, so that where its

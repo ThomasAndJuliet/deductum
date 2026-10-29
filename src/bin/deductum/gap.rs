@@ -20,27 +20,16 @@ pub struct Gap<'a, Message, Theme, Renderer> {
     /// A band of the editor's text tinted (from, to, below its top; the colour): the construct the
     /// proof state is for
     band: Option<(f32, f32, cosmic::iced::Color)>,
-    /// The editor's background and its corner radius, drawn here under the band when the editor's
-    /// own is clear (an editor's background would cover a band drawn under its text)
-    background: Option<(Box<dyn Fn(&Theme) -> cosmic::iced::Color + 'a>, f32)>,
 }
 
 impl<'a, Message, Theme, Renderer> Gap<'a, Message, Theme, Renderer> {
     pub fn new(editor: impl Into<Element<'a, Message, Theme, Renderer>>, inset: impl Into<Element<'a, Message, Theme, Renderer>>, at: f32) -> Self {
-        Self { editor: editor.into(), inset: inset.into(), at, band: None, background: None }
+        Self { editor: editor.into(), inset: inset.into(), at, band: None }
     }
 
-    /// Tint the editor's lines from `from` to `to` below its top, under their text and over the
-    /// editor's background, so that a selection in the editor covers the band
+    /// Tint the editor's text from `from` to `to` below its top
     pub fn band(mut self, from: f32, to: f32, color: cosmic::iced::Color) -> Self {
         self.band = Some((from, to, color));
-        self
-    }
-
-    /// Draw the editor's background here, under the band: for an editor whose own background is
-    /// clear, `color` with corners of `radius`, as the editor would draw it
-    pub fn background(mut self, color: impl Fn(&Theme) -> cosmic::iced::Color + 'a, radius: f32) -> Self {
-        self.background = Some((Box::new(color), radius));
         self
     }
 }
@@ -98,31 +87,32 @@ where
             Some(p) if p.y >= editor.y + at => mouse::Cursor::Unavailable,
             _ => c,
         };
-        // Under the editor's text, in the layer it is drawn in (a layer draws its quads before its
-        // text): its background, then the construct's band from `y0` to `y1` below its top. A
-        // selection, drawn in a layer of its own over the text, covers both
-        let under = |r: &mut Renderer, y0: f32, y1: f32| {
-            if let Some((color, radius)) = &self.background {
-                r.fill_quad(renderer::Quad { bounds: editor, border: cosmic::iced::Border { radius: (*radius).into(), ..Default::default() }, ..Default::default() }, cosmic::iced::Background::Color(color(theme)));
-            }
+        // The construct's band, over the text (where the gap opens in it, its lower part moves
+        // down), and under a selection: in a layer of its own made inside the editor's, after the
+        // layer that takes the editor's background and text and before those the editor makes
+        // for its selection (layers are drawn in the order they are made), so a selection, which
+        // libcosmic draws opaque in layers of its own, lies over the band
+        let band = |r: &mut Renderer, y0: f32, y1: f32| {
             if let Some((_, _, color)) = self.band
                 && y1 > y0
             {
-                r.fill_quad(renderer::Quad { bounds: Rectangle { y: editor.y + y0, height: y1 - y0, ..editor }, ..Default::default() }, cosmic::iced::Background::Color(color));
+                let bounds = Rectangle { y: y0, height: y1 - y0, ..editor };
+                r.with_layer(bounds, |r| {
+                    r.fill_quad(renderer::Quad { bounds, ..Default::default() }, cosmic::iced::Background::Color(color));
+                });
             }
         };
-        // (the band no further than the editor's own bottom; where the gap opens in it, its lower
-        // part moves down with the text)
+        // (no further than the editor's own bottom)
         let (from, to) = self.band.map_or((0.0, 0.0), |(from, to, _)| (from, to.min(editor.height)));
         // Above the gap: as it is
         renderer.with_layer(Rectangle { height: at, ..editor }, |r| {
-            under(r, from.min(at), to.min(at));
+            band(r, editor.y + from.min(at), editor.y + to.min(at));
             self.editor.as_widget().draw(&tree.children[0], r, theme, style, editor_layout, moved(cursor), viewport);
         });
         // Below it: moved down by the gap
         renderer.with_layer(Rectangle { y: editor.y + at + gap, height: (editor.height - at).max(0.0), ..editor }, |r| {
+            band(r, editor.y + from.max(at) + gap, editor.y + to.max(at) + gap);
             r.with_translation(Vector::new(0.0, gap), |r| {
-                under(r, from.max(at), to.max(at));
                 self.editor.as_widget().draw(&tree.children[0], r, theme, style, editor_layout, moved(cursor), viewport);
             });
         });
