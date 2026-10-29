@@ -49,6 +49,10 @@ prose-render = { path = "prose/prose-render" }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "gif"] }
 # Charts in threads, drawn natively; from the shared diagrams repository
 chartgen = { path = "vendor/chartgen/crates/chartgen" }
+# The household's tone maths (household-ui RULES.md rule 6): Deductum's selection tint and the
+# muted accent of its chosen tabs and toggles; the highlight tests read the expected colours from
+# it too. From the private household-kit, read over ssh; pinned in Cargo.lock
+household-tones = { git = "ssh://git@github.com/ThomasAndJuliet/household-kit.git" }
 secret-service = { version = "5.1.0", features = [
     "rt-tokio-crypto-rust",
 ], optional = true }
@@ -86,11 +90,6 @@ tikv-jemallocator = { version = "0.7", features = ["background_threads"] }
 
 [build-dependencies]
 xdgen = "0.1"
-
-[dev-dependencies]
-# The household's tone maths, which the highlight tests (src/bin/deductum/highlight_tests.rs)
-# read the expected colours from; pinned in Cargo.lock
-household-tones = { git = "ssh://git@github.com/ThomasAndJuliet/household-kit.git" }
 
 [features]
 default = ["dbus-config", "wgpu", "wayland", "password_manager"]

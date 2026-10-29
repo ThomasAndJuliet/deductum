@@ -113,8 +113,8 @@ Local Flatpak builds use `scripts/build-flatpak.sh`. To reproduce the SDK tests,
 run `python3 scripts/prepare-ci-manifest.py` and build the generated
 `packaging/flatpak/dev.twright.Deductum.ci.yml` manifest. Frozen Cargo downloads
 are regenerated from Cargo.lock with `flatpak-cargo-generator.py`, followed by
-`scripts/fix-cargo-sources-ssh.py` for the libcosmic fork, which is fetched over
-ssh:
+`scripts/fix-cargo-sources-ssh.py` for the libcosmic fork and household-kit (its
+household-tones crate), which are fetched over ssh:
 
     flatpak-cargo-generator.py Cargo.lock -o packaging/flatpak/cargo-sources.json
     python3 scripts/fix-cargo-sources-ssh.py packaging/flatpak/cargo-sources.json
