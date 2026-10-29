@@ -87,6 +87,11 @@ tikv-jemallocator = { version = "0.7", features = ["background_threads"] }
 [build-dependencies]
 xdgen = "0.1"
 
+[dev-dependencies]
+# The household's tone maths, which the highlight tests (src/bin/deductum/highlight_tests.rs)
+# read the expected colours from; pinned in Cargo.lock
+household-tones = { git = "ssh://git@github.com/ThomasAndJuliet/household-kit.git" }
+
 [features]
 default = ["dbus-config", "wgpu", "wayland", "password_manager"]
 dbus-config = ["libcosmic/dbus-config"]
