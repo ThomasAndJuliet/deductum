@@ -17,7 +17,7 @@ use serde_json::Value;
 use super::editor::{Mode, Theory, highlight_format};
 use super::prover::{GoalBody, Setting, Tool};
 use super::theory::{Block, Kind, Status};
-use super::tones::{Beneath, code_selection};
+use super::tones::{Beneath, code_selection, muted_button};
 use prose_render::rich::{Typography, rich_text};
 use super::{App, LeftMode, Message, Panel, Workspace, file_name};
 
@@ -2822,7 +2822,8 @@ fn panel_tabs<'a>(open: Panel, tabs: Vec<(Panel, String)>, width: f32) -> Elemen
         .width(Length::FillPortion(portion))
         .height(Length::Fill)
         .padding([0, 4])
-        .class(if active { theme::Button::Suggested } else { theme::Button::Icon })
+        // (the open panel's tab in the muted accent, household rule 6)
+        .class(if active { muted_button(theme::Button::Icon) } else { theme::Button::Icon })
         .on_press(msg)
         .into()
     };
@@ -2995,7 +2996,8 @@ fn state_body<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols, on: &Ben
             .width(Length::Fixed(z(64.0)))
             .height(Length::Fill)
             .padding(0)
-            .class(if on { theme::Button::Suggested } else { theme::Button::Icon })
+            // (the chosen side in the muted accent, household rule 6)
+            .class(if on { muted_button(theme::Button::Icon) } else { theme::Button::Icon })
             .on_press(msg)
     };
     let switch = widget::container(widget::row::with_capacity(2).spacing(2).height(Length::Fill).push(toggle("Goals", !ws.state_text, Message::StateText(false))).push(toggle("Text", ws.state_text, Message::StateText(true))))
@@ -3461,7 +3463,8 @@ fn query_route_row<'a>(ws: &'a Workspace) -> Element<'a, Message> {
     let mut items: Vec<Element<'a, Message>> = vec![widget::container(widget::text::caption("Queries go to")).padding([z(6.0), 0.0]).into()];
     let choice = |label: String, value: String| -> Element<'a, Message> {
         let on = route == value;
-        widget::button::text(label).class(if on { theme::Button::Suggested } else { theme::Button::Text }).on_press(Message::QueryRoute(value)).into()
+        // (the chosen one in the muted accent, household rule 6)
+        widget::button::text(label).class(if on { muted_button(theme::Button::Text) } else { theme::Button::Text }).on_press(Message::QueryRoute(value)).into()
     };
     items.push(choice("the helper".into(), "helper".into()));
     items.push(choice("a fresh request".into(), "fresh".into()));
