@@ -1,0 +1,11 @@
+[Icon Theme]
+Name=Cosmic test fixture
+Comment=Adwaita symbolic icons for headless Deductum tests
+Directories=scalable/actions
+
+[scalable/actions]
+Size=16
+Type=Scalable
+MinSize=1
+MaxSize=512
+Context=Actions

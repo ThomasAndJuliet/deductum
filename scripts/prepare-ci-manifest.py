@@ -9,7 +9,9 @@ checks = ('  - cargo --offline --locked test --workspace --all-targets --all-fea
           '  - python3 -m unittest discover -s deductum/host/tests -p "test_*.py"\n')
 env_needle = '    CARGO_HOME: /run/build/deductum/cargo\n'
 assert text.count(env_needle) == 1
-ci_env = (env_needle + '    CARGO_PROFILE_DEV_DEBUG: "0"\n'
+# The SDK lacks an icon theme; use real symbolic icons for the headless tests.
+ci_env = (env_needle + '    XDG_DATA_DIRS: /run/build/deductum/cosmic-term/tests/fixtures/icon-data:/usr/share:/app/share\n'
+          '    CARGO_PROFILE_DEV_DEBUG: "0"\n'
           '    CARGO_PROFILE_TEST_DEBUG: "0"\n'
           '    CARGO_INCREMENTAL: "0"\n')
 source.with_name('dev.twright.Deductum.ci.yml').write_text(

@@ -13,10 +13,10 @@
 //! editor's bounds less the buttons in them (the pop-out button, and in the narrow scene the
 //! proof state's controls, whose chosen tab is meant to change: the muted accent).
 //!
-//! The reference frames were made by running this file's tests on `origin/main` (the file works
-//! there unchanged: it asks nothing of the selection code, nor of household-tones) with
-//! `CT_SNAPSHOTS` set to a folder, and keeping the `main-*.png` frames it left (the `-warm` ones
-//! are not kept). When a later change to how the editor draws is
+//! Every reference set was made by running this file on `origin/main` (the file works
+//! there unchanged) with `CT_SNAPSHOTS` set. The original, Neo host-font and Flatpak SDK
+//! font sets are kept separately; the drawn editor must exactly match one of them.
+//! The `-warm` frames are not kept. When a later change to how the editor draws is
 //! meant, make them again the same way from the commit before it, and say so in the commit.
 
 use std::collections::HashMap;
@@ -160,7 +160,9 @@ fn difference(now: &[u8], before: &[u8], width: u32, compared: &Compared) -> Opt
 /// of the source view and of the block being edited, wide and narrow, in both themes
 #[test]
 fn an_unselected_construct_is_drawn_as_before() {
-    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/highlight-unselected-main");
+    let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+    let dirs = ["highlight-unselected-main", "highlight-unselected-main-neo", "highlight-unselected-main-sdk"];
+
     let mut problems = Vec::new();
     let mut compared = 0;
     for scene in Scene::ALL {
@@ -171,19 +173,22 @@ fn an_unselected_construct_is_drawn_as_before() {
             // (the frame has something in it: not all one colour, and an editor of some size)
             assert!(now.chunks(4).any(|p| p != &now[..4]), "{name}: a blank frame");
             assert!(area.editor.width > 200.0 && area.editor.height > 100.0, "{name}: the editor is only {:?}", area.editor);
-            let file = dir.join(format!("{name}.png"));
-            let Ok(bytes) = std::fs::read(&file) else {
-                problems.push(format!("{name}: no reference frame at {}", file.display()));
-                continue;
-            };
-            let before = image::load_from_memory(&bytes).expect("a reference frame").to_rgba8();
-            if (before.width(), before.height()) != (size.width as u32, size.height as u32) {
-                problems.push(format!("{name}: the reference frame is the wrong size"));
-                continue;
+            let mut matches = false;
+            let mut differences = Vec::new();
+            for dir in dirs {
+                let file = fixtures.join(dir).join(format!("{name}.png"));
+                let bytes = std::fs::read(&file).unwrap_or_else(|_| panic!("no reference frame at {}", file.display()));
+                let before = image::load_from_memory(&bytes).expect("a reference frame").to_rgba8();
+                assert_eq!((before.width(), before.height()), (size.width as u32, size.height as u32), "{} has the wrong size", file.display());
+                if let Some(what) = difference(&now, before.as_raw(), size.width as u32, &area) {
+                    differences.push(format!("{dir}: {what}"));
+                } else {
+                    matches = true;
+                }
             }
             compared += 1;
-            if let Some(what) = difference(&now, before.as_raw(), size.width as u32, &area) {
-                problems.push(format!("{name}: {what}"));
+            if !matches {
+                problems.push(format!("{name}: {}", differences.join("; ")));
             }
         }
     }
