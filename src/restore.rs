@@ -68,6 +68,15 @@ pub struct Claim {
     saved: Option<Record>,
 }
 
+impl Drop for Claim {
+    fn drop(&mut self) {
+        // A forked child can retain the open file description after this
+        // claim is dropped, so closing our descriptor alone may not unlock it.
+        // SAFETY: the descriptor remains owned by self.file during drop.
+        unsafe { libc::flock(self.file.as_raw_fd(), libc::LOCK_UN) };
+    }
+}
+
 fn lock(file: &File) -> bool {
     // SAFETY: flock on a descriptor this file owns
     unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) == 0 }
@@ -144,6 +153,23 @@ impl Claim {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // A concurrently forked child can briefly retain a duplicate of the
+    // locked descriptor even though the window has dropped its claim.
+    #[test]
+    fn dropping_a_claim_releases_the_lock_even_if_a_descriptor_was_duplicated() {
+        let tmp = std::env::temp_dir().join(format!("ct-restore-dup-{}", cosmic_term::random_hex(16)));
+        let mut claim = Claim::new_in(&tmp).unwrap();
+        let record = Record { tabs: vec![Tab::Session { descriptor: "session@neo".into() }], active: 0 };
+        claim.save(&record);
+        let duplicate = claim.file.try_clone().unwrap();
+        drop(claim);
+        let (claimed, found) = Claim::previous_in(&tmp).expect("dropping the claim must release its lock");
+        assert_eq!(found, record);
+        drop(duplicate);
+        claimed.forget();
+        std::fs::remove_dir_all(&tmp).unwrap();
+    }
 
     #[test]
     fn a_record_round_trips_and_is_claimed_once() {
