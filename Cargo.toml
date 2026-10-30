@@ -122,27 +122,25 @@ exclude = ["vendor/alacritty_terminal", "vendor/vte", "vendor/chartgen"]
 # libcosmic and its iced from the household fork (ThomasAndJuliet/libcosmic,
 # branch household, read over ssh); HOUSEHOLD.md there says what it changes and
 # how to move this pin. Every crate the lock takes from pop-os/libcosmic.
-# For now the head of fork/list-and-segmented-fixes (PR #12, on household
-# 4170487a): back to household once that merges.
 [patch."https://github.com/pop-os/libcosmic.git"]
-libcosmic = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "f05807cba6711d0ad0b833de2feb00f8a97f6318" }
-build_helpers = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "f05807cba6711d0ad0b833de2feb00f8a97f6318" }
-cosmic-config = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "f05807cba6711d0ad0b833de2feb00f8a97f6318" }
-cosmic-config-derive = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "f05807cba6711d0ad0b833de2feb00f8a97f6318" }
-cosmic-theme = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "f05807cba6711d0ad0b833de2feb00f8a97f6318" }
-iced = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "f05807cba6711d0ad0b833de2feb00f8a97f6318" }
-iced_accessibility = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "f05807cba6711d0ad0b833de2feb00f8a97f6318" }
-iced_core = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "f05807cba6711d0ad0b833de2feb00f8a97f6318" }
-iced_debug = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "f05807cba6711d0ad0b833de2feb00f8a97f6318" }
-iced_futures = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "f05807cba6711d0ad0b833de2feb00f8a97f6318" }
-iced_graphics = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "f05807cba6711d0ad0b833de2feb00f8a97f6318" }
-iced_program = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "f05807cba6711d0ad0b833de2feb00f8a97f6318" }
-iced_renderer = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "f05807cba6711d0ad0b833de2feb00f8a97f6318" }
-iced_runtime = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "f05807cba6711d0ad0b833de2feb00f8a97f6318" }
-iced_tiny_skia = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "f05807cba6711d0ad0b833de2feb00f8a97f6318" }
-iced_wgpu = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "f05807cba6711d0ad0b833de2feb00f8a97f6318" }
-iced_widget = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "f05807cba6711d0ad0b833de2feb00f8a97f6318" }
-iced_winit = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "f05807cba6711d0ad0b833de2feb00f8a97f6318" }
+libcosmic = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }
+build_helpers = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }
+cosmic-config = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }
+cosmic-config-derive = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }
+cosmic-theme = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }
+iced = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }
+iced_accessibility = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }
+iced_core = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }
+iced_debug = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }
+iced_futures = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }
+iced_graphics = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }
+iced_program = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }
+iced_renderer = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }
+iced_runtime = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }
+iced_tiny_skia = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }
+iced_wgpu = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }
+iced_widget = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }
+iced_winit = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }
 
 # XTWINOPS 16 (cell size in pixels) answered; see vendor/README.md
 [patch.crates-io]
@@ -160,15 +158,15 @@ opt-level = 3
 # the "failed to get pointer data" panic. Its winit crates refer to each other
 # by path, so redirecting winit-wayland alone would bring a second winit-core.
 [patch."https://github.com/pop-os/winit.git"]
-dpi = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "f05807cba6711d0ad0b833de2feb00f8a97f6318" }
-winit = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "f05807cba6711d0ad0b833de2feb00f8a97f6318" }
-winit-android = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "f05807cba6711d0ad0b833de2feb00f8a97f6318" }
-winit-appkit = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "f05807cba6711d0ad0b833de2feb00f8a97f6318" }
-winit-common = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "f05807cba6711d0ad0b833de2feb00f8a97f6318" }
-winit-core = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "f05807cba6711d0ad0b833de2feb00f8a97f6318" }
-winit-orbital = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "f05807cba6711d0ad0b833de2feb00f8a97f6318" }
-winit-uikit = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "f05807cba6711d0ad0b833de2feb00f8a97f6318" }
-winit-wayland = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "f05807cba6711d0ad0b833de2feb00f8a97f6318" }
-winit-web = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "f05807cba6711d0ad0b833de2feb00f8a97f6318" }
-winit-win32 = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "f05807cba6711d0ad0b833de2feb00f8a97f6318" }
-winit-x11 = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "f05807cba6711d0ad0b833de2feb00f8a97f6318" }
+dpi = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }
+winit = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }
+winit-android = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }
+winit-appkit = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }
+winit-common = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }
+winit-core = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }
+winit-orbital = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }
+winit-uikit = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }
+winit-wayland = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }
+winit-web = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }
+winit-win32 = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }
+winit-x11 = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }
