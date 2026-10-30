@@ -465,11 +465,23 @@ impl Scene {
     /// of them from the tint must be that colour
     fn judge_ink(&self, wanted: V) -> Vec<String> {
         let tint = self.theme.tint_over(self.beneath);
+        // An editor can have both its ordinary background and the construct
+        // band under the selection. Count only glyph ink, not either broad
+        // background, even when the band differs by more than 12 levels.
+        let mut colours = HashMap::<[u8; 3], usize>::new();
+        for (_, _, pixel) in self.before.pixels(self.region) {
+            *colours.entry([pixel[0] as u8, pixel[1] as u8, pixel[2] as u8]).or_default() += 1;
+        }
+        let area = (self.region.2 - self.region.0) as usize * (self.region.3 - self.region.1) as usize;
+        let backgrounds: Vec<V> = colours.into_iter().filter_map(|(c, count)| {
+            let colour = [c[0] as f32, c[1] as f32, c[2] as f32];
+            (count * 20 >= area && dist(colour, self.beneath) <= 40.0).then_some(colour)
+        }).collect();
         let (mut ink, mut strays) = (0usize, 0usize);
         let (mut furthest, mut furthest_at) = (tint, 0.0f32);
         let mut worst = (0.0f32, (0, 0), [0.0; 3]);
         for (x, y, u) in self.before.pixels(self.region) {
-            if dist(u, self.beneath) <= 12.0 {
+            if dist(u, self.beneath) <= 12.0 || backgrounds.iter().any(|background| dist(u, *background) <= 12.0) {
                 continue;
             }
             ink += 1;
