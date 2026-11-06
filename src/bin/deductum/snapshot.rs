@@ -1754,8 +1754,181 @@ fn a_block_opened_by_a_click_has_vim_block_cursor() {
     assert_eq!(be.content.selection().map(|s| s.chars().count()), Some(1), "and after the click is placed in the open block");
 }
 
-/// Down from a text block into the code block after it, and up back again: with vim's j/k, and
-/// with the arrow keys
+fn cursor_navigation_app() -> App {
+    let text = "theory Cursor imports Main begin\n\nlemma first_long_name: \"True\" by simp\n\nvalue \"0\"\n\nlemma last_long_name: \"True\" by simp\n\nend\n";
+    cursor_navigation_app_with(text)
+}
+
+fn cursor_navigation_app_with(text: &str) -> App {
+    let mut app = demo_app(Mode::Literate);
+    let doc = json!({"text": text, "revision": 1});
+    app.workspace.as_mut().unwrap().theory = Some(Theory::new("/tmp/Cursor.thy".into(), &doc, &Table::fallback(), Arc::new(HashMap::new()), Mode::Literate, crate::prover::profile(None)));
+    app.show_right = false;
+    app.show_sidebar = false;
+    app.vim_enabled = false;
+    app
+}
+
+#[test]
+fn cursor_navigation_short_rows_preserve_x_within_a_cell() {
+    use cosmic::iced::keyboard::key::Named;
+    use cosmic::widget::text_editor::Position;
+    let mut app = cursor_navigation_app_with("theory Cursor imports Main begin\n\nlemma first_long_name: \"True\"\n  by simp\n\nend\n");
+    let i = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.name == "lemma").unwrap();
+    let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(i));
+    let mut h = Harness::new(Size::new(1400.0, 900.0));
+    h.focus(&app, super::view::block_editor_id());
+    super::editor::place(&mut app.workspace.as_mut().unwrap().theory.as_mut().unwrap().block_editor.as_mut().unwrap().content, Position { line: 0, column: 20 });
+    cursor_navigation_key(&mut h, &mut app, Named::ArrowDown);
+    let be = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().block_editor.as_ref().unwrap();
+    assert_eq!(be.content.cursor().position, Position { line: 1, column: 9 });
+    cursor_navigation_key(&mut h, &mut app, Named::ArrowUp);
+    let be = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().block_editor.as_ref().unwrap();
+    assert_eq!(be.content.cursor().position, Position { line: 0, column: 20 });
+}
+
+#[test]
+fn cursor_navigation_keeps_x_through_wrapped_prose_and_paragraphs() {
+    use cosmic::iced::keyboard::key::Named;
+    use cosmic::widget::text_editor::Position;
+    let paragraph = "A paragraph with café and αβ, whose words wrap over several rows as we move vertically through the cell. ".repeat(4);
+    let text = format!("theory Cursor imports Main begin\n\nlemma first_long_name: \"True\" by simp\n\ntext ‹{paragraph}\n\nShort.›\n\nlemma last_long_name: \"True\" by simp\n\nend\n");
+    let mut app = cursor_navigation_app_with(&text);
+    let i = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.name == "lemma").unwrap();
+    let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(i));
+    let mut h = Harness::new(Size::new(900.0, 900.0));
+    h.focus(&app, super::view::block_editor_id());
+    super::editor::place(&mut app.workspace.as_mut().unwrap().theory.as_mut().unwrap().block_editor.as_mut().unwrap().content, Position { line: 0, column: 20 });
+    cursor_navigation_key(&mut h, &mut app, Named::ArrowDown);
+    let desired = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().vertical_x.unwrap();
+    let mut reached = false;
+    for _ in 0..24 {
+        let t = app.workspace.as_mut().unwrap().theory.as_mut().unwrap();
+        assert_eq!(t.vertical_x, Some(desired), "wrapped rows and short paragraphs retain the intended x");
+        let be = t.block_editor.as_mut().unwrap();
+        if be.shown_text.starts_with("lemma last") {
+            assert_eq!(be.content.cursor().position.column, 20);
+            reached = true;
+            break;
+        }
+        assert_eq!(be.kind, super::theory::Kind::Text);
+        cursor_navigation_key(&mut h, &mut app, Named::ArrowDown);
+    }
+    assert!(reached, "one Down per visual row must reach the next proof");
+}
+
+fn cursor_navigation_key(h: &mut Harness, app: &mut App, key: cosmic::iced::keyboard::key::Named) {
+    for message in h.key(app, cosmic::iced::keyboard::Key::Named(key), None) {
+        let task = cosmic::Application::update(app, message);
+        h.run_task_with_updates(app, task);
+    }
+}
+
+#[test]
+fn cursor_navigation_moves_right_immediately_after_entering_a_cell() {
+    use cosmic::iced::keyboard::key::Named;
+    let mut app = cursor_navigation_app();
+    let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+    let first = t.blocks.iter().position(|b| b.name == "lemma").unwrap();
+    let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(first));
+    let mut h = Harness::new(Size::new(1400.0, 900.0));
+    h.focus(&app, super::view::block_editor_id());
+    cursor_navigation_key(&mut h, &mut app, Named::ArrowDown);
+    let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+    let be = t.block_editor.as_ref().unwrap();
+    assert!(be.shown_text.starts_with("value"), "entered the next cell: {:?}", be.shown_text);
+    let before = be.content.cursor().position;
+    cursor_navigation_key(&mut h, &mut app, Named::ArrowRight);
+    let after = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().block_editor.as_ref().unwrap().content.cursor().position;
+    assert_eq!(after.column, before.column + 1, "the first Right must move, without an extra selection-clearing press");
+}
+
+#[test]
+fn cursor_navigation_remembers_horizontal_position_across_short_cells() {
+    use cosmic::iced::keyboard::key::Named;
+    use cosmic::widget::text_editor::Position;
+    for (down, vim) in [(true, false), (false, false), (true, true), (false, true)] {
+        let mut app = cursor_navigation_app();
+        app.vim_enabled = vim;
+        app.vim.mode = super::vim::Mode::Normal;
+        let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+        let i = if down { t.blocks.iter().position(|b| b.name == "lemma") } else { t.blocks.iter().rposition(|b| b.name == "lemma") }.unwrap();
+        let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(i));
+        let mut h = Harness::new(Size::new(1400.0, 900.0));
+        h.focus(&app, super::view::block_editor_id());
+        app.vim_caret(false);
+        let be = app.workspace.as_mut().unwrap().theory.as_mut().unwrap().block_editor.as_mut().unwrap();
+        super::editor::place(&mut be.content, Position { line: 0, column: 20 });
+        app.vim_caret(true);
+        let key = if down { Named::ArrowDown } else { Named::ArrowUp };
+        let step = |h: &mut Harness, app: &mut App| {
+            if vim {
+                let text = if down { "j" } else { "k" };
+                for m in h.key(app, cosmic::iced::keyboard::Key::Character(text.into()), Some(text)) {
+                    let task = cosmic::Application::update(app, m);
+                    h.run_task_with_updates(app, task);
+                }
+            } else {
+                cursor_navigation_key(h, app, key.clone());
+            }
+        };
+        step(&mut h, &mut app);
+        let be = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().block_editor.as_ref().unwrap();
+        assert!(be.shown_text.starts_with("value"), "entered the short cell: {:?}", be.shown_text);
+        let cursor = be.content.cursor();
+        assert_eq!(cursor.selection.unwrap_or(cursor.position).column, "value \"0\"".len() - usize::from(vim), "clamped to the short line's end");
+        step(&mut h, &mut app);
+        let be = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().block_editor.as_ref().unwrap();
+        assert!(be.shown_text.starts_with("lemma"), "entered the next long cell: {:?}", be.shown_text);
+        let cursor = be.content.cursor();
+        assert_eq!(cursor.selection.unwrap_or(cursor.position).column, 20, "down {down}, vim {vim}: the short cell must not replace the intended horizontal position");
+    }
+}
+
+#[test]
+fn cursor_navigation_horizontal_move_replaces_the_remembered_position() {
+    use cosmic::iced::keyboard::key::Named;
+    use cosmic::widget::text_editor::Position;
+    let mut app = cursor_navigation_app();
+    let i = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.name == "lemma").unwrap();
+    let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(i));
+    let mut h = Harness::new(Size::new(1400.0, 900.0));
+    h.focus(&app, super::view::block_editor_id());
+    super::editor::place(&mut app.workspace.as_mut().unwrap().theory.as_mut().unwrap().block_editor.as_mut().unwrap().content, Position { line: 0, column: 20 });
+    cursor_navigation_key(&mut h, &mut app, Named::ArrowDown);
+    cursor_navigation_key(&mut h, &mut app, Named::ArrowLeft);
+    cursor_navigation_key(&mut h, &mut app, Named::ArrowDown);
+    let be = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().block_editor.as_ref().unwrap();
+    assert!(be.shown_text.starts_with("lemma last"));
+    assert_eq!(be.content.cursor().position.column, 8, "Left on the short line establishes the next vertical position");
+}
+
+#[test]
+fn cursor_navigation_prose_first_line_has_no_extra_space() {
+    for lean in [false, true] {
+        let mut app = if lean {
+            super::snapshot_lean::lean_app_with(Mode::Literate, "/-! A paragraph with no indentation in the reading view. -/\ndef x := 0\n")
+        } else {
+            let mut app = cursor_navigation_app();
+            let text = "theory Cursor imports Main begin\n\ntext ‹ A paragraph with no indentation in the reading view. ›\n\nend\n";
+            app.workspace.as_mut().unwrap().theory = Some(Theory::new("/tmp/Cursor.thy".into(), &json!({"text": text, "revision": 1}), &Table::fallback(), Arc::new(HashMap::new()), Mode::Literate, crate::prover::profile(None)));
+            app
+        };
+        let i = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.kind == super::theory::Kind::Text).unwrap();
+        let original = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().local.clone();
+        let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(i));
+        let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+        let be = t.block_editor.as_ref().unwrap();
+        let visible: String = be.shown_text.chars().filter(|c| *c != super::editor::ZERO_WIDTH).collect();
+        assert!(visible.starts_with("A paragraph"), "lean {lean}: opening prose must not add a visible leading space: {visible:?}");
+        assert_eq!(t.local, original, "opening prose preserves the source's whitespace");
+        super::editor::place(&mut app.workspace.as_mut().unwrap().theory.as_mut().unwrap().block_editor.as_mut().unwrap().content, cosmic::widget::text_editor::Position { line: 0, column: 0 });
+        let _ = cosmic::Application::update(&mut app, super::Message::BlockAction(cosmic::widget::text_editor::Action::Edit(cosmic::widget::text_editor::Edit::Insert('X'))));
+        assert_eq!(app.workspace.as_ref().unwrap().theory.as_ref().unwrap().local, original.replace("A paragraph", "XA paragraph"), "typing preserves delimiter spacing and maps to the first visible character");
+    }
+}
+
+/// Down from a text block into the code block after it using Vim or arrows.
 #[test]
 fn moving_from_a_text_block_into_a_code_block() {
     for vim in [true, false] {
@@ -1908,6 +2081,9 @@ fn vim_burst_waits_for_each_new_cell_layout() {
     let mut mixed = Vec::new();
     for (key, text) in [
         (Key::Character("j".into()), Some("j")),
+        // Cell entry retains x now. Home explicitly establishes the insertion
+        // point for this input-order test, after the queued cell transition.
+        (Key::Character("0".into()), Some("0")),
         (Key::Character("i".into()), Some("i")),
         (Key::Character("X".into()), Some("X")),
         (Key::Named(cosmic::iced::keyboard::key::Named::Tab), None),

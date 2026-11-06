@@ -682,6 +682,10 @@ pub struct Theory {
     rendered_sources: Vec<Option<Arc<SourceMap>>>,
     doc_cache: HashMap<String, (Arc<Doc>, Arc<SourceMap>)>,
     pub block_editor: Option<BlockEditor>,
+    /// Desired visual x during a run of vertical moves, including across cells.
+    pub vertical_x: Option<f32>,
+    /// Place the caret on the new cell's edge row after its first layout.
+    pub vertical_entry: Option<bool>,
     pub mode: Mode,
     /// Source offset of the caret, for the proof state
     pub cursor: usize,
@@ -905,6 +909,64 @@ pub fn place(content: &mut text_editor::Content, position: text_editor::Position
     content.perform(Action::ClearSelection);
 }
 
+/// Recover the visual caret position through the laid-out editor's hit testing.
+/// Content exposes source positions but no caret geometry. Hit regions are centred
+/// on caret stops; their midpoint also works with proportional fonts and symbols.
+pub fn caret_point(content: &mut text_editor::Content) -> cosmic::iced::Point {
+    use cosmic::iced::Point;
+    let saved = content.cursor();
+    let target = (saved.position.line, saved.position.column);
+    let hit = |content: &mut text_editor::Content, x, y| {
+        content.perform(Action::Click(Point::new(x, y)));
+        let pos = content.cursor().position;
+        (pos.line, pos.column)
+    };
+    let mut top = 0.0;
+    let mut bottom = 16.0;
+    while hit(content, 1.0e7, bottom) < target && bottom < 1.0e7 {
+        top = bottom;
+        bottom *= 2.0;
+    }
+    while bottom - top > 0.125 {
+        let middle = (top + bottom) / 2.0;
+        if hit(content, 1.0e7, middle) < target { top = middle } else { bottom = middle }
+    }
+    let y = bottom;
+    let at_start = hit(content, 0.0, y) == target;
+    let mut left = 0.0;
+    let mut right = 16.0;
+    while hit(content, right, y) < target && right < 1.0e7 { right *= 2.0; }
+    while right - left > 0.125 {
+        let middle = (left + right) / 2.0;
+        if hit(content, middle, y) < target { left = middle } else { right = middle }
+    }
+    let start = right;
+    // The line's end has an unbounded hit region. Use the preceding stop's
+    // region to recover its half-width instead of averaging with infinity.
+    let end = if hit(content, 1.0e7, y) <= target {
+        let previous = hit(content, (start - 0.25).max(0.0), y);
+        left = 0.0;
+        right = start;
+        while right - left > 0.125 {
+            let middle = (left + right) / 2.0;
+            if hit(content, middle, y) < previous { left = middle } else { right = middle }
+        }
+        start + (start - right)
+    } else {
+        left = start;
+        right = start.max(16.0) * 2.0;
+        while hit(content, right, y) <= target && right < 1.0e7 { right *= 2.0; }
+        while right - left > 0.125 {
+            let middle = (left + right) / 2.0;
+            if hit(content, middle, y) <= target { left = middle } else { right = middle }
+        }
+        right
+    };
+    content.move_to(saved);
+    if saved.selection.is_none() { content.perform(Action::ClearSelection); }
+    Point::new(if at_start { 0.0 } else { (start + end) / 2.0 }, y)
+}
+
 fn new_txn() -> String {
     format!("{:x}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos()))
 }
@@ -952,6 +1014,8 @@ impl Theory {
             rendered_sources: Vec::new(),
             doc_cache: HashMap::new(),
             block_editor: None,
+            vertical_x: None,
+            vertical_entry: None,
             mode,
             cursor: 0,
             highlight: HighlightSettings(Arc::new(HighlightData { generation: 0, lines: Vec::new() }), false),
@@ -1629,6 +1693,8 @@ impl Theory {
         if change.is_empty() {
             return;
         }
+        self.vertical_x = None;
+        self.vertical_entry = None;
         // Where an undo step ends: a pause, the caret jumping, a change between typing and
         // deleting, the end of a word or line, and around anything that is not typing
         let (kind, at, after) = match change.as_slice() {
@@ -1739,7 +1805,22 @@ impl Theory {
     pub fn block_action(&mut self, action: Action, table: &dyn Symbols) -> bool {
         let Some(be) = &mut self.block_editor else { return false };
         let edit = action.is_edit();
+        let vertical = matches!(action, Action::Move(text_editor::Motion::Up | text_editor::Motion::Down));
+        let before = be.content.cursor().position;
+        if vertical {
+            if self.vertical_x.is_none() {
+                self.vertical_x = Some(caret_point(&mut be.content).x + super::view::block_text_inset(be));
+            }
+        } else {
+            self.vertical_x = None;
+            self.vertical_entry = None;
+        }
         be.content.perform(action);
+        if vertical && be.content.cursor().position != before {
+            let y = caret_point(&mut be.content).y;
+            let x = (self.vertical_x.unwrap_or(0.0) - super::view::block_text_inset(be)).max(0.0);
+            be.content.perform(Action::Click(cosmic::iced::Point::new(x, y)));
+        }
         let cursor = be.content.cursor();
         if !edit {
             // (a formula the caret moves into is shown as its source; one it leaves, set)
@@ -1798,12 +1879,15 @@ impl Theory {
     }
 
     pub fn open_block(&mut self, index: usize, table: &dyn Symbols) {
+        self.vertical_x = None;
+        self.vertical_entry = None;
         let Some(block) = self.blocks.get(index) else { return };
         let full = self.source_text(block.start, block.end);
         let (kind, preview) = preview_of(self.profile, &full, &self.kinds, table);
         // A heading or text is edited as its text alone, set like the text it is
         let (start, end, wrap) = match (block.kind, block.body) {
             (theory::Kind::Heading(_) | theory::Kind::Text, Some((s, e))) if block.start <= s && s <= e && e <= block.end => {
+                let (s, e) = self.prose_range(s, e);
                 (s, e, Some((self.source_text(block.start, s), self.source_text(e, block.end))))
             }
             _ => (block.start, block.end, None),
@@ -1861,6 +1945,7 @@ impl Theory {
 
     /// Edit `s..e` of a block (a paragraph of its text) as its prose editor, the caret at `at`
     fn open_range(&mut self, block: &theory::Block, s: usize, e: usize, at: usize, table: &dyn Symbols) {
+        let (s, e) = self.prose_range(s, e);
         let full = self.source_text(block.start, block.end);
         let (kind, preview) = preview_of(self.profile, &full, &self.kinds, table);
         let wrap = Some((self.source_text(block.start, s), self.source_text(e, block.end)));
@@ -1873,6 +1958,16 @@ impl Theory {
         self.cursor = at.clamp(s, e);
         self.block_editor = Some(BlockEditor { layout_revision: 0, start: s, end: e, decoded, content, preview, kind, wrap, shown_text: shown });
         self.compute_block_highlight();
+    }
+
+    /// Delimiter spacing belongs to the wrapper, as in the rendered paragraph.
+    /// Keep it in the source without introducing a leading space or empty row
+    /// when the paragraph opens for editing.
+    fn prose_range(&self, start: usize, end: usize) -> (usize, usize) {
+        let text = self.source_text(start, end);
+        let leading = text.chars().take_while(|c| c.is_whitespace()).count();
+        let length = text.trim().chars().count();
+        (start + leading, start + leading + length)
     }
 
     /// Prose is edited a paragraph at a time: the one the caret is in becomes source, the rest of
