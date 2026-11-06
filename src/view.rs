@@ -886,6 +886,11 @@ fn code_line_height() -> f32 {
 /// Padding of code in a block, shown or edited: the same, so that opening a block moves nothing
 const CODE_PADDING: Padding = Padding { left: 10.0, right: 10.0, top: 5.0, bottom: 5.0 };
 
+/// The text origin relative to a literate cell, including the code status strip.
+pub fn block_text_inset(be: &super::editor::BlockEditor) -> f32 {
+    if be.wrap.is_some() { 0.0 } else { 8.0 + CODE_PADDING.left }
+}
+
 /// The width of a block of code with this many columns: its text and a little room, not the page
 /// (the page column caps it, and long lines wrap)
 pub fn code_width(columns: usize) -> f32 {
