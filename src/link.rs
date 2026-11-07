@@ -105,7 +105,7 @@ pub fn targets() -> Vec<(String, Target)> {
         }
     }
     if out.len() == 1 {
-        // No machines registered here: the fleet's, as COSMIC Terminal's mount helper lists them
+        // No machines registered here: the fleet's, as the Terminal Agents mount helper lists them
         // (`NAME  ssh DESTINATION  MOUNT  STATUS`)
         let helper = home().join(".config/cosmic-term-agents/ct-mount");
         if let Ok(output) = std::process::Command::new(&helper).arg("--list").output() {
@@ -454,7 +454,7 @@ pub enum Opener {
 }
 
 /// Open a session's folder, on the computer `target` names, in the file manager (through
-/// COSMIC Terminal's sshfs mount if it is remote), Zed (as an ssh project) or a terminal
+/// Terminal Agents' sshfs mount if it is remote), Zed (as an ssh project) or a terminal
 /// (ssh'd there), the way Terminal Agents opens a tab's project
 pub async fn open_folder(opener: Opener, target: Target, folder: String) -> Result<(), String> {
     #[cfg(windows)]
@@ -523,7 +523,7 @@ async fn open_folder_unix(opener: Opener, target: Target, folder: String) -> Res
             )
         }
         (Opener::Terminal, dest) => {
-            // Terminal Agents if it is installed, else COSMIC Terminal, else any terminal
+            // Terminal Agents if it is installed, else the plain cosmic-term, else any terminal
             let (dir, command) = match dest {
                 None => (quote(&folder), String::new()),
                 Some(dest) => (

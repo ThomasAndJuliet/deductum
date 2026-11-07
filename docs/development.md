@@ -80,7 +80,7 @@ Use these subjects for commits and for a PR's title when squash-merging it.
 
 This also applies before 1.0: breaking changes advance to the next major.
 `release-config.json` starts the distribution version at `0.1.0` and excludes
-history at or before the adoption commit. Inherited Terminal tags such as
+history at or before the adoption commit. Older tags such as
 `epoch-*`, prereleases and unrelated branches do not set the version. The
 source Cargo package version is retained in the Windows build receipt; the
 SemVer tag identifies the downloadable Deductum release.

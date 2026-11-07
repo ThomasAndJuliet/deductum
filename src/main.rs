@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! Deductum: proof documents (Isabelle theories now) as literate documents,
-//! worked on together with agents in one live prover session. A sibling of COSMIC Terminal Agents
+//! worked on together with agents in one live prover session. A companion to the separate Terminal Agents app
 //! (design C7), sharing its rendering and its list of machines.
 //!
 //! The design record is `docs/deductum-decisions.md`. The app is a client of
@@ -70,7 +70,7 @@ mod live_mixed;
 #[cfg(test)]
 mod live_tools;
 
-/// The bundled prose fonts, shared with Cerea and Terminal; see `res/fonts/README`
+/// The bundled prose fonts, shared with Cerea and Terminal Agents; see `res/fonts/README`
 pub const FONTS: [&[u8]; 9] = [
     // Raised and lowered small glyphs for \<^sup> and \<^sub>; see res/make-scripts-font.py
     include_bytes!("../res/fonts/IsabellumScripts.ttf"),

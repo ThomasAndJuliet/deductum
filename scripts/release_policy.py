@@ -64,7 +64,7 @@ def plan(sha, tags=None):
                 candidates.append((version, revision))
     base, start = max(candidates) if candidates else (tuple(map(int, config["initial_version"].split("."))), bootstrap)
     # Include merged PR commits as well as direct/fast-forward commits. The
-    # bootstrap point excludes inherited Terminal and vendored history.
+    # bootstrap point excludes earlier and vendored history.
     messages = [message for message in git("log", "--reverse", "--no-merges", "--format=%B%x00", f"{start}..{sha}").split("\0") if message.strip()]
     messages = [message.strip() for message in messages]
     version = next_version(base, messages)
