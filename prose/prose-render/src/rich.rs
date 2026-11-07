@@ -3017,7 +3017,7 @@ mod tests {
     fn explicit_font_override_shapes_only_its_range_and_preserves_offsets() {
         let mut fonts = cosmic_text::FontSystem::new();
         fonts.db_mut().load_font_data(
-            include_bytes!("../../../res/deductum/fonts/IsabellumScripts.ttf").to_vec(),
+            include_bytes!("../../../res/fonts/IsabellumScripts.ttf").to_vec(),
         );
         let mut typo = (*typography()).clone();
         typo.font_overrides.push(FontOverride {

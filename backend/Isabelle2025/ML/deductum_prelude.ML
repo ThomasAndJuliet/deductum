@@ -1,4 +1,4 @@
-(*  Title:      deductum/backend/Isabelle2025/ML/deductum_prelude.ML
+(*  Title:      backend/Isabelle2025/ML/deductum_prelude.ML
 
 Loaded into the prover at startup (Isabelle_Process use_prelude). A query
 operation that runs a diagnostic Isar command, such as quickcheck, nitpick,

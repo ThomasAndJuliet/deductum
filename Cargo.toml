@@ -6,10 +6,6 @@ edition = "2024"
 license = "GPL-3.0-only"
 rust-version = "1.95"
 
-[[bin]]
-name = "deductum"
-path = "src/bin/deductum/main.rs"
-
 [dependencies]
 log = "0.4"
 open = "5.3.2"
@@ -47,7 +43,7 @@ features = [
 ]
 
 [target.'cfg(unix)'.dependencies]
-# The global allocator of the GUI binary (src/bin/deductum):
+# The global allocator of the GUI binary (src/):
 # libcosmic's malloc_trim after each update and view then has only glibc's
 # small heap to scan. Background threads return freed memory from jemalloc's
 # own thread, so an idle window gives memory back too.

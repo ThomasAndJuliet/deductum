@@ -26,8 +26,8 @@ class BundleTests(unittest.TestCase):
         (files / "bin/deductum").write_text("#!/bin/sh\n" + text + "\n")
         (files / "bin/deductum").chmod(0o755)
         for source, destination in [
-            ("res/deductum/dev.twright.Deductum.desktop", f"share/applications/{bundler.APP_ID}.desktop"),
-            ("res/deductum/dev.twright.Deductum.svg", f"share/icons/hicolor/scalable/apps/{bundler.APP_ID}.svg"),
+            ("res/dev.twright.Deductum.desktop", f"share/applications/{bundler.APP_ID}.desktop"),
+            ("res/dev.twright.Deductum.svg", f"share/icons/hicolor/scalable/apps/{bundler.APP_ID}.svg"),
             ("packaging/flatpak/dev.twright.Deductum.metainfo.xml", f"share/metainfo/{bundler.APP_ID}.metainfo.xml"),
         ]:
             dest = files / destination

@@ -137,7 +137,7 @@ Deductum's headless UI/unit tests, and runs all Python host unit-test modules:
 
 ```sh
 cargo --offline --locked test --workspace --all-targets --all-features
-python3 -m unittest discover -s deductum/host/tests -p "test_*.py"
+python3 -m unittest discover -s host/tests -p "test_*.py"
 python3 scripts/test-publish-release.py
 python3 scripts/test-release-policy.py
 python3 scripts/test-package-flatpak-bundle.py
@@ -179,8 +179,8 @@ synchronous callers remain supported.
 The focused regressions are:
 
 ```sh
-python3 -m unittest discover -s deductum/host/tests -p "test_responsiveness.py"
-python3 -m unittest discover -s deductum/host/tests -p "test_background_io.py"
+python3 -m unittest discover -s host/tests -p "test_responsiveness.py"
+python3 -m unittest discover -s host/tests -p "test_background_io.py"
 cargo --offline --locked test --bin deductum link::tests
 cargo --offline --locked test --bin deductum prover_view_tests
 cargo --offline --locked test --bin deductum ui_responsiveness
@@ -199,11 +199,11 @@ A separate hosted job installs Lean 4.19.0 and the checksum-pinned official
 Isabelle2025 distribution. It runs the existing real backend integrations:
 
 ```sh
-python3 deductum/host/tests/integration_lean.py --skip-dsrv \
+python3 host/tests/integration_lean.py --skip-dsrv \
   --core-fixture "$PWD/scripts/ci-fixtures/lean"
 DEDUCTUM_ISABELLE=/path/to/Isabelle2025/bin/isabelle \
   DEDUCTUM_STATE_DIR=/disposable/state \
-  python3 deductum/host/tests/integration_host.py
+  python3 host/tests/integration_host.py
 ```
 
 The Lean driver runs its generated tiny project and the existing host-core

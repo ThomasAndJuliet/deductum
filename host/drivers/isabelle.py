@@ -607,6 +607,35 @@ def _register_windows_component(adapter, registry, comp, progress, cancel_event)
             staged.unlink(missing_ok=True)
 
 
+# Either separator: on Windows the components listing holds native paths
+_STALE_BACKEND_PATH = re.compile(r"deductum[^/\\]*[/\\]backend[/\\][^/\\]+[/\\]?$")
+
+
+def stale_backend_components(adapter, lines: List[str], comp_path: str) -> List[str]:
+    """Registered components other than comp_path that provide a Deductum backend.
+
+    Used where the Isabelle CLI manages the registry (Linux and macOS); Windows
+    registration is _register_windows_component's. A component is recognised by its
+    content (_is_deductum_component), so a source checkout is found whatever its
+    directory is called. A registration whose directory is gone cannot be inspected;
+    for those the old path pattern still applies, so that a deleted install is
+    unregistered too (a stale entry would break Isabelle's startup).
+    """
+    stale = []
+    for ln in lines:
+        if not ln or ln == comp_path:
+            continue
+        try:
+            native = Path(adapter.to_native(ln))
+            exists = native.is_dir()
+            marked = exists and _is_deductum_component(native)
+        except OSError:
+            exists = marked = False
+        if marked or (not exists and _STALE_BACKEND_PATH.search(ln)):
+            stale.append(ln)
+    return stale
+
+
 def ensure_component(runtime: str, progress, cancel_event=None) -> None:
     """Register the backend component with the runtime and build its jar"""
     ident = runtime_identifier(Path(runtime))
@@ -676,7 +705,7 @@ def ensure_component(runtime: str, progress, cancel_event=None) -> None:
     if _component_ready.get(runtime) and comp_path in lines:
         return
     # Other copies of the backend (an old install, a test) would provide the same tool
-    for stale in [ln for ln in lines if ln != comp_path and re.search(r"deductum[^/]*/backend/[^/]+/?$", ln)]:
+    for stale in stale_backend_components(adapter, lines, comp_path):
         progress(f"Unregistering a stale Deductum backend: {stale}")
         adapter.run(["components", "-x", stale], capture_output=True, text=True, encoding="utf-8", timeout=300, env=env)
     if comp_path not in lines:

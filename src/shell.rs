@@ -320,9 +320,9 @@ pub fn icon_handle(name: &'static str) -> widget::icon::Handle {
         "sidebar-left" => widget::icon::from_svg_bytes(SIDEBAR_LEFT).symbolic(true),
         "sidebar-right" => widget::icon::from_svg_bytes(SIDEBAR_RIGHT).symbolic(true),
         #[cfg(windows)]
-        "view-dual-symbolic" => widget::icon::from_svg_bytes(include_bytes!("../../../res/icons/view-dual-symbolic.svg").as_slice()).symbolic(true),
+        "view-dual-symbolic" => widget::icon::from_svg_bytes(include_bytes!("../res/icons/view-dual-symbolic.svg").as_slice()).symbolic(true),
         #[cfg(windows)]
-        "view-paged-symbolic" => widget::icon::from_svg_bytes(include_bytes!("../../../res/icons/view-paged-symbolic.svg").as_slice()).symbolic(true),
+        "view-paged-symbolic" => widget::icon::from_svg_bytes(include_bytes!("../res/icons/view-paged-symbolic.svg").as_slice()).symbolic(true),
         _ => widget::icon::from_name(name).handle(),
     }
 }

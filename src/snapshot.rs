@@ -507,7 +507,7 @@ fn scripts_font_loads() {
     println!("faces: {found:?}");
     let ncm: Vec<String> = fs.raw().db().faces().flat_map(|f| f.families.iter().map(|(n, _)| n.clone())).filter(|n| n.contains("NewComputer")).collect();
     println!("ncm: {}", ncm.len());
-    let data = include_bytes!("../../../res/deductum/fonts/IsabellumScripts.ttf");
+    let data = include_bytes!("../res/fonts/IsabellumScripts.ttf");
     println!("ttf-parser: {:?}", cosmic_text::fontdb::Database::new().len());
     let mut db = cosmic_text::fontdb::Database::new();
     db.load_font_data(data.to_vec());

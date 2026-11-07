@@ -244,7 +244,7 @@ are:
 
 ```sh
 cargo --offline --locked test --workspace --all-targets --all-features
-python3 -m unittest discover -s deductum/host/tests -p "test_*.py"
+python3 -m unittest discover -s host/tests -p "test_*.py"
 python3 scripts/test-publish-release.py
 python3 scripts/test-release-policy.py
 python3 scripts/test-package-flatpak-bundle.py

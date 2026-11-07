@@ -29,7 +29,7 @@ def main():
         manifest = (root / "Cargo.toml").read_text() + '''
 [[bin]]
 name = "deductum-vnc"
-path = "src/bin/deductum/main.rs"
+path = "src/main.rs"
 harness = false
 '''
         (work / "Cargo.toml").write_text(manifest)

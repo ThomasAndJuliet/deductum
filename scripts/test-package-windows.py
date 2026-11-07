@@ -27,15 +27,15 @@ class PackageWindows(unittest.TestCase):
             archive.writestr("python.exe", b"MZ-fixture-runtime")
             archive.writestr("python313.zip", b"fixture stdlib")
         self.digest = hashlib.sha256(self.runtime.read_bytes()).hexdigest()
-        for folder in ("deductum/host/tests", "deductum/host/__pycache__", "deductum/backend/src", "packaging/windows"):
+        for folder in ("host/tests", "host/__pycache__", "backend/Isabelle2025/src", "packaging/windows"):
             (self.root / folder).mkdir(parents=True)
         files = {"Cargo.toml": '[package]\nversion = "0.1.0"\n', "LICENSE": "license",
                  "packaging/windows/README.txt": "portable package",
-                 "deductum/host/deductum_host.py": "print('fixture')\n",
-                 "deductum/host/drivers/isabelle_windows.sh": "#!/usr/bin/env bash\nprintf '%s' fixture\n",
-                 "deductum/host/tests/test_secret.py": "must not be shipped",
-                 "deductum/host/__pycache__/host.pyc": "must not be shipped",
-                 "deductum/backend/src/backend.scala": "// fixture backend",
+                 "host/deductum_host.py": "print('fixture')\n",
+                 "host/drivers/isabelle_windows.sh": "#!/usr/bin/env bash\nprintf '%s' fixture\n",
+                 "host/tests/test_secret.py": "must not be shipped",
+                 "host/__pycache__/host.pyc": "must not be shipped",
+                 "backend/Isabelle2025/src/backend.scala": "// fixture backend",
                  ".env": "FIXTURE_CREDENTIAL=not-a-real-secret", "state/session.json": "fixture private data",
                  ".ssh/id_fixture": "not-a-real-key"}
         for name, content in files.items():
@@ -73,9 +73,9 @@ class PackageWindows(unittest.TestCase):
             self.assertEqual(source.read(prefix + "deductum.exe"), self.binary.read_bytes())
             self.assertIn(prefix + "python/python.exe", names)
             self.assertIn(prefix + "share/deductum/host/deductum_host.py", names)
-            launcher = "deductum/host/drivers/isabelle_windows.sh"
-            self.assertEqual(source.read(prefix + "share/" + launcher), (self.root / launcher).read_bytes())
-            self.assertIn(prefix + "share/deductum/backend/src/backend.scala", names)
+            launcher = "host/drivers/isabelle_windows.sh"
+            self.assertEqual(source.read(prefix + "share/deductum/" + launcher), (self.root / launcher).read_bytes())
+            self.assertIn(prefix + "share/deductum/backend/Isabelle2025/src/backend.scala", names)
             for forbidden in ("/.git/", "/.ssh/", "/state/", "/tests/", "/__pycache__/", "/.env"):
                 self.assertFalse(any(forbidden in name for name in names), "package included " + forbidden)
 
@@ -94,7 +94,7 @@ class PackageWindows(unittest.TestCase):
         self.assertFalse(list(self.output.glob("*.zip")) if self.output.exists() else [])
 
     def test_dirty_source_requires_explicit_development_opt_in_and_matching_binary(self):
-        (self.root / "deductum/host/deductum_host.py").write_text("changed fixture\n")
+        (self.root / "host/deductum_host.py").write_text("changed fixture\n")
         with self.assertRaisesRegex(ValueError, "clean checkout"):
             self.package()
         with self.assertRaisesRegex(ValueError, "stamp"):
@@ -130,7 +130,7 @@ class PackageWindows(unittest.TestCase):
             P.extract_runtime(archive, self.base / "extraction", hashlib.sha256(archive.read_bytes()).hexdigest())
 
     def test_bundle_identity_changes_for_source_contents_and_paths_but_not_manifest(self):
-        bundle = self.root / "deductum"
+        bundle = self.root
         original = P.bundle_digest(bundle)
         (bundle / "RELEASE.json").write_text("fixture release metadata")
         self.assertEqual(P.bundle_digest(bundle), original)

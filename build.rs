@@ -8,7 +8,7 @@ fn source_identity() {
     let dirty = git(&["status", "--porcelain", "--untracked-files=all"]).is_none_or(|status| !status.is_empty());
     println!("cargo:rustc-env=DEDUCTUM_BUILD_SHA={sha}");
     println!("cargo:rustc-env=DEDUCTUM_BUILD_STATE={}", if dirty { "dirty" } else { "clean" });
-    for path in ["src", "res", "deductum", "Cargo.toml", "Cargo.lock", "build.rs"] {
+    for path in ["src", "res", "host", "backend", "Cargo.toml", "Cargo.lock", "build.rs"] {
         println!("cargo:rerun-if-changed={path}");
     }
     let mut refs = vec!["HEAD".to_string(), "index".to_string()];
