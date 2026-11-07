@@ -2612,6 +2612,14 @@ impl cosmic::Application for App {
         &mut self.core
     }
 
+    /// The desktop changed its theme (its accent, say, or light to dark): libcosmic has put the
+    /// desktop's theme in place of Deductum's, so the household's tones are laid on it again
+    fn system_theme_update(&mut self, _keys: &[&'static str], _new: &cosmic::cosmic_theme::Theme) -> Task<Self::Message> {
+        let active = cosmic::theme::active();
+        let toned = tones::household(active.clone());
+        if toned == active { Task::none() } else { cosmic::command::set_theme(toned) }
+    }
+
     fn init(mut core: Core, flags: Self::Flags) -> (Self, Task<Self::Message>) {
         // (no inset card around the content: the theory's scroll bar at the window's edge, as in
         // the terminal)

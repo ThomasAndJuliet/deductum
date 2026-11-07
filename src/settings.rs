@@ -262,10 +262,16 @@ impl ThemeChoice {
         }
     }
 
-    /// The theme to apply. A desktop that never saved one of its themes (or saved only some of its
-    /// fields) gives libcosmic's dark defaults for what is missing, so the light theme would then
-    /// be dark: COSMIC's own stands in for it, as the Terminal Agents app does
+    /// The theme to apply: COSMIC's for the choice, with the household's text tones
+    /// (`tones::household`)
     pub fn theme(self) -> cosmic::Theme {
+        super::tones::household(self.cosmic_theme())
+    }
+
+    /// COSMIC's theme for the choice. A desktop that never saved one of its themes (or saved only
+    /// some of its fields) gives libcosmic's dark defaults for what is missing, so the light theme
+    /// would then be dark: COSMIC's own stands in for it, as the Terminal Agents app does
+    fn cosmic_theme(self) -> cosmic::Theme {
         use cosmic::theme;
         match self {
             ThemeChoice::System => theme::system_preference(),

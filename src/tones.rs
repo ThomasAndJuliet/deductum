@@ -40,6 +40,82 @@ fn strongest(theme: &cosmic::Theme) -> Srgb {
     Role::Darkest.tone(mode).unwrap_or(if theme.cosmic().is_dark { Srgb::WHITE } else { Srgb::BLACK })
 }
 
+// ----- the household's text tones
+
+/// Whether the household's light-mode tones apply to `theme`: a light theme, not high contrast
+/// (COSMIC's high-contrast themes keep their own text)
+fn household_light(theme: &cosmic::cosmic_theme::Theme) -> bool {
+    !theme.is_dark && !theme.is_high_contrast
+}
+
+/// The theme Deductum hands libcosmic: COSMIC's, with the household's text tones (rule 25d; the
+/// 16 Oct UI plan §1, "darkest #222222 … no pure black"). In a light theme the text COSMIC derives
+/// for its containers, their components and its buttons is darkest, #222222, instead of black, so
+/// every label, line of code and caption drawn in the theme's text colour takes it. Dark and
+/// high-contrast themes keep COSMIC's own for now. The theme stays a system theme if it was one, so
+/// libcosmic goes on following the desktop; it is applied again to each theme the desktop sends
+/// (`system_theme_update`), and applying it twice changes nothing
+pub fn household(theme: cosmic::Theme) -> cosmic::Theme {
+    use cosmic::theme::ThemeType;
+    let mut inner = theme.cosmic().clone();
+    if !household_light(&inner) {
+        return theme;
+    }
+    let darkest = Role::Darkest.tone(Mode::Light).expect("darkest has a tone");
+    let on = cosmic::cosmic_theme::palette::Srgba::new(darkest.r, darkest.g, darkest.b, 1.0);
+    for component in [&mut inner.button, &mut inner.icon_button, &mut inner.text_button, &mut inner.list_button] {
+        component.on = on;
+    }
+    let inner = std::sync::Arc::new(with_container_text(inner, on));
+    let theme_type = match theme.theme_type {
+        ThemeType::System { prefer_dark, .. } => ThemeType::System { prefer_dark, theme: inner },
+        _ => ThemeType::Custom(inner),
+    };
+    cosmic::Theme { theme_type, ..theme }
+}
+
+/// `theme` with `on` as the text of its containers (the background, primary and secondary layers,
+/// opaque and translucent) and of their components. cosmic-theme keeps the containers private to
+/// itself, with no way to change them but rebuilding the theme from a builder, which derives its
+/// text from a palette and cannot give an exact tone; the theme is a plain serde record, so the
+/// fields are set through it. The record writes each colour as #RRGGBBAA, so the theme's other
+/// colours come back rounded to the 8 bits a screen shows (as a theme the desktop saved already
+/// is). Should a revision rename them, the theme is left as it was (and the
+/// test `household_text_is_darkest_in_light_themes` fails)
+fn with_container_text(theme: cosmic::cosmic_theme::Theme, on: cosmic::cosmic_theme::palette::Srgba) -> cosmic::cosmic_theme::Theme {
+    let (Ok(mut record), Ok(on)) = (serde_json::to_value(&theme), serde_json::to_value(on)) else { return theme };
+    for layer in ["background", "primary", "secondary", "transparent_background", "transparent_primary", "transparent_secondary"] {
+        if let Some(container) = record.get_mut(layer) {
+            container["on"] = on.clone();
+            if let Some(component) = container.get_mut("component") {
+                component["on"] = on.clone();
+            }
+        }
+    }
+    serde_json::from_value(record).unwrap_or(theme)
+}
+
+/// Body text read in paragraphs (the Literate view's prose) at `size_px`: on a light theme darkest
+/// below 18 px and dark (#525252) from 18 px, where the larger letters carry the contrast
+/// (`household_tones::text_role`); otherwise the theme's text
+pub fn body_text(theme: &cosmic::Theme, size_px: f32) -> Color {
+    let c = theme.cosmic();
+    if !household_light(c) {
+        return c.on_bg_color().into();
+    }
+    household_tones::roles::text_role(size_px, true).tone(Mode::Light).map_or_else(|| c.on_bg_color().into(), color)
+}
+
+/// Secondary text and the icons that go with it (an imports line, a hint, a caption, a detail
+/// line): on a light theme the text's own darkest tone, as every caption is ("caption text should
+/// be darkest (as it is in Cosmic UI) rather than grey", Juliet 16 Oct; size and weight set it
+/// apart, not a lighter grey); on other themes, as before, the text faded to `alpha`
+pub fn secondary_text(theme: &cosmic::Theme, alpha: f32) -> Color {
+    let c = theme.cosmic();
+    let text: Color = c.on_bg_color().into();
+    if household_light(c) { text } else { Color { a: alpha, ..text } }
+}
+
 // ----- the tint on code
 
 /// What a view of code is drawn on, from the theme it is drawn in: the page, a cell, a card, with
@@ -175,4 +251,75 @@ pub fn muted_segmented() -> cosmic::theme::SegmentedButton {
         appearance.active.text_color = on;
         appearance
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn hex(c: impl Into<Color>) -> String {
+        let c: Color = c.into();
+        let [r, g, b, _] = c.into_rgba8();
+        format!("#{r:02x}{g:02x}{b:02x}")
+    }
+
+    fn texts(theme: &cosmic::Theme) -> Vec<String> {
+        let c = theme.cosmic();
+        let mut all = Vec::new();
+        for transparent in [false, true] {
+            for container in [c.background(transparent), c.primary(transparent), c.secondary(transparent)] {
+                all.push(hex(container.on));
+                all.push(hex(container.component.on));
+            }
+        }
+        all.extend([&c.button, &c.icon_button, &c.text_button, &c.list_button].map(|b| hex(b.on)));
+        all
+    }
+
+    /// No pure black (rule 25d, plan §1): every text colour a light theme derives is darkest,
+    /// #222222, whether the theme is COSMIC's built-in one or the desktop's, and the desktop's
+    /// stays a system theme so libcosmic goes on following the desktop
+    #[test]
+    fn household_text_is_darkest_in_light_themes() {
+        let light = cosmic::Theme::light();
+        assert!(texts(&light).iter().any(|t| t != "#222222"), "COSMIC's own light text is not already darkest");
+        let toned = household(light);
+        assert!(texts(&toned).iter().all(|t| t == "#222222"), "{:?}", texts(&toned));
+        assert_eq!(hex(toned.cosmic().on_bg_color()), "#222222");
+        let system = cosmic::Theme::system(std::sync::Arc::new(cosmic::Theme::light().cosmic().clone()));
+        let toned = household(system);
+        assert!(matches!(toned.theme_type, cosmic::theme::ThemeType::System { .. }));
+        assert!(texts(&toned).iter().all(|t| t == "#222222"));
+        // Applied twice, nothing more changes (it is laid again on each theme the desktop sends)
+        assert_eq!(household(toned.clone()), toned);
+        // The rest of the theme is COSMIC's, to the 8 bits a channel is saved in (the theme's
+        // record writes colours as #RRGGBBAA, as the desktop's saved themes are)
+        let (before, after) = (cosmic::Theme::light(), household(cosmic::Theme::light()));
+        let (b, a) = (before.cosmic(), after.cosmic());
+        assert_eq!(hex(b.accent_color()), hex(a.accent_color()));
+        assert_eq!(hex(b.bg_color()), hex(a.bg_color()));
+        assert_eq!(hex(b.primary_container_color()), hex(a.primary_container_color()));
+        assert_eq!(hex(b.secondary_container_color()), hex(a.secondary_container_color()));
+    }
+
+    /// Dark and high-contrast themes keep COSMIC's text for now
+    #[test]
+    fn other_themes_keep_cosmic_text() {
+        for theme in [cosmic::Theme::dark(), cosmic::Theme::light_hc(), cosmic::Theme::dark_hc()] {
+            assert_eq!(household(theme.clone()), theme);
+        }
+    }
+
+    /// Prose is darkest below 18 px and dark (#525252) from 18 px on a light theme; captions and
+    /// secondary text are darkest, not a translucent grey
+    #[test]
+    fn body_and_secondary_text_take_the_household_tones() {
+        let light = household(cosmic::Theme::light());
+        assert_eq!(hex(body_text(&light, 17.0)), "#222222");
+        assert_eq!(hex(body_text(&light, 20.0)), "#525252");
+        assert_eq!(secondary_text(&light, 0.65), Color::from(light.cosmic().on_bg_color()));
+        let dark = cosmic::Theme::dark();
+        assert_eq!(body_text(&dark, 20.0), Color::from(dark.cosmic().on_bg_color()));
+        assert_eq!(secondary_text(&dark, 0.65).a, 0.65);
+    }
 }
