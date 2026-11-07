@@ -5,6 +5,26 @@ from pathlib import Path
 import sys
 
 
+def _windows_ascii_file(path):
+    """An existing same-file name that is safe in an OEM-decoded batch file."""
+    import ctypes
+    from ctypes import wintypes
+    path = str(Path(path).resolve(strict=True))
+    alias = path
+    if not path.isascii():
+        get_short = ctypes.WinDLL("kernel32", use_last_error=True).GetShortPathNameW
+        get_short.argtypes = [wintypes.LPCWSTR, wintypes.LPWSTR, wintypes.DWORD]
+        get_short.restype = wintypes.DWORD
+        output = ctypes.create_unicode_buffer(32768)
+        size = get_short(path, output, len(output))
+        if not size or size >= len(output) or not output.value.isascii():
+            raise OSError("The Windows command fixture requires an existing ASCII NTFS short name: " + path)
+        alias = output.value
+    if not os.path.samefile(path, alias):
+        raise OSError("The command fixture's ASCII alias identifies a different file: " + path)
+    return alias
+
+
 def json_agent(root, answer):
     root = Path(root)
     root.mkdir(parents=True, exist_ok=True)
@@ -24,7 +44,9 @@ def json_executable(root, name, answer):
     script.write_text("import json\nprint(json.dumps(" + repr(answer) + "))\n", encoding="utf-8")
     if os.name == "nt":
         executable = root / (name + ".cmd")
-        executable.write_text(f'@"{sys.executable}" "{script}"\n', encoding="utf-8")
+        python = _windows_ascii_file(sys.executable).replace("%", "%%")
+        source = _windows_ascii_file(script).replace("%", "%%")
+        executable.write_bytes(f'@setlocal DisableDelayedExpansion\r\n@"{python}" "{source}"\r\n'.encode("ascii"))
     else:
         executable = root / name
         # The test interpreter path is fixed by its environment; no shell or
