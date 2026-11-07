@@ -717,7 +717,7 @@ class Discovery(unittest.TestCase):
             meta = {}
         drv = lean.LeanDriver(S())
         text = "theorem a : True := by\n  trivial\n\ntheorem t (p q : Prop) (hp : p) (hq : q) : p ∧ q := by\n  constructor\n  · exact hp\n  · sorry\n\ndef z := 1\n"
-        doc = lean.LDoc("/x/A.lean", text, 1)
+        doc = lean.LDoc(os.path.abspath(os.path.join("x", "A.lean")), text, 1)
         at = text.index("sorry")
         body, lo, hi, as_command = drv.scratch_text(doc, at, "exact hq")
         self.assertFalse(as_command)
@@ -779,14 +779,10 @@ class Loogle(unittest.TestCase):
             os.environ["PATH"] = saved or ""
 
     def test_local_runs_the_binary(self):
-        import json, stat, tempfile
+        import tempfile
+        from fixture_helpers import json_executable
         with tempfile.TemporaryDirectory() as d:
-            exe = os.path.join(d, "loogle")
-            with open(exe, "w") as f:
-                f.write("#!/bin/sh\ncat " + os.path.join(d, "answer.json") + "\n")
-            with open(os.path.join(d, "answer.json"), "w") as f:
-                json.dump(self.ANSWER, f)
-            os.chmod(exe, os.stat(exe).st_mode | stat.S_IXUSR)
+            json_executable(d, "loogle", self.ANSWER)
             saved = os.environ.get("PATH", "")
             os.environ["PATH"] = d + os.pathsep + saved
             try:

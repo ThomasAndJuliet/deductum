@@ -15,6 +15,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 os.environ.setdefault("DEDUCTUM_STATE_DIR", tempfile.mkdtemp())
 import deductum_host as H  # noqa: E402
 import drivers  # noqa: E402
+import platform_support as platform  # noqa: E402
 from drivers.isabelle import IsabelleDriver  # noqa: E402
 
 
@@ -42,7 +43,8 @@ class FakeDriver(drivers.Driver):
 
     async def start(self):
         # (a real process, so that the memory budget has something to measure)
-        self.proc = await asyncio.create_subprocess_exec("sleep", "60", start_new_session=True)
+        self.proc = await platform.create_subprocess_exec(sys.executable, "-c", "import sys; sys.stdin.buffer.read()",
+                                                          stdin=asyncio.subprocess.PIPE)
         self.emit({"event": "ready", "identifier": "Fake 1"})
 
     def send(self, obj):
@@ -53,8 +55,7 @@ class FakeDriver(drivers.Driver):
 
     async def stop(self):
         if self.proc and self.proc.returncode is None:
-            self.proc.terminate()
-            await self.proc.wait()
+            await drivers.stop_process(self.proc)
 
 
 class App:
@@ -105,7 +106,9 @@ class DriverTests(unittest.IsolatedAsyncioTestCase):
         self._state = H.STATE_DIR
         H.STATE_DIR = self.tmp / "state"
         self._xdg = os.environ.get("XDG_CONFIG_HOME")
+        self._config = os.environ.get("DEDUCTUM_CONFIG_DIR")
         os.environ["XDG_CONFIG_HOME"] = str(self.tmp / "config")
+        os.environ["DEDUCTUM_CONFIG_DIR"] = str(self.tmp / "config" / "deductum")
         drivers.register(FakeDriver)
         FakeDriver.sent = []
         self.host = H.Host()
@@ -121,6 +124,10 @@ class DriverTests(unittest.IsolatedAsyncioTestCase):
             os.environ.pop("XDG_CONFIG_HOME", None)
         else:
             os.environ["XDG_CONFIG_HOME"] = self._xdg
+        if self._config is None:
+            os.environ.pop("DEDUCTUM_CONFIG_DIR", None)
+        else:
+            os.environ["DEDUCTUM_CONFIG_DIR"] = self._config
 
     def folder(self, *files):
         d = Path(tempfile.mkdtemp(dir=self.tmp))
@@ -381,8 +388,10 @@ class DriverTests(unittest.IsolatedAsyncioTestCase):
         self.assertRegex(parent["branch"], r"^deductum/[0-9a-f]{8}$")
         wt = Path(parent["worktree"])
         self.assertTrue((wt / "A.fk").is_file())
-        self.assertTrue((wt / ".lake" / "packages").is_symlink())
-        self.assertEqual(os.path.realpath(wt / ".lake" / "packages"), os.path.realpath(repo / ".lake" / "packages"))
+        self.assertEqual((wt / ".lake" / "packages" / "dep" / "x.txt").read_text(), "x")
+        if os.name != "nt":
+            self.assertTrue((wt / ".lake" / "packages").is_symlink())
+            self.assertEqual(os.path.realpath(wt / ".lake" / "packages"), os.path.realpath(repo / ".lake" / "packages"))
         doc = s.get_doc(str(wt / "A.fk"))
         s.commit(doc, agent.author(), "edit", [(0, 1, "changed")])
         files = self.host.merge_preview(s)
@@ -438,6 +447,13 @@ class MigrationTests(unittest.TestCase):
         self.assertEqual(len(list((self.new_state / "sessions" / "d1" / "docs").glob("*.json"))), 1)
 
     def test_does_nothing_while_the_isabellum_host_runs(self):
+        if not hasattr(socket, "AF_UNIX"):
+            (self.old_state / "host.sock").touch()
+            with self.assertRaisesRegex(H.HostError, "original machine"):
+                self.run_migration()
+            self.assertTrue((self.old_state / "sessions" / "abc12345").exists())
+            self.assertFalse(self.new_state.exists())
+            return
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         sock.bind(str(self.old_state / "host.sock"))
         sock.listen(1)
@@ -457,6 +473,15 @@ class MigrationTests(unittest.TestCase):
         self.assertFalse(self.new_cfg.exists())
 
     def test_a_stale_socket_file_does_not_count_as_running(self):
+        if not hasattr(socket, "AF_UNIX"):
+            # Without the legacy transport, a copied marker cannot be
+            # established stale. Preserve it and require migration at source.
+            (self.old_state / "host.sock").touch()
+            with self.assertRaisesRegex(H.HostError, "original machine"):
+                self.run_migration()
+            self.assertTrue((self.old_state / "sessions" / "abc12345").exists())
+            self.assertFalse(self.new_state.exists())
+            return
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         sock.bind(str(self.old_state / "host.sock"))
         sock.close()  # (bound, never listening: connecting fails)
@@ -471,6 +496,7 @@ class MigrationTests(unittest.TestCase):
         (cfg / "isabellum" / "host.json").write_text(json.dumps({"runtimes": ["/r/bin/isabelle"]}))
         env = {k: v for k, v in os.environ.items() if k != "DEDUCTUM_STATE_DIR"}
         env.update(HOME=str(home), XDG_STATE_HOME=str(state), XDG_CONFIG_HOME=str(cfg))
+        env.update(DEDUCTUM_STATE_DIR=str(state / "deductum"), DEDUCTUM_CONFIG_DIR=str(cfg / "deductum"))
         r = subprocess.run([sys.executable, H.__file__, "migrate-from-isabellum"], env=env,
                            capture_output=True, text=True, timeout=60)
         self.assertEqual(r.returncode, 0, r.stderr)

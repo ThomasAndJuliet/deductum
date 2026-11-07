@@ -18,10 +18,12 @@ import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(HERE))
 os.environ.setdefault("DEDUCTUM_STATE_DIR", tempfile.mkdtemp(prefix="deductum-it-"))
 
 import deductum_host as H  # noqa: E402
+from fixture_helpers import json_agent
 
 THY = """theory Demo
   imports Main
@@ -72,10 +74,7 @@ def wait_for(client, pred, timeout=240, what="condition", on_wait=None):
 def main():
     # A stand-in for the claude CLI, for the typed-keyword fill
     fake = Path(tempfile.mkdtemp(prefix="deductum-bin-"))
-    (fake / "claude").write_text('#!/bin/sh\necho \'{"proofs": ["by simp", "by blast"], '
-                                 '"using": ["mult_1_right", "no_such_fact_xyz"]}\'\n')
-    (fake / "claude").chmod(0o755)
-    os.environ["PATH"] = f"{fake}:{os.environ.get('PATH', '')}"
+    json_agent(fake, {"proofs": ["by simp", "by blast"], "using": ["mult_1_right", "no_such_fact_xyz"]})
     folder = Path(tempfile.mkdtemp(prefix="deductum-thy-"))
     thy = folder / "Demo.thy"
     thy.write_text(THY)

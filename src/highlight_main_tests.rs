@@ -160,7 +160,10 @@ fn difference(now: &[u8], before: &[u8], width: u32, compared: &Compared) -> Opt
 /// of the source view and of the block being edited, wide and narrow, in both themes
 #[test]
 fn an_unselected_construct_is_drawn_as_before() {
-    let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+    let root = std::env::var_os("DEDUCTUM_TEST_ROOT")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")).to_owned());
+    let fixtures = root.join("tests/fixtures");
     let dirs = ["highlight-unselected-main", "highlight-unselected-main-neo", "highlight-unselected-main-sdk"];
 
     let mut problems = Vec::new();
