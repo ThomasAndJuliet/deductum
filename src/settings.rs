@@ -443,7 +443,7 @@ pub fn path() -> PathBuf {
     if cfg!(test) {
         return std::env::temp_dir().join(format!("deductum-test-config-{}", std::process::id())).join("settings.json");
     }
-    std::env::var_os("HOME").map(PathBuf::from).unwrap_or_default().join(".config/deductum/settings.json")
+    super::platform::config_dir().join("settings.json")
 }
 
 // ----- the published copy

@@ -27,7 +27,6 @@ import contextvars
 import copy
 import difflib
 import errno
-import fcntl
 import hashlib
 import json
 import os
@@ -46,6 +45,7 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import deductum_ot as ot  # noqa: E402
 import drivers  # noqa: E402
+import platform_support as platform  # noqa: E402
 import prompts  # noqa: E402
 from background import OrderedIO, Busy as IOBusy, weight as io_weight  # noqa: E402
 from drivers import HostError, log, read_json  # noqa: E402
@@ -54,8 +54,7 @@ from drivers.isabelle import IsabelleDriver, find_runtimes, known_sessions, sugg
 PROTOCOL = 2
 VERSION = "0.1.0"
 HOME = Path.home()
-STATE_DIR = Path(os.environ.get("DEDUCTUM_STATE_DIR")
-                 or Path(os.environ.get("XDG_STATE_HOME") or HOME / ".local/state") / "deductum")
+STATE_DIR = platform.state_dir()
 SOCKET_PATH = STATE_DIR / "host.sock"
 LOCK_PATH = STATE_DIR / "host.lock"
 LOG_PATH = STATE_DIR / "host.log"
@@ -89,6 +88,10 @@ def write_json_atomic(path: Path, data: Any) -> None:
 
 def file_key(path: str) -> str:
     return hashlib.sha1(path.encode()).hexdigest()[:16]
+
+
+def text_digest(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8", errors="surrogatepass")).hexdigest()
 
 
 def stat_sig(path: str) -> Optional[Tuple[int, int]]:
@@ -201,6 +204,8 @@ class Doc:
         self.save_error: Optional[str] = None
         self.last_edit = 0.0
         self.saved_revision = 0
+        self.checkpoint_known = False
+        self.journal_records: Dict[int, Dict[str, Any]] = {}
 
     # persistence
 
@@ -242,6 +247,7 @@ class Doc:
         # Undo no longer leaves pieces to restore (it keeps later edits instead)
         d.alternatives = [a for a in data.get("alternatives", []) if a.get("kind") not in ("undo", "redo", "revert")]
         d.saved_revision = data.get("saved_revision", 0)
+        d.checkpoint_known = True
         return d
 
     def load_from_disk(self) -> None:
@@ -354,9 +360,20 @@ def link_fork_dirs(top: str, worktree: Path, folder: str, rels: Tuple[str, ...])
             dst = worktree / os.path.relpath(src, os.path.realpath(top))
             if dst.exists() or dst.is_symlink():
                 continue
-            with contextlib.suppress(OSError):
+            try:
                 dst.parent.mkdir(parents=True, exist_ok=True)
-                os.symlink(src, dst)
+                os.symlink(src, dst, target_is_directory=True)
+            except OSError:
+                if platform.WINDOWS:
+                    # Copying dependencies works without the Windows symlink privilege.
+                    # A failed copy must not silently produce a dependency-less fork.
+                    temp = dst.with_name(dst.name + ".deductum-" + uuid.uuid4().hex)
+                    try:
+                        shutil.copytree(src, temp)
+                        os.replace(temp, dst)
+                    except OSError as error:
+                        shutil.rmtree(temp, ignore_errors=True)
+                        raise HostError(f"Could not copy fork dependencies from {src}: {error}") from error
         if str(base) == os.path.realpath(top) or base == base.parent:
             break
 
@@ -394,7 +411,7 @@ def excerpt(text: str, start: int, end: int, context: int = 80) -> str:
 def git(*args: str, cwd: Optional[str] = None) -> str:
     # (a folder of another machine, through its sshfs mount, is owned by another user here: git
     # would refuse it as of "dubious ownership")
-    r = subprocess.run(["git", "-c", "safe.directory=*", *args], cwd=cwd, capture_output=True, text=True, timeout=300)
+    r = subprocess.run(["git", "-c", "safe.directory=*", *args], cwd=cwd, capture_output=True, text=True, encoding="utf-8", timeout=300)
     if r.returncode != 0:
         raise HostError("git " + " ".join(args[:2]) + ": " + r.stderr.strip())
     return r.stdout
@@ -528,25 +545,141 @@ class Session:
         return True
 
     def load_docs(self) -> None:
+        keys = set()
         for p in sorted((self.dir / "docs").glob("*.json")):
             data = read_json(p)
             if data and "path" in data:
                 doc = Doc.from_json(self, data)
+                self.replay_journal(doc)
                 self.docs[doc.path] = doc
+                keys.add(doc.key)
+            else:
+                raise HostError(f"Cannot recover {self.id}: invalid document checkpoint {p.name}", "io_error")
+        orphaned = [p.name for p in (self.dir / "logs").glob("*.jsonl") if p.stem not in keys]
+        if orphaned:
+            raise HostError(f"Cannot recover {self.id}: journals without document checkpoints: "
+                            + ", ".join(orphaned), "io_error")
+
+    def replay_journal(self, doc: Doc) -> None:
+        """Replay an intact contiguous suffix, retaining receipts exactly once.
+
+        An invalid suffix is a recovery error, never permission to replace an
+        acknowledged buffer with the disk file. New journals always establish
+        the initial checkpoint before their first record can be acknowledged.
+        """
+        snapshot_revision = doc.revision
+        try:
+            source = open(doc.log_path(), encoding="utf-8")
+        except FileNotFoundError:
+            return
+        try:
+            with source:
+                for line in source:
+                    entry = json.loads(line)
+                    if not isinstance(entry, dict) or type(entry.get("rev")) is not int:
+                        raise ValueError("invalid revision")
+                    if entry["rev"] <= snapshot_revision:
+                        continue
+                    if entry["rev"] != doc.revision + 1 or type(entry.get("id")) is not int or entry["id"] != doc.next_entry:
+                        raise ValueError("noncontiguous journal")
+                    change = ot.normalize(entry["change"], len(doc.text))
+                    if [list(r) for r in change] != entry["change"] or \
+                            [list(r) for r in ot.invert(doc.text, change)] != entry["inverse"]:
+                        raise ValueError("journal does not match its baseline")
+                    if entry.get("journal_version") is not None:
+                        if type(entry["journal_version"]) is not int or entry["journal_version"] != 1 or \
+                                entry["base_sha256"] != text_digest(doc.text) or not isinstance(entry.get("recovery"), dict):
+                            raise ValueError("journal baseline digest mismatch")
+                    new = ot.apply(doc.text, change)
+                    recovery = entry.get("recovery")
+                    if recovery is not None and recovery["text_sha256"] != text_digest(new):
+                        raise ValueError("journal result digest mismatch")
+                    doc.text = new
+                    doc.revision = entry["rev"]
+                    doc.next_entry = entry["id"] + 1
+                    restored = {k: v for k, v in entry.items()
+                                if k not in ("recovery", "journal_version", "base_sha256")}
+                    doc.entries.append(restored)
+                    doc.entries = doc.entries[-MEMORY_ENTRIES:]
+                    if recovery is not None:
+                        doc.undo_stack = recovery["undo_stack"]
+                        doc.redo_stack = recovery["redo_stack"]
+                        doc.undone = {int(k): v for k, v in recovery["undone"].items()}
+                        doc.trackers = recovery["trackers"]
+                        if "disk" in recovery:
+                            disk = recovery["disk"]
+                            doc.disk_text, doc.crlf, doc.bom = disk["text"], disk["crlf"], disk["bom"]
+                            doc.disk_sig = tuple(disk["sig"]) if disk["sig"] else None
+                            doc.saved_revision = disk["saved_revision"]
+                        if "conflict" in recovery:
+                            doc.conflict = recovery["conflict"]
+                    else:
+                        # Legacy entries contain sufficient information for
+                        # text/receipt recovery and ordinary edit transactions.
+                        if entry.get("kind") == "edit" and entry.get("author", {}).get("kind") == "human":
+                            txn = entry["txn"]
+                            if not doc.undo_stack or doc.undo_stack[-1] != txn:
+                                doc.undo_stack.append(txn)
+                            doc.redo_stack.clear()
+                        elif entry.get("kind") in ("undo", "redo", "revert"):
+                            raise ValueError("legacy undo journal needs its checkpoint")
+        except (OSError, ValueError, KeyError, TypeError, IndexError) as error:
+            raise HostError(f"Cannot recover {doc.path}: journal {doc.log_path().name} is inconsistent "
+                            f"({type(error).__name__}); preserve the state directory for recovery", "io_error") from error
 
     def append_log(self, doc: Doc, entry: Dict[str, Any]) -> Optional[asyncio.Task]:
         path = doc.log_path()
         frozen = copy.deepcopy(entry)
+        baseline = copy.deepcopy(doc.to_json()) if not doc.checkpoint_known else None
+        before_disk = (doc.disk_text, doc.disk_sig, doc.crlf, doc.bom, doc.saved_revision)
+        before_conflict = copy.deepcopy(doc.conflict)
+        if self.host.state_io is not None:
+            frozen.update(journal_version=1, base_sha256=text_digest(doc.text))
         def write():
             path.parent.mkdir(parents=True, exist_ok=True)
+            if frozen.get("journal_version") and "recovery" not in frozen:
+                raise OSError("Journal record was not sealed before storage")
+            if baseline is not None and not doc.state_path().exists():
+                write_json_atomic(doc.state_path(), baseline)
             with open(path, "a", encoding="utf-8") as f:
                 f.write(json.dumps(frozen, ensure_ascii=False) + "\n")
         if self.host.state_io is not None:
             size = 4096 + sum((len(t) + e - s) * 8 for s, e, t in entry["change"])
-            return self._state_write(write, size)
+            size += io_weight(baseline) + io_weight(doc.trackers) + io_weight(doc.undone) + io_weight(frozen)
+            size += io_weight(doc.undo_stack[-500:]) + io_weight(doc.redo_stack[-500:])
+            size += 128 * len(doc.entries)  # a reverse operation may mark the entire retained transaction
+            if entry["kind"] in ("reload", "resolve"):
+                size += io_weight(doc.disk_text) + io_weight(doc.text)
+            task = self._state_write(write, size)
+            doc.checkpoint_known = True
+            doc.journal_records[entry["id"]] = {"record": frozen, "disk": before_disk,
+                                                 "conflict": before_conflict}
+            task.add_done_callback(lambda _f: doc.journal_records.pop(entry["id"], None))
+            return task
         else:
             write()
+            doc.checkpoint_known = True
             return None
+
+    def seal_journal(self, doc: Doc, entry: Dict[str, Any]) -> None:
+        """Freeze compact post-operation state before the event loop can dispatch its write."""
+        pending = doc.journal_records.get(entry["id"])
+        if pending is None:
+            return
+        if entry["rev"] != doc.revision:
+            raise HostError("Cannot seal a journal against another revision", "io_error")
+        retained = {e["id"] for e in doc.entries}
+        recovery = {"text_sha256": text_digest(doc.text), "undo_stack": list(doc.undo_stack[-500:]),
+                    "redo_stack": list(doc.redo_stack[-500:]),
+                    "undone": {k: v for k, v in doc.undone.items() if k in retained},
+                    "trackers": copy.deepcopy(doc.trackers[-500:])}
+        current_disk = (doc.disk_text, doc.disk_sig, doc.crlf, doc.bom, doc.saved_revision)
+        if current_disk != pending["disk"]:
+            recovery["disk"] = {"text": doc.disk_text, "sig": doc.disk_sig, "crlf": doc.crlf,
+                                "bom": doc.bom, "saved_revision": doc.saved_revision}
+        if doc.conflict != pending["conflict"]:
+            recovery["conflict"] = copy.deepcopy(doc.conflict)
+        pending["record"]["recovery"] = recovery
 
     def _state_write(self, operation: Callable[[], Any], size: int) -> asyncio.Task:
         assert self.host.state_io is not None
@@ -788,6 +921,7 @@ class Session:
             "request": request, "client": client.id if client else None,
             "dirty": doc.dirty, "can_undo": bool(doc.undo_stack), "can_redo": bool(doc.redo_stack),
         })
+        self.seal_journal(doc, entry)
         return entry
 
     def track_agent_change(self, doc: Doc, entry: Dict[str, Any]) -> None:
@@ -904,6 +1038,7 @@ class Session:
         reply = {"revision": doc.revision, "change": entry["change"], "entry": entry["id"]}
         if author["kind"] == "human" and client.kind == "app":
             self.keyword_fill(client, doc, entry, author, txn)
+        self.seal_journal(doc, entry)
         return reply
 
     # `claude` or `codex` (a model in brackets, `codex[astra]`, and a hint after it) ending a line,
@@ -1039,6 +1174,8 @@ class Session:
                 report["line"] = ot.lines_cols(doc.text, min(report["at"], len(doc.text)))[0]
         for e in entries:
             doc.undone[e["id"]] = made[0]["id"] if made else -1
+        if made:
+            self.seal_journal(doc, made[0])
         return made
 
     def undo(self, client: "Client", path: str) -> Dict[str, Any]:
@@ -1061,6 +1198,8 @@ class Session:
                 passed += 1
                 continue
             doc.redo_stack.append(txn)
+            if made:
+                self.seal_journal(doc, made[0])
             self.persist(doc)
             return {"revision": doc.revision, "undone": [e["id"] for e in entries],
                     "entries": [m["id"] for m in made], "at": report.get("at"),
@@ -1088,8 +1227,10 @@ class Session:
             entries = [e for e in doc.entries if e["txn"] == "undo:" + txn and e["id"] not in doc.undone]
             if entries:
                 report: Dict[str, Any] = {}
-                self.reverse_entries(doc, entries, HUMAN, "redo", txn, report)
+                made = self.reverse_entries(doc, entries, HUMAN, "redo", txn, report)
                 doc.undo_stack.append(txn)
+                if made:
+                    self.seal_journal(doc, made[0])
                 self.persist(doc)
                 return {"revision": doc.revision, "redone": [e["id"] for e in entries], "at": report.get("at"),
                         "note": self.undo_note("Redid", report, 0)}
@@ -1547,10 +1688,11 @@ class Session:
         if disk_text is not None and not doc.dirty and not doc.conflict:
             # No unsaved edits: take the disk version, as a logged, revertable edit
             change = line_change(doc.text, disk_text)
-            self.commit(doc, DISK, "reload", change)
+            entry = self.commit(doc, DISK, "reload", change)
             doc.crlf, doc.bom = got[1], got[2]
             doc.disk_text, doc.disk_sig = disk_text, sig
             doc.saved_revision = doc.revision
+            self.seal_journal(doc, entry)
             self.persist(doc)
             self.host.broadcast_doc(self, doc, {"event": "doc_saved", "session": self.id,
                 "path": doc.path, "revision": doc.revision, "dirty": False})
@@ -1590,14 +1732,15 @@ class Session:
             target = text.replace("\r\n", "\n")
         else:
             raise HostError("Choice must be disk, buffer or merge")
-        if target != doc.text:
-            self.commit(doc, author, "resolve", line_change(doc.text, target), client=client)
+        entry = self.commit(doc, author, "resolve", line_change(doc.text, target), client=client) if target != doc.text else None
         doc.conflict = None
         doc.disk_text = disk_text
         # Keep the signature represented by the conflict. The save lane checks
         # it again so a later external change becomes a fresh conflict.
         if self.host.project_io is None:
             doc.disk_sig = stat_sig(doc.path)
+        if entry:
+            self.seal_journal(doc, entry)
         self.persist(doc)
         self.schedule_save(doc, 0.1)
         self.host.broadcast_doc(self, doc, {"event": "doc_conflict", "session": self.id, "path": doc.path,
@@ -1698,24 +1841,7 @@ class Session:
 
     @staticmethod
     def process_group_usage(pgid: int) -> Optional[Tuple[int, int]]:
-        ticks = 0
-        rss_pages = 0
-        try:
-            for entry in os.listdir("/proc"):
-                if not entry.isdigit():
-                    continue
-                try:
-                    with open(f"/proc/{entry}/stat") as f:
-                        fields = f.read().rsplit(")", 1)[1].split()
-                except OSError:
-                    continue
-                if int(fields[2]) != pgid:  # process group
-                    continue
-                ticks += int(fields[11]) + int(fields[12])
-                rss_pages += int(fields[21])
-        except OSError:
-            return None
-        return ticks, rss_pages
+        return platform.process_group_usage(pgid)
 
     def prover_stats(self) -> Optional[Dict[str, Any]]:
         """CPU and memory of the prover's process group"""
@@ -1723,7 +1849,7 @@ class Session:
         if usage is None:
             return None
         ticks, rss_pages = usage
-        hz = os.sysconf("SC_CLK_TCK")
+        hz = platform.clock_ticks()
         cpu_s = ticks / hz
         t = time.monotonic()
         cpu = None
@@ -1732,7 +1858,7 @@ class Session:
             if dt > 0:
                 cpu = round(100 * (cpu_s - self.cpu_sample[1]) / dt)
         self.cpu_sample = (t, cpu_s)
-        return {"cpu": cpu, "rss_mb": round(rss_pages * os.sysconf("SC_PAGE_SIZE") / 1e6)}
+        return {"cpu": cpu, "rss_mb": round(rss_pages * platform.page_size() / 1e6)}
 
     def activity(self) -> Dict[str, Any]:
         t = now()
@@ -1787,9 +1913,15 @@ class Session:
             self.driver = self.driver_class(self)
             await self.driver.start()
         except HostError as exn:
+            if self.driver:
+                with contextlib.suppress(Exception):
+                    await self.driver.stop()
             self.driver = None
             self.set_lifecycle("Failed", str(exn))
         except Exception as exn:
+            if self.driver:
+                with contextlib.suppress(Exception):
+                    await self.driver.stop()
             self.driver = None
             self.set_lifecycle("Failed", f"Could not start the prover: {exn}")
 
@@ -1829,6 +1961,9 @@ class Session:
         self.save_all()
         self.meta["desired"] = "stopped"
         self.set_lifecycle("Stopping", "Stopping the prover")
+        if self.start_task is not None and not self.start_task.done():
+            self.start_task.cancel()
+            await asyncio.gather(self.start_task, return_exceptions=True)
         if self.driver:
             await self.driver.stop()
         self.driver = None
@@ -2005,7 +2140,7 @@ class Session:
                             canonical = os.path.realpath(source)
                             text = None
                             with contextlib.suppress(OSError):
-                                text = Path(canonical).read_text()
+                                text = Path(canonical).read_text(encoding="utf-8")
                             return canonical, text
                         target_path, disk_text = await self.host.project_read(source, read_target)
                         check_current()
@@ -2103,19 +2238,30 @@ class Session:
             if conversation:
                 cmd += ["--session-id" if start else "--resume", conversation]
         env = dict(os.environ)
-        env["PATH"] = env.get("PATH", "") + ":" + str(HOME / ".local/bin")
-        proc = await asyncio.create_subprocess_exec(
+        policy = self.host.resource_policy if self.host.state_io is not None else drivers.read_config()
+        commands = policy.get("agent_commands", {})
+        if not isinstance(commands, dict):
+            raise HostError("host.json agent_commands must be an object of argv lists")
+        if agent in commands:
+            prefix = commands[agent]
+            if not isinstance(prefix, list) or not prefix or any(not isinstance(p, str) or not p for p in prefix):
+                raise HostError(f"host.json agent_commands.{agent} must be a nonempty list of nonempty strings")
+            cmd = prefix + cmd[1:]
+        env["PATH"] = env.get("PATH", "") + os.pathsep + str(HOME / ".local/bin")
+        proc = await platform.create_subprocess_exec(
             *cmd, stdin=asyncio.subprocess.DEVNULL, stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE, cwd=cwd, env=env)
         try:
             out, err = await asyncio.wait_for(proc.communicate(), 300)
         except asyncio.TimeoutError:
-            proc.kill()
+            platform.terminate_process_tree(proc, force=True)
+            await proc.wait()
             raise HostError(f"{agent} did not answer within 5 minutes")
         except asyncio.CancelledError:
             # (stopped, or its keyword deleted: the LLM stops too)
             with contextlib.suppress(ProcessLookupError):
-                proc.kill()
+                platform.terminate_process_tree(proc, force=True)
+            await proc.wait()
             raise
         answer = out.decode(errors="replace")
         if agent == "codex" and start:
@@ -2128,7 +2274,7 @@ class Session:
                         self._started_conversation = str(tid)
                         break
         if out_file and out_file.exists():
-            answer = out_file.read_text(errors="replace")
+            answer = out_file.read_text(encoding="utf-8", errors="replace")
             out_file.unlink()
         if proc.returncode and not answer.strip():
             raise HostError(f"{agent} failed: " + err.decode(errors="replace").strip()[-300:])
@@ -2652,6 +2798,8 @@ class Host:
 
     def project_group(self, path: str) -> str:
         path = os.path.abspath(path)
+        if platform.WINDOWS:
+            return os.path.splitdrive(path)[0].casefold() or Path(path).anchor
         return next((p for p in self._mounts if p == "/" or path == p or path.startswith(p + "/")), "/")
 
     async def project_read(self, path: str, operation: Callable[[], Any]):
@@ -2774,7 +2922,7 @@ class Host:
         used = 0
         for s in active:
             usage = s.group_usage()
-            used += max(usage[1] * os.sysconf("SC_PAGE_SIZE") if usage else 0, reserved)
+            used += max(usage[1] * platform.page_size() if usage else 0, reserved)
         if used + reserved > budget * 1e9:
             raise HostError(f"The running provers use {used / 1e9:.1f} GB, the memory budget is {budget:g} GB; "
                             "stop a session before starting another", "memory_budget",
@@ -2940,7 +3088,7 @@ class Host:
             path = item["path"]
             if not os.path.exists(path):
                 Path(path).parent.mkdir(parents=True, exist_ok=True)
-                Path(path).write_text("")
+                Path(path).write_text("", encoding="utf-8")
             doc = target.get_doc(path)
             agent_change = line_change(item["base"], item["theirs"])
             human_change = line_change(item["base"], doc.text)
@@ -3187,7 +3335,7 @@ class Host:
                 outside = path not in s.docs and await self.project_read(path, lambda: not path_inside(path, folder))
                 if outside:
                     try:
-                        text = await self.project_read(path, lambda: Path(path).read_text())
+                        text = await self.project_read(path, lambda: Path(path).read_text(encoding="utf-8"))
                     except OSError as e:
                         raise HostError(f"Cannot read {path}: {e}", "not_found")
                     return {"doc": {"path": path, "text": text, "revision": 0, "prover": None, "library": True}}
@@ -3612,18 +3760,17 @@ class Host:
             await asyncio.sleep(WATCH_INTERVAL)
 
     async def run(self) -> None:
-        STATE_DIR.mkdir(parents=True, exist_ok=True)
+        platform.ensure_state_dir(STATE_DIR)
         self.load()
         self.enable_background_io()
-        with contextlib.suppress(FileNotFoundError):
-            SOCKET_PATH.unlink()
-        self.server = await asyncio.start_unix_server(self.serve_client, path=str(SOCKET_PATH),
-                                                      limit=64 * 1024 * 1024)
-        os.chmod(SOCKET_PATH, 0o600)
+        self.server = await platform.listen(self.serve_client, STATE_DIR, SOCKET_PATH)
         log("deductum host", VERSION, "listening on", SOCKET_PATH)
         loop = asyncio.get_running_loop()
         for sig in (signal.SIGTERM, signal.SIGINT):
-            loop.add_signal_handler(sig, self.stopping.set)
+            if platform.WINDOWS:
+                signal.signal(sig, lambda *_: loop.call_soon_threadsafe(self.stopping.set))
+            else:
+                loop.add_signal_handler(sig, self.stopping.set)
         watcher = asyncio.create_task(self.watch_loop())
         for sid in self.resume_after_load:
             try:
@@ -3671,8 +3818,7 @@ class Host:
         self.project_io.close()
         if self.sample_io is not None:
             self.sample_io.close()
-        with contextlib.suppress(FileNotFoundError):
-            SOCKET_PATH.unlink()
+        platform.cleanup_endpoint(STATE_DIR, SOCKET_PATH)
 
 
 # ---------------------------------------------------------------------------
@@ -3680,30 +3826,31 @@ class Host:
 
 
 def run_daemon(to_log: bool = False) -> int:
-    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    platform.ensure_state_dir(STATE_DIR)
     if to_log:
         logf = open(LOG_PATH, "ab", buffering=0)
         os.dup2(logf.fileno(), 1)
         os.dup2(logf.fileno(), 2)
-    lock = open(LOCK_PATH, "w")
     try:
-        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except OSError:
+        lock = platform.acquire_host_lock(LOCK_PATH)
+    except platform.HostLockBusy:
         print("deductum host already running", file=sys.stderr)
         return 0
-    asyncio.run(Host().run())
+    try:
+        asyncio.run(Host().run())
+    finally:
+        lock.close()
     return 0
 
 
-def host_running() -> bool:
-    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+def host_running(allow_bundle_mismatch: bool = False) -> bool:
     try:
-        s.connect(str(SOCKET_PATH))
-        return True
+        with platform.connect(STATE_DIR, SOCKET_PATH, allow_bundle_mismatch=allow_bundle_mismatch):
+            return True
+    except platform.HostBundleMismatch:
+        raise
     except OSError:
         return False
-    finally:
-        s.close()
 
 
 TOOLS = IsabelleDriver.TOOLS  # (the Isabelle proof tools; each driver has its own `tool_names`)
@@ -3741,23 +3888,21 @@ def spawn_daemon() -> None:
     """Start the host outside the client's process group and, where systemd manages the
     user's processes, in its own unit: closing or restarting a client (whose unit may be
     stopped with everything in it) must never end the host or its provers (design C2/C3)"""
-    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    platform.ensure_state_dir(STATE_DIR)
     script = str(Path(__file__).resolve())
     started = False
-    if shutil.which("systemd-run") and os.environ.get("XDG_RUNTIME_DIR"):
+    if not platform.WINDOWS and shutil.which("systemd-run") and os.environ.get("XDG_RUNTIME_DIR"):
         env_args = [f"--setenv={k}={os.environ[k]}" for k in ("DEDUCTUM_STATE_DIR", "USER_HOME", "PATH",
                                                                 "DEDUCTUM_ISABELLE") if os.environ.get(k)]
         for unit in ("deductum-host", f"deductum-host-{int(time.time())}"):
             r = subprocess.run(["systemd-run", "--user", "--collect", "--quiet", f"--unit={unit}", *env_args,
                                 sys.executable, script, "daemon", "--log"],
-                               capture_output=True, text=True, timeout=30)
+                               capture_output=True, text=True, encoding="utf-8", timeout=30)
             if r.returncode == 0:
                 started = True
                 break
     if not started:
-        logf = open(LOG_PATH, "ab")
-        subprocess.Popen([sys.executable, script, "daemon"], stdin=subprocess.DEVNULL,
-                         stdout=logf, stderr=logf, start_new_session=True, close_fds=True)
+        platform.spawn_detached(script, LOG_PATH)
     for _ in range(100):
         if host_running():
             return
@@ -3765,38 +3910,15 @@ def spawn_daemon() -> None:
     raise SystemExit("deductum host did not start; see " + str(LOG_PATH))
 
 
-def connect_socket() -> socket.socket:
-    if not host_running():
+def connect_socket(allow_bundle_mismatch: bool = False) -> socket.socket:
+    if not host_running(allow_bundle_mismatch=allow_bundle_mismatch):
         spawn_daemon()
-    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    s.connect(str(SOCKET_PATH))
-    return s
+    return platform.connect(STATE_DIR, SOCKET_PATH, allow_bundle_mismatch=allow_bundle_mismatch)
 
 
 def run_connect() -> int:
-    """Bridge stdio to the host's socket, for clients on other machines (over ssh)"""
-    import selectors
-    sock = connect_socket()
-    sel = selectors.DefaultSelector()
-    stdin = sys.stdin.buffer.raw if hasattr(sys.stdin.buffer, "raw") else sys.stdin.buffer
-    sel.register(stdin, selectors.EVENT_READ, "in")
-    sel.register(sock, selectors.EVENT_READ, "sock")
-    out = sys.stdout.buffer
-    while True:
-        for key, _ in sel.select():
-            if key.data == "in":
-                data = os.read(stdin.fileno(), 65536)
-                if not data:
-                    sock.shutdown(socket.SHUT_WR)
-                    sel.unregister(stdin)
-                    continue
-                sock.sendall(data)
-            else:
-                data = sock.recv(1 << 20)
-                if not data:
-                    return 0
-                out.write(data)
-                out.flush()
+    """Bridge binary stdio to the per-user host, locally or over SSH."""
+    return platform.bridge_stdio(connect_socket())
 
 
 class SyncClient:
@@ -3810,8 +3932,8 @@ class SyncClient:
         self.events: List[Dict[str, Any]] = []
 
     @classmethod
-    def local(cls) -> "SyncClient":
-        return cls(sock=connect_socket())
+    def local(cls, allow_bundle_mismatch: bool = False) -> "SyncClient":
+        return cls(sock=connect_socket(allow_bundle_mismatch=allow_bundle_mismatch))
 
     @classmethod
     def over_ssh(cls, destination: str, remote_python: str = "python3",
@@ -3860,6 +3982,10 @@ class SyncClient:
 
 
 def socket_accepts(path: Path) -> bool:
+    if not path.exists():
+        return False
+    if not hasattr(socket, "AF_UNIX"):
+        raise HostError("The legacy host socket cannot be checked on this platform; migrate on its original machine")
     s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     try:
         s.settimeout(2)
@@ -3874,7 +4000,7 @@ def socket_accepts(path: Path) -> bool:
 def rewrite_prefix(value: Any, old: str, new: str) -> Any:
     """`value` (parsed JSON) with every string that starts with the path `old` moved to `new`"""
     if isinstance(value, str):
-        return new + value[len(old):] if value == old or value.startswith(old + "/") else value
+        return new + value[len(old):] if value == old or value.startswith((old + os.sep, old + "/")) else value
     if isinstance(value, list):
         return [rewrite_prefix(v, old, new) for v in value]
     if isinstance(value, dict):
@@ -3903,7 +4029,7 @@ def migrate_from_isabellum(old_state: Optional[Path] = None, old_config: Optiona
     if not old_sessions.is_dir() and not old_worktrees.is_dir() and not old_config.is_file():
         say("Nothing to migrate: no Isabellum sessions, worktrees or config found.")
         return 0
-    new_state.mkdir(parents=True, exist_ok=True)
+    platform.ensure_state_dir(new_state)
     moved_sessions = 0
     new_worktrees = new_state / "worktrees"
     if old_worktrees.is_dir():
@@ -3923,7 +4049,7 @@ def migrate_from_isabellum(old_state: Optional[Path] = None, old_config: Optiona
             if meta is None:
                 continue
             repo_wts = []
-            if (meta.get("parent") or {}).get("worktree", "").startswith(old_prefix + "/"):
+            if (meta.get("parent") or {}).get("worktree", "").startswith((old_prefix + os.sep, old_prefix + "/")):
                 repo_wts.append((meta["parent"]["repo"], meta["parent"]["worktree"].replace(old_prefix, new_prefix, 1)))
             write_json_atomic(target / "meta.json", rewrite_prefix(meta, old_prefix, new_prefix))
             for f in sorted((target / "docs").glob("*.json")) if (target / "docs").is_dir() else []:
@@ -3983,8 +4109,8 @@ def main(argv: List[str]) -> int:
         print(json.dumps(c.request("find_sessions", **opts)["sessions"]))
         return 0
     if cmd == "stop-host":
-        if host_running():
-            c = SyncClient.local()
+        if host_running(allow_bundle_mismatch=True):
+            c = SyncClient.local(allow_bundle_mismatch=True)
             c.request("hello", client="cli")
             c.request("shutdown")
         return 0

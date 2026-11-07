@@ -115,6 +115,9 @@ class OrderedIO:
         while self.tasks:
             results = await asyncio.gather(*(asyncio.shield(task) for task in list(self.tasks)), return_exceptions=True)
             errors.extend(r for r in results if isinstance(r, BaseException))
+            # Gathering tasks that are already done need not yield. Their done
+            # callbacks remove them from self.tasks on the next loop turn.
+            await asyncio.sleep(0)
         if errors:
             raise errors[0]
 

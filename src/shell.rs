@@ -319,6 +319,10 @@ pub fn icon_handle(name: &'static str) -> widget::icon::Handle {
     match name {
         "sidebar-left" => widget::icon::from_svg_bytes(SIDEBAR_LEFT).symbolic(true),
         "sidebar-right" => widget::icon::from_svg_bytes(SIDEBAR_RIGHT).symbolic(true),
+        #[cfg(windows)]
+        "view-dual-symbolic" => widget::icon::from_svg_bytes(include_bytes!("../../../res/icons/view-dual-symbolic.svg").as_slice()).symbolic(true),
+        #[cfg(windows)]
+        "view-paged-symbolic" => widget::icon::from_svg_bytes(include_bytes!("../../../res/icons/view-paged-symbolic.svg").as_slice()).symbolic(true),
         _ => widget::icon::from_name(name).handle(),
     }
 }
@@ -545,7 +549,7 @@ pub fn header_end(app: &App) -> Vec<Element<'_, Message>> {
         items.push(
             widget::tooltip(
                 // (a toggle: on, filled with the muted accent, household rule 6)
-                widget::button::icon(widget::icon::from_name(if beside { "view-dual-symbolic" } else { "view-paged-symbolic" }))
+                widget::button::icon(icon_handle(if beside { "view-dual-symbolic" } else { "view-paged-symbolic" }))
                     .class(if beside { super::tones::muted_button(theme::Button::Icon) } else { theme::Button::Icon })
                     .on_press(Message::ToggleGoalBeside),
                 widget::text(if beside {
