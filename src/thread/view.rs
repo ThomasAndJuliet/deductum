@@ -92,6 +92,7 @@ impl ThreadStyle {
             (String::new(), f32::from(settings.text_size), 1.5, false)
         };
         let base = Typography {
+            display_start: false,
             body: body_family,
             mono,
             font_overrides: Vec::new(),
@@ -102,8 +103,10 @@ impl ThreadStyle {
             justify,
             italic: false,
             text,
+            strong: text,
             muted,
             link: accent,
+            link_strong: accent,
             code: text,
             code_background,
             page: page.unwrap_or_else(|| cosmic.bg_color().into()),

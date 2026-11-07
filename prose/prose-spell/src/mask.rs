@@ -26,13 +26,19 @@ pub fn mask_discord_syntax(text: &str) -> String {
         }
         // Inline code.
         if c == '`' {
-            let end = chars[i + 1..].iter().position(|&d| d == '`').map(|p| i + 1 + p + 1).unwrap_or(n);
+            let end = chars[i + 1..]
+                .iter()
+                .position(|&d| d == '`')
+                .map(|p| i + 1 + p + 1)
+                .unwrap_or(n);
             blank(&mut out, i, end);
             i = end;
             continue;
         }
         // Links.
-        if (i == 0 || !chars[i - 1].is_alphanumeric()) && (starts_with_ci(&chars, i, "https://") || starts_with_ci(&chars, i, "http://")) {
+        if (i == 0 || !chars[i - 1].is_alphanumeric())
+            && (starts_with_ci(&chars, i, "https://") || starts_with_ci(&chars, i, "http://"))
+        {
             let end = run_until_space(&chars, i);
             blank(&mut out, i, end);
             i = end;
@@ -94,7 +100,11 @@ fn find(chars: &[char], from: usize, pat: &str) -> Option<usize> {
 }
 
 fn run_until_space(chars: &[char], from: usize) -> usize {
-    chars[from..].iter().position(|c| c.is_whitespace()).map(|p| from + p).unwrap_or(chars.len())
+    chars[from..]
+        .iter()
+        .position(|c| c.is_whitespace())
+        .map(|p| from + p)
+        .unwrap_or(chars.len())
 }
 
 fn angle_token(s: &[char]) -> Option<usize> {
@@ -132,7 +142,12 @@ mod tests {
 
     #[test]
     fn keeps_char_count() {
-        for t in ["héllo `cöde` <@1> :smile: https://x.y/é", "```rs\nfn main() {}\n``` after", "a < b > c", "@everyone hi"] {
+        for t in [
+            "héllo `cöde` <@1> :smile: https://x.y/é",
+            "```rs\nfn main() {}\n``` after",
+            "a < b > c",
+            "@everyone hi",
+        ] {
             assert_eq!(m(t).chars().count(), t.chars().count(), "{t}");
         }
     }

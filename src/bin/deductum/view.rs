@@ -116,7 +116,9 @@ pub fn typography(theme: &cosmic::Theme) -> Typography {
     let text: Color = cosmic.on_bg_color().into();
     let dark = cosmic.is_dark;
     let display = super::settings::display();
+    let link: Color = cosmic.accent_text_color().into();
     Typography {
+        display_start: false,
         body: display.font.family().into(),
         mono: String::new(),
         font_overrides: [(0xE021, 0xE07E), (0xE121, 0xE17E), (0xE211, 0xE249), (0xE311, 0xE349)]
@@ -130,8 +132,10 @@ pub fn typography(theme: &cosmic::Theme) -> Typography {
         justify: display.justify,
         italic: false,
         text,
+        strong: text,
         muted: Color { a: 0.68, ..text },
-        link: cosmic.accent_text_color().into(),
+        link,
+        link_strong: link,
         code: text,
         code_background: cell_color(theme),
         page: page_color(theme),
@@ -2039,9 +2043,12 @@ fn prose_editor<'a>(t: &'a Theory, be: &'a super::editor::BlockEditor, vim_mode:
         .placeholder(if bold { "Section title" } else { "Text" })
         .font(serif)
         .size(size * scale)
-        .line_height(iced::widget::text::LineHeight::Relative(if bold { 1.25 } else { super::settings::display().line_height }))
-        // (a Markdown heading in a text block is set a little lower, as the renderer sets its headings)
-        .padding(if markdown_heading.flatten().is_some() { Padding { top: z(4.0), bottom: z(2.0), ..Padding::ZERO } } else { Padding::ZERO })
+        .line_height(iced::widget::text::LineHeight::Relative(match level {
+            // (a heading's lines close up as it grows, as the renderer sets them, household rule 23a)
+            Some(level) => Typography::heading_line_height(level, super::settings::display().line_height),
+            None => super::settings::display().line_height,
+        }))
+        .padding(Padding::ZERO)
         .on_action(Message::BlockAction)
         .key_binding(key_bindings(!t.completions.is_empty(), vim_mode, super::EditorTarget::Block))
         .style(|theme: &cosmic::Theme, _status| {

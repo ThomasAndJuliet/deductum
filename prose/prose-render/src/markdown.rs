@@ -95,18 +95,27 @@ pub struct Doc {
 impl Doc {
     /// Every formula, inline or display, with whether it is display math
     pub fn formulas(&self) -> impl Iterator<Item = (&str, bool)> {
-        self.blocks.iter().flat_map(|block| -> Box<dyn Iterator<Item = (&str, bool)>> {
-            match block {
-                Block::Math { latex, .. } => Box::new(std::iter::once((latex.as_str(), true))),
-                Block::Text(text) => {
-                    Box::new(text.runs.iter().filter(|r| r.style.math).map(|r| (r.text.as_str(), false)))
+        self.blocks
+            .iter()
+            .flat_map(|block| -> Box<dyn Iterator<Item = (&str, bool)>> {
+                match block {
+                    Block::Math { latex, .. } => Box::new(std::iter::once((latex.as_str(), true))),
+                    Block::Text(text) => Box::new(
+                        text.runs
+                            .iter()
+                            .filter(|r| r.style.math)
+                            .map(|r| (r.text.as_str(), false)),
+                    ),
+                    Block::Table { rows } => Box::new(
+                        rows.iter()
+                            .flatten()
+                            .flatten()
+                            .filter(|r| r.style.math)
+                            .map(|r| (r.text.as_str(), false)),
+                    ),
+                    _ => Box::new(std::iter::empty()),
                 }
-                Block::Table { rows } => {
-                    Box::new(rows.iter().flatten().flatten().filter(|r| r.style.math).map(|r| (r.text.as_str(), false)))
-                }
-                _ => Box::new(std::iter::empty()),
-            }
-        })
+            })
     }
 }
 
@@ -122,35 +131,82 @@ pub fn plain(text: &str) -> Doc {
                 indent: 0,
                 quote: 0,
                 marker: None,
-                runs: vec![Run { text: p.trim_end().to_string(), style: Style::default(), link: None }],
+                runs: vec![Run {
+                    text: p.trim_end().to_string(),
+                    style: Style::default(),
+                    link: None,
+                }],
             })
         })
         .collect();
     Doc { blocks }
 }
 
+/// Markdown as a chat takes it: each line break is meant (an agent's
+/// reply), a soft break kept as a line break
 pub fn parse(markdown: &str) -> Doc {
-    parse_with_map(markdown, false).0
+    parse_with(markdown, false, false, false).0
 }
 
 /// Parse Markdown and retain the exact origin of rendered UTF-8 positions.
 pub fn parse_mapped(markdown: &str) -> MappedDoc {
-    let (doc, map) = parse_with_map(markdown, true);
-    MappedDoc { doc, map: map.unwrap() }
+    let (doc, map) = parse_with(markdown, false, false, true);
+    MappedDoc {
+        doc,
+        map: map.unwrap(),
+    }
 }
 
-fn parse_with_map(markdown: &str, mapped: bool) -> (Doc, Option<SourceMap>) {
+/// Markdown as CommonMark has it, for documents: a soft break (a line
+/// ending inside a paragraph) is a space; hard breaks still break. Front
+/// matter (a `---` … `---` YAML block at the very start, see
+/// [`front_matter_end`]) is left out
+pub fn parse_document(markdown: &str) -> Doc {
+    parse_with(markdown, true, true, false).0
+}
+
+/// [`parse_document`] of a part of a document that does not start it:
+/// there is no front matter to leave out, as front matter is only ever at
+/// a document's start
+pub fn parse_document_part(markdown: &str) -> Doc {
+    parse_with(markdown, true, false, false).0
+}
+
+/// `mapped` also retains where each rendered position came from in
+/// `markdown`; the map is `None` otherwise
+fn parse_with(
+    markdown: &str,
+    soft_space: bool,
+    front: bool,
+    mapped: bool,
+) -> (Doc, Option<SourceMap>) {
     let (source, rewrites) = normalize_math_mapped(markdown);
     let options = Options::ENABLE_MATH
         | Options::ENABLE_TABLES
         | Options::ENABLE_STRIKETHROUGH
         | Options::ENABLE_TASKLISTS
-        | Options::ENABLE_GFM;
-    let mut builder = Builder::default();
+        | Options::ENABLE_GFM
+        // Footnotes: a reference shows as its raised label, a definition
+        // starts with it
+        | Options::ENABLE_FOOTNOTES;
+    // A document's front matter is not its text: read as Cerea's own
+    // analysis reads it, only a block at the very start ([`front_matter_end`]),
+    // and left out, as Export leaves it out, rather than set as a rule and a
+    // heading. The same lines further on are read as CommonMark reads them.
+    // Offsets stay those of the whole `source`, so the source map is unaffected
+    let start = match front_matter_end(&source) {
+        Some(end) if front => end,
+        _ => 0,
+    };
+    let mut builder = Builder {
+        soft_space,
+        ..Builder::default()
+    };
     if mapped {
         builder.mapping = Some(SourceTracker::new(&source));
     }
-    for (event, range) in Parser::new_ext(&source, options).into_offset_iter() {
+    for (event, range) in Parser::new_ext(&source[start..], options).into_offset_iter() {
+        let range = range.start + start..range.end + start;
         if let Some(map) = &mut builder.mapping {
             map.range = range.clone();
         }
@@ -161,7 +217,67 @@ fn parse_with_map(markdown: &str, mapped: bool) -> (Doc, Option<SourceMap>) {
     }
     builder.flush();
     let map = builder.mapping.map(|map| map.finish(markdown, rewrites));
-    (Doc { blocks: builder.blocks }, map)
+    (
+        Doc {
+            blocks: builder.blocks,
+        },
+        map,
+    )
+}
+
+/// Where a document's front matter ends, if it starts with some: the byte
+/// after its closing line. Front matter is only a block at the very start
+/// of a document, read as pulldown-cmark's YAML metadata scanner reads one:
+/// a `---` line (exactly three dashes, then only white space), a next line
+/// neither blank nor closing, and a closing `---` or `...` line after it.
+/// The same lines further on are not front matter
+pub fn front_matter_end(text: &str) -> Option<usize> {
+    let bytes = text.as_bytes();
+    let line_end = |at: usize| {
+        bytes[at..]
+            .iter()
+            .position(|b| *b == b'\n')
+            .map_or(bytes.len(), |i| at + i)
+    };
+    let first = line_end(0);
+    let line = &bytes[..first];
+    if !line.starts_with(b"---")
+        || line.get(3) == Some(&b'-')
+        || !line[3..].iter().all(|b| b.is_ascii_whitespace())
+    {
+        return None;
+    }
+    let next = bytes.get(first + 1..).filter(|n| !n.is_empty())?;
+    let blank = next
+        .iter()
+        .position(|b| !matches!(b, b'\t' | 0x0b | 0x0c | b' '))
+        .is_none_or(|i| matches!(next[i], b'\n' | b'\r'));
+    if blank || is_metadata_closer(next) {
+        return None;
+    }
+    let mut at = line_end(first + 1);
+    while at < bytes.len() {
+        at += 1;
+        if is_metadata_closer(&bytes[at..]) {
+            return Some((line_end(at) + 1).min(bytes.len()));
+        }
+        at = line_end(at);
+    }
+    None
+}
+
+/// Whether `line` (and what follows it) starts with a line closing front
+/// matter, as pulldown-cmark's scanner reads one: `---` or `...`, spaces,
+/// then a line's end (`\n`, `\r`) or the text's
+pub fn is_metadata_closer(line: &[u8]) -> bool {
+    if !(line.starts_with(b"---") || line.starts_with(b"...")) || line.get(3) == Some(&line[0]) {
+        return false;
+    }
+    let after = line[3..]
+        .iter()
+        .position(|b| *b != b' ')
+        .map_or(line.len(), |i| i + 3);
+    matches!(line.get(after), None | Some(b'\n' | b'\r'))
 }
 
 #[derive(Default)]
@@ -178,9 +294,13 @@ struct Builder {
     marker: Option<String>,
     code: Option<(String, String)>,
     table: Option<Vec<Vec<Vec<Run>>>>,
+    /// A soft break is a space (documents), not a line break (chats)
+    soft_space: bool,
     image: Option<(String, String)>,
     /// Whether the fenced code block being built has its closing fence
     fence_closed: bool,
+    /// A footnote definition's label, put before its first paragraph
+    footnote: Option<String>,
 }
 
 impl Builder {
@@ -198,7 +318,11 @@ impl Builder {
         }
         if let Some(rows) = &mut self.table {
             if let Some(cell) = rows.last_mut().and_then(|row| row.last_mut()) {
-                cell.push(Run { text: text.to_string(), style, link: self.link.clone() });
+                cell.push(Run {
+                    text: text.to_string(),
+                    style,
+                    link: self.link.clone(),
+                });
             }
             return;
         }
@@ -210,7 +334,11 @@ impl Builder {
             last.text.push_str(text);
             return;
         }
-        self.runs.push(Run { text: text.to_string(), style, link: self.link.clone() });
+        self.runs.push(Run {
+            text: text.to_string(),
+            style,
+            link: self.link.clone(),
+        });
     }
 
     /// End the text block being built, if it has any text
@@ -238,6 +366,13 @@ impl Builder {
                 Tag::Paragraph => {
                     self.flush();
                     self.kind = Some(TextKind::Paragraph);
+                    if let Some(label) = self.footnote.take() {
+                        self.push_text(&format!("{label} "), Style::default());
+                    }
+                }
+                Tag::FootnoteDefinition(name) => {
+                    self.flush();
+                    self.footnote = Some(superscript(&name).unwrap_or_else(|| format!("[{name}]")));
                 }
                 Tag::Heading { level, .. } => {
                     self.flush();
@@ -260,7 +395,11 @@ impl Builder {
                         map.begin_code();
                     }
                     let lang = match kind {
-                        CodeBlockKind::Fenced(lang) => lang.split_whitespace().next().unwrap_or_default().to_string(),
+                        CodeBlockKind::Fenced(lang) => lang
+                            .split_whitespace()
+                            .next()
+                            .unwrap_or_default()
+                            .to_string(),
                         CodeBlockKind::Indented => String::new(),
                     };
                     self.code = Some((lang, String::new()));
@@ -292,6 +431,9 @@ impl Builder {
                     }
                     self.image = Some((dest_url.to_string(), String::new()));
                 }
+                // An HTML block is a paragraph of its own text: not run
+                // together with the blocks around it
+                Tag::HtmlBlock => self.flush(),
                 Tag::Table(_) => {
                     self.flush();
                     self.table = Some(Vec::new());
@@ -330,15 +472,31 @@ impl Builder {
                     if let Some((lang, text)) = self.code.take() {
                         let text = text.strip_suffix('\n').unwrap_or(&text).to_string();
                         if let Some(map) = &mut self.mapping {
-                            map.end_code(text.len(), lang == "chartgen" || lang == "mermaid" && self.fence_closed);
+                            map.end_code(
+                                text.len(),
+                                lang == "chartgen" || lang == "mermaid" && self.fence_closed,
+                            );
                         }
                         let (indent, quote) = (self.indent(), self.quote);
                         self.blocks.push(if lang == "chartgen" {
-                            Block::Chart { spec: text, indent, quote }
+                            Block::Chart {
+                                spec: text,
+                                indent,
+                                quote,
+                            }
                         } else if lang == "mermaid" && self.fence_closed {
-                            Block::Diagram { source: text, indent, quote }
+                            Block::Diagram {
+                                source: text,
+                                indent,
+                                quote,
+                            }
                         } else {
-                            Block::Code { lang, text, indent, quote }
+                            Block::Code {
+                                lang,
+                                text,
+                                indent,
+                                quote,
+                            }
                         });
                     }
                 }
@@ -346,7 +504,13 @@ impl Builder {
                     self.flush();
                     self.lists.pop();
                 }
-                TagEnd::Item => self.flush(),
+                TagEnd::HtmlBlock => self.flush(),
+                TagEnd::Item => {
+                    self.flush();
+                    // An empty item's bullet is its own: not given to the
+                    // text after the list (a heading took it)
+                    self.marker = None;
+                }
                 TagEnd::Emphasis => self.style.italic = false,
                 TagEnd::Strong => self.style.bold = false,
                 TagEnd::Strikethrough => self.style.strike = false,
@@ -354,7 +518,11 @@ impl Builder {
                 TagEnd::Image => {
                     if let Some((url, alt)) = self.image.take() {
                         self.flush();
-                        self.blocks.push(Block::Image { url, alt, indent: self.indent() });
+                        self.blocks.push(Block::Image {
+                            url,
+                            alt,
+                            indent: self.indent(),
+                        });
                         if let Some(map) = &mut self.mapping {
                             map.end_image();
                         }
@@ -380,8 +548,20 @@ impl Builder {
                     self.push_text(&text, self.style);
                 }
             }
-            Event::Code(text) => self.push_text(&text, Style { code: true, ..self.style }),
-            Event::InlineMath(latex) => self.push_text(latex.trim(), Style { math: true, ..Style::default() }),
+            Event::Code(text) => self.push_text(
+                &text,
+                Style {
+                    code: true,
+                    ..self.style
+                },
+            ),
+            Event::InlineMath(latex) => self.push_text(
+                latex.trim(),
+                Style {
+                    math: true,
+                    ..Style::default()
+                },
+            ),
             Event::DisplayMath(latex) => {
                 if let Some(rows) = &mut self.table {
                     if let Some(map) = &mut self.mapping {
@@ -390,7 +570,10 @@ impl Builder {
                     if let Some(cell) = rows.last_mut().and_then(|row| row.last_mut()) {
                         cell.push(Run {
                             text: latex.trim().to_string(),
-                            style: Style { math: true, ..Style::default() },
+                            style: Style {
+                                math: true,
+                                ..Style::default()
+                            },
                             link: None,
                         });
                     }
@@ -422,7 +605,7 @@ impl Builder {
             // An agent means its line breaks, as chats take them
             Event::SoftBreak => {
                 if self.code.is_none() {
-                    self.push_text("\n", self.style);
+                    self.push_text(if self.soft_space { " " } else { "\n" }, self.style);
                 }
             }
             Event::HardBreak => self.push_text("\n", self.style),
@@ -437,24 +620,56 @@ impl Builder {
                 self.marker = Some(if done { "☑" } else { "☐" }.to_string());
             }
             Event::Html(html) | Event::InlineHtml(html) => self.push_text(&html, self.style),
-            Event::FootnoteReference(name) => self.push_text(&format!("[{name}]"), self.style),
+            // A raised label, as the Paper and Text views show it: the
+            // name in superscript letters where each has one, else as before
+            Event::FootnoteReference(name) => match superscript(&name) {
+                Some(raised) => self.push_text(&raised, self.style),
+                None => self.push_text(&format!("[{name}]"), self.style),
+            },
         }
     }
+}
+
+/// `text` in Unicode's superscript letters, if every one has one (rich
+/// text sets every run on one baseline, so a raised label is written
+/// with them)
+fn superscript(text: &str) -> Option<String> {
+    const FROM: &str = "0123456789+-=()abcdefghijklmnoprstuvwxyzABDEGHIJKLMNOPRTUVW";
+    const TO: [char; 59] = [
+        '⁰', '¹', '²', '³', '⁴', '⁵', '⁶', '⁷', '⁸', '⁹', '⁺', '⁻', '⁼', '⁽', '⁾', 'ᵃ', 'ᵇ', 'ᶜ',
+        'ᵈ', 'ᵉ', 'ᶠ', 'ᵍ', 'ʰ', 'ⁱ', 'ʲ', 'ᵏ', 'ˡ', 'ᵐ', 'ⁿ', 'ᵒ', 'ᵖ', 'ʳ', 'ˢ', 'ᵗ', 'ᵘ', 'ᵛ',
+        'ʷ', 'ˣ', 'ʸ', 'ᶻ', 'ᴬ', 'ᴮ', 'ᴰ', 'ᴱ', 'ᴳ', 'ᴴ', 'ᴵ', 'ᴶ', 'ᴷ', 'ᴸ', 'ᴹ', 'ᴺ', 'ᴼ', 'ᴾ',
+        'ᴿ', 'ᵀ', 'ᵁ', 'ⱽ', 'ᵂ',
+    ];
+    if text.is_empty() {
+        return None;
+    }
+    text.chars()
+        .map(|c| FROM.chars().position(|f| f == c).map(|i| TO[i]))
+        .collect()
 }
 
 /// Whether a fenced code block, as its source runs, ends with a closing
 /// fence: pulldown-cmark ends an unclosed one at the end of the document
 fn fence_closed(block: &str) -> bool {
-    let strip = |line: &str| line.trim_start_matches(|c: char| c.is_whitespace() || c == '>').to_string();
+    let strip = |line: &str| {
+        line.trim_start_matches(|c: char| c.is_whitespace() || c == '>')
+            .to_string()
+    };
     let mut lines = block.trim_end().lines();
     let Some(open) = lines.next().map(strip) else {
         return false;
     };
-    let fence: String = open.chars().take_while(|c| *c == '`' || *c == '~').collect();
+    let fence: String = open
+        .chars()
+        .take_while(|c| *c == '`' || *c == '~')
+        .collect();
     let Some(close) = lines.last().map(strip) else {
         return false;
     };
-    !fence.is_empty() && close.starts_with(&fence) && close.trim_end().chars().all(|c| fence.starts_with(c))
+    !fence.is_empty()
+        && close.starts_with(&fence)
+        && close.trim_end().chars().all(|c| fence.starts_with(c))
 }
 
 /// Rewrite `\(…\)` as `$…$`, `\[…\]` as `$$…$$`, and wrap bare display
@@ -475,21 +690,49 @@ pub struct Rewrite {
 /// into the rewritten text map back to the original: an editor parses the
 /// rewritten text and edits the original
 pub fn normalize_math_mapped(text: &str) -> (String, Vec<Rewrite>) {
-    const ENVIRONMENTS: [&str; 8] =
-        ["align", "align*", "equation", "equation*", "gather", "gather*", "multline", "eqnarray"];
+    let (out, rewrites, _) = normalize_math_scan(text);
+    (out, rewrites)
+}
+
+/// [`normalize_math_mapped`], with the lines it starts in the middle of
+/// something — a code fence or a `\[` not yet closed — as ranges of the
+/// original: a line starting in none of them is read the same whatever
+/// came before it. An incremental parser restarts only at such a line
+pub fn normalize_math_scan(text: &str) -> (String, Vec<Rewrite>, Vec<std::ops::Range<usize>>) {
+    const ENVIRONMENTS: [&str; 8] = [
+        "align",
+        "align*",
+        "equation",
+        "equation*",
+        "gather",
+        "gather*",
+        "multline",
+        "eqnarray",
+    ];
     let mut out = String::with_capacity(text.len() + 16);
     let mut rewrites = Vec::new();
-    let insert = |out: &mut String, rewrites: &mut Vec<Rewrite>, src: std::ops::Range<usize>, with: &str| {
-        let start = out.len();
-        out.push_str(with);
-        rewrites.push(Rewrite { src, out: start..out.len() });
-    };
+    let insert =
+        |out: &mut String, rewrites: &mut Vec<Rewrite>, src: std::ops::Range<usize>, with: &str| {
+            let start = out.len();
+            out.push_str(with);
+            rewrites.push(Rewrite {
+                src,
+                out: start..out.len(),
+            });
+        };
     let mut in_fence: Option<String> = None;
     let mut in_display = false;
     let mut line_start = 0;
+    let mut held: Vec<std::ops::Range<usize>> = Vec::new();
     for line in text.split_inclusive('\n') {
         let at = line_start;
         line_start += line.len();
+        if in_fence.is_some() || in_display {
+            match held.last_mut() {
+                Some(h) if h.end == at => h.end = line_start,
+                _ => held.push(at..line_start),
+            }
+        }
         let trimmed = line.trim_start();
         if let Some(fence) = &in_fence {
             if trimmed.starts_with(fence.as_str()) {
@@ -499,13 +742,18 @@ pub fn normalize_math_mapped(text: &str) -> (String, Vec<Rewrite>) {
             continue;
         }
         if trimmed.starts_with("```") || trimmed.starts_with("~~~") {
-            let fence: String = trimmed.chars().take_while(|c| *c == '`' || *c == '~').collect();
+            let fence: String = trimmed
+                .chars()
+                .take_while(|c| *c == '`' || *c == '~')
+                .collect();
             in_fence = Some(fence);
             out.push_str(line);
             continue;
         }
         // Environments on lines of their own
-        let begins = ENVIRONMENTS.iter().any(|env| trimmed.starts_with(&format!("\\begin{{{env}}}")));
+        let begins = ENVIRONMENTS
+            .iter()
+            .any(|env| trimmed.starts_with(&format!("\\begin{{{env}}}")));
         if begins && !in_display {
             insert(&mut out, &mut rewrites, at..at, "$$\n");
         }
@@ -556,7 +804,9 @@ pub fn normalize_math_mapped(text: &str) -> (String, Vec<Rewrite>) {
             }
             out.push(c);
         }
-        let ends = ENVIRONMENTS.iter().any(|env| trimmed.trim_end().ends_with(&format!("\\end{{{env}}}")));
+        let ends = ENVIRONMENTS
+            .iter()
+            .any(|env| trimmed.trim_end().ends_with(&format!("\\end{{{env}}}")));
         if ends && !in_display {
             // The line's own break stands for the closing fence's line, so
             // the maths ends where its last line does
@@ -569,7 +819,7 @@ pub fn normalize_math_mapped(text: &str) -> (String, Vec<Rewrite>) {
             }
         }
     }
-    (out, rewrites)
+    (out, rewrites, held)
 }
 
 /// Maps offsets into a rewritten text back to the original
@@ -613,10 +863,36 @@ mod tests {
         doc.formulas().map(|(l, d)| (l.to_string(), d)).collect()
     }
 
+    fn text_of(doc: &Doc) -> String {
+        let Block::Text(block) = &doc.blocks[0] else {
+            panic!()
+        };
+        block.runs.iter().map(|r| r.text.as_str()).collect()
+    }
+
+    #[test]
+    fn soft_breaks_are_line_breaks_in_chats_and_spaces_in_documents() {
+        let md = "Written before the `~/shelf`\nmigration, wrapped.  \nA hard break.";
+        assert_eq!(
+            text_of(&parse(md)),
+            "Written before the ~/shelf\nmigration, wrapped.\nA hard break."
+        );
+        assert_eq!(
+            text_of(&parse_document(md)),
+            "Written before the ~/shelf migration, wrapped.\nA hard break."
+        );
+    }
+
     #[test]
     fn dollars_make_inline_and_display_math() {
         let doc = parse("Let $x^2$ be.\n\n$$\\int_0^1 f$$\n\nDone, costs $5 and $6.");
-        assert_eq!(math_runs(&doc), vec![("x^2".to_string(), false), ("\\int_0^1 f".to_string(), true)]);
+        assert_eq!(
+            math_runs(&doc),
+            vec![
+                ("x^2".to_string(), false),
+                ("\\int_0^1 f".to_string(), true)
+            ]
+        );
     }
 
     #[test]
@@ -625,8 +901,15 @@ mod tests {
         let runs = math_runs(&doc);
         assert_eq!(runs[0], ("a+b".to_string(), false));
         assert_eq!(runs[1], ("E = mc^2".to_string(), true));
-        let Block::Text(block) = &doc.blocks[0] else { panic!() };
-        assert!(block.runs.iter().any(|r| r.style.code && r.text == "\\(code\\)"));
+        let Block::Text(block) = &doc.blocks[0] else {
+            panic!()
+        };
+        assert!(
+            block
+                .runs
+                .iter()
+                .any(|r| r.style.code && r.text == "\\(code\\)")
+        );
     }
 
     #[test]
@@ -649,7 +932,10 @@ mod tests {
     fn rewritten_offsets_map_back() {
         let text = "a \\(x\\) b\n\\[y\\]\n\\begin{align}\nz\n\\end{align}\nc\n";
         let (out, rewrites) = normalize_math_mapped(text);
-        assert_eq!(out, "a $x$ b\n$$y$$\n$$\n\\begin{align}\nz\n\\end{align}\n$$\nc\n");
+        assert_eq!(
+            out,
+            "a $x$ b\n$$y$$\n$$\n\\begin{align}\nz\n\\end{align}\n$$\nc\n"
+        );
         assert_eq!(out, normalize_math(text));
         let map = OffsetMap::new(&rewrites);
         // "x" and " b"
@@ -666,14 +952,28 @@ mod tests {
     fn closed_mermaid_fences_are_diagrams_and_open_ones_code() {
         let source = "flowchart TD\n    A --> B";
         let doc = parse(&format!("See:\n\n```mermaid\n{source}\n```\n\nDone."));
-        assert!(matches!(&doc.blocks[1], Block::Diagram { source: s, .. } if s == source), "{doc:#?}");
+        assert!(
+            matches!(&doc.blocks[1], Block::Diagram { source: s, .. } if s == source),
+            "{doc:#?}"
+        );
         // Still streaming: the fence is open
         let doc = parse(&format!("See:\n\n```mermaid\n{source}\n"));
-        assert!(matches!(&doc.blocks[1], Block::Code { lang, .. } if lang == "mermaid"), "{doc:#?}");
+        assert!(
+            matches!(&doc.blocks[1], Block::Code { lang, .. } if lang == "mermaid"),
+            "{doc:#?}"
+        );
         // In a list and a quote, and with a longer fence
-        let doc = parse(&format!("- item\n\n  ````mermaid\n  {source}\n  ````\n\n> ```mermaid\n> graph LR\n> ```\n"));
-        assert!(matches!(&doc.blocks[1], Block::Diagram { indent: 1, .. }), "{doc:#?}");
-        assert!(matches!(&doc.blocks[2], Block::Diagram { quote: 1, .. }), "{doc:#?}");
+        let doc = parse(&format!(
+            "- item\n\n  ````mermaid\n  {source}\n  ````\n\n> ```mermaid\n> graph LR\n> ```\n"
+        ));
+        assert!(
+            matches!(&doc.blocks[1], Block::Diagram { indent: 1, .. }),
+            "{doc:#?}"
+        );
+        assert!(
+            matches!(&doc.blocks[2], Block::Diagram { quote: 1, .. }),
+            "{doc:#?}"
+        );
         // A shorter fence does not close a longer one
         let doc = parse("````mermaid\ngraph LR\n```\n");
         assert!(matches!(&doc.blocks[0], Block::Code { .. }), "{doc:#?}");
@@ -684,15 +984,148 @@ mod tests {
         let doc = parse(
             "# Title\n\n1. one\n2. two\n   - nested\n\n```rust\nfn x() {}\n```\n\n| a | b |\n|---|---|\n| $1$ | 2 |\n",
         );
-        let Block::Text(heading) = &doc.blocks[0] else { panic!() };
+        let Block::Text(heading) = &doc.blocks[0] else {
+            panic!()
+        };
         assert_eq!(heading.kind, TextKind::Heading(1));
-        let Block::Text(item) = &doc.blocks[2] else { panic!() };
+        let Block::Text(item) = &doc.blocks[2] else {
+            panic!()
+        };
         assert_eq!(item.marker.as_deref(), Some("2."));
-        let Block::Text(nested) = &doc.blocks[3] else { panic!() };
+        let Block::Text(nested) = &doc.blocks[3] else {
+            panic!()
+        };
         assert_eq!((nested.indent, nested.marker.as_deref()), (2, Some("◦")));
-        assert!(matches!(&doc.blocks[4], Block::Code { lang, text, .. } if lang == "rust" && text == "fn x() {}"));
-        let Block::Table { rows } = &doc.blocks[5] else { panic!() };
+        assert!(
+            matches!(&doc.blocks[4], Block::Code { lang, text, .. } if lang == "rust" && text == "fn x() {}")
+        );
+        let Block::Table { rows } = &doc.blocks[5] else {
+            panic!()
+        };
         assert_eq!(rows.len(), 2);
         assert!(rows[1][0][0].style.math);
+    }
+
+    fn all_text(doc: &Doc) -> String {
+        doc.blocks
+            .iter()
+            .filter_map(|b| match b {
+                Block::Text(t) => Some(t.runs.iter().map(|r| r.text.as_str()).collect::<String>()),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+            .join("|")
+    }
+
+    /// The Source view's preview leaves a document's front matter out, as
+    /// Export does, rather than setting it as a rule and a heading
+    /// (follow-up to item 2); a chat's text is read as before
+    #[test]
+    fn a_documents_front_matter_is_left_out_of_its_preview_but_not_a_chats() {
+        let md = "---\ntitle: Running the house server\nauthor: Juliet\n---\n\n# Running the house server\n\nThe server sits in the hall cupboard.\n";
+        let doc = parse_document(md);
+        assert_eq!(doc.blocks.len(), 2, "{doc:#?}");
+        assert!(
+            !doc.blocks.iter().any(|b| matches!(b, Block::Rule)),
+            "no rule"
+        );
+        let Block::Text(first) = &doc.blocks[0] else {
+            panic!("{doc:#?}")
+        };
+        assert_eq!(
+            (first.kind, first.runs[0].text.as_str()),
+            (TextKind::Heading(1), "Running the house server"),
+            "the first block is the heading"
+        );
+        assert!(!all_text(&doc).contains("author") && !all_text(&doc).contains("title:"));
+        // A chat's reply is not a document: a rule and text, as before
+        let chat = parse(md);
+        assert!(
+            chat.blocks.iter().any(|b| matches!(b, Block::Rule)),
+            "{chat:#?}"
+        );
+        assert!(all_text(&chat).contains("author"));
+        // Only at the start: a rule between two paragraphs is a rule
+        let later = parse_document("Intro.\n\n---\n\nMore.\n");
+        assert!(
+            later.blocks.iter().any(|b| matches!(b, Block::Rule)),
+            "{later:#?}"
+        );
+        // Unclosed front matter is not front matter
+        assert!(all_text(&parse_document("---\ntitle: x\n\nBody.\n")).contains("Body."));
+        // Without any, nothing changes
+        assert_eq!(parse_document("# T\n\nBody.\n"), parse("# T\n\nBody.\n"));
+    }
+
+    /// Front matter is only a block at the very start: the same block in
+    /// the middle of a document is shown as CommonMark reads it, a rule and
+    /// then the lines down to the second `---` as a heading
+    #[test]
+    fn a_front_matter_block_mid_document_is_shown() {
+        assert_eq!(front_matter_end("---\ntitle: x\n---\n\nBody.\n"), Some(17));
+        assert_eq!(front_matter_end("Intro.\n\n---\ntitle: x\n---\n"), None);
+        assert_eq!(
+            front_matter_end("---\n\ntitle: x\n---\n"),
+            None,
+            "a blank line first"
+        );
+        assert_eq!(front_matter_end("---\ntitle: x\n"), None, "no closing line");
+        let mid = "Intro.\n\n---\ntitle: x\nauthor: J\n---\n\nMore.\n";
+        let doc = parse_document(mid);
+        assert!(matches!(doc.blocks[1], Block::Rule), "{doc:#?}");
+        let Block::Text(heading) = &doc.blocks[2] else {
+            panic!("{doc:#?}")
+        };
+        assert_eq!(heading.kind, TextKind::Heading(2), "{doc:#?}");
+        assert_eq!(
+            heading
+                .runs
+                .iter()
+                .map(|r| r.text.as_str())
+                .collect::<String>(),
+            "title: x author: J"
+        );
+        assert_eq!(all_text(&doc), "Intro.|title: x author: J|More.");
+        // With front matter at the start as well, only that is left out
+        let both = parse_document(&format!("---\nk: v\n---\n\n{mid}"));
+        assert_eq!(both, doc);
+    }
+
+    /// Item 11: a footnote reference is its name in superscript letters,
+    /// where each has one; a definition starts with its label; a name that
+    /// cannot be raised keeps its brackets
+    #[test]
+    fn footnotes_are_superscript_labels_with_the_definition_starting_with_it() {
+        let doc = parse_document(
+            "Disks are encrypted.[^keys] And more.[^1] Odd.[^no_way!]\n\n[^keys]: The keys are on paper.\n\n[^1]: One.\n\n[^no_way!]: Odd one.\n",
+        );
+        let first = text_of(&doc);
+        assert_eq!(first, "Disks are encrypted.ᵏᵉʸˢ And more.¹ Odd.[no_way!]");
+        assert_eq!(superscript("keys").as_deref(), Some("ᵏᵉʸˢ"));
+        assert_eq!(superscript("1").as_deref(), Some("¹"));
+        assert_eq!(superscript("q"), None, "no superscript q in Unicode");
+        assert_eq!(superscript(""), None);
+        assert_eq!(superscript("a-b").as_deref(), Some("ᵃ⁻ᵇ"));
+        // The definitions: the label first, then the words
+        let texts: Vec<String> = doc
+            .blocks
+            .iter()
+            .filter_map(|b| {
+                if let Block::Text(t) = b {
+                    Some(t.runs.iter().map(|r| r.text.as_str()).collect())
+                } else {
+                    None
+                }
+            })
+            .collect();
+        assert!(
+            texts.contains(&"ᵏᵉʸˢ The keys are on paper.".to_string()),
+            "{texts:?}"
+        );
+        assert!(texts.contains(&"¹ One.".to_string()), "{texts:?}");
+        assert!(
+            texts.contains(&"[no_way!] Odd one.".to_string()),
+            "{texts:?}"
+        );
     }
 }
