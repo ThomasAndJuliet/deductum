@@ -105,6 +105,72 @@ def secure_file(path):
         local_free(descriptor)
 
 
+def replace_preserving_dacl(staged, destination):
+    """Replace an upstream configuration file without broadening its ACL."""
+    staged, destination = Path(staged), Path(destination)
+    reject_reparse(destination)
+    reject_reparse(staged)
+    if destination.exists():
+        check_owner(destination)
+        descriptor = W.LPVOID()
+        error = get_security(str(destination), 1, 4, None, None, None, None, C.byref(descriptor))
+        if error:
+            raise C.WinError(error)
+        try:
+            control, revision = W.WORD(), W.DWORD()
+            get_control = api(a, "GetSecurityDescriptorControl", W.BOOL, W.LPVOID,
+                              C.POINTER(W.WORD), C.POINTER(W.DWORD))
+            checked(get_control(descriptor, C.byref(control), C.byref(revision)))
+            protection = 0x80000000 if control.value & 0x1000 else 0x20000000
+            checked(set_security(str(staged), 4 | protection, descriptor))
+        finally:
+            local_free(descriptor)
+    os.replace(staged, destination)
+
+
+def check_private_dacl(path, *, protected=False):
+    """Accept only the simple current-user/System ACLs created for our cache."""
+    path = Path(path)
+    reject_reparse(path)
+    check_owner(path)
+    dacl, descriptor = W.LPVOID(), W.LPVOID()
+    error = get_security(str(path), 1, 4, None, None, C.byref(dacl), None, C.byref(descriptor))
+    if error:
+        raise C.WinError(error)
+    try:
+        if protected:
+            control, revision = W.WORD(), W.DWORD()
+            get_control = api(a, "GetSecurityDescriptorControl", W.BOOL, W.LPVOID,
+                              C.POINTER(W.WORD), C.POINTER(W.DWORD))
+            checked(get_control(descriptor, C.byref(control), C.byref(revision)))
+            if not control.value & 0x1000:
+                raise OSError("The Isabelle cache root does not have a protected DACL")
+        if not dacl:
+            raise OSError("The Isabelle cache has a permissive NULL DACL")
+        class AclSize(C.Structure):
+            _fields_ = [(name, W.DWORD) for name in ("count", "used", "free")]
+        size = AclSize()
+        get_info = api(a, "GetAclInformation", W.BOOL, W.LPVOID, W.LPVOID, W.DWORD, C.c_int)
+        get_ace = api(a, "GetAce", W.BOOL, W.LPVOID, W.DWORD, C.POINTER(W.LPVOID))
+        checked(get_info(dacl, C.byref(size), C.sizeof(size), 2))
+        allowed = {current_sid(), "S-1-5-18"}
+        for index in range(size.count):
+            ace = W.LPVOID()
+            checked(get_ace(dacl, index, C.byref(ace)))
+            # ACCESS_ALLOWED_ACE has an 8-byte header/mask before its SID.
+            if C.cast(ace, C.POINTER(C.c_ubyte))[0] != 0:
+                raise OSError("The Isabelle cache has an unsupported DACL entry")
+            sid = W.LPWSTR()
+            checked(sid_string(W.LPVOID(ace.value + 8), C.byref(sid)))
+            try:
+                if sid.value not in allowed:
+                    raise OSError("The Isabelle cache grants access to another user")
+            finally:
+                local_free(C.cast(sid, W.HANDLE))
+    finally:
+        local_free(descriptor)
+
+
 def secure_directory(path):
     """Create the state root privately, or replace its DACL before using it."""
     path = Path(os.path.abspath(path))
