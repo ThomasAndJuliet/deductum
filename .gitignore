@@ -1,11 +1,4 @@
-/.cargo/
-/debian/*debhelper*
-/debian/cosmic-term.substvars
-/debian/cosmic-term/
-/debian/files
 /target/
-/vendor.tar
-/.direnv/
 /.idea/
 nohup.out
 /build-flatpak/
@@ -13,7 +6,6 @@ nohup.out
 /.local-design/
 __pycache__/
 *.pyc
-/chartgen-src
 
 **/target/
 **/.lake/

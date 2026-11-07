@@ -1,98 +1,32 @@
 [package]
-name = "cosmic-term"
-version = "1.9.0"
-authors = ["Jeremy Soller <jeremy@system76.com>"]
+name = "deductum"
+version = "0.1.0"
+authors = ["Thomas and Juliet"]
 edition = "2024"
 license = "GPL-3.0-only"
 rust-version = "1.95"
-autobins = false
 
 [[bin]]
 name = "deductum"
 path = "src/bin/deductum/main.rs"
 
-[[bin]]
-name = "cosmic-term"
-path = "src/main.rs"
-required-features = ["terminal"]
-
-[[bin]]
-name = "ct-supervise"
-path = "src/bin/ct-supervise.rs"
-required-features = ["terminal"]
-
-[[bin]]
-name = "ct-sudo-agent"
-path = "src/bin/ct-sudo-agent.rs"
-required-features = ["terminal"]
-
-[[bin]]
-name = "ct-transfer"
-path = "src/bin/ct-transfer.rs"
-required-features = ["terminal"]
-
-[[bin]]
-name = "ct-chartgen"
-path = "src/bin/ct-chartgen.rs"
-required-features = ["terminal"]
-
 [dependencies]
-alacritty_terminal = { version = "0.25.1", optional = true }
-hex_color = { version = "3", features = ["serde"] }
-indexmap = "2"
-libc = "0.2"
 log = "0.4"
 open = "5.3.2"
-paste = "1.0"
-regex = "1"
 ron = "0.11"
 serde_json = "1"
 serde = { version = "1", features = ["serde_derive"] }
-shlex = "1"
-# Windows are separate processes; they find and ask each other over D-Bus
-zbus = { version = "5", default-features = false, features = ["tokio"] }
 tokio = { version = "1", features = ["sync", "process", "io-util", "rt", "time", "macros", "net"] }
-# The sudo agent's protocol and keys; see AGENTS-PLAN.md, "Sudo from agents"
-ct-sudo-protocol = { path = "sudo/protocol", features = ["sign"] }
-futures-util = "0.3"
-# The secrets store: an Argon2id key from the store password seals it with
-# XChaCha20-Poly1305
-argon2 = { version = "0.5", default-features = false, features = ["alloc"] }
+# Only for its OsRng, which mints the session tokens
 chacha20poly1305 = { version = "0.10", default-features = false, features = ["alloc", "getrandom"] }
-zeroize = { version = "1", features = ["derive"] }
-# The sudo agent's pow, as its static build has no libm
-libm = "0.2"
-# CLI arguments
-clap_lex = "0.7"
-# Internationalization
-i18n-embed = { version = "0.16", features = [
-    "fluent-system",
-    "desktop-requester",
-] }
-i18n-embed-fl = "0.10"
-icu = { version = "2.1.1", features = ["compiled_data"] }
-rust-embed = "8"
-url = "2.5"
 # Markdown, LaTeX, Mermaid, charts and images, shared with other apps
 prose-render = { path = "prose/prose-render" }
-# Decoders for the images threads show; iced's own build has none
+# Decoders for the images shown in proof documents; iced's own build has none
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "gif"] }
-# Charts in threads, drawn natively; from the shared diagrams repository
-chartgen = { path = "vendor/chartgen/crates/chartgen" }
 # The household's tone maths (household-ui RULES.md rule 6): Deductum's selection tint and the
 # muted accent of its chosen tabs and toggles; the highlight tests read the expected colours from
 # it too. From the private household-kit, read over ssh; pinned in Cargo.lock
 household-tones = { git = "ssh://git@github.com/ThomasAndJuliet/household-kit.git" }
-secret-service = { version = "5.1.0", features = [
-    "rt-tokio-crypto-rust",
-], optional = true }
-thiserror = { version = "2.0", optional = true }
-secstr = { version = "0.5", optional = true }
-
-[dependencies.cosmic-files]
-git = "https://github.com/pop-os/cosmic-files.git"
-default-features = false
-optional = true
 
 [dependencies.cosmic-text]
 version = "0.19"
@@ -109,11 +43,11 @@ features = [
     "tokio",
     "winit",
     "surface-message",
+    "advanced-shaping",
 ]
 
 [target.'cfg(unix)'.dependencies]
-fork = "0.4"
-# The global allocator of the GUI binaries (src/main.rs, src/bin/deductum):
+# The global allocator of the GUI binary (src/bin/deductum):
 # libcosmic's malloc_trim after each update and view then has only glibc's
 # small heap to scan. Background threads return freed memory from jemalloc's
 # own thread, so an idle window gives memory back too.
@@ -132,37 +66,19 @@ windows-sys = { version = "0.61", features = [
     "Win32_UI_WindowsAndMessaging",
 ] }
 
-[build-dependencies]
-xdgen = "0.1"
-
 [features]
-default = ["terminal", "dbus-config", "wgpu", "wayland", "password_manager"]
-terminal = ["dep:cosmic-files", "dep:alacritty_terminal"]
 dbus-config = ["libcosmic/dbus-config"]
-wgpu = ["libcosmic/wgpu", "cosmic-files?/wgpu"]
-wayland = ["libcosmic/wayland", "cosmic-files?/wayland"]
-password_manager = ["secret-service", "thiserror", "secstr"]
+wgpu = ["libcosmic/wgpu"]
+wayland = ["libcosmic/wayland"]
+default = ["dbus-config", "wgpu", "wayland"]
 
 [profile.release-with-debug]
 inherits = "release"
 debug = true
 
-# [patch.'https://github.com/pop-os/libcosmic']
-# libcosmic = { path = "../libcosmic" }
-# cosmic-config = { path = "../libcosmic/cosmic-config" }
-# cosmic-theme = { path = "../libcosmic/cosmic-theme" }
-# iced_futures = { path = "../libcosmic/iced/futures" }
-# iced_winit = { path = "../libcosmic/iced/winit" }
-# libcosmic = { git = "https://github.com/pop-os/libcosmic//", branch = "theme-v2" }
-# cosmic-config = { git = "https://github.com/pop-os/libcosmic//", branch = "theme-v2" }
-# cosmic-theme = { git = "https://github.com/pop-os/libcosmic//", branch = "theme-v2" }
-# iced_futures = { git = "https://github.com/pop-os/libcosmic//", branch = "theme-v2" }
-# iced_winit = { git = "https://github.com/pop-os/libcosmic//", branch = "theme-v2" }
-
-# The sudo agent's protocol, and the PAM module that uses it; see AGENTS-PLAN.md
 [workspace]
-members = ["sudo/protocol", "sudo/pam", "prose/prose-render"]
-exclude = ["vendor/alacritty_terminal", "vendor/vte", "vendor/chartgen"]
+members = ["prose/prose-render"]
+exclude = ["vendor/chartgen"]
 
 # libcosmic and its iced from the household fork (ThomasAndJuliet/libcosmic,
 # branch household, read over ssh); HOUSEHOLD.md there says what it changes and
@@ -186,18 +102,6 @@ iced_tiny_skia = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", r
 iced_wgpu = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }
 iced_widget = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }
 iced_winit = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }
-
-# XTWINOPS 16 (cell size in pixels) answered; see vendor/README.md
-[patch.crates-io]
-alacritty_terminal = { path = "vendor/alacritty_terminal" }
-vte = { path = "vendor/vte" }
-
-# The store's key derivation is slow on purpose; unoptimized, it is far slower
-[profile.dev.package.argon2]
-opt-level = 3
-
-[profile.dev.package.blake2]
-opt-level = 3
 
 # The whole pop-os/winit family from the same fork (HOUSEHOLD.md), which fixes
 # the "failed to get pointer data" panic. Its winit crates refer to each other

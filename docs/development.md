@@ -20,8 +20,7 @@ libcosmic fork and household-kit requires read access to their private GitHub
 repositories over SSH. CI uses read-only deploy keys through
 `scripts/ci-private-crates.sh`; it does not use an administrator's login.
 A source build uses `cargo build --locked --release --bin deductum` with the
-native dependencies required by libcosmic. The package is still named
-`cosmic-term` for historical reasons; select the `deductum` binary explicitly.
+native dependencies required by libcosmic.
 
 ## Build the Windows package
 
@@ -217,7 +216,7 @@ hosted runner.
 
 After the SDK tests, CI builds `deductum` in Freedesktop SDK 25.08 and packages
 that exact tested checkout. It validates desktop/AppStream/catalog/icons and
-records its Git SHA, run ID and archive digest. Chartgen and terminal dependencies are vendored in this repository;
+records its Git SHA, run ID and archive digest. Chartgen is vendored in this repository;
 libcosmic and household-tones are fetched from private household repositories
 using read-only deploy keys. No sibling checkout is needed.
 The successful default-branch push preserves its artifact for seven days.
