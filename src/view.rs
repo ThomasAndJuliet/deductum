@@ -2010,6 +2010,12 @@ fn block_editor_in<'a>(ws: Option<&'a Workspace>, t: &'a Theory, window: bool, i
     col.width(Length::Fixed(block_code_width(t.code_columns.max(columns)) + 8.0)).into()
 }
 
+/// The size scale and relative line height the prose editor sets a heading of `level` in
+pub(crate) fn prose_heading_style(level: u8, prose_line_height: f32) -> (f32, f32) {
+    let scale = match level { 1 => 1.55, 2 => 1.32, 3 => 1.16, 4 => 1.05, _ => 1.0 };
+    (scale, Typography::heading_line_height(level, prose_line_height))
+}
+
 /// A heading or text being edited: its text alone, set in the font, size and width it reads in,
 /// on the page rather than in a box; code inside it (antiquotations) keeps code colours, and
 /// what only renders (maths, antiquotations) shows rendered underneath
@@ -2026,11 +2032,12 @@ fn prose_editor<'a>(t: &'a Theory, be: &'a super::editor::BlockEditor, vim_mode:
         (1..=6).contains(&hashes).then(|| text.chars().nth(hashes).is_some_and(|c| c == ' ')).unwrap_or(false).then_some(hashes as u8)
     });
     let level = match be.kind {
-        Kind::Heading(level) => Some(level),
+        // (as the rendered view sets it, which stops at level four)
+        Kind::Heading(level) => Some(super::editor::rendered_heading_level(level)),
         _ => markdown_heading.flatten(),
     };
     let (scale, bold) = match level {
-        Some(level) => (match level { 1 => 1.55, 2 => 1.32, 3 => 1.16, 4 => 1.05, _ => 1.0 }, true),
+        Some(level) => (prose_heading_style(level, super::settings::display().line_height).0, true),
         None => (1.0, false),
     };
     let serif = cosmic::iced::Font {
@@ -2045,7 +2052,7 @@ fn prose_editor<'a>(t: &'a Theory, be: &'a super::editor::BlockEditor, vim_mode:
         .size(size * scale)
         .line_height(iced::widget::text::LineHeight::Relative(match level {
             // (a heading's lines close up as it grows, as the renderer sets them, household rule 23a)
-            Some(level) => Typography::heading_line_height(level, super::settings::display().line_height),
+            Some(level) => prose_heading_style(level, super::settings::display().line_height).1,
             None => super::settings::display().line_height,
         }))
         .padding(Padding::ZERO)

@@ -235,6 +235,13 @@ pub fn shown_text(text: &str, prose: bool) -> String {
 }
 
 /// The rendered prose of a block's source, if it is prose
+/// The heading level the rendered view sets a heading in: Markdown headings stop at four. The
+/// prose editor uses the same level, so that opening a heading changes neither its size nor its
+/// line height
+pub(crate) fn rendered_heading_level(level: u8) -> u8 {
+    level.min(4)
+}
+
 fn preview_of(profile: &dyn Profile, source: &str, kinds: &HashMap<String, String>, table: &dyn Symbols) -> (theory::Kind, Option<Arc<Doc>>) {
     let blocks = profile.blocks(source, &[], kinds);
     let Some(block) = blocks.first() else { return (theory::Kind::Formal, None) };
@@ -242,7 +249,7 @@ fn preview_of(profile: &dyn Profile, source: &str, kinds: &HashMap<String, Strin
     let md = match (block.kind, block.body) {
         (theory::Kind::Heading(level), Some((s, e))) if e <= chars.len() => Some(format!(
             "{} {}",
-            "#".repeat(level.min(4) as usize),
+            "#".repeat(rendered_heading_level(level) as usize),
             profile.prose(&chars[s..e].iter().collect::<String>(), table).replace('\n', " ")
         )),
         (theory::Kind::Text, Some((s, e))) if e <= chars.len() => Some(profile.prose(&chars[s..e].iter().collect::<String>(), table)),
@@ -1399,7 +1406,7 @@ impl Theory {
                     if s <= e && e <= chars.len() =>
                 {
                     let src: String = chars[s..e].iter().collect();
-                    let md = format!("{} {}", "#".repeat(level.min(4) as usize), self.profile.prose(&src, table).replace('\n', " "));
+                    let md = format!("{} {}", "#".repeat(rendered_heading_level(level) as usize), self.profile.prose(&src, table).replace('\n', " "));
                     Some(md)
                 }
                 (theory::Kind::Text, Some((s, e))) if s <= e && e <= chars.len() => {
@@ -2200,6 +2207,22 @@ mod tests {
 #[cfg(test)]
 mod preview_tests {
     use super::*;
+
+    #[test]
+    fn deep_isabelle_heading_previews_and_edits_at_one_level() {
+        let table = Table::fallback();
+        let src = "paragraph \\<open>Deep title\\<close>";
+        let (kind, doc) = preview_of(crate::prover::profile(None), src, &HashMap::new(), &table);
+        let theory::Kind::Heading(level) = kind else { panic!("a heading: {kind:?}") };
+        assert_eq!(level, 5, "Isabelle paragraph is level 5");
+        let doc = doc.expect("a preview");
+        let rendered = format!("{doc:?}");
+        assert!(rendered.contains("Heading(4)"), "rendered at level 4: {rendered}");
+        let edited = crate::view::prose_heading_style(rendered_heading_level(level), 1.5);
+        let as_four = crate::view::prose_heading_style(4, 1.5);
+        assert_eq!(edited, as_four, "the editor sets level 5 as the rendered view does");
+        assert_ne!(edited, crate::view::prose_heading_style(level, 1.5), "unclamped it differed");
+    }
 
     #[test]
     fn previews_prose() {

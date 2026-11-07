@@ -2661,17 +2661,28 @@ impl<'a, Message> Widget<Message, cosmic::Theme, Renderer> for RichText<'a, Mess
     }
 }
 
+fn valid_scale(scale: f32) -> f32 {
+    if scale.is_finite() && scale > 0.0 {
+        scale
+    } else {
+        1.0
+    }
+}
+
+/// Snap a logical y to the nearest physical pixel. Text and inline formulas
+/// both use this, so they stay on one grid at fractional device scales.
+fn snap_y(y: f32, scale: f32) -> f32 {
+    let scale = valid_scale(scale);
+    (y * scale).round() / scale
+}
+
 /// SVGs are rasterized at the ceiling of their physical dimensions. Keep the
 /// drawn quad that same integer size: independently snapped fractional edges
 /// can otherwise squeeze out a one-pixel mathematical stroke.
 fn formula_pixel_bounds(mut bounds: Rectangle, scale: f32) -> Rectangle {
-    let scale = if scale.is_finite() && scale > 0.0 {
-        scale
-    } else {
-        1.0
-    };
+    let scale = valid_scale(scale);
     bounds.x = (bounds.x * scale).round() / scale;
-    bounds.y = (bounds.y * scale).round() / scale;
+    bounds.y = snap_y(bounds.y, scale);
     let extent = |size: f32| {
         // The shader rounds both edges to nearest-even. An even extent keeps
         // their rounded distance invariant even at a half-pixel translation.
@@ -2794,7 +2805,7 @@ fn draw_cell(renderer: &mut Renderer, cell: &Shaped, at: Vector, clip: Rectangle
     // On a whole pixel: glyph rows are cut toward zero from where the text
     // starts, so text starting above the window's top was drawn a pixel
     // lower, and jumped as it crossed the top while scrolling
-    let position = Point::new(at.x + cell.origin.x, (at.y + cell.origin.y).round());
+    let position = Point::new(at.x + cell.origin.x, snap_y(at.y + cell.origin.y, scale));
     renderer.fill_raw(Raw {
         buffer: Arc::downgrade(&cell.buffer),
         position,
@@ -2835,6 +2846,35 @@ impl<'a, Message: 'a> From<RichText<'a, Message>>
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn text_and_formula_snap_to_the_same_physical_pixel() {
+        use cosmic::iced::{Rectangle, Size};
+        for scale in [1.25_f32, 1.5, 1.75] {
+            let mut disagreements = 0;
+            for i in 0..400 {
+                let y = 100.0 + i as f32 * 0.37;
+                let text = super::snap_y(y, scale);
+                let formula = super::formula_pixel_bounds(
+                    Rectangle::new(cosmic::iced::Point::new(0.0, y), Size::new(10.0, 10.0)),
+                    scale,
+                )
+                .y;
+                assert_eq!(text, formula, "y {y} at {scale}");
+                let physical = text * scale;
+                assert!((physical - physical.round()).abs() < 1e-3, "y {y} at {scale}");
+                if (y.round() - text).abs() * scale > 0.5 {
+                    disagreements += 1;
+                }
+            }
+            // The former logical-pixel rounding left the text off this grid
+            assert!(disagreements > 0);
+        }
+        for i in 0..100 {
+            let y = 5.0 + i as f32 * 0.31;
+            assert_eq!(super::snap_y(y, 1.0), y.round());
+        }
+    }
+
     #[test]
     fn formula_quad_matches_raster_size_at_fractional_scale_and_position() {
         use cosmic::iced::Rectangle;

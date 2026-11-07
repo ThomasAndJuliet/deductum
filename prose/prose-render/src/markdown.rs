@@ -367,6 +367,11 @@ impl Builder {
                     self.flush();
                     self.kind = Some(TextKind::Paragraph);
                     if let Some(label) = self.footnote.take() {
+                        // The label is generated: it has no source bytes, so the
+                        // tracker records it as an empty span at the paragraph start.
+                        if let Some(map) = &mut self.mapping {
+                            map.generated_next();
+                        }
                         self.push_text(&format!("{label} "), Style::default());
                     }
                 }
