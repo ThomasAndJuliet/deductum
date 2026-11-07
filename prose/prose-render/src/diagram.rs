@@ -41,7 +41,16 @@ pub struct Palette {
 
 impl Palette {
     fn key(&self) -> [[u8; 4]; 7] {
-        [self.page, self.surface, self.text, self.muted, self.rule, self.accent, self.error].map(Color::into_rgba8)
+        [
+            self.page,
+            self.surface,
+            self.text,
+            self.muted,
+            self.rule,
+            self.accent,
+            self.error,
+        ]
+        .map(Color::into_rgba8)
     }
 
     pub fn dark(&self) -> bool {
@@ -90,8 +99,13 @@ struct Cache {
     clock: u64,
 }
 
-static CACHE: LazyLock<Mutex<Cache>> =
-    LazyLock::new(|| Mutex::new(Cache { entries: HashMap::new(), bytes: 0, clock: 0 }));
+static CACHE: LazyLock<Mutex<Cache>> = LazyLock::new(|| {
+    Mutex::new(Cache {
+        entries: HashMap::new(),
+        bytes: 0,
+        clock: 0,
+    })
+});
 
 /// The text of each diagram last drawn, by its source, for copying and
 /// selecting it without drawing it
@@ -110,7 +124,11 @@ pub fn labels_of(source: &str) -> Option<Arc<Vec<String>>> {
 
 /// `source` drawn in `palette`, or why it can't be
 pub fn render(source: &str, palette: &Palette) -> Result<Arc<Diagram>, String> {
-    let key = Key { source: source.to_string(), palette: palette.key(), fonts: fonts().key };
+    let key = Key {
+        source: source.to_string(),
+        palette: palette.key(),
+        fonts: fonts().key,
+    };
     let mut cache = CACHE.lock().unwrap();
     cache.clock += 1;
     let clock = cache.clock;
@@ -128,7 +146,10 @@ pub fn render(source: &str, palette: &Palette) -> Result<Arc<Diagram>, String> {
         if labels.len() > 256 {
             labels.clear();
         }
-        labels.insert(source_key(source), Arc::new(diagram.labels.iter().map(|l| l.text.clone()).collect()));
+        labels.insert(
+            source_key(source),
+            Arc::new(diagram.labels.iter().map(|l| l.text.clone()).collect()),
+        );
     }
     let bytes = source.len() + 64 + result.as_ref().map_or(0, |diagram| 2 * diagram.svg.len());
     let mut cache = CACHE.lock().unwrap();
@@ -168,7 +189,10 @@ struct Fonts {
     key: u64,
     db: Arc<fontdb::Database>,
     family: String,
-    measure: Mutex<(cosmic_text::FontSystem, HashMap<(String, u32, bool, bool), f64>)>,
+    measure: Mutex<(
+        cosmic_text::FontSystem,
+        HashMap<(String, u32, bool, bool), f64>,
+    )>,
 }
 
 thread_local! {
@@ -205,7 +229,9 @@ fn fonts() -> Arc<Fonts> {
         return fonts;
     }
     {
-        let mut system = cosmic::iced::advanced::graphics::text::font_system().write().unwrap();
+        let mut system = cosmic::iced::advanced::graphics::text::font_system()
+            .write()
+            .unwrap();
         prepare(system.raw());
     }
     FONTS.with(|fonts| fonts.borrow().as_ref().unwrap().clone())
@@ -215,15 +241,34 @@ fn fonts_from(db: &fontdb::Database, locale: &str) -> Fonts {
     // The interface's sans-serif, by the name its faces give, or else the
     // first of the usual ones installed
     let family = std::iter::once(db.family_name(&fontdb::Family::SansSerif))
-        .chain(["Open Sans", "Noto Sans", "Inter", "Cantarell", "DejaVu Sans", "Liberation Sans"])
+        .chain([
+            "Open Sans",
+            "Noto Sans",
+            "Inter",
+            "Cantarell",
+            "DejaVu Sans",
+            "Liberation Sans",
+        ])
         .find(|name| {
-            db.query(&fontdb::Query { families: &[fontdb::Family::Name(name)], ..Default::default() }).is_some()
+            db.query(&fontdb::Query {
+                families: &[fontdb::Family::Name(name)],
+                ..Default::default()
+            })
+            .is_some()
         })
-        .or_else(|| db.faces().find_map(|face| face.families.first().map(|(name, _)| name.as_str())))
+        .or_else(|| {
+            db.faces()
+                .find_map(|face| face.families.first().map(|(name, _)| name.as_str()))
+        })
         .unwrap_or("sans-serif")
         .to_string();
     let system = cosmic_text::FontSystem::new_with_locale_and_db(locale.to_string(), db.clone());
-    Fonts { key: font_key(db, locale), db: Arc::new(db.clone()), family, measure: Mutex::new((system, HashMap::new())) }
+    Fonts {
+        key: font_key(db, locale),
+        db: Arc::new(db.clone()),
+        family,
+        measure: Mutex::new((system, HashMap::new())),
+    }
 }
 
 /// The width of `text` in the diagrams' family
@@ -244,7 +289,10 @@ fn measure(text: &str, size: f32, bold: bool, italic: bool) -> f64 {
         .style(if italic { Style::Italic } else { Style::Normal });
     buffer.set_text(text, &attrs, Shaping::Advanced, None);
     buffer.shape_until_scroll(system, false);
-    let width = buffer.layout_runs().map(|run| run.line_w).fold(0.0f32, f32::max) as f64;
+    let width = buffer
+        .layout_runs()
+        .map(|run| run.line_w)
+        .fold(0.0f32, f32::max) as f64;
     if widths.len() > 16_384 {
         widths.clear();
     }
@@ -262,7 +310,11 @@ fn hex(color: Color) -> String {
 
 /// `a` moved `t` of the way to `b`
 fn mix(a: Color, b: Color, t: f32) -> Color {
-    Color::from_rgb(a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t, a.b + (b.b - a.b) * t)
+    Color::from_rgb(
+        a.r + (b.r - a.r) * t,
+        a.g + (b.g - a.g) * t,
+        a.b + (b.b - a.b) * t,
+    )
 }
 
 /// `color` turned `degrees` round the hue circle, as series colours that
@@ -319,23 +371,35 @@ fn theme(palette: &Palette, family: &str) -> Result<merman::svg::HostTheme, Stri
         (ThemeRole::ActorBackground, p.surface),
         (ThemeRole::ActorBorder, mix(p.surface, p.accent, 0.8)),
         (ThemeRole::ActorText, p.text),
-        (ThemeRole::ActivationBackground, mix(p.surface, p.accent, 0.25)),
+        (
+            ThemeRole::ActivationBackground,
+            mix(p.surface, p.accent, 0.25),
+        ),
         (ThemeRole::ActivationBorder, mix(p.surface, p.accent, 0.8)),
         (ThemeRole::Error, p.error),
         (ThemeRole::Warning, turned(p.error, 40.0)),
         (ThemeRole::Success, turned(p.error, 120.0)),
     ];
     let mut theme = HostTheme::new()
-        .with_appearance(if p.dark() { HostThemeAppearance::Dark } else { HostThemeAppearance::Light })
+        .with_appearance(if p.dark() {
+            HostThemeAppearance::Dark
+        } else {
+            HostThemeAppearance::Light
+        })
         .try_with_font_family(family)
         .map_err(|err| err.to_string())?;
     for (role, color) in roles {
-        theme = theme.try_with_role(role, hex(color)).map_err(|err| err.to_string())?;
+        theme = theme
+            .try_with_role(role, hex(color))
+            .map_err(|err| err.to_string())?;
     }
     // Series colours go round from the accent, toned towards the page
-    let series: Vec<String> =
-        [0.0, 150.0, 60.0, 210.0, 300.0, 100.0, 255.0, 30.0].map(|d| hex(mix(turned(p.accent, d), p.page, 0.1))).into();
-    theme.try_with_series_palette(series).map_err(|err| err.to_string())
+    let series: Vec<String> = [0.0, 150.0, 60.0, 210.0, 300.0, 100.0, 255.0, 30.0]
+        .map(|d| hex(mix(turned(p.accent, d), p.page, 0.1)))
+        .into();
+    theme
+        .try_with_series_palette(series)
+        .map_err(|err| err.to_string())
 }
 
 /// What merman hard-codes, in the palette's colours
@@ -344,8 +408,10 @@ fn recolour(svg: &str, palette: &Palette) -> String {
     let muted = hex(palette.muted);
     let text_fill = format!(r#"style="fill:{}""#, hex(palette.text));
     // C4 sets words as spans that start with their space, which usvg drops
-    let mut out = svg
-        .replace(r#"<tspan class="text-inner-tspan"> "#, r#"<tspan class="text-inner-tspan" xml:space="preserve"> "#);
+    let mut out = svg.replace(
+        r#"<tspan class="text-inner-tspan"> "#,
+        r#"<tspan class="text-inner-tspan" xml:space="preserve"> "#,
+    );
     for (from, to) in [
         // Architecture icons' tiles
         ("#087ebf", tile.as_str()),
@@ -370,11 +436,15 @@ fn without_text(svg: &str) -> String {
             continue;
         }
         out.push_str(&rest[..start]);
-        let tag_end = rest[start..].find('>').map_or(rest.len(), |i| start + i + 1);
+        let tag_end = rest[start..]
+            .find('>')
+            .map_or(rest.len(), |i| start + i + 1);
         let end = if rest[..tag_end].ends_with("/>") {
             tag_end
         } else {
-            rest[tag_end..].find("</text>").map_or(rest.len(), |i| tag_end + i + "</text>".len())
+            rest[tag_end..]
+                .find("</text>")
+                .map_or(rest.len(), |i| tag_end + i + "</text>".len())
         };
         rest = &rest[end..];
     }
@@ -384,31 +454,42 @@ fn without_text(svg: &str) -> String {
 
 fn draw(source: &str, palette: &Palette) -> Result<Arc<Diagram>, String> {
     use merman::svg::{
-        CssOverridePolicy, DeterministicTextMeasurer, MeasurementProfileId, Presentation, SvgOutputPolicy,
-        SvgPipelinePreset, SvgRenderOptions, TextMeasurementPolicy, TextMeasurementProfile,
-        TextMeasurementProfileIdentity,
+        CssOverridePolicy, DeterministicTextMeasurer, MeasurementProfileId, Presentation,
+        SvgOutputPolicy, SvgPipelinePreset, SvgRenderOptions, TextMeasurementPolicy,
+        TextMeasurementProfile, TextMeasurementProfileIdentity,
     };
-    use merman::{OperationControl, RenderOutput, RenderRequest, Renderer, SvgEnvironment, SvgRequest};
+    use merman::{
+        OperationControl, RenderOutput, RenderRequest, Renderer, SvgEnvironment, SvgRequest,
+    };
 
     let fonts = fonts();
-    let resolved = Presentation::new().with_theme(theme(palette, &fonts.family)?).resolve();
+    let resolved = Presentation::new()
+        .with_theme(theme(palette, &fonts.family)?)
+        .resolve();
     // Labels wrap at 200 pixels, as in Mermaid 10, not merman's 120
-    let config = merman::MermaidConfig::from_value(serde_json::json!({"flowchart": {"wrappingWidth": 200}}));
-    let renderer =
-        Renderer::new().with_engine(resolved.materialize_engine(merman::Engine::new()).with_site_config(config));
+    let config =
+        merman::MermaidConfig::from_value(serde_json::json!({"flowchart": {"wrappingWidth": 200}}));
+    let renderer = Renderer::new().with_engine(
+        resolved
+            .materialize_engine(merman::Engine::new())
+            .with_site_config(config),
+    );
     let measurer = DeterministicTextMeasurer::default().with_width_callback(|text, style| {
-        let bold = style
-            .font_weight
+        let bold = style.font_weight.as_deref().is_some_and(|w| {
+            w == "bold" || w == "bolder" || w.parse::<u16>().is_ok_and(|w| w >= 600)
+        });
+        let italic = style
+            .font_style
             .as_deref()
-            .is_some_and(|w| w == "bold" || w == "bolder" || w.parse::<u16>().is_ok_and(|w| w >= 600));
-        let italic = style.font_style.as_deref().is_some_and(|s| s == "italic" || s == "oblique");
+            .is_some_and(|s| s == "italic" || s == "oblique");
         measure(text, style.font_size as f32, bold, italic)
     });
     let identity = MeasurementProfileId::new("cosmic-term.cosmic-text")
         .and_then(|id| TextMeasurementProfileIdentity::new(id, "1"))
         .map_err(|err| err.to_string())?;
-    let environment = SvgEnvironment::deterministic()
-        .with_text_measurement_policy(TextMeasurementPolicy::uniform(TextMeasurementProfile::new(identity, measurer)));
+    let environment = SvgEnvironment::deterministic().with_text_measurement_policy(
+        TextMeasurementPolicy::uniform(TextMeasurementProfile::new(identity, measurer)),
+    );
     let output = SvgOutputPolicy {
         preset: SvgPipelinePreset::ResvgSafe,
         css_override_policy: CssOverridePolicy::StripExistingImportant,
@@ -431,9 +512,13 @@ fn draw(source: &str, palette: &Palette) -> Result<Arc<Diagram>, String> {
         Ok(_) => return Err("this is not a diagram merman knows".into()),
         Err(err) => return Err(err.to_string()),
     };
-    let options =
-        usvg::Options { fontdb: fonts.db.clone(), font_family: fonts.family.clone(), ..usvg::Options::default() };
-    let tree = usvg::Tree::from_str(&svg, &options).map_err(|err| format!("the SVG does not parse: {err}"))?;
+    let options = usvg::Options {
+        fontdb: fonts.db.clone(),
+        font_family: fonts.family.clone(),
+        ..usvg::Options::default()
+    };
+    let tree = usvg::Tree::from_str(&svg, &options)
+        .map_err(|err| format!("the SVG does not parse: {err}"))?;
     let mut labels = Vec::new();
     collect_labels(tree.root(), &tree, palette.text, &mut labels);
     let size = tree.size();
@@ -467,16 +552,27 @@ fn text_labels(text: &usvg::Text, tree: &usvg::Tree, ink: Color, labels: &mut Ve
         if !span.visible {
             continue;
         }
-        let color = match span.fill.as_ref().map(|fill| (fill.paint(), fill.opacity().get())) {
-            Some((usvg::Paint::Color(c), opacity)) => Color::from_rgba8(c.red, c.green, c.blue, opacity),
+        let color = match span
+            .fill
+            .as_ref()
+            .map(|fill| (fill.paint(), fill.opacity().get()))
+        {
+            Some((usvg::Paint::Color(c), opacity)) => {
+                Color::from_rgba8(c.red, c.green, c.blue, opacity)
+            }
             _ => ink,
         };
         for glyph in &span.positioned_glyphs {
             let ts = glyph.transform();
             let (x, y) = (ts.tx, ts.ty);
-            let (x, y) = (abs.sx * x + abs.kx * y + abs.tx, abs.ky * x + abs.sy * y + abs.ty);
+            let (x, y) = (
+                abs.sx * x + abs.kx * y + abs.tx,
+                abs.ky * x + abs.sy * y + abs.ty,
+            );
             let size = span.font_size.get() * scale;
-            let new_line = lines.last().is_none_or(|line| (line.baseline - y).abs() > size * 0.5);
+            let new_line = lines
+                .last()
+                .is_none_or(|line| (line.baseline - y).abs() > size * 0.5);
             if new_line {
                 let face = tree.fontdb().face(glyph.font);
                 lines.push(Label {
@@ -496,16 +592,26 @@ fn text_labels(text: &usvg::Text, tree: &usvg::Tree, ink: Color, labels: &mut Ve
     }
     // The chunks' own text, when there is a line for each, as glyphs that
     // share a cluster each carry its text
-    let chunks: Vec<&str> = text.chunks().iter().map(|chunk| chunk.text().trim()).filter(|t| !t.is_empty()).collect();
+    let chunks: Vec<&str> = text
+        .chunks()
+        .iter()
+        .map(|chunk| chunk.text().trim())
+        .filter(|t| !t.is_empty())
+        .collect();
     if chunks.len() == lines.len() {
         for (line, chunk) in lines.iter_mut().zip(chunks) {
             line.text = chunk.to_string();
         }
     }
-    labels.extend(lines.into_iter().filter(|line| !line.text.trim().is_empty()).map(|mut line| {
-        line.text = line.text.trim().to_string();
-        line
-    }));
+    labels.extend(
+        lines
+            .into_iter()
+            .filter(|line| !line.text.trim().is_empty())
+            .map(|mut line| {
+                line.text = line.text.trim().to_string();
+                line
+            }),
+    );
 }
 
 #[cfg(test)]
@@ -529,18 +635,35 @@ mod tests {
     #[test]
     fn draws_a_flowchart_with_its_labels() {
         let diagram = render(FLOWCHART, &dark()).expect("a diagram");
-        assert!(diagram.width > 100.0 && diagram.height > 100.0, "{} × {}", diagram.width, diagram.height);
+        assert!(
+            diagram.width > 100.0 && diagram.height > 100.0,
+            "{} × {}",
+            diagram.width,
+            diagram.height
+        );
         let texts: Vec<&str> = diagram.labels.iter().map(|l| l.text.as_str()).collect();
-        for expected in ["Parse markdown", "Mermaid fence?", "Draw the diagram", "Code block", "yes", "no"] {
+        for expected in [
+            "Parse markdown",
+            "Mermaid fence?",
+            "Draw the diagram",
+            "Code block",
+            "yes",
+            "no",
+        ] {
             assert!(texts.contains(&expected), "{texts:?}");
         }
         for label in &diagram.labels {
             assert!(label.x >= 0.0 && label.x < diagram.width, "{label:?}");
-            assert!(label.baseline > 0.0 && label.baseline <= diagram.height, "{label:?}");
+            assert!(
+                label.baseline > 0.0 && label.baseline <= diagram.height,
+                "{label:?}"
+            );
             assert!(label.size > 8.0, "{label:?}");
         }
         // The thread's SVG leaves the text to the cells; the window's keeps it
-        let svg::Data::Bytes(bytes) = diagram.handle.data() else { panic!() };
+        let svg::Data::Bytes(bytes) = diagram.handle.data() else {
+            panic!()
+        };
         let bare = std::str::from_utf8(bytes).unwrap();
         assert!(!bare.contains("<text") && diagram.svg.contains("<text"));
         assert!(diagram.svg.contains(&diagram.family));
@@ -551,9 +674,15 @@ mod tests {
     fn draws_architecture_in_the_palettes_colours() {
         let source = "architecture-beta\n    group api(cloud)[API]\n    service db(database)[Database] in api\n    service server(server)[Server] in api\n    db:L -- R:server\n";
         let diagram = render(source, &dark()).expect("a diagram");
-        assert!(!diagram.svg.contains("#087ebf"), "the icons keep merman's blue");
+        assert!(
+            !diagram.svg.contains("#087ebf"),
+            "the icons keep merman's blue"
+        );
         let texts: Vec<&str> = diagram.labels.iter().map(|l| l.text.as_str()).collect();
-        assert!(texts.contains(&"Database") && texts.contains(&"Server") && texts.contains(&"API"), "{texts:?}");
+        assert!(
+            texts.contains(&"Database") && texts.contains(&"Server") && texts.contains(&"API"),
+            "{texts:?}"
+        );
     }
 
     #[test]
@@ -561,7 +690,10 @@ mod tests {
         let source = "sequenceDiagram\n    participant T as Terminal\n    participant C as Claude\n    T->>C: prompt\n    C-->>T: markdown\n";
         let diagram = render(source, &dark()).expect("a diagram");
         let texts: Vec<&str> = diagram.labels.iter().map(|l| l.text.as_str()).collect();
-        assert!(texts.contains(&"Terminal") && texts.contains(&"prompt") && texts.contains(&"markdown"), "{texts:?}");
+        assert!(
+            texts.contains(&"Terminal") && texts.contains(&"prompt") && texts.contains(&"markdown"),
+            "{texts:?}"
+        );
     }
 
     #[test]
@@ -580,7 +712,11 @@ mod tests {
         let source = "flowchart LR\n    X --> Y\n";
         let first = render(source, &dark()).unwrap();
         assert!(Arc::ptr_eq(&first, &render(source, &dark()).unwrap()));
-        let light = Palette { page: Color::WHITE, text: Color::BLACK, ..dark() };
+        let light = Palette {
+            page: Color::WHITE,
+            text: Color::BLACK,
+            ..dark()
+        };
         let other = render(source, &light).unwrap();
         assert!(!Arc::ptr_eq(&first, &other));
         assert!(other.svg.contains("#ffffff"));
@@ -588,9 +724,11 @@ mod tests {
 
     /// One of each kind of diagram, with their text, for a look
     #[test]
-    #[ignore]
+    #[ignore = "a diagnostic: CT_SNAPSHOTS=<dir> cargo test -p prose-render -- --ignored dump_every_kind"]
     fn dump_every_kind() {
-        let Some(dir) = std::env::var_os("CT_SNAPSHOTS") else { return };
+        let Some(dir) = std::env::var_os("CT_SNAPSHOTS") else {
+            panic!("a diagnostic that writes its output to a folder: set CT_SNAPSHOTS=<dir>");
+        };
         let kinds = [
             ("flowchart", FLOWCHART),
             (
@@ -629,7 +767,10 @@ mod tests {
                 "gantt",
                 "gantt\n    title Plan\n    dateFormat YYYY-MM-DD\n    section Work\n    Parse :a1, 2026-01-01, 3d\n    Draw  :after a1, 4d\n",
             ),
-            ("pie", "pie title Time\n    \"Layout\" : 40\n    \"Drawing\" : 35\n    \"Text\" : 25\n"),
+            (
+                "pie",
+                "pie title Time\n    \"Layout\" : 40\n    \"Drawing\" : 35\n    \"Text\" : 25\n",
+            ),
         ];
         let light = Palette {
             page: Color::WHITE,
@@ -643,10 +784,11 @@ mod tests {
         for (name, source) in kinds {
             for (tone, palette) in [("dark", dark()), ("light", light)] {
                 match render(source, &palette) {
-                    Ok(diagram) => {
-                        std::fs::write(std::path::Path::new(&dir).join(format!("{name}-{tone}.svg")), &*diagram.svg)
-                            .unwrap()
-                    }
+                    Ok(diagram) => std::fs::write(
+                        std::path::Path::new(&dir).join(format!("{name}-{tone}.svg")),
+                        &*diagram.svg,
+                    )
+                    .unwrap(),
                     Err(err) => eprintln!("{name}: {err}"),
                 }
             }
@@ -655,7 +797,8 @@ mod tests {
 
     #[test]
     fn text_is_taken_out_whole() {
-        let svg = r#"<svg><g><text x="1"><tspan>a</tspan></text><rect/><text/><textPath/></g></svg>"#;
+        let svg =
+            r#"<svg><g><text x="1"><tspan>a</tspan></text><rect/><text/><textPath/></g></svg>"#;
         assert_eq!(without_text(svg), "<svg><g><rect/><textPath/></g></svg>");
     }
 

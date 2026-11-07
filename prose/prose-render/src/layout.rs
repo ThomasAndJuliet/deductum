@@ -16,7 +16,11 @@ pub struct HeightIndex {
 }
 
 fn height(value: f32) -> f32 {
-    if value.is_finite() { value.max(0.0) } else { 0.0 }
+    if value.is_finite() {
+        value.max(0.0)
+    } else {
+        0.0
+    }
 }
 
 impl HeightIndex {
@@ -112,7 +116,11 @@ impl HeightIndex {
         }
         let first = self.index_at(top).unwrap();
         let last = self.index_at(bottom).unwrap();
-        let end = if self.top(last) >= bottom { last } else { last + 1 };
+        let end = if self.top(last) >= bottom {
+            last
+        } else {
+            last + 1
+        };
         first..end.max(first)
     }
 

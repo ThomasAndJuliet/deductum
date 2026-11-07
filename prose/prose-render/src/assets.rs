@@ -32,10 +32,16 @@ impl PreparedImage {
             ImageHandle::Svg(svg::Handle::from_memory(std::fs::read(path).ok()?))
         } else {
             let thumbnail = crate::images::thumbnail_path(path);
-            let data = std::fs::read(&thumbnail).or_else(|_| std::fs::read(path)).ok()?;
+            let data = std::fs::read(&thumbnail)
+                .or_else(|_| std::fs::read(path))
+                .ok()?;
             ImageHandle::Raster(image::Handle::from_bytes(data))
         };
-        Some(Self { width, height, handle })
+        Some(Self {
+            width,
+            height,
+            handle,
+        })
     }
 }
 
@@ -48,7 +54,10 @@ pub struct PreparedImages {
 impl PreparedImages {
     pub fn new(images: impl IntoIterator<Item = (PathBuf, PreparedImage)>) -> Self {
         static NEXT: AtomicU64 = AtomicU64::new(1);
-        Self { generation: NEXT.fetch_add(1, Ordering::Relaxed), images: images.into_iter().collect() }
+        Self {
+            generation: NEXT.fetch_add(1, Ordering::Relaxed),
+            images: images.into_iter().collect(),
+        }
     }
 
     pub fn get(&self, path: &Path) -> Option<&PreparedImage> {
