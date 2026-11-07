@@ -22,6 +22,14 @@ for that Isabelle operation. Lean and Linux remote connections keep their
 native Unicode paths. Local Isabelle logic names and command-line option
 values must use ASCII.
 
+The backend builds in a protected cache under the state directory, so the
+portable package can live in a path containing emoji. The bundled JDK cannot
+load jars from canonical paths containing supplementary Unicode characters.
+Keep Isabelle's own installation and the state/cache location in paths without
+emoji or other supplementary characters; Greek letters such as β and Ω work.
+An unsupported cache location gives `DEDUCTUM_STATE_DIR` guidance. Cached components are keyed by their source contents and retained
+across updates.
+
 Extract the complete private portable ZIP into a new directory and run
 `deductum.exe`. Python is included. Keep its `python` and `share` directories
 beside the executable. Add remote machines to
