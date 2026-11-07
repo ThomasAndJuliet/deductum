@@ -32,6 +32,7 @@ class PackageWindows(unittest.TestCase):
         files = {"Cargo.toml": '[package]\nversion = "0.1.0"\n', "LICENSE": "license",
                  "packaging/windows/README.txt": "portable package",
                  "deductum/host/deductum_host.py": "print('fixture')\n",
+                 "deductum/host/drivers/isabelle_windows.sh": "#!/usr/bin/env bash\nprintf '%s' fixture\n",
                  "deductum/host/tests/test_secret.py": "must not be shipped",
                  "deductum/host/__pycache__/host.pyc": "must not be shipped",
                  "deductum/backend/src/backend.scala": "// fixture backend",
@@ -72,6 +73,8 @@ class PackageWindows(unittest.TestCase):
             self.assertEqual(source.read(prefix + "deductum.exe"), self.binary.read_bytes())
             self.assertIn(prefix + "python/python.exe", names)
             self.assertIn(prefix + "share/deductum/host/deductum_host.py", names)
+            launcher = "deductum/host/drivers/isabelle_windows.sh"
+            self.assertEqual(source.read(prefix + "share/" + launcher), (self.root / launcher).read_bytes())
             self.assertIn(prefix + "share/deductum/backend/src/backend.scala", names)
             for forbidden in ("/.git/", "/.ssh/", "/state/", "/tests/", "/__pycache__/", "/.env"):
                 self.assertFalse(any(forbidden in name for name in names), "package included " + forbidden)

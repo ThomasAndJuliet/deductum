@@ -8,6 +8,7 @@ ROOTs, the base logic, symbols, and the proof tools.
 from __future__ import annotations
 
 import asyncio
+import base64
 import contextlib
 import json
 import os
@@ -91,21 +92,33 @@ class RuntimeAdapter:
             return [self.runtime, *args]
         if not self.bash.is_file() or not self.cygpath.is_file():
             raise HostError("Use the official Isabelle Windows distribution with its bundled Cygwin")
+        if any("\0" in arg for arg in args):
+            raise HostError("Windows Isabelle arguments cannot contain NUL characters", "unsupported_path")
         if any(not arg.isascii() for arg in args):
             raise HostError("The Windows Isabelle launcher cannot carry a non-ASCII command-line value. "
                             "Use an ASCII logic name and option values; project and application paths "
                             "need an existing ASCII NTFS short name.", "unsupported_path")
-        # Bash converts only the executable's Windows path. Remaining arguments
-        # are passed as positional data, never interpolated into shell source.
-        return [str(self.bash), "--noprofile", "--norc", "-c",
-                'export PATH="/usr/bin:/bin:$PATH"; '
-                'exec /usr/bin/bash "$(/usr/bin/cygpath -u -- "$1")" "${@:2}"',
-                "deductum-isabelle", self.cli_path(self.runtime), *args]
+        # The bundled Cygwin native-argv parser does not implement MSCRT's
+        # embedded-quote/backslash rules, even with noglob. Only safe base64
+        # data crosses that parser; the immutable launcher reconstructs argv.
+        values = [self.cli_path(self.runtime), *args]
+        raw = ("\0".join([str(len(values)), *values]) + "\0").encode("utf-8")
+        payload = base64.b64encode(raw).decode("ascii")
+        if len(payload) > 16384:
+            raise HostError("Windows Isabelle arguments exceed the 16384-byte encoded limit; "
+                            "reduce the number or length of prover options", "unsupported_path")
+        launcher = self.cli_path(str(Path(__file__).with_name("isabelle_windows.sh")))
+        return [str(self.bash), "--noprofile", "--norc", launcher, payload]
 
     def environment(self, env=None):
         result = dict(os.environ if env is None else env)
         if platform.WINDOWS:
             result["LANG"] = result["LC_ALL"] = "C.UTF-8"
+            path_keys = [key for key in result if key.upper() == "PATH"]
+            path = result[path_keys[0]] if path_keys else ""
+            for key in path_keys:
+                del result[key]
+            result["PATH"] = str(self.bash.parent) + ";" + path
             # Native Python already supplies argv as data. Cygwin's startup
             # globber otherwise removes apostrophes from valid NTFS short
             # names before cygpath or Bash receives them.

@@ -1,5 +1,6 @@
 """Disk bytes and native path boundaries, including real Windows sharing denial."""
 import asyncio
+import base64
 import os
 from pathlib import Path
 import subprocess
@@ -89,20 +90,40 @@ class FileBytes(unittest.IsolatedAsyncioTestCase):
 class IsabellePathBoundary(unittest.TestCase):
     def test_windows_cygwin_options_disable_native_argv_globbing_without_changing_the_callers_environment(self):
         adapter = RuntimeAdapter("unused")
-        for options in (None, "winsymlinks:nativestrict", "glob winsymlinks:nativestrict"):
-            original = {"PATH": "unrelated tools", "LANG": "old-locale"}
-            if options is not None:
-                original["CYGWIN"] = options
-            before = dict(original)
-            with self.subTest(options=options), patch.object(P, "WINDOWS", True):
-                result = adapter.environment(original)
-            self.assertEqual(original, before, "runtime preparation changed the parent environment")
-            self.assertEqual(result["PATH"], original["PATH"])
-            self.assertEqual((result["LANG"], result["LC_ALL"]), ("C.UTF-8", "C.UTF-8"))
-            tokens = result["CYGWIN"].split()
-            self.assertEqual(tokens[-1], "noglob", "native argv is still interpreted by the Cygwin startup globber")
-            for option in (options or "").split():
-                self.assertIn(option, tokens, "an unrelated Cygwin option was discarded")
+        for path_key in ("PATH", "Path", "pAtH", None):
+            for options in (None, "winsymlinks:nativestrict", "glob winsymlinks:nativestrict"):
+                original = {"LANG": "old-locale"}
+                if path_key:
+                    original[path_key] = "unrelated tools"
+                if options is not None:
+                    original["CYGWIN"] = options
+                before = dict(original)
+                with self.subTest(options=options, path_key=path_key), patch.object(P, "WINDOWS", True):
+                    result = adapter.environment(original)
+                self.assertEqual(original, before, "runtime preparation changed the parent environment")
+                path_keys = [key for key in result if key.upper() == "PATH"]
+                self.assertEqual(path_keys, ["PATH"], "child environment contains conflicting Windows Path keys")
+                self.assertEqual(result["PATH"], str(adapter.bash.parent) + ";" + ("unrelated tools" if path_key else ""))
+                self.assertEqual((result["LANG"], result["LC_ALL"]), ("C.UTF-8", "C.UTF-8"))
+                tokens = result["CYGWIN"].split()
+                self.assertEqual(tokens[-1], "noglob", "native argv is still interpreted by the Cygwin startup globber")
+                for option in (options or "").split():
+                    self.assertIn(option, tokens, "an unrelated Cygwin option was discarded")
+
+    def test_encoded_argument_limit_is_bounded_before_any_runtime_execution(self):
+        adapter = RuntimeAdapter("unused")
+        # The specified vector is "2 NUL /r NUL argument NUL": six bytes
+        # besides the argument. Exactly 12288 decoded bytes encode to 16384.
+        with patch.object(P, "WINDOWS", True), patch.object(Path, "is_file", return_value=True), \
+                patch.object(adapter, "cli_path", return_value="/r"), \
+                patch.object(P, "run", side_effect=AssertionError("runtime started")):
+            command = adapter.command(["x" * 12282])
+            self.assertEqual(len(command[-1]), 16384)
+            for invalid in ("x" * 12283, "before\0after"):
+                with self.subTest(length=len(invalid)), self.assertRaises(H.HostError) as caught:
+                    adapter.run([invalid])
+                self.assertEqual(caught.exception.code, "unsupported_path")
+                self.assertIn("16384" if "\0" not in invalid else "NUL", str(caught.exception))
 
     def test_unix_cli_paths_and_arguments_are_preserved(self):
         adapter = RuntimeAdapter("/opt/Isabelle β/bin/isabelle")
@@ -174,6 +195,84 @@ class IsabellePathBoundary(unittest.TestCase):
                     adapter.run(args)
                 self.assertEqual(caught.exception.code, "unsupported_path")
                 self.assertIn("ASCII", str(caught.exception))
+
+
+@unittest.skipUnless(os.name == "nt", "Official Windows bundled Bash argument transport")
+class WindowsIsabelleArguments(unittest.TestCase):
+    def setUp(self):
+        runtime = os.environ.get("DEDUCTUM_ISABELLE")
+        if not runtime:
+            self.skipTest("Requires the official DEDUCTUM_ISABELLE runtime")
+        self.temp = tempfile.TemporaryDirectory(prefix="Deductum β Ω transport ")
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.output = self.root / "argv.bin"
+        self.output.touch()
+        receiver = self.root / "receive args.sh"
+        receiver.write_bytes(b"output=$1\nshift\nprintf '%s\\0' \"$@\" > \"$output\"\n"
+                             b"/usr/bin/cat > \"$output.stdin\"\n"
+                             b"printf 'receiver stdout\\n'\nprintf 'receiver stderr\\n' >&2\nexit 17\n")
+        self.adapter = RuntimeAdapter(runtime)
+        # Keep the actual official Bash/Cygpath, selecting a private receiver
+        # through the same public runtime field used by command().
+        self.adapter.runtime = str(receiver)
+        self.receiver = self.adapter.cli_path(str(receiver))
+        self.destination = self.adapter.cli_path(str(self.output))
+
+    def test_official_bash_receives_exact_arguments_stdin_and_exit_status(self):
+        arguments = ["", "space value", 'literal "double quotes"', "apostrophe's", "$HOME $(touch SHOULD_NOT_EXIST)",
+                     "`touch SHOULD_NOT_EXIST`", "semi;colon & pipe|", "slash\\", "double\\\\", 'mixed\\\"end\\',
+                     "first\nsecond\r\nthird", "__DEDUCTUM_ARGV_END__", "x" * 9000, ""]
+        standard_input = b"raw\0\xff\r\n\x1a" + bytes(range(256))
+        result = self.adapter.run([self.destination, *arguments], input=standard_input,
+                                  cwd=str(self.root), capture_output=True, timeout=30)
+        self.assertEqual(result.returncode, 17)
+        self.assertEqual(result.stdout, b"receiver stdout\n")
+        self.assertEqual(result.stderr, b"receiver stderr\n")
+        self.assertEqual(self.output.read_bytes(), b"\0".join(arg.encode("ascii") for arg in arguments) + b"\0",
+                         "the official Bash boundary changed argument data or empty arguments")
+        self.assertEqual(Path(str(self.output) + ".stdin").read_bytes(), standard_input)
+        self.assertFalse((self.root / "SHOULD_NOT_EXIST").exists(), "argument contents were evaluated")
+
+    def test_async_managed_launch_preserves_the_same_argument_vector_and_streams(self):
+        arguments = ["", 'quoted "value"', "last\\", "'single' $literal\nnext", ""]
+        async def run():
+            proc = await P.create_subprocess_exec(*self.adapter.command([self.destination, *arguments]),
+                env=self.adapter.environment(), cwd=str(self.root), stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+            out, err = await asyncio.wait_for(proc.communicate(b"async\0\xff"), 30)
+            return proc.returncode, out, err
+        code, out, err = asyncio.run(run())
+        self.assertEqual((code, out, err), (17, b"receiver stdout\n", b"receiver stderr\n"))
+        self.assertEqual(self.output.read_bytes(), b"\0".join(arg.encode("ascii") for arg in arguments) + b"\0")
+        self.assertEqual(Path(str(self.output) + ".stdin").read_bytes(), b"async\0\xff")
+
+    def test_malformed_payloads_never_execute_even_a_partially_decoded_receiver(self):
+        launcher = self.adapter.cli_path(str(Path(__file__).resolve().parent.parent / "drivers" / "isabelle_windows.sh"))
+        vector = [self.receiver, self.destination, ""]
+        def wire(count, values, final_nul=True):
+            raw = (str(count) + "\0" + "\0".join(values)).encode("ascii")
+            return raw + (b"\0" if final_nul else b"")
+        raw = wire(3, vector)
+        vector[-1] = "x" * ((-len(raw)) % 3)
+        valid = base64.b64encode(wire(3, vector)).decode("ascii")
+        self.assertNotIn("=", valid, "partial-decode case must reach decoder exit-status validation")
+        invalid = {"empty": [""], "alphabet": ["!!!!"], "truncated_base64": [valid + "A"],
+                   "no_final_nul": [base64.b64encode(wire(3, vector, False)).decode("ascii")],
+                   "too_few_fields": [base64.b64encode(wire(4, vector)).decode("ascii")],
+                   "too_many_fields": [base64.b64encode(wire(2, vector)).decode("ascii")],
+                   "zero_count": [base64.b64encode(wire(0, vector)).decode("ascii")],
+                   "count_expression": [base64.b64encode(wire("1+2", vector)).decode("ascii")],
+                   "oversize": ["A" * 16385], "missing_payload": [], "extra_payload": [valid, valid]}
+        for case, payload in invalid.items():
+            with self.subTest(case=case):
+                self.output.write_bytes(b"not executed")
+                result = P.run([str(self.adapter.bash), "--noprofile", "--norc", launcher, *payload],
+                               env=self.adapter.environment(), input=b"", capture_output=True, timeout=30)
+                self.assertEqual(result.returncode, 2, result.stderr.decode(errors="replace"))
+                self.assertIn(b"Invalid Deductum Isabelle argument payload", result.stderr)
+                self.assertEqual(self.output.read_bytes(), b"not executed", "decoder executed a partial vector")
+                self.assertFalse(Path(str(self.output) + ".stdin").exists())
 
 
 @unittest.skipUnless(os.name == "nt", "Native existing NTFS short-name identity")

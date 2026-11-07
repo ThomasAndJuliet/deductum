@@ -287,8 +287,12 @@ def bridge_stdio(sock):
 def managed_argv(argv):
     from _windows import creation_time
     name = "Local\\Deductum-" + secrets.token_hex(24)
-    return [sys.executable, "-X", "utf8", str(Path(__file__).with_name("managed_process.py")), name,
-            str(os.getpid()), str(creation_time()), *map(str, argv)], name
+    command = [sys.executable, "-X", "utf8", str(Path(__file__).with_name("managed_process.py")), name,
+               str(os.getpid()), str(creation_time()), *map(str, argv)]
+    if len(subprocess.list2cmdline(command).encode("utf-16-le")) > 65532:
+        raise OSError("Windows process command exceeds 32767 UTF-16 units including its terminator; "
+                      "reduce argument or installation-path lengths")
+    return command, name
 
 
 async def create_subprocess_exec(*argv, **kwargs):
