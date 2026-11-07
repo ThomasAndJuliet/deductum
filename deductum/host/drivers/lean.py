@@ -9,6 +9,7 @@ a ``by`` block. Their statuses come from ``$/lean/fileProgress`` and the diagnos
 Protocol facts this relies on, checked on Lean v4.19.0 (see tests/integration_lean.py):
 ``$/lean/fileProgress`` carries tactic-level ranges, the last one running to the end of
 the file; ``publishDiagnostics`` is cumulative and carries the document version;
+``textDocument/waitForDiagnostics`` fences final diagnostics after progress ends;
 ``$/lean/plainGoal`` answers with the state after a tactic when the position is past its
 first character; ``Lean.Widget.getInteractiveGoals`` goes through ``$/lean/rpc/call``;
 "Try this" suggestions are information diagnostics (and quickfix code actions); a changed
@@ -607,7 +608,9 @@ def build_report(commands: List[Tuple[int, int, str]], diags: List[Dict[str, Any
                 else:
                     states[i] = "unprocessed"
     count = {k: states.count(k) for k in ("unprocessed", "running", "warned", "failed", "finished")}
-    done = not live
+    # A zero-width range still identifies a pending Lean task, even though it
+    # does not overlap a command. Only an empty task list reports completion.
+    done = not processing
     reached = n - count["unprocessed"] - count["running"]
     status = dict(count, total=n, canceled=0, consolidated=done,
                   percentage=100 if n == 0 else int(100 * reached / n))
@@ -1011,6 +1014,8 @@ class LDoc:
         self.splits: Dict[int, Splitter] = {}
         self.diags: Optional[Tuple[int, List[Dict[str, Any]]]] = None  # version, with offsets
         self.progress: Optional[Tuple[int, List[Tuple[int, int]]]] = None
+        self.diagnostics_complete: Optional[Tuple[int, int]] = None  # version, open generation
+        self.diagnostics_task: Optional[asyncio.Task] = None
         self.colours: Optional[Tuple[int, List[List[Any]]]] = None
         self.stale = False
         self.import_error = False
@@ -1410,6 +1415,7 @@ class LeanDriver(Driver):
             await stop_process(self.proc)
 
     def _cancel_doc_tasks(self, doc: LDoc) -> None:
+        self._reset_diagnostics(doc)
         for t in (doc.rpc_task, doc.colour_task, doc.import_task):
             if t:
                 t.cancel()
@@ -1426,6 +1432,7 @@ class LeanDriver(Driver):
         if self.disk_task is not None:
             self.disk_task.cancel()
         for doc in self.docs.values():
+            self._reset_diagnostics(doc)
             if doc.import_task:
                 doc.import_task.cancel()
         if self.standalone_io is not None:
@@ -1482,6 +1489,7 @@ class LeanDriver(Driver):
         self._schedule_node(doc)
 
     def _did_open(self, doc: LDoc) -> None:
+        self._reset_diagnostics(doc)
         doc.import_generation += 1
         doc.import_pending = False
         doc.server_open = True
@@ -1511,6 +1519,7 @@ class LeanDriver(Driver):
         doc = self.docs.get(obj["file"])
         if doc is None:
             return
+        self._reset_diagnostics(doc)
         changes = []
         first = len(doc.text)
         for ed in obj.get("edits", []):
@@ -1669,7 +1678,8 @@ class LeanDriver(Driver):
         return {}
 
     def _busy(self, doc: LDoc) -> bool:
-        return bool(doc.server_open and doc.progress and any(e > s for s, e in doc.progress[1]))
+        return bool(doc.server_open and (not doc.progress or doc.progress[0] != doc.version
+                    or doc.progress[1] or doc.diagnostics_complete != (doc.version, doc.import_generation)))
 
     async def _req_cancel(self, obj: Dict[str, Any]) -> Dict[str, Any]:
         """No request stops Lean's elaboration, so the files that are being checked are closed and opened"""
@@ -1784,9 +1794,46 @@ class LeanDriver(Driver):
         index = doc.splitter(version).index
         ranges = [index.range_to_offsets(p["range"]) for p in params.get("processing", [])]
         doc.progress = (version, ranges)
-        if not any(e > s for s, e in ranges):
+        if ranges:
+            self._reset_diagnostics(doc)
+        elif version == doc.version:
+            if (doc.diagnostics_complete != (version, doc.import_generation)
+                    and doc.diagnostics_task is None):
+                doc.diagnostics_task = asyncio.create_task(
+                    self._wait_for_diagnostics(doc, version, doc.import_generation))
             self._schedule_colours(doc)
         self._schedule_node(doc)
+
+    def _reset_diagnostics(self, doc: LDoc) -> None:
+        if doc.diagnostics_task is not None:
+            doc.diagnostics_task.cancel()
+            doc.diagnostics_task = None
+        doc.diagnostics_complete = None
+
+    async def _wait_for_diagnostics(self, doc: LDoc, version: int, generation: int) -> None:
+        """Lean's reporter, rather than a timing delay, fences final diagnostics."""
+        try:
+            if self.client is None:
+                return
+            await self.client.request("textDocument/waitForDiagnostics",
+                                      {"uri": doc.uri, "version": version}, timeout=1800)
+            if (not self.stopping and self.docs.get(doc.path) is doc and doc.server_open
+                    and doc.diagnostics_task is asyncio.current_task()
+                    and doc.version == version and doc.import_generation == generation
+                    and doc.progress == (version, []) and doc.diags is not None
+                    and doc.diags[0] == version):
+                doc.diagnostics_complete = (version, generation)
+        except (LspError, LspClosed, asyncio.TimeoutError) as exn:
+            if (not self.stopping and self.docs.get(doc.path) is doc and doc.server_open
+                    and doc.diagnostics_task is asyncio.current_task()
+                    and doc.version == version and doc.import_generation == generation):
+                self.emit({"event": "log", "text": "Could not verify final Lean diagnostics: " +
+                           str(exn or type(exn).__name__)})
+        finally:
+            if doc.diagnostics_task is asyncio.current_task():
+                doc.diagnostics_task = None
+                if not self.stopping and self.docs.get(doc.path) is doc:
+                    self._schedule_node(doc)
 
     # ----- node events
 
@@ -1902,6 +1949,9 @@ class LeanDriver(Driver):
             if version != seq:
                 processing = None
         rep = build_report(sp.commands, diags, processing)
+        if doc.diagnostics_complete != (seq, doc.import_generation):
+            rep["done"] = False
+            rep["status"] = dict(rep["status"], consolidated=False)
         doc.report, doc.report_seq = rep, seq
         colours: List[List[Any]] = lexical_colours(sp.mask)
         if doc.colours:

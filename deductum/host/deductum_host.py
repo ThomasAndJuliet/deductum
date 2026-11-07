@@ -3892,7 +3892,7 @@ def spawn_daemon() -> None:
     script = str(Path(__file__).resolve())
     started = False
     if not platform.WINDOWS and shutil.which("systemd-run") and os.environ.get("XDG_RUNTIME_DIR"):
-        env_args = [f"--setenv={k}={os.environ[k]}" for k in ("DEDUCTUM_STATE_DIR", "USER_HOME", "PATH",
+        env_args = [f"--setenv={k}={os.environ[k]}" for k in ("DEDUCTUM_STATE_DIR", "DEDUCTUM_CONFIG_DIR", "USER_HOME", "PATH",
                                                                 "DEDUCTUM_ISABELLE") if os.environ.get(k)]
         for unit in ("deductum-host", f"deductum-host-{int(time.time())}"):
             r = subprocess.run(["systemd-run", "--user", "--collect", "--quiet", f"--unit={unit}", *env_args,
