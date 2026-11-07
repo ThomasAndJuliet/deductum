@@ -50,13 +50,30 @@ def check(cond, what):
         FAILURES.append(what)
 
 
-def wait_for(client, pred, timeout=240, what="condition", on_wait=None):
+def wait_for(client, pred, timeout=240, what="condition", on_wait=None, running_session=None):
     deadline = time.monotonic() + timeout
+    diagnostics = []
+
+    def failure(reason):
+        detail = "\n".join(json.dumps(ev, ensure_ascii=False) for ev in diagnostics)
+        raise SystemExit(reason + ("\nRecent session diagnostics:\n" + detail if detail else ""))
+
     while time.monotonic() < deadline:
         for i, ev in enumerate(client.events):
             if pred(ev):
                 del client.events[:i + 1]
                 return ev
+            if ev.get("event") == "session":
+                session = ev.get("session") or {}
+                diagnostics.append({"event": "session", "id": session.get("id"),
+                                    "lifecycle": session.get("lifecycle"),
+                                    "message": str(session.get("message") or "")[-4000:]})
+                del diagnostics[:-20]
+                if running_session is not None and session.get("id") == running_session and session.get("lifecycle") == "Failed":
+                    failure(f"session failed while waiting for {what}")
+            elif ev.get("event") == "session_log":
+                diagnostics.append({"event": "session_log", "session": ev.get("session"), "text": str(ev.get("text", ""))[-4000:]})
+                del diagnostics[:-20]
         client.events.clear()
         if on_wait is not None:
             on_wait()
@@ -68,7 +85,7 @@ def wait_for(client, pred, timeout=240, what="condition", on_wait=None):
             pass
         finally:
             client.sock.settimeout(None)
-    raise SystemExit(f"timed out waiting for {what}")
+    failure(f"timed out waiting for {what}")
 
 
 def main():
@@ -94,7 +111,7 @@ def main():
     doc = app.request("read", session=sid, path=str(thy))["doc"]
     rev0 = doc["revision"]
     wait_for(app, lambda e: e.get("event") == "session" and e["session"]["id"] == sid
-             and e["session"]["lifecycle"] == "Running", what="Running")
+             and e["session"]["lifecycle"] == "Running", what="Running", running_session=sid)
     ev = wait_for(app, lambda e: e.get("event") == "doc_prover" and e["prover"]["status"]
                   and e["prover"]["status"].get("consolidated"), what="checked theory")
     names = [c[2] for c in ev["prover"]["commands"]]
@@ -286,7 +303,7 @@ def main():
         check(e.code == "forbidden", "agents cannot resume the human's session")
     app.request("resume", session=sid)
     wait_for(app, lambda e: e.get("event") == "session" and e["session"]["id"] == sid
-             and e["session"]["lifecycle"] == "Running", what="Running again")
+             and e["session"]["lifecycle"] == "Running", what="Running again", running_session=sid)
     info = app.request("session_info", session=sid)["session"]
     check(info["epoch"] == epoch + 1, "resume starts a new epoch")
 
