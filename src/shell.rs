@@ -116,8 +116,8 @@ impl App {
         let theme = settings.appearance.theme;
         super::settings::publish(&settings);
         self.shell.settings = settings;
-        // (the desktop's theme is libcosmic's own default: nothing to set for it)
-        if theme == ThemeChoice::System { Task::none() } else { cosmic::command::set_theme(theme.theme()) }
+        // The desktop's theme is libcosmic's own default, but it too takes the household's tones
+        cosmic::command::set_theme(theme.theme())
     }
 
     /// Tell a machine's host what this app wants of keyword lines and searches (the models to
@@ -402,9 +402,10 @@ pub fn tinted_icon<'a>(name: &'static str, size: u16, tint: fn(&cosmic::Theme) -
         .into()
 }
 
-/// The text's colour, faded towards the page (for icons that go with secondary text)
+/// Icons that go with secondary text: `tones::secondary_text`, the darkest tone on a light theme,
+/// the text's colour faded towards the page on a dark one
 pub fn muted(theme: &cosmic::Theme) -> Color {
-    Color { a: 0.7, ..Color::from(theme.cosmic().on_bg_color()) }
+    super::tones::secondary_text(theme, 0.7)
 }
 
 /// The text's colour, faded further (for what cannot be used yet)

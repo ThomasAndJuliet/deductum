@@ -91,12 +91,13 @@ fn marked_region(theme: &cosmic::Theme) -> (Color, Option<Color>) {
     (Color { a: if c.is_dark { 0.07 } else { 0.09 }, ..accent }, Some(accent))
 }
 
-/// Secondary text (a line number, a time, a hint): the text's colour, fainter. Taken from the
+/// Secondary text (a line number, a time, a hint): `tones::secondary_text`, the darkest tone on a
+/// light theme, the text's colour fainter on a dark one. Taken from the
 /// theme as the text is drawn, not as the view is built, so it follows the theme it is drawn in
 pub fn muted() -> theme::Text {
     theme::Text::Custom(|theme| {
         let c = theme.cosmic();
-        iced::widget::text::Style { color: Some(Color { a: 0.65, ..Color::from(c.on_bg_color()) }), selected_fill: Color { a: 0.32, ..Color::from(c.accent.base) }, selected_text_color: None }
+        iced::widget::text::Style { color: Some(super::tones::secondary_text(theme, 0.65)), selected_fill: Color { a: 0.32, ..Color::from(c.accent.base) }, selected_text_color: None }
     })
 }
 
@@ -113,9 +114,12 @@ fn prose_size() -> f32 { z(super::settings::display().text_size) }
 
 pub fn typography(theme: &cosmic::Theme) -> Typography {
     let cosmic = theme.cosmic();
-    let text: Color = cosmic.on_bg_color().into();
+    // Headings, bold text, code and captions in the darkest tone; the body in the household's tone
+    // for its size (darker from 18 px, on a light theme)
+    let strong: Color = cosmic.on_bg_color().into();
     let dark = cosmic.is_dark;
     let display = super::settings::display();
+    let text = super::tones::body_text(theme, display.text_size);
     let link: Color = cosmic.accent_text_color().into();
     Typography {
         display_start: false,
@@ -132,14 +136,14 @@ pub fn typography(theme: &cosmic::Theme) -> Typography {
         justify: display.justify,
         italic: false,
         text,
-        strong: text,
-        muted: Color { a: 0.68, ..text },
+        strong,
+        muted: super::tones::secondary_text(theme, 0.68),
         link,
         link_strong: link,
-        code: text,
+        code: strong,
         code_background: cell_color(theme),
         page: page_color(theme),
-        rule: Color { a: 0.25, ..text },
+        rule: Color { a: 0.25, ..strong },
         selection: Color { a: 0.32, ..Color::from(cosmic.accent.base) },
         error: cosmic.destructive_text_color().into(),
         added: if dark { Color::from_rgb8(0x8f, 0xd6, 0x8f) } else { Color::from_rgb8(0x1d, 0x7a, 0x2a) },
@@ -1592,7 +1596,7 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
                 widget::column::with_capacity(2)
                     .push(symbol_text_with_font(&title, &*table, z(26.0), cosmic::iced::Font { weight: cosmic::iced::font::Weight::Bold, ..cosmic::font::default() }))
                     .push(widget::container(symbol_text_with_font(&rest, &*table, z(13.0), cosmic::font::default())).class(theme::Container::custom(|theme| iced::widget::container::Style {
-                        text_color: Some(Color { a: 0.65, ..Color::from(theme.cosmic().on_bg_color()) }),
+                        text_color: Some(super::tones::secondary_text(theme, 0.65)),
                         ..Default::default()
                     })))
                     .into()
@@ -3173,7 +3177,7 @@ fn tool_section<'a>(ws: &'a Workspace, tool: &'a Tool, r: super::flow::Report, t
     let said = |text: String| -> Element<'a, Message> { symbol_text_with_font(&text, table, z(14.0), cosmic::font::default()) };
     let hint = |text: &str| -> Element<'a, Message> {
         widget::container(symbol_text_with_font(text, table, z(12.0), cosmic::font::default())).class(theme::Container::custom(|theme| iced::widget::container::Style {
-            text_color: Some(Color { a: 0.65, ..Color::from(theme.cosmic().on_bg_color()) }),
+            text_color: Some(super::tones::secondary_text(theme, 0.65)),
             ..Default::default()
         })).into()
     };
@@ -3262,8 +3266,8 @@ fn offer_list<'a>(ws: &'a Workspace, offers: &[super::flow::Offer], active: bool
             widget::column::with_capacity(2).push(code()).push(widget::text::caption(o.detail.clone()).class(muted())).width(Length::Fill).into()
         };
         let mark: Element<'a, Message> = match (&o.act, o.ok) {
-            (Act::Replace(_) | Act::Ask(_), _) | (Act::Insert(_), None) => widget::icon::from_name("go-next-symbolic").size(16).icon().class(theme::Svg::custom(|t| iced::widget::svg::Style { color: Some(Color { a: 0.7, ..Color::from(t.cosmic().on_bg_color()) }) })).into(),
-            (Act::Facts, _) => widget::icon::from_name("view-list-symbolic").size(16).icon().class(theme::Svg::custom(|t| iced::widget::svg::Style { color: Some(Color { a: 0.7, ..Color::from(t.cosmic().on_bg_color()) }) })).into(),
+            (Act::Replace(_) | Act::Ask(_), _) | (Act::Insert(_), None) => widget::icon::from_name("go-next-symbolic").size(16).icon().class(theme::Svg::custom(|t| iced::widget::svg::Style { color: Some(super::tones::secondary_text(t, 0.7)) })).into(),
+            (Act::Facts, _) => widget::icon::from_name("view-list-symbolic").size(16).icon().class(theme::Svg::custom(|t| iced::widget::svg::Style { color: Some(super::tones::secondary_text(t, 0.7)) })).into(),
             (_, ok) => verdict(ok),
         };
         let button = if on { widget::button::suggested(o.button()) } else { widget::button::standard(o.button()) };
