@@ -311,6 +311,7 @@ pub(crate) struct SourceTracker {
     image_range: Range<usize>,
     table: Option<Vec<Vec<CellMap>>>,
     blocks: Vec<BlockMap>,
+    generated: bool,
 }
 
 impl SourceTracker {
@@ -324,10 +325,30 @@ impl SourceTracker {
             image_range: 0..0,
             table: None,
             blocks: Vec::new(),
+            generated: false,
         }
     }
 
+    /// The next `push` is generated text with no source (e.g. a footnote
+    /// label): record it as non-literal with an empty range at the start of
+    /// the current event, so following text keeps mapping into its own source.
+    pub fn generated_next(&mut self) {
+        self.generated = true;
+    }
+
     pub fn push(&mut self, text: &str, math: bool, code: bool) {
+        if std::mem::take(&mut self.generated) {
+            let at = self.range.start;
+            let cell = self
+                .table
+                .as_mut()
+                .and_then(|rows| rows.last_mut())
+                .and_then(|row| row.last_mut())
+                .unwrap_or(&mut self.text);
+            cell.push(text.len(), at..at, false);
+            cell.trailing_breaks = 0;
+            return;
+        }
         let cell = self
             .table
             .as_mut()
@@ -523,6 +544,41 @@ mod tests {
             assert_eq!(
                 mapped.map.source_byte(1, offset, Affinity::After),
                 Some(start + offset)
+            );
+        }
+    }
+
+    #[test]
+    fn footnote_label_is_generated_and_note_text_maps_into_the_text() {
+        let source = "Body[^1].\n\n[^1]: Note text.\n";
+        let mapped = parse_mapped(source);
+        let block = mapped
+            .doc
+            .blocks
+            .iter()
+            .enumerate()
+            .skip(1)
+            .map(|(i, _)| i)
+            .next()
+            .expect("note block");
+        let start = source.find("Note").unwrap();
+        let label = "\u{b9} ".len();
+        for affinity in [Affinity::Before, Affinity::After] {
+            assert_eq!(mapped.map.source_byte(block, 0, affinity), Some(start));
+            assert_eq!(
+                mapped.map.source_byte(block, label, affinity),
+                Some(start),
+                "{affinity:?}"
+            );
+            assert_eq!(
+                mapped.map.source_byte(block, label + 5, affinity),
+                Some(start + 5),
+                "{affinity:?}"
+            );
+            assert_eq!(
+                mapped.map.source_byte(block, label + 10, affinity),
+                Some(start + 10),
+                "{affinity:?}"
             );
         }
     }
