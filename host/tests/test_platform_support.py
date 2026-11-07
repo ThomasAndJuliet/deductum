@@ -465,6 +465,23 @@ class StdioBridge(unittest.TestCase):
 
 
 class AuxiliaryCommands(unittest.TestCase):
+    @unittest.skipUnless(os.name == "nt", "Native complete command-line UTF-16 limit")
+    def test_wrapped_command_accepts_the_utf16_boundary_and_rejects_one_more_unit_before_spawn(self):
+        arguments = [sys.executable, "-c", "pass"]
+        prefix, _ = P.managed_argv(arguments)
+        remaining = 32766 - len(subprocess.list2cmdline(prefix).encode("utf-16-le")) // 2 - 1
+        self.assertGreater(remaining, 0)
+        value = "😀" * (remaining // 2) + "x" * (remaining % 2)
+        wrapped, _ = P.managed_argv([*arguments, value])
+        self.assertEqual(len(subprocess.list2cmdline(wrapped).encode("utf-16-le")) // 2, 32766)
+        result = P.run([*arguments, value], capture_output=True, timeout=30)
+        self.assertEqual(result.returncode, 0, result.stderr.decode(errors="replace"))
+        with patch.object(subprocess, "Popen", side_effect=AssertionError("overlong command was spawned")):
+            with self.assertRaises(OSError) as caught:
+                P.run([*arguments, value + "x"], capture_output=True, timeout=30)
+        self.assertIn("32767", str(caught.exception))
+        self.assertIn("UTF-16", str(caught.exception))
+
     def test_strict_text_decoding_failure_reaches_the_caller_without_a_reader_thread_traceback(self):
         for stream in (1, 2):
             for cancel in (None, threading.Event()):

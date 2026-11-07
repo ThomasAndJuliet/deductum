@@ -1,2 +1,5 @@
 # Preserve the verbatim third-party license while checking application whitespace.
 res/icons/LICENSE.window-pop-out -whitespace
+
+# Bash reads the native Windows launcher directly from the packaged checkout.
+deductum/host/drivers/isabelle_windows.sh text eol=lf
