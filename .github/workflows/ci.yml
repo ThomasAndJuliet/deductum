@@ -140,6 +140,9 @@ jobs:
     name: Native Windows portable package
     runs-on: ${{ vars.CI_RUNNER == 'hosted' && 'ubuntu-24.04' || 'neo-ubuntu' }}
     timeout-minutes: 90
+    env:
+      CARGO_HOME: ${{ runner.temp }}/deductum-windows-cargo
+      RUSTUP_HOME: ${{ runner.temp }}/deductum-windows-rustup
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -148,7 +151,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64
-          rustup toolchain install 1.99.0 --profile minimal --target x86_64-pc-windows-gnu
+          curl --proto '=https' --tlsv1.2 --fail --location https://sh.rustup.rs --output "$RUNNER_TEMP/rustup-init.sh"
+          sh "$RUNNER_TEMP/rustup-init.sh" -y --no-modify-path --profile minimal --default-toolchain 1.99.0 --target x86_64-pc-windows-gnu
+          printf '%s\n' "$CARGO_HOME/bin" >> "$GITHUB_PATH"
       - name: Fetch the private toolkit with read-only build identities
         env:
           LIBCOSMIC_DEPLOY_KEY: ${{ secrets.LIBCOSMIC_DEPLOY_KEY }}
