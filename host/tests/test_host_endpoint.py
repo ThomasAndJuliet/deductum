@@ -49,11 +49,14 @@ class DetachedHost(unittest.TestCase):
         self.process_handles = {}
         self.addCleanup(self.cleanup)
 
-    def start(self):
+    def start(self, host_launcher=False):
         # The client process exits immediately after invoking the production
         # detached launcher. The daemon must survive that caller's exit.
         code = ("import sys; sys.path.insert(0,sys.argv[1]); import platform_support as p; "
                 "p.spawn_detached(sys.argv[2],sys.argv[3])")
+        if host_launcher:
+            code = ("import sys; sys.path.insert(0,sys.argv[1]); import deductum_host as h; "
+                    "h.__file__=sys.argv[2]; h.spawn_daemon()")
         result = subprocess.run([sys.executable, "-c", code, str(Path(P.__file__).parent), str(self.wrapper),
                                  str(self.root / "host.log")], env=self.env, capture_output=True, timeout=10)
         self.assertEqual(result.returncode, 0, result.stderr.decode(errors="replace"))
@@ -147,6 +150,44 @@ class DetachedHost(unittest.TestCase):
 
     def read(self, client):
         return client.request("read", session="fixture", path=str(self.path), since_revision=0)
+
+    def test_detached_host_observes_the_selected_private_configuration(self):
+        runtime = self.root / "private runtime β" / "bin" / "isabelle"
+        runtime.parent.mkdir(parents=True)
+        runtime.touch()
+        identifier = runtime.parent.parent / "etc" / "ISABELLE_IDENTIFIER"
+        identifier.parent.mkdir()
+        identifier.write_text("PrivateConfigFixture", encoding="utf-8")
+        (self.config / "host.json").write_text(json.dumps({"isabelle": [str(runtime)], "lean": []}), encoding="utf-8")
+        marker = self.root / "manager-started"
+        if os.name != "nt":
+            # A fresh service manager receives only explicitly selected settings.
+            # Execute its real detached child, without contacting the user's
+            # manager or depending on its unrelated inherited environment.
+            bindir = self.root / "bin"
+            bindir.mkdir()
+            manager = bindir / "systemd-run"
+            manager.write_text("#!" + sys.executable + "\n"
+                "import os,subprocess,sys\nfrom pathlib import Path\n"
+                "env={k:os.environ[k] for k in ('HOME','USERPROFILE','PATH') if k in os.environ}\n"
+                "args=sys.argv[1:]\n"
+                "while args and args[0].startswith('--'):\n"
+                " arg=args.pop(0)\n"
+                " if arg.startswith('--setenv='):\n"
+                "  key,_,value=arg[len('--setenv='):].partition('='); env[key]=value\n"
+                f"Path({str(marker)!r}).touch()\n"
+                f"with open({str(self.root / 'host.log')!r},'ab') as log:\n"
+                " subprocess.Popen(args,env=env,stdin=subprocess.DEVNULL,stdout=log,stderr=log,"
+                "start_new_session=True,close_fds=True)\n", encoding="utf-8")
+            manager.chmod(0o700)
+            self.env["PATH"] = str(bindir) + os.pathsep + self.env.get("PATH", "")
+            self.env["XDG_RUNTIME_DIR"] = str(self.root / "runtime")
+        client = self.start(host_launcher=True)
+        runtimes = client.request("runtimes")["runtimes"]
+        self.assertTrue(any(item["identifier"] == "PrivateConfigFixture" and os.path.samefile(item["path"], runtime)
+                            for item in runtimes), "detached host used another configuration instead of the selected one")
+        if os.name != "nt":
+            self.assertTrue(marker.exists(), "fixture did not exercise the fresh service-manager environment")
 
     def test_the_first_acknowledged_edit_survives_a_crash_before_periodic_checkpoint(self):
         client = self.start()

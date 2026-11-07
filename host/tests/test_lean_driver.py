@@ -30,10 +30,17 @@ class ImportInvalidation(unittest.IsolatedAsyncioTestCase):
                 case.events.append(obj)
                 case.changed.set()
         class ServerWithoutImportGraph:
+            def __init__(self):
+                self.reporter_finished = asyncio.Event()
             def notify(self, method, params):
                 # This is the real protocol boundary: a watched-file change
                 # arriving before Lean's importClosure has no stale reply.
                 case.notifications.append((method, params))
+            async def request(self, method, params, **kwargs):
+                if method == "textDocument/waitForDiagnostics":
+                    self.reporter_finished.set()
+                    return None
+                return {}
             async def shutdown(self):
                 pass
         self.driver = lean.LeanDriver(Session())
@@ -57,6 +64,7 @@ class ImportInvalidation(unittest.IsolatedAsyncioTestCase):
         text = Path(path).read_text() if text is None else text
         self.driver.send({"op": "open", "file": path, "text": text, "rev": 1})
         doc = self.driver.docs[path]
+        self.driver._on_diagnostics({"uri": doc.uri, "version": 1, "diagnostics": []})
         self.driver._on_progress({"textDocument": {"uri": doc.uri, "version": 1}, "processing": []})
         return doc
 
@@ -75,6 +83,7 @@ class ImportInvalidation(unittest.IsolatedAsyncioTestCase):
         dep = self.source("Tiny.Dep", "def n := 1\n")
         use = self.source("Tiny.Use", "import Tiny.Dep\n\n#eval n\n")
         doc = self.opened(use)
+        await asyncio.wait_for(self.driver.client.reporter_finished.wait(), 1)
         self.assertTrue(self.driver.node_for(doc)["status"]["consolidated"])
         self.driver.send({"op": "disk_changed", "files": [dep]})
         node = self.driver.node_for(doc)
@@ -250,6 +259,280 @@ class ImportInvalidation(unittest.IsolatedAsyncioTestCase):
             await asyncio.sleep(.01)
         self.assertFalse(doc.stale)
         self.assertIsNone(self.driver.disk_task)
+
+
+class DiagnosticCompletion(unittest.IsolatedAsyncioTestCase):
+    """Protocol responses, not elapsed time, establish the final diagnostic set."""
+
+    TEXT = "theorem t : True := by\n  sorry\n"
+
+    async def asyncSetUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp.name)
+        self.events, self.requests = [], []
+        self.started = asyncio.Queue()
+        case = self
+
+        class Session:
+            meta = {}
+            def on_backend_event(self, event):
+                case.events.append(event)
+
+        class Server:
+            def notify(self, method, params):
+                pass
+            async def shutdown(self):
+                pass
+            async def request(self, method, params, **kwargs):
+                if method != "textDocument/waitForDiagnostics":
+                    return {}
+                request = {"params": params, "reply": asyncio.get_running_loop().create_future(),
+                           "returned": asyncio.Event(), "canceled": asyncio.Event(),
+                           "task": asyncio.current_task()}
+                case.requests.append(request)
+                case.started.put_nowait(request)
+                try:
+                    try:
+                        return await asyncio.shield(request["reply"])
+                    except asyncio.CancelledError:
+                        # An obsolete response can still arrive from a transport
+                        # that has already queued it. Exercise the identity fence.
+                        request["canceled"].set()
+                        return await asyncio.shield(request["reply"])
+                finally:
+                    request["returned"].set()
+
+        self.driver = lean.LeanDriver(Session())
+        self.driver.lake_root = str(self.root)
+        self.driver.client = Server()
+
+    async def asyncTearDown(self):
+        await self.driver.stop()
+        for request in self.requests:
+            if not request["reply"].done():
+                request["reply"].set_result(None)
+        await asyncio.gather(*(request["task"] for request in self.requests), return_exceptions=True)
+        self.temp.cleanup()
+
+    def opened(self, name="Main"):
+        path = str(self.root / (name + ".lean"))
+        Path(path).write_text(self.TEXT, encoding="utf-8")
+        self.driver.send({"op": "open", "file": path, "text": self.TEXT, "rev": 1})
+        return self.driver.docs[path]
+
+    def diagnostics(self, doc, warning=False, version=None):
+        items = [{"severity": 2, "message": "declaration uses 'sorry'", "range": {
+            "start": {"line": 0, "character": 8}, "end": {"line": 0, "character": 9}}}] if warning else []
+        self.driver._on_diagnostics({"uri": doc.uri, "version": doc.version if version is None else version,
+                                     "diagnostics": items})
+
+    def progress(self, doc, pending=False):
+        tasks = [{"range": {"start": {"line": 0, "character": 0},
+                            "end": {"line": 0, "character": 0}}}] if pending else []
+        self.driver._on_progress({"textDocument": {"uri": doc.uri, "version": doc.version}, "processing": tasks})
+
+    async def barrier(self, doc):
+        try:
+            request = await asyncio.wait_for(self.started.get(), 1)
+        except asyncio.TimeoutError:
+            self.fail(f"No new diagnostic reporter request for {Path(doc.path).name} revision {doc.version}; "
+                      f"{len(self.requests)} previous requests recorded")
+        self.assertEqual(request["params"], {"uri": doc.uri, "version": doc.version})
+        return request
+
+    async def reply(self, request, error=None):
+        if error is None:
+            request["reply"].set_result(None)
+        else:
+            request["reply"].set_exception(error)
+        await asyncio.wait_for(request["returned"].wait(), 1)
+
+    def assert_pending(self, doc):
+        node = self.driver.node_for(doc)
+        self.assertFalse(node["status"]["consolidated"], "final diagnostics were claimed before the reporter fence")
+        return node
+
+    async def test_zero_width_tasks_and_empty_intermediate_diagnostics_do_not_finish_a_file(self):
+        doc = self.opened()
+        self.progress(doc, pending=True)
+        self.diagnostics(doc)
+        self.assert_pending(doc)
+        self.diagnostics(doc, warning=True)
+        node = self.assert_pending(doc)
+        self.assertEqual(node["status"]["warned"], 1, "pending reporter hid an already published warning")
+        self.assertEqual(node["messages"][0]["text"], "declaration uses 'sorry'")
+        self.assertEqual(self.requests, [], "zero-width pending work was mistaken for an empty task list")
+        self.progress(doc)
+        request = await self.barrier(doc)
+        self.assert_pending(doc)
+        await self.reply(request)
+        node = self.driver.node_for(doc)
+        self.assertTrue(node["status"]["consolidated"])
+        self.assertEqual(node["status"]["warned"], 1)
+        self.assertEqual(node["messages"][0]["start"], 8)
+        self.assertEqual(node["messages"][0]["end"], 9)
+
+    async def test_final_warning_is_included_whether_progress_or_diagnostics_arrives_first(self):
+        for warning_first in (False, True):
+            with self.subTest(warning_first=warning_first):
+                doc = self.opened("First" if warning_first else "Second")
+                self.diagnostics(doc)
+                if warning_first:
+                    self.diagnostics(doc, warning=True)
+                self.progress(doc)
+                request = await self.barrier(doc)
+                if not warning_first:
+                    self.diagnostics(doc, warning=True)
+                self.assert_pending(doc)
+                await self.reply(request)
+                node = self.driver.node_for(doc)
+                self.assertTrue(node["status"]["consolidated"])
+                self.assertEqual(node["status"]["warned"], 1)
+                self.assertEqual(node["messages"][0]["kind"], "warning")
+
+    async def test_empty_final_diagnostics_can_finish_after_the_reporter_reply(self):
+        doc = self.opened()
+        self.diagnostics(doc)
+        self.progress(doc)
+        request = await self.barrier(doc)
+        self.assert_pending(doc)
+        await self.reply(request)
+        node = self.driver.node_for(doc)
+        self.assertTrue(node["status"]["consolidated"])
+        self.assertEqual(node["messages"], [])
+        self.assertEqual(node["status"]["finished"], node["status"]["total"])
+
+    async def test_reply_after_an_edit_cannot_finish_the_new_revision(self):
+        doc = self.opened()
+        self.diagnostics(doc)
+        self.progress(doc)
+        old = await self.barrier(doc)
+        self.driver.send({"op": "edit", "file": doc.path, "rev": 2,
+                          "edits": [{"start": 0, "end": 0, "text": "-- new revision\n"}]})
+        self.diagnostics(doc)
+        self.progress(doc)
+        current = await self.barrier(doc)
+        await asyncio.wait_for(old["canceled"].wait(), 1)
+        await self.reply(old)
+        self.assertEqual(self.assert_pending(doc)["seq"], 2)
+        await self.reply(current)
+        self.assertTrue(self.driver.node_for(doc)["status"]["consolidated"])
+
+    async def test_reopen_and_cancel_each_fence_a_reply_for_the_same_document_version(self):
+        for action in ("reopen", "cancel"):
+            with self.subTest(action=action):
+                doc = self.opened(action)
+                self.diagnostics(doc)
+                self.progress(doc)
+                old = await self.barrier(doc)
+                if action == "reopen":
+                    self.driver._reopen(doc)
+                else:
+                    result = await self.driver.request({"op": "cancel"})
+                    self.assertEqual(result["canceled"], 1, "pending diagnostics were treated as an idle file")
+                self.diagnostics(doc)
+                self.progress(doc)
+                current = await self.barrier(doc)
+                await asyncio.wait_for(old["canceled"].wait(), 1)
+                await self.reply(old)
+                self.assert_pending(doc)
+                await self.reply(current)
+                self.assertTrue(self.driver.node_for(doc)["status"]["consolidated"])
+                self.driver.send({"op": "close", "file": doc.path})
+
+    async def test_close_and_replacement_fence_a_reply_for_the_same_path_and_revision(self):
+        old_doc = self.opened()
+        self.diagnostics(old_doc)
+        self.progress(old_doc)
+        old = await self.barrier(old_doc)
+        self.driver.send({"op": "close", "file": old_doc.path})
+        new_doc = self.opened()
+        self.assertIsNot(old_doc, new_doc)
+        self.diagnostics(new_doc)
+        self.progress(new_doc)
+        current = await self.barrier(new_doc)
+        await self.reply(old)
+        self.assert_pending(new_doc)
+        await self.reply(current)
+        self.assertTrue(self.driver.node_for(new_doc)["status"]["consolidated"])
+
+    async def test_closed_document_emits_nothing_when_its_canceled_reporter_replies(self):
+        doc = self.opened()
+        self.diagnostics(doc)
+        self.progress(doc)
+        request = await self.barrier(doc)
+        self.driver.send({"op": "close", "file": doc.path})
+        self.events.clear()
+        await self.reply(request)
+        self.assertNotIn(doc.path, self.driver.docs)
+        self.assertEqual(self.events, [], "a closed document emitted a late reporter result")
+
+    async def test_error_from_an_old_revision_is_not_reported_as_a_current_failure(self):
+        doc = self.opened()
+        self.diagnostics(doc)
+        self.progress(doc)
+        old = await self.barrier(doc)
+        self.driver.send({"op": "edit", "file": doc.path, "rev": 2,
+                          "edits": [{"start": 0, "end": 0, "text": "-- new revision\n"}]})
+        self.events.clear()
+        await self.reply(old, error=lean.LspError(-32603, "obsolete reporter failure"))
+        self.assertFalse(any("obsolete reporter failure" in event.get("text", "") for event in self.events))
+        self.assertEqual(self.assert_pending(doc)["seq"], 2)
+
+    async def test_new_pending_work_invalidates_a_reporter_reply_for_the_same_version(self):
+        doc = self.opened()
+        self.diagnostics(doc)
+        self.progress(doc)
+        old = await self.barrier(doc)
+        self.progress(doc, pending=True)
+        await self.reply(old)
+        self.assert_pending(doc)
+        self.progress(doc)
+        current = await self.barrier(doc)
+        await self.reply(current)
+        self.assertTrue(self.driver.node_for(doc)["status"]["consolidated"])
+
+    async def test_a_new_progress_cycle_gets_its_own_barrier_before_the_old_reporter_replies(self):
+        for error in (None, lean.LspError(-32603, "obsolete progress-cycle failure")):
+            with self.subTest(reply="success" if error is None else "error"):
+                doc = self.opened("FreshCycle" if error is None else "FailedCycle")
+                self.diagnostics(doc)
+                self.progress(doc)
+                old = await self.barrier(doc)
+                self.progress(doc, pending=True)
+                self.progress(doc)
+                current = await self.barrier(doc)
+                self.assertIsNot(current, old)
+                await asyncio.wait_for(old["canceled"].wait(), 1)
+                self.events.clear()
+                await self.reply(old, error=error)
+                self.assert_pending(doc)
+                self.assertFalse(any("obsolete progress-cycle failure" in event.get("text", "") for event in self.events))
+                await self.reply(current)
+                self.assertTrue(self.driver.node_for(doc)["status"]["consolidated"])
+
+    async def test_stop_cancels_pending_diagnostics_and_a_late_reply_emits_no_new_node(self):
+        doc = self.opened()
+        self.diagnostics(doc)
+        self.progress(doc)
+        request = await self.barrier(doc)
+        await asyncio.wait_for(self.driver.stop(), 1)
+        await asyncio.wait_for(request["canceled"].wait(), 1)
+        self.events.clear()
+        await self.reply(request)
+        self.assertEqual(self.events, [], "a stopped driver emitted a node after a stale reporter reply")
+        self.assert_pending(doc)
+
+    async def test_failed_or_canceled_reporter_requests_never_manufacture_completion(self):
+        for index, error in enumerate((lean.LspError(-32603, "reporter failed"), lean.LspClosed(),
+                                       asyncio.TimeoutError(), asyncio.CancelledError())):
+            with self.subTest(error=type(error).__name__):
+                doc = self.opened("Error" + str(index))
+                self.diagnostics(doc)
+                self.progress(doc)
+                request = await self.barrier(doc)
+                await self.reply(request, error=error)
+                self.assert_pending(doc)
 
 
 def split(text):
@@ -601,9 +884,10 @@ class Reports(unittest.TestCase):
         self.assertEqual((st["running"], st["unprocessed"], st["percentage"]), (1, 2, 25))
         self.assertFalse(st["consolidated"])
 
-    def test_empty_ranges_are_ignored(self):
+    def test_zero_width_tasks_are_pending_even_when_no_command_range_is_marked_running(self):
         rep = lean.build_report(self.CMDS, [], [(5, 5), (25, 25)])
         self.assertTrue(all(c[3] == "finished" for c in rep["commands"]))
+        self.assertFalse(rep["status"]["consolidated"], "zero-width tasks still represent pending work")
 
     def test_nothing_known_is_unprocessed(self):
         rep = lean.build_report(self.CMDS, [], None)
