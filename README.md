@@ -1,7 +1,8 @@
 # Deductum
 
-Deductum is a desktop workspace for Isabelle and Lean proofs on Linux and
-Windows. Read and edit proofs as literate documents, inspect goals as you work,
+Deductum is a household application for shared Isabelle and Lean proof work on
+Linux and Windows, built with the COSMIC toolkit (libcosmic, iced and
+cosmic-text). Read and edit proofs as literate documents, inspect goals as you work,
 and share a live prover session with coding agents. Projects can run on your
 computer or a Linux machine reached over SSH.
 
@@ -86,7 +87,7 @@ sha256sum --check --ignore-missing SHA256SUMS
 
 The Flatpak includes the app and its session-host code. Local provers run on
 your Linux system, so install Python 3 and the prover you need there, outside
-the Flatpak. COSMIC Terminal is optional.
+the Flatpak. The separate Terminal Agents app is optional.
 
 ### Linux: household Flatpak repository
 
@@ -207,7 +208,7 @@ Add machines to `machines.json` in Deductum's
 ```
 
 Choose that machine when creating a session. Folder paths refer to the
-**remote** filesystem. Existing machines configured in COSMIC Terminal Agents
+**remote** filesystem. Machines already configured in the separate Terminal Agents app
 are also recognised.
 
 ```sh

@@ -51,7 +51,7 @@ pub struct Appearance {
     pub goal_beside: bool,
 }
 
-/// Reading controls shared in vocabulary with Cerea and Terminal's threads.
+/// Reading controls shared in vocabulary with Cerea and Terminal Agents' threads.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Display {
@@ -264,7 +264,7 @@ impl ThemeChoice {
 
     /// The theme to apply. A desktop that never saved one of its themes (or saved only some of its
     /// fields) gives libcosmic's dark defaults for what is missing, so the light theme would then
-    /// be dark: COSMIC's own stands in for it, as COSMIC Terminal does
+    /// be dark: COSMIC's own stands in for it, as the Terminal Agents app does
     pub fn theme(self) -> cosmic::Theme {
         use cosmic::theme;
         match self {

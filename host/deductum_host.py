@@ -3184,7 +3184,7 @@ class Host:
             client.settings.update({k: p[k] for k in known if k in p})
             return {"settings": client.settings}
         # A client on another machine names files as that machine does; here they are reached
-        # through COSMIC Terminal's sshfs mount of it
+        # through Terminal Agents' sshfs mount of it
         for key in ("path", "folder"):
             if isinstance(p.get(key), str):
                 known = self.sessions.get(str(p.get("session")))

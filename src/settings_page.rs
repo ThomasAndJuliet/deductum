@@ -53,7 +53,7 @@ pub fn page(app: &App) -> Element<'_, Message> {
     let widths: Vec<String> = width_values.iter().map(|v| if *v == 0.0 { "Automatic".into() } else { format!("{v} em") }).collect();
     let display = settings::section()
         .title("Display")
-        .add(settings::item::builder("Text font").description("The literate document and its prose editor; Sans matches Terminal threads")
+        .add(settings::item::builder("Text font").description("The literate document and its prose editor; Sans matches Terminal Agents threads")
             .control(widget::dropdown(TextFont::ALL.iter().map(|f| f.label()).collect::<Vec<_>>(), TextFont::ALL.iter().position(|f| *f == d.font), |i| set(Msg::Display(DisplayChange::Font(TextFont::ALL[i]))))))
         .add(choose("Text size", &[12.0, 14.0, 16.0, 17.0, 18.0, 20.0, 22.0, 24.0, 28.0, 32.0], d.text_size, " px", DisplayChange::TextSize))
         .add(choose("Line spacing", &[1.2, 1.3, 1.4, 1.45, 1.5, 1.55, 1.6, 1.8, 2.0], d.line_height, "", DisplayChange::LineHeight))
@@ -152,7 +152,7 @@ pub fn page(app: &App) -> Element<'_, Message> {
         machines = machines.add(settings::item::builder(link.name.clone()).description(destination).control(machine_state(link)));
     }
     if app.links.is_empty() {
-        machines = machines.add(settings::item::builder("No machines").description("Machines come from COSMIC Terminal Agents").control(widget::Space::new()));
+        machines = machines.add(settings::item::builder("No machines").description("Machines come from the Terminal Agents app").control(widget::Space::new()));
     }
 
     let about = settings::section()

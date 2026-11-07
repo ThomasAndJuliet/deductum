@@ -1,7 +1,7 @@
 # Deductum (formerly Isabellum): Isabelle, Lean and Rocq backends
 
-Status: design, 2026-10-11 (Rocq deferred, C17c), on branch `multi-prover`
-(`~/Documents/cosmic-term-multi-prover`). No production code has changed for
+Status: design, 2026-10-11 (Rocq deferred, C17c), on branch `multi-prover`.
+No production code has changed for
 it yet. The branch starts from the Deductum branch `worktree-2026-10-10-isabelle`
 at `4b6b42c3b`. Cerea's rendering split (`shared-prose`, `9a556ee36`) is merged
 into it, and `prose/` has been pulled up to Cerea's `9f8c181d`.
