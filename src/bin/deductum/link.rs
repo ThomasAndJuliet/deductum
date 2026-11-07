@@ -46,6 +46,31 @@ struct Machine {
 /// This computer, then the machines Terminal Agents has registered
 pub fn targets() -> Vec<(String, Target)> {
     let mut out = vec![(local_name(), Target { key: "local".into(), destination: None })];
+    // Deductum can run without Terminal Agents, including on Windows.
+    let path = super::platform::config_dir().join("machines.json");
+    if let Ok(text) = std::fs::read_to_string(path) {
+        match serde_json::from_str::<Vec<Machine>>(&text) {
+            Ok(machines) => {
+                for machine in machines {
+                    let destination = if machine.user.trim().is_empty() {
+                        machine.host.trim().to_string()
+                    } else {
+                        format!("{}@{}", machine.user.trim(), machine.host.trim())
+                    };
+                    if !machine.name.trim().is_empty()
+                        && machine.name != "local"
+                        && !destination.is_empty()
+                        && !destination.starts_with('-')
+                        && !destination.chars().any(char::is_whitespace)
+                        && !out.iter().any(|(_, target)| target.key == machine.name)
+                    {
+                        out.push((machine.name.clone(), Target { key: machine.name, destination: Some(destination) }));
+                    }
+                }
+            }
+            Err(error) => log::error!("could not read Deductum's machines.json: {error}"),
+        }
+    }
     // Extra machines, `name=destination,…`, for trying a host without registering it
     if let Ok(extra) = std::env::var("DEDUCTUM_MACHINES") {
         for item in extra.split(',').filter(|s| !s.trim().is_empty()) {
@@ -99,17 +124,18 @@ pub fn targets() -> Vec<(String, Target)> {
 }
 
 fn config_dir() -> PathBuf {
-    std::env::var_os("XDG_CONFIG_HOME")
-        .map(PathBuf::from)
-        .filter(|p| p.is_absolute())
-        .unwrap_or_else(|| home().join(".config"))
+    super::platform::config_home()
 }
 
 fn home() -> PathBuf {
-    std::env::var_os("HOME").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("/"))
+    super::platform::home()
 }
 
 pub fn local_name() -> String {
+    #[cfg(windows)]
+    if let Ok(name) = std::env::var("COMPUTERNAME") {
+        return name;
+    }
     std::fs::read_to_string("/etc/hostname")
         .ok()
         .map(|s| s.trim().to_string())
@@ -131,6 +157,8 @@ fn host_command(program: &str, args: &[String]) -> tokio::process::Command {
     } else {
         let mut cmd = tokio::process::Command::new(program);
         cmd.args(args);
+        #[cfg(windows)]
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW for connection helpers
         cmd
     }
 }
@@ -145,6 +173,7 @@ pub fn bundle() -> Option<PathBuf> {
     if let Ok(exe) = std::env::current_exe()
         && let Some(dir) = exe.parent()
     {
+        candidates.push(dir.join("share/deductum"));
         candidates.push(dir.join("../share/deductum"));
         candidates.push(dir.join("../../deductum"));
     }
@@ -199,6 +228,10 @@ fn remote_root(target: &Target) -> (String, String) {
 
 /// Install the bundled sources on the target when its copy differs
 async fn install(target: &Target) -> Result<(), String> {
+    #[cfg(windows)]
+    if target.destination.is_none() {
+        return bundle().map(|_| ()).ok_or_else(|| "Deductum's bundled session host is missing; reinstall the complete Windows package".into());
+    }
     let Some(bundle) = bundle() else { return Ok(()) };
     // Running from the installed copy itself: nothing to install
     let installed = home().join(".local/share/deductum");
@@ -255,7 +288,29 @@ async fn install(target: &Target) -> Result<(), String> {
     Ok(())
 }
 
-fn connect_command(target: &Target) -> tokio::process::Command {
+#[cfg(windows)]
+fn native_python(bundle: &std::path::Path) -> PathBuf {
+    if let Some(python) = std::env::var_os("DEDUCTUM_PYTHON").filter(|value| !value.is_empty()) {
+        return PathBuf::from(python);
+    }
+    let python = bundle.join("../../python/python.exe");
+    if python.is_file() { python } else { PathBuf::from("python.exe") }
+}
+
+fn connect_command(target: &Target) -> Result<tokio::process::Command, String> {
+    #[cfg(windows)]
+    if target.destination.is_none() {
+        let bundle = bundle().ok_or_else(|| "Deductum's bundled session host is missing".to_string())?;
+        let mut cmd = tokio::process::Command::new(native_python(&bundle));
+        cmd.args(["-X", "utf8"]).arg(bundle.join("host/deductum_host.py")).arg("connect");
+        cmd.env("PYTHONUTF8", "1");
+        if let Some(root) = std::env::var_os("DEDUCTUM_LOCAL_ROOT") {
+            cmd.env("DEDUCTUM_STATE_DIR", PathBuf::from(root).join("state"));
+        }
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).kill_on_drop(true);
+        return Ok(cmd);
+    }
     let (root, env) = remote_root(target);
     let script = format!("{env}python3 {root}/host/deductum_host.py connect");
     let mut cmd = match &target.destination {
@@ -266,7 +321,7 @@ fn connect_command(target: &Target) -> tokio::process::Command {
         ),
     };
     cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).kill_on_drop(true);
-    cmd
+    Ok(cmd)
 }
 
 /// Read host events and write commands independently. Delivering an event can
@@ -324,7 +379,7 @@ pub fn run(target: &Target) -> impl Stream<Item = (String, Event)> + use<> {
             if output.send((key.clone(), Event::Connecting("connecting".into()))).await.is_err() {
                 return;
             }
-            let mut child = match connect_command(&target).spawn() {
+            let mut child = match connect_command(&target).and_then(|mut command| command.spawn().map_err(|error| error.to_string())) {
                 Ok(child) => child,
                 Err(err) => {
                     if output.send((key.clone(), Event::Disconnected(err.to_string()))).await.is_err() {
@@ -399,6 +454,49 @@ pub enum Opener {
 /// COSMIC Terminal's sshfs mount if it is remote), Zed (as an ssh project) or a terminal
 /// (ssh'd there), the way Terminal Agents opens a tab's project
 pub async fn open_folder(opener: Opener, target: Target, folder: String) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        return open_folder_windows(opener, target, folder).await;
+    }
+    #[cfg(not(windows))]
+    open_folder_unix(opener, target, folder).await
+}
+
+#[cfg(windows)]
+async fn open_folder_windows(opener: Opener, target: Target, folder: String) -> Result<(), String> {
+    let mut command = match (opener, target.destination) {
+        (Opener::Files, None) => {
+            return open::that_detached(folder).map_err(|error| error.to_string());
+        }
+        (Opener::Files, Some(_)) => return Err("A remote folder needs a mounted drive to open in Explorer. Use Open in Zed or Open terminal for this SSH connection.".into()),
+        (Opener::Zed, destination) => {
+            let mut command = tokio::process::Command::new("zed.exe");
+            command.arg("--new").arg(destination.map_or(folder.clone(), |destination| format!("ssh://{destination}{folder}")));
+            command
+        }
+        (Opener::Terminal, None) => {
+            let mut command = tokio::process::Command::new("powershell.exe");
+            // The working directory is data, not a PowerShell source string.
+            command.current_dir(folder).args(["-NoLogo", "-NoExit"]);
+            command.creation_flags(0x00000010); // CREATE_NEW_CONSOLE
+            command
+        }
+        (Opener::Terminal, Some(destination)) => {
+            let mut command = tokio::process::Command::new("ssh.exe");
+            let quote = format!("'{}'", folder.replace('\'', r"'\''"));
+            command.args(["-t", &destination, &format!("cd {quote} && exec \"$SHELL\" -l")]);
+            command.creation_flags(0x00000010);
+            command
+        }
+    };
+    if opener == Opener::Zed {
+        command.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
+    }
+    command.spawn().map(|_| ()).map_err(|error| error.to_string())
+}
+
+#[cfg(not(windows))]
+async fn open_folder_unix(opener: Opener, target: Target, folder: String) -> Result<(), String> {
     let quote = |s: &str| format!("'{}'", s.replace('\'', r"'\''"));
     let script = match (opener, &target.destination) {
         (Opener::Files, None) => format!("exec xdg-open {}", quote(&folder)),

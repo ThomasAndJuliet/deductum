@@ -8,6 +8,8 @@
 //! order from whichever computer the terminal is on. The design is in
 //! `AGENTS-PLAN.md`, under "Transferring sessions".
 
+#![cfg(all(unix, feature = "terminal"))]
+
 pub mod b64;
 pub mod helper;
 pub mod mount_setup;

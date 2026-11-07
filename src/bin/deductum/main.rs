@@ -11,6 +11,8 @@
 //! `prover`: a profile per backend, and the capabilities each session's host
 //! reports, which decide what the UI offers.
 
+#![cfg_attr(all(windows, not(test)), windows_subsystem = "windows")]
+
 // jemalloc, not glibc's malloc: libcosmic calls malloc_trim after every
 // update and view, which with glibc scans the whole fragmented heap on the UI
 // thread; with jemalloc it only scans glibc's own small heap
@@ -29,6 +31,7 @@ mod insert;
 mod link;
 mod new_session;
 mod ot;
+mod platform;
 mod prover;
 mod settings;
 mod settings_page;
@@ -84,6 +87,20 @@ pub const FONTS: [&[u8]; 9] = [
 pub fn load_fonts() {
     let mut font_system = cosmic::iced::advanced::graphics::text::font_system().write().unwrap();
     for data in FONTS {
+        font_system.load_font(std::borrow::Cow::Borrowed(data));
+    }
+    // The toolkit requests these families by name; Windows does not ship them.
+    #[cfg(windows)]
+    for data in [
+        include_bytes!("../../../res/deductum/windows-fonts/NotoSansMono[wght].ttf").as_slice(),
+        include_bytes!("../../../res/deductum/windows-fonts/NotoSansMono-Bold.ttf").as_slice(),
+        include_bytes!("../../../res/deductum/windows-fonts/OpenSans-Regular.ttf").as_slice(),
+        include_bytes!("../../../res/deductum/windows-fonts/OpenSans-Bold.ttf").as_slice(),
+        include_bytes!("../../../res/deductum/windows-fonts/OpenSans-Italic.ttf").as_slice(),
+        include_bytes!("../../../res/deductum/windows-fonts/OpenSans-BoldItalic.ttf").as_slice(),
+        include_bytes!("../../../res/deductum/windows-fonts/OpenSans-Semibold.ttf").as_slice(),
+        include_bytes!("../../../res/deductum/windows-fonts/OpenSans-SemiboldItalic.ttf").as_slice(),
+    ] {
         font_system.load_font(std::borrow::Cow::Borrowed(data));
     }
 }

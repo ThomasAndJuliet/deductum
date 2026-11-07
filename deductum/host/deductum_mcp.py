@@ -76,10 +76,20 @@ def identity_from_env() -> Optional[Dict[str, str]]:
 def parent_agent() -> Optional[tuple]:
     """The agent CLI this adapter runs under (name, pid), from the process tree"""
     pid = os.getppid()
+    if os.name == "nt":
+        from _windows import process_parents
+        try:
+            for comm, parent_pid in process_parents(pid):
+                for name in ("codex", "claude"):
+                    if comm.lower().startswith(name):
+                        return name, parent_pid
+        except OSError:
+            pass
+        return None
     for _ in range(4):
         try:
-            comm = Path(f"/proc/{pid}/comm").read_text().strip().lower()
-            stat = Path(f"/proc/{pid}/stat").read_text()
+            comm = Path(f"/proc/{pid}/comm").read_text(encoding="utf-8").strip().lower()
+            stat = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
         except OSError:
             return None
         for name in ("codex", "claude"):

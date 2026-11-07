@@ -1904,6 +1904,7 @@ dependencies = [
  "tikv-jemallocator",
  "tokio",
  "url",
+ "windows-sys 0.61.2",
  "xdgen",
  "zbus",
  "zeroize",

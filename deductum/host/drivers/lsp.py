@@ -241,8 +241,7 @@ class LspClient:
 
     async def shutdown(self, timeout: float = 5.0) -> None:
         """``shutdown`` and ``exit``, then stop the process (and its group) if it lingers"""
-        import os
-        import signal
+        import platform_support as platform
         if not self.closed:
             with contextlib.suppress(Exception):
                 await self.request("shutdown", None, timeout)
@@ -253,9 +252,9 @@ class LspClient:
         try:
             await asyncio.wait_for(self.proc.wait(), timeout)
         except asyncio.TimeoutError:
-            for sig in (signal.SIGTERM, signal.SIGKILL):
+            for force in (False, True):
                 with contextlib.suppress(ProcessLookupError):
-                    os.killpg(self.proc.pid, sig)
+                    platform.terminate_process_tree(self.proc, force=force)
                 try:
                     await asyncio.wait_for(self.proc.wait(), 5)
                     break

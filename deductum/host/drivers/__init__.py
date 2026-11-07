@@ -98,6 +98,7 @@ import re
 import signal
 import sys
 import time
+import platform_support as platform
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -129,7 +130,7 @@ def read_json(path: Any, default: Any = None) -> Any:
 
 def config_path() -> Path:
     """``~/.config/deductum/host.json``, from the environment as it is now"""
-    return Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "deductum" / "host.json"
+    return platform.config_dir() / "host.json"
 
 
 def read_config() -> Dict[str, Any]:
@@ -318,12 +319,13 @@ async def stop_process(proc: Optional[asyncio.subprocess.Process], close_stdin: 
         await asyncio.wait_for(proc.wait(), 20)
     except asyncio.TimeoutError:
         with contextlib.suppress(ProcessLookupError):
-            os.killpg(proc.pid, signal.SIGTERM)
+            platform.terminate_process_tree(proc)
         try:
             await asyncio.wait_for(proc.wait(), 10)
         except asyncio.TimeoutError:
             with contextlib.suppress(ProcessLookupError):
-                os.killpg(proc.pid, signal.SIGKILL)
+                platform.terminate_process_tree(proc, force=True)
+            await proc.wait()
 
 
 _registered: Dict[str, type] = {}

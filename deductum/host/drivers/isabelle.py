@@ -12,13 +12,102 @@ import contextlib
 import json
 import os
 import time
+import threading
 import re
 import shutil
 import subprocess
+import ntpath
+import platform_support as platform
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 from . import (SHARE_DIR, Driver, HostError, log, read_config, resource_limit, stop_process)
+
+
+class RuntimeAdapter:
+    """The official distribution's Bash boundary; JVM protocol paths stay native.
+
+    Shell tools consume Cygwin paths, while backend.scala uses java.io.File and
+    must receive Windows paths in protocol objects. Path conversion belongs here,
+    never in the common host or Lean driver.
+    """
+
+    def __init__(self, runtime: str, cancel_event=None):
+        self.runtime = str(runtime)
+        self.home = Path(runtime).resolve().parent.parent
+        self.bash = self.home / "contrib" / "cygwin" / "bin" / "bash.exe"
+        self.cygpath = self.bash.with_name("cygpath.exe")
+        if platform.WINDOWS and not self.bash.is_file():
+            candidates = sorted((self.home / "contrib").glob("cygwin*/bin/bash.exe"))
+            if candidates:
+                self.bash = candidates[0]
+                self.cygpath = self.bash.with_name("cygpath.exe")
+        self._native = {}
+        self._posix = {}
+        self.cancel_event = cancel_event
+
+    def _convert(self, path: str, flag: str) -> str:
+        result = platform.run([str(self.cygpath), flag, "-a", "--", str(path)],
+                              capture_output=True, text=True, encoding="utf-8", timeout=30,
+                              cancel_event=self.cancel_event, env=self.environment())
+        if result.returncode or not result.stdout.strip():
+            raise HostError("Isabelle's bundled Cygwin could not convert a path")
+        return result.stdout.strip()
+
+    def to_posix(self, path: str) -> str:
+        if not platform.WINDOWS or path.startswith("/"):
+            return path
+        if path not in self._posix:
+            self._posix[path] = self._convert(path, "-u")
+        return self._posix[path]
+
+    def to_native(self, path: str) -> str:
+        if not platform.WINDOWS or not path.startswith("/"):
+            return os.path.normpath(path) if platform.WINDOWS else path
+        if path not in self._native:
+            self._native[path] = self._convert(path, "-w")
+        return self._native[path]
+
+    def command(self, args: List[str]) -> List[str]:
+        if not platform.WINDOWS:
+            return [self.runtime, *args]
+        if not self.bash.is_file() or not self.cygpath.is_file():
+            raise HostError("Use the official Isabelle Windows distribution with its bundled Cygwin")
+        # Bash converts only the executable's Windows path. Remaining arguments
+        # are passed as positional data, never interpolated into shell source.
+        return [str(self.bash), "--noprofile", "--norc", "-c",
+                'export PATH="/usr/bin:/bin:$PATH"; '
+                'exec /usr/bin/bash "$(/usr/bin/cygpath -u -- "$1")" "${@:2}"',
+                "deductum-isabelle", self.runtime, *args]
+
+    def environment(self, env=None):
+        result = dict(os.environ if env is None else env)
+        if platform.WINDOWS:
+            result["LANG"] = result["LC_ALL"] = "C.UTF-8"
+        return result
+
+    def run(self, args: List[str], **kwargs):
+        kwargs["env"] = self.environment(kwargs.get("env"))
+        return platform.run(self.command(args), cancel_event=self.cancel_event, **kwargs)
+
+    def protocol(self, obj: Any) -> Any:
+        """Normalize only structured file fields, preserving text and offsets."""
+        if not platform.WINDOWS:
+            return obj
+        if isinstance(obj, list):
+            return [self.protocol(v) for v in obj]
+        if not isinstance(obj, dict):
+            return obj
+        result = {}
+        for key, value in obj.items():
+            if key in ("file", "home") and isinstance(value, str):
+                result[key] = self.to_native(value)
+            elif key in ("files", "imports") and isinstance(value, list):
+                result[key] = [self.to_native(v) if isinstance(v, str) and
+                               (v.startswith("/") or ntpath.isabs(v)) else self.protocol(v) for v in value]
+            else:
+                result[key] = self.protocol(value)
+        return result
 
 
 # ---------------------------------------------------------------------------
@@ -28,7 +117,7 @@ from . import (SHARE_DIR, Driver, HostError, log, read_config, resource_limit, s
 def runtime_identifier(isabelle: Path) -> Optional[str]:
     home = isabelle.resolve().parent.parent
     try:
-        return (home / "etc" / "ISABELLE_IDENTIFIER").read_text().strip() or None
+        return (home / "etc" / "ISABELLE_IDENTIFIER").read_text(encoding="utf-8").strip() or None
     except OSError:
         return None
 
@@ -48,6 +137,10 @@ def find_runtimes() -> List[Dict[str, Any]]:
         candidates.extend(sorted(Path.home().glob(pattern)))
     for root in ("/opt", "/usr/local"):
         candidates.extend(sorted(Path(root).glob("Isabelle*/bin/isabelle")))
+    if platform.WINDOWS:
+        for root in (os.environ.get("ProgramFiles"), os.environ.get("ProgramFiles(x86)"), Path.home().anchor):
+            if root:
+                candidates.extend(sorted(Path(root).glob("Isabelle*/bin/isabelle")))
     which = shutil.which("isabelle")
     if which:
         candidates.append(Path(which))
@@ -79,7 +172,7 @@ SESSION_RE = re.compile(
 
 def parse_root(path: Path) -> List[Dict[str, str]]:
     try:
-        text = path.read_text(errors="replace")
+        text = path.read_text(encoding="utf-8", errors="replace")
     except OSError:
         return []
     text = re.sub(r"\(\*.*?\*\)", " ", text, flags=re.S)
@@ -102,7 +195,8 @@ def known_sessions(runtime: Optional[str]) -> List[str]:
         return []
     if runtime not in _known_sessions:
         try:
-            r = subprocess.run([runtime, "sessions", "-a"], capture_output=True, text=True, timeout=300)
+            r = RuntimeAdapter(runtime).run(["sessions", "-a"], capture_output=True, text=True,
+                                             encoding="utf-8", timeout=300)
             _known_sessions[runtime] = [ln.strip() for ln in r.stdout.splitlines() if ln.strip()]
         except (OSError, subprocess.TimeoutExpired):
             _known_sessions[runtime] = []
@@ -172,12 +266,13 @@ def symbol_table(runtime: str) -> List[Dict[str, Any]]:
     """The runtime's Isabelle symbols, from the files ISABELLE_SYMBOLS lists"""
     if runtime in _symbol_tables:
         return _symbol_tables[runtime]
-    r = subprocess.run([runtime, "getenv", "-b", "ISABELLE_SYMBOLS"], capture_output=True, text=True,
-                       timeout=120)
+    adapter = RuntimeAdapter(runtime)
+    r = adapter.run(["getenv", "-b", "ISABELLE_SYMBOLS"], capture_output=True, text=True,
+                    encoding="utf-8", timeout=120)
     entries: Dict[str, Dict[str, Any]] = {}
     for path in r.stdout.strip().split(":"):
         try:
-            text = Path(path).read_text(errors="replace")
+            text = Path(adapter.to_native(path)).read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
         for line in text.splitlines():
@@ -204,38 +299,42 @@ def symbol_table(runtime: str) -> List[Dict[str, Any]]:
     return _symbol_tables[runtime]
 
 
-def ensure_component(runtime: str, progress) -> None:
+def ensure_component(runtime: str, progress, cancel_event=None) -> None:
     """Register the backend component with the runtime and build its jar"""
     ident = runtime_identifier(Path(runtime))
     comp = SHARE_DIR / "backend" / (ident or "")
     if not ident or not comp.is_dir():
         raise HostError(f"No Deductum backend for {ident or runtime}", "unsupported_runtime")
     env = dict(os.environ)
-    home_user = _component_ready.get(runtime) or subprocess.run(
-        [runtime, "getenv", "-b", "ISABELLE_HOME_USER"], capture_output=True, text=True, timeout=120,
+    adapter = RuntimeAdapter(runtime, cancel_event=cancel_event)
+    comp_path = adapter.to_posix(str(comp))
+    home_user = _component_ready.get(runtime) or adapter.run(
+        ["getenv", "-b", "ISABELLE_HOME_USER"], capture_output=True, text=True, encoding="utf-8", timeout=120,
         env=env).stdout.strip()
-    registry = Path(home_user) / "etc" / "components"
+    if not home_user:
+        raise HostError("Isabelle did not report its per-user component directory")
+    registry = Path(adapter.to_native(home_user)) / "etc" / "components"
     lines = []
     with contextlib.suppress(OSError):
-        lines = [ln.strip() for ln in registry.read_text().splitlines()]
+        lines = [ln.strip() for ln in registry.read_text(encoding="utf-8").splitlines()]
     # (ready before, and still registered: another host, a test, may have registered its own since)
-    if _component_ready.get(runtime) and str(comp) in lines:
+    if _component_ready.get(runtime) and comp_path in lines:
         return
     # Other copies of the backend (an old install, a test) would provide the same tool
-    for stale in [ln for ln in lines if ln != str(comp) and re.search(r"deductum[^/]*/backend/[^/]+/?$", ln)]:
+    for stale in [ln for ln in lines if ln != comp_path and re.search(r"deductum[^/]*/backend/[^/]+/?$", ln)]:
         progress(f"Unregistering a stale Deductum backend: {stale}")
-        subprocess.run([runtime, "components", "-x", stale], capture_output=True, text=True, timeout=300, env=env)
-    if str(comp) not in lines:
+        adapter.run(["components", "-x", stale], capture_output=True, text=True, encoding="utf-8", timeout=300, env=env)
+    if comp_path not in lines:
         progress(f"Registering the Deductum backend with {ident}")
-        r = subprocess.run([runtime, "components", "-u", str(comp)], capture_output=True,
-                           text=True, timeout=300, env=env)
+        r = adapter.run(["components", "-u", comp_path], capture_output=True,
+                        text=True, encoding="utf-8", timeout=300, env=env)
         if r.returncode != 0:
             raise HostError("Could not register backend: " + r.stderr.strip())
     jar = comp / "lib" / "deductum_backend.jar"
     sources = list((comp / "src").glob("*.scala")) + [comp / "etc" / "build.props"]
     if not jar.is_file() or any(s.stat().st_mtime > jar.stat().st_mtime for s in sources):
         progress("Building the Deductum backend")
-        r = subprocess.run([runtime, "scala_build"], capture_output=True, text=True, timeout=1800,
+        r = adapter.run(["scala_build"], capture_output=True, text=True, encoding="utf-8", timeout=1800,
                            env=env)
         if r.returncode != 0 or not jar.is_file():
             raise HostError("Backend build failed: " + (r.stdout + r.stderr)[-2000:])
@@ -445,12 +544,21 @@ class IsabelleDriver(Driver):
         s = self.session
         meta = s.meta
         runtime = meta.get("toolchain") or meta["runtime"]
+        self.runtime_adapter = RuntimeAdapter(runtime)
         proj = meta.get("project") or {}
         loop = asyncio.get_running_loop()
-        await asyncio.to_thread(ensure_component, runtime, lambda m: loop.call_soon_threadsafe(s.session_log, m))
-        cmd = [runtime, "deductum_backend", "-l", proj.get("logic") or "HOL"]
+        canceled = threading.Event()
+        build = asyncio.create_task(asyncio.to_thread(
+            ensure_component, runtime, lambda m: loop.call_soon_threadsafe(s.session_log, m), canceled))
+        try:
+            await asyncio.shield(build)
+        except asyncio.CancelledError:
+            canceled.set()
+            await asyncio.gather(build, return_exceptions=True)
+            raise
+        cmd = ["deductum_backend", "-l", proj.get("logic") or "HOL"]
         for d in proj.get("dirs", []):
-            cmd += ["-d", d]
+            cmd += ["-d", await asyncio.to_thread(self.runtime_adapter.to_posix, d)]
         for name in proj.get("include_sessions", []):
             cmd += ["-i", name]
         threads = resource_limit(s, "prover_threads")
@@ -459,9 +567,10 @@ class IsabelleDriver(Driver):
         for opt in meta.get("options", []):
             cmd += ["-o", opt]
         log("starting backend", s.id, " ".join(cmd))
-        self.proc = await asyncio.create_subprocess_exec(
-            *cmd, stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE, start_new_session=True, limit=64 * 1024 * 1024)
+        self.proc = await platform.create_subprocess_exec(
+            *self.runtime_adapter.command(cmd), stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE, start_new_session=True, limit=64 * 1024 * 1024,
+            env=self.runtime_adapter.environment())
         self.reader_task = asyncio.create_task(self.read_loop())
         self.stderr_task = asyncio.create_task(self.stderr_loop())
 
@@ -476,6 +585,8 @@ class IsabelleDriver(Driver):
                     msg = json.loads(line)
                 except ValueError:
                     continue
+                if platform.WINDOWS:
+                    msg = await asyncio.to_thread(self.runtime_adapter.protocol, msg)
                 if "reply" in msg:
                     fut = self.pending.pop(msg["reply"], None)
                     if fut and not fut.done():
@@ -504,6 +615,7 @@ class IsabelleDriver(Driver):
     def send(self, obj: Dict[str, Any]) -> None:
         if not self.proc or not self.proc.stdin or self.proc.returncode is not None:
             raise HostError("Prover is not running", "stopped")
+        obj = self.runtime_adapter.protocol(obj)
         self.proc.stdin.write((json.dumps(obj, ensure_ascii=False) + "\n").encode())
 
     async def request(self, obj: Dict[str, Any], timeout: float = 120.0) -> Dict[str, Any]:
