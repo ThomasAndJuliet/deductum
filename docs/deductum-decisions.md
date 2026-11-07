@@ -2,7 +2,7 @@
 
 Deductum opens a folder of Isabelle theories and shows it as a literate
 document. You and any number of agents work in the same live prover session.
-The app is a sibling of COSMIC Terminal Agents and lives in the same repository.
+The app is a sibling of COSMIC Terminal Agents. It was developed in that repository and is now a standalone repository of its own.
 
 This app was called **Isabellum** until 2026-10-11 (C17a); the record below keeps its history under the new name. On branch `multi-prover` it is being extended to Lean and Rocq (Coq)
 backends alongside Isabelle (C16). That design is in
@@ -40,11 +40,11 @@ deductum command, Terminal Agents ┘   socket, or         │ edit log, undo, g
 
 | Component | Path | Role |
 |---|---|---|
-| Backend | `deductum/backend/Isabelle2025/src/backend.scala` | One PIDE session per prover epoch. Holds the prover's copy of each opened theory and reports command spans and status, messages, proof states at any offset, and query operations (Sledgehammer, Find Theorems). |
-| Session host | `deductum/host/deductum_host.py` | Owns sessions, the authoritative buffers, the edit log, undo, grants, notices, autosave and disk watching. Starts and stops backends. Standard library only. |
-| Transforms | `deductum/host/deductum_ot.py`, `src/bin/deductum/ot.rs` | Rebasing a change past later changes under the `strict`, `partial` and `merge` policies. |
-| MCP adapter | `deductum/host/deductum_mcp.py` | The agent tools. Run with `deductum_host.py mcp [--ssh DEST]`. |
-| App | `src/bin/deductum/` | Sessions sidebar, the literate and source views, panels, the `deductum` command. |
+| Backend | `backend/Isabelle2025/src/backend.scala` | One PIDE session per prover epoch. Holds the prover's copy of each opened theory and reports command spans and status, messages, proof states at any offset, and query operations (Sledgehammer, Find Theorems). |
+| Session host | `host/deductum_host.py` | Owns sessions, the authoritative buffers, the edit log, undo, grants, notices, autosave and disk watching. Starts and stops backends. Standard library only. |
+| Transforms | `host/deductum_ot.py`, `src/ot.rs` | Rebasing a change past later changes under the `strict`, `partial` and `merge` policies. |
+| MCP adapter | `host/deductum_mcp.py` | The agent tools. Run with `deductum_host.py mcp [--ssh DEST]`. |
+| App | `src/` | Sessions sidebar, the literate and source views, panels, the `deductum` command. |
 | Renderer | `prose/prose-render`, `prose/prose-spell` | Cerea's shared crates, as a git subtree. They replace the `#[path]` borrowing of `src/thread/{markdown,rich,math}.rs` described under "The literate view" (merged from `shared-prose`). |
 
 ## Specified behaviour
@@ -129,22 +129,22 @@ deductum command, Terminal Agents ┘   socket, or         │ edit log, undo, g
 
 | Area | Evidence |
 |---|---|
-| Transforms | `deductum/host/tests/test_ot.py`: 14 tests, including randomised properties. Strict rebasing equals applying both changes simultaneously; merging never drops inserted text; inverses round-trip. The Rust port has matching tests. |
-| Host against a real prover | `deductum/host/tests/integration_host.py` passes 28 checks on au-laptop with CyPhyAssure Isabelle2025: proof states, refusing edits without a grant, rebasing stale edits, rejecting conflicting ones, overlap notices, per-author undo and redo, revert with notice, autosave, clean reload as a logged edit, disk conflicts holding autosave, agent resolution, Sledgehammer with the span to replace, Pause refusing queries immediately, Resume rechecking, Stop and Resume with a new epoch, agents unable to resume the human's session, `find_sessions` by Zellij session, and refusal after revoking. |
+| Transforms | `host/tests/test_ot.py`: 14 tests, including randomised properties. Strict rebasing equals applying both changes simultaneously; merging never drops inserted text; inverses round-trip. The Rust port has matching tests. |
+| Host against a real prover | `host/tests/integration_host.py` passes 28 checks on au-laptop with CyPhyAssure Isabelle2025: proof states, refusing edits without a grant, rebasing stale edits, rejecting conflicting ones, overlap notices, per-author undo and redo, revert with notice, autosave, clean reload as a logged edit, disk conflicts holding autosave, agent resolution, Sledgehammer with the span to replace, Pause refusing queries immediately, Resume rechecking, Stop and Resume with a new epoch, agents unable to resume the human's session, `find_sessions` by Zellij session, and refusal after revoking. |
 | MCP | A scripted agent session on au-laptop: open, check, read, proof state, Sledgehammer refused without rights and then inserting `by simp` after a grant, history, Find Theorems. |
-| App views | `src/bin/deductum/snapshot.rs` renders the literate view, the source view, and the Sledgehammer, Agents and History panels headlessly with tiny-skia (`CT_SNAPSHOTS=dir`). |
-| App against a real host | `src/bin/deductum/live.rs` (`DEDUCTUM_LIVE=d59500`, `--ignored`) drives the window's state machine over ssh. You type in the source view while an agent replaces a `sorry` against an older revision; the replica converges on both edits. The goal query, Sledgehammer and autosave are checked too. |
+| App views | `src/snapshot.rs` renders the literate view, the source view, and the Sledgehammer, Agents and History panels headlessly with tiny-skia (`CT_SNAPSHOTS=dir`). |
+| App against a real host | `src/live.rs` (`DEDUCTUM_LIVE=d59500`, `--ignored`) drives the window's state machine over ssh. You type in the source view while an agent replaces a `sorry` against an older revision; the replica converges on both edits. The goal query, Sledgehammer and autosave are checked too. |
 | Unit tests | 43 Rust tests (`cargo test --bin deductum`): symbols and offset maps, blocks, the literate conversion, the replica with concurrent edits, typed symbol escapes, the command line. |
 
 Building and running:
 
 ```sh
 cargo build --release --bin deductum                       # inside the Flatpak SDK on neo
-python3 deductum/host/deductum_host.py runtimes           # the runtimes the host can use
+python3 host/deductum_host.py runtimes           # the runtimes the host can use
 claude mcp add deductum -- python3 ~/.local/share/deductum/host/deductum_host.py mcp
 ```
 
-The app installs `deductum/host` and `deductum/backend` into
+The app installs `host` and `backend` into
 `~/.local/share/deductum` on each machine it connects to. The host builds
 the backend jar with the runtime's `isabelle scala_build`.
 

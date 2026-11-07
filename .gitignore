@@ -1,0 +1,14 @@
+/target/
+/.idea/
+nohup.out
+/build-flatpak/
+/.flatpak-builder/
+/.local-design/
+__pycache__/
+*.pyc
+
+**/target/
+**/.lake/
+/ci-artifact/
+/dist/windows/
+/packaging/flatpak/*.ci.yml

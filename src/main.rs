@@ -5,7 +5,7 @@
 //! (design C7), sharing its rendering and its list of machines.
 //!
 //! The design record is `docs/deductum-decisions.md`. The app is a client of
-//! the session host on each machine (`deductum/host`), which owns sessions,
+//! the session host on each machine (`host`), which owns sessions,
 //! buffers and provers; it keeps a replica of each open theory and shows it
 //! in a literate view and a source view. What depends on the prover is in
 //! `prover`: a profile per backend, and the capabilities each session's host
@@ -72,16 +72,16 @@ mod live_tools;
 
 /// The bundled prose fonts, shared with Cerea and Terminal; see `res/fonts/README`
 pub const FONTS: [&[u8]; 9] = [
-    // Raised and lowered small glyphs for \<^sup> and \<^sub>; see res/deductum/make-scripts-font.py
-    include_bytes!("../../../res/deductum/fonts/IsabellumScripts.ttf"),
-    include_bytes!("../../../res/fonts/LibertinusSerif-Regular.otf"),
-    include_bytes!("../../../res/fonts/LibertinusSerif-Bold.otf"),
-    include_bytes!("../../../res/fonts/LibertinusSerif-Italic.otf"),
-    include_bytes!("../../../res/fonts/LibertinusSerif-BoldItalic.otf"),
-    include_bytes!("../../../res/fonts/NewCM10-Regular.otf"),
-    include_bytes!("../../../res/fonts/NewCM10-Bold.otf"),
-    include_bytes!("../../../res/fonts/NewCM10-Italic.otf"),
-    include_bytes!("../../../res/fonts/NewCM10-BoldItalic.otf"),
+    // Raised and lowered small glyphs for \<^sup> and \<^sub>; see res/make-scripts-font.py
+    include_bytes!("../res/fonts/IsabellumScripts.ttf"),
+    include_bytes!("../res/fonts/LibertinusSerif-Regular.otf"),
+    include_bytes!("../res/fonts/LibertinusSerif-Bold.otf"),
+    include_bytes!("../res/fonts/LibertinusSerif-Italic.otf"),
+    include_bytes!("../res/fonts/LibertinusSerif-BoldItalic.otf"),
+    include_bytes!("../res/fonts/NewCM10-Regular.otf"),
+    include_bytes!("../res/fonts/NewCM10-Bold.otf"),
+    include_bytes!("../res/fonts/NewCM10-Italic.otf"),
+    include_bytes!("../res/fonts/NewCM10-BoldItalic.otf"),
 ];
 
 pub fn load_fonts() {
@@ -92,14 +92,14 @@ pub fn load_fonts() {
     // The toolkit requests these families by name; Windows does not ship them.
     #[cfg(windows)]
     for data in [
-        include_bytes!("../../../res/deductum/windows-fonts/NotoSansMono[wght].ttf").as_slice(),
-        include_bytes!("../../../res/deductum/windows-fonts/NotoSansMono-Bold.ttf").as_slice(),
-        include_bytes!("../../../res/deductum/windows-fonts/OpenSans-Regular.ttf").as_slice(),
-        include_bytes!("../../../res/deductum/windows-fonts/OpenSans-Bold.ttf").as_slice(),
-        include_bytes!("../../../res/deductum/windows-fonts/OpenSans-Italic.ttf").as_slice(),
-        include_bytes!("../../../res/deductum/windows-fonts/OpenSans-BoldItalic.ttf").as_slice(),
-        include_bytes!("../../../res/deductum/windows-fonts/OpenSans-Semibold.ttf").as_slice(),
-        include_bytes!("../../../res/deductum/windows-fonts/OpenSans-SemiboldItalic.ttf").as_slice(),
+        include_bytes!("../res/windows-fonts/NotoSansMono[wght].ttf").as_slice(),
+        include_bytes!("../res/windows-fonts/NotoSansMono-Bold.ttf").as_slice(),
+        include_bytes!("../res/windows-fonts/OpenSans-Regular.ttf").as_slice(),
+        include_bytes!("../res/windows-fonts/OpenSans-Bold.ttf").as_slice(),
+        include_bytes!("../res/windows-fonts/OpenSans-Italic.ttf").as_slice(),
+        include_bytes!("../res/windows-fonts/OpenSans-BoldItalic.ttf").as_slice(),
+        include_bytes!("../res/windows-fonts/OpenSans-Semibold.ttf").as_slice(),
+        include_bytes!("../res/windows-fonts/OpenSans-SemiboldItalic.ttf").as_slice(),
     ] {
         font_system.load_font(std::borrow::Cow::Borrowed(data));
     }

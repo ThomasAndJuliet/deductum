@@ -1,0 +1,117 @@
+[package]
+name = "deductum"
+version = "0.1.0"
+authors = ["Thomas and Juliet"]
+edition = "2024"
+license = "GPL-3.0-only"
+rust-version = "1.95"
+
+[dependencies]
+log = "0.4"
+open = "5.3.2"
+ron = "0.11"
+serde_json = "1"
+serde = { version = "1", features = ["serde_derive"] }
+tokio = { version = "1", features = ["sync", "process", "io-util", "rt", "time", "macros", "net"] }
+# Only for its OsRng, which mints the session tokens
+chacha20poly1305 = { version = "0.10", default-features = false, features = ["alloc", "getrandom"] }
+# Markdown, LaTeX, Mermaid, charts and images, shared with other apps
+prose-render = { path = "prose/prose-render" }
+# Decoders for the images shown in proof documents; iced's own build has none
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "gif"] }
+# The household's tone maths (household-ui RULES.md rule 6): Deductum's selection tint and the
+# muted accent of its chosen tabs and toggles; the highlight tests read the expected colours from
+# it too. From the private household-kit, read over ssh; pinned in Cargo.lock
+household-tones = { git = "ssh://git@github.com/ThomasAndJuliet/household-kit.git" }
+
+[dependencies.cosmic-text]
+version = "0.19"
+features = ["monospace_fallback", "shape-run-cache"]
+
+[dependencies.libcosmic]
+git = "https://github.com/pop-os/libcosmic.git"
+default-features = false
+#TODO: a11y feature crashes file chooser dialog
+features = [
+    "about",
+    "autosize",
+    "multi-window",
+    "tokio",
+    "winit",
+    "surface-message",
+    "advanced-shaping",
+]
+
+[target.'cfg(unix)'.dependencies]
+# The global allocator of the GUI binary (src/):
+# libcosmic's malloc_trim after each update and view then has only glibc's
+# small heap to scan. Background threads return freed memory from jemalloc's
+# own thread, so an idle window gives memory back too.
+tikv-jemallocator = { version = "0.7", features = ["background_threads"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_System_Memory",
+    "Win32_System_Pipes",
+    "Win32_System_Threading",
+    "Win32_System_Com",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+[features]
+dbus-config = ["libcosmic/dbus-config"]
+wgpu = ["libcosmic/wgpu"]
+wayland = ["libcosmic/wayland"]
+default = ["dbus-config", "wgpu", "wayland"]
+
+[profile.release-with-debug]
+inherits = "release"
+debug = true
+
+[workspace]
+members = ["prose/prose-render"]
+exclude = ["vendor/chartgen"]
+
+# libcosmic and its iced from the household fork (ThomasAndJuliet/libcosmic,
+# branch household, read over ssh); HOUSEHOLD.md there says what it changes and
+# how to move this pin. Every crate the lock takes from pop-os/libcosmic.
+[patch."https://github.com/pop-os/libcosmic.git"]
+libcosmic = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }
+build_helpers = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }
+cosmic-config = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }
+cosmic-config-derive = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }
+cosmic-theme = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }
+iced = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }
+iced_accessibility = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }
+iced_core = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }
+iced_debug = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }
+iced_futures = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }
+iced_graphics = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }
+iced_program = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }
+iced_renderer = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }
+iced_runtime = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }
+iced_tiny_skia = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }
+iced_wgpu = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }
+iced_widget = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }
+iced_winit = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }
+
+# The whole pop-os/winit family from the same fork (HOUSEHOLD.md), which fixes
+# the "failed to get pointer data" panic. Its winit crates refer to each other
+# by path, so redirecting winit-wayland alone would bring a second winit-core.
+[patch."https://github.com/pop-os/winit.git"]
+dpi = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }
+winit = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }
+winit-android = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }
+winit-appkit = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }
+winit-common = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }
+winit-core = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }
+winit-orbital = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }
+winit-uikit = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }
+winit-wayland = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }
+winit-web = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }
+winit-win32 = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }
+winit-x11 = { git = "ssh://git@github.com/ThomasAndJuliet/libcosmic.git", rev = "b44caa8154cea3a582e85faec63226d86317fa7f" }

@@ -142,12 +142,12 @@ jobs:
           tar -xzf "$RUNNER_TEMP/Isabelle2025_linux.tar.gz" -C "$RUNNER_TEMP"
           rm "$RUNNER_TEMP/Isabelle2025_linux.tar.gz"
       - name: Test Lean driver and host core on disposable projects
-        run: python3 deductum/host/tests/integration_lean.py --skip-dsrv --core-fixture "$GITHUB_WORKSPACE/scripts/ci-fixtures/lean"
+        run: python3 host/tests/integration_lean.py --skip-dsrv --core-fixture "$GITHUB_WORKSPACE/scripts/ci-fixtures/lean"
       - name: Test the host against real Isabelle2025
         env:
           DEDUCTUM_ISABELLE: ${{ runner.temp }}/Isabelle2025/bin/isabelle
           DEDUCTUM_STATE_DIR: ${{ runner.temp }}/deductum-isabelle-state
-        run: python3 deductum/host/tests/integration_host.py
+        run: python3 host/tests/integration_host.py
 
   windows-build:
     name: Native Windows portable package

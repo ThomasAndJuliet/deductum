@@ -77,7 +77,7 @@ const SUP_SHOWN: &[(char, char)] = &[
     ('φ', 'ᵠ'), ('χ', 'ᵡ'), ('\'', '′'), ('⇩', '⇩'), ('∗', '*'), ('⊤', 'ᵀ'), ('†', '†'), ('⊥', 'ᗮ'),
 ];
 
-/// Isabellum Scripts (`res/deductum/fonts`) has a raised and a lowered small glyph
+/// Isabellum Scripts (`res/fonts`) has a raised and a lowered small glyph
 /// for each printable ASCII and Greek character, in the private use area
 pub fn script_glyph(superscript: bool, c: char) -> Option<char> {
     let c = c as u32;

@@ -175,9 +175,10 @@ pub fn bundle() -> Option<PathBuf> {
     {
         candidates.push(dir.join("share/deductum"));
         candidates.push(dir.join("../share/deductum"));
-        candidates.push(dir.join("../../deductum"));
+        // target/<profile>/deductum in a source checkout: the checkout root holds host/ and backend/
+        candidates.push(dir.join("../.."));
     }
-    candidates.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("deductum"));
+    candidates.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")));
     candidates.into_iter().find(|p| p.join("host/deductum_host.py").is_file())
 }
 

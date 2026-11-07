@@ -106,7 +106,7 @@ def package(root: Path, binary: Path, python_zip: Path, output: Path, *, allow_d
         extract_runtime(python_zip, stage / "python", runtime["sha256"])
         bundle = stage / "share/deductum"
         for folder in ("host", "backend"):
-            shutil.copytree(root / "deductum" / folder, bundle / folder,
+            shutil.copytree(root / folder, bundle / folder,
                             ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "tests", "lib"))
         metadata = {
             "repository": "ThomasAndJuliet/deductum", "source_sha": source_sha,
@@ -121,7 +121,7 @@ def package(root: Path, binary: Path, python_zip: Path, output: Path, *, allow_d
         shutil.copy2(root / "packaging/windows/README.txt", stage / "README.txt")
         shutil.copy2(root / "LICENSE", stage / "LICENSE")
         # Embedded fonts/icons keep their redistribution notices beside the app.
-        for folder in (root / "res/fonts", root / "res/deductum/windows-fonts", root / "res/icons"):
+        for folder in (root / "res/fonts", root / "res/windows-fonts", root / "res/icons"):
             for notice in folder.glob("LICENSE*"):
                 target = stage / "licenses" / folder.relative_to(root) / notice.name
                 target.parent.mkdir(parents=True, exist_ok=True)

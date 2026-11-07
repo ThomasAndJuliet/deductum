@@ -57,16 +57,16 @@ Set-Location $source
 . (Join-Path $source 'scripts/install-windows-test-provers.ps1')
 $env:DEDUCTUM_ISABELLE = Join-Path $env:RUNNER_TEMP 'deductum-test-provers/Isabelle2025/bin/isabelle'
 $python = Join-Path $env:DEDUCTUM_PACKAGE 'python/python.exe'
-& $python -X utf8 -m unittest discover -s deductum/host/tests -p 'test_*.py' -v
+& $python -X utf8 -m unittest discover -s host/tests -p 'test_*.py' -v
 if ($LASTEXITCODE -ne 0) { throw 'Windows host tests failed' }
 if ($Gate -eq 'Host') { return }
 & (Join-Path $artifact 'deductum-tests.exe') --test-threads=4
 if ($LASTEXITCODE -ne 0) { throw 'Windows app tests failed' }
 $env:DEDUCTUM_STATE_DIR = Join-Path $Work 'deductum-isabelle-state'
-& $python -X utf8 deductum/host/tests/integration_lean.py --skip-dsrv --core-fixture (Join-Path $source 'scripts/ci-fixtures/lean')
+& $python -X utf8 host/tests/integration_lean.py --skip-dsrv --core-fixture (Join-Path $source 'scripts/ci-fixtures/lean')
 if ($LASTEXITCODE -ne 0) { throw 'Native Lean integration failed' }
 try {
-    & $python -X utf8 deductum/host/tests/integration_host.py
+    & $python -X utf8 host/tests/integration_host.py
     if ($LASTEXITCODE -ne 0) { throw 'Native Isabelle integration failed' }
 } catch {
     $integrationError = $_

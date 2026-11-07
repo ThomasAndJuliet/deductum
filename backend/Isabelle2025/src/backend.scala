@@ -1,4 +1,4 @@
-/*  Title:      deductum/backend/Isabelle2025/src/backend.scala
+/*  Title:      backend/Isabelle2025/src/backend.scala
 
     "isabelle deductum_backend": one PIDE session for Deductum's session host,
     driven by JSON lines on stdin and answering with JSON lines on stdout.

@@ -2,4 +2,4 @@
 res/icons/LICENSE.window-pop-out -whitespace
 
 # Bash reads the native Windows launcher directly from the packaged checkout.
-deductum/host/drivers/isabelle_windows.sh text eol=lf
+host/drivers/isabelle_windows.sh text eol=lf
