@@ -706,6 +706,12 @@ impl App {
                 _ => None,
             };
             if let Some((m, before, line_count)) = crossing {
+                if let Some(t) = self.workspace.as_mut().and_then(|w| w.theory.as_mut())
+                    && t.vertical_x.is_none()
+                    && let Some(be) = &mut t.block_editor
+                {
+                    t.vertical_x = Some(editor::caret_point(&mut be.content).x + view::block_text_inset(be));
+                }
                 // Move first: a wrapped paragraph is one line with many rows, so the edge is
                 // where the caret no longer moves
                 let last_line = before.line + 1 >= line_count;
@@ -766,6 +772,7 @@ impl App {
                 if let Some(t) = self.workspace.as_mut().and_then(|w| w.theory.as_mut())
                     && t.adjacent_paragraph(*m == M::Down, &*table)
                 {
+                    t.vertical_entry = Some(*m == M::Down);
                     tasks.push(view::centre_selected());
                     if self.nav_raw_dispatch {
                         let rest: Vec<_> = remaining.collect();
@@ -781,10 +788,13 @@ impl App {
                     let target = if *m == M::Down { i + 1 } else { i.wrapping_sub(1) };
                     if target < t.blocks.len() {
                         let down = *m == M::Down;
+                        let x = t.vertical_x;
                         tasks.push(self.update(Message::EditBlock(target)));
                         if let Some(t) = self.workspace.as_mut().and_then(|w| w.theory.as_mut())
                             && let Some(be) = &mut t.block_editor
                         {
+                            t.vertical_x = x;
+                            t.vertical_entry = Some(down);
                             be.content.perform(A::Move(if down { M::DocumentStart } else { M::DocumentEnd }));
                             // A newly opened prose editor has not been laid out yet. Home
                             // would go to the start of its whole logical paragraph, skipping
@@ -879,6 +889,22 @@ impl App {
         let generation = self.nav_generation;
         self.nav_waiting = Some((scope, generation));
         view::navigation_layout(scope, generation)
+    }
+
+    fn finish_vertical_entry(&mut self) {
+        let pending = self.workspace.as_mut().and_then(|w| w.theory.as_mut()).and_then(|t| t.vertical_entry.take());
+        let Some(down) = pending else { return };
+        self.vim_caret(false);
+        if let Some(t) = self.workspace.as_mut().and_then(|w| w.theory.as_mut())
+            && let Some(be) = &mut t.block_editor
+            && let Some(x) = t.vertical_x
+        {
+            let y = if down { 0.0 } else { editor::caret_point(&mut be.content).y };
+            let x = (x - view::block_text_inset(be)).max(0.0);
+            be.content.perform(cosmic::widget::text_editor::Action::Click(cosmic::iced::Point::new(x, y)));
+            t.sync_block_cursor();
+        }
+        self.vim_caret(true);
     }
 
     /// Stopping work does not wait for an editor's layout or clipboard continuation.
@@ -2830,6 +2856,7 @@ impl cosmic::Application for App {
                     return Task::none();
                 }
                 if !found { self.status = Some("The editor is no longer visible".into()); }
+                if found { self.finish_vertical_entry(); }
                 return self.nav_drain();
             }
             Message::NavPageReady(scope, generation, down, select, rows) => {
@@ -3963,6 +3990,8 @@ impl cosmic::Application for App {
                 if let Some(t) = self.workspace.as_mut().and_then(|w| w.theory.as_mut())
                     && let Some(be) = &mut t.block_editor
                 {
+                    t.vertical_x = None;
+                    t.vertical_entry = None;
                     be.content.perform(cosmic::widget::text_editor::Action::Click(p));
                     t.sync_block_cursor();
                     // (then only the paragraph clicked is source)
