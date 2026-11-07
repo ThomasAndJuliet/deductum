@@ -65,5 +65,20 @@ if ($LASTEXITCODE -ne 0) { throw 'Windows app tests failed' }
 $env:DEDUCTUM_STATE_DIR = Join-Path $Work 'deductum-isabelle-state'
 & $python -X utf8 deductum/host/tests/integration_lean.py --skip-dsrv --core-fixture (Join-Path $source 'scripts/ci-fixtures/lean')
 if ($LASTEXITCODE -ne 0) { throw 'Native Lean integration failed' }
-& $python -X utf8 deductum/host/tests/integration_host.py
-if ($LASTEXITCODE -ne 0) { throw 'Native Isabelle integration failed' }
+try {
+    & $python -X utf8 deductum/host/tests/integration_host.py
+    if ($LASTEXITCODE -ne 0) { throw 'Native Isabelle integration failed' }
+} catch {
+    $integrationError = $_
+    # This is the disposable integration's own host log, before parent cleanup.
+    $hostLog = Join-Path $env:DEDUCTUM_STATE_DIR 'host.log'
+    try {
+        if (Test-Path -LiteralPath $hostLog) {
+            Write-Output 'Native Isabelle integration host log (last 100 lines):'
+            Get-Content -LiteralPath $hostLog -Tail 100 | ForEach-Object {
+                if ($_.Length -gt 4000) { $_.Substring($_.Length - 4000) } else { $_ }
+            }
+        }
+    } catch { Write-Warning 'Could not read the disposable integration host log' }
+    throw $integrationError
+}
