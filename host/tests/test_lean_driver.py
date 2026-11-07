@@ -288,17 +288,19 @@ class DiagnosticCompletion(unittest.IsolatedAsyncioTestCase):
                     return {}
                 request = {"params": params, "reply": asyncio.get_running_loop().create_future(),
                            "returned": asyncio.Event(), "canceled": asyncio.Event(),
+                           "ready": asyncio.Event(),
                            "task": asyncio.current_task()}
                 case.requests.append(request)
                 case.started.put_nowait(request)
                 try:
                     try:
-                        return await asyncio.shield(request["reply"])
+                        await request["ready"].wait()
                     except asyncio.CancelledError:
                         # An obsolete response can still arrive from a transport
                         # that has already queued it. Exercise the identity fence.
                         request["canceled"].set()
-                        return await asyncio.shield(request["reply"])
+                        await request["ready"].wait()
+                    return request["reply"].result()
                 finally:
                     request["returned"].set()
 
@@ -311,6 +313,7 @@ class DiagnosticCompletion(unittest.IsolatedAsyncioTestCase):
         for request in self.requests:
             if not request["reply"].done():
                 request["reply"].set_result(None)
+            request["ready"].set()
         await asyncio.gather(*(request["task"] for request in self.requests), return_exceptions=True)
         self.temp.cleanup()
 
@@ -345,6 +348,7 @@ class DiagnosticCompletion(unittest.IsolatedAsyncioTestCase):
             request["reply"].set_result(None)
         else:
             request["reply"].set_exception(error)
+        request["ready"].set()
         await asyncio.wait_for(request["returned"].wait(), 1)
 
     def assert_pending(self, doc):
