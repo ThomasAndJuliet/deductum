@@ -258,7 +258,9 @@ async fn install(target: &Target) -> Result<(), String> {
     }
     // tar the sources, without built jars, and unpack them there
     let mut tar = std::process::Command::new("tar");
-    tar.arg("-C").arg(&bundle).args(["--exclude=__pycache__", "--exclude=lib", "--exclude=tests", "-cf", "-", "host", "backend"]);
+    // Windows tar narrows non-ACP command-line paths. Set the directory through
+    // CreateProcessW instead, keeping argv ASCII and preserving bundle spelling.
+    tar.current_dir(&bundle).args(["-C", ".", "--exclude=__pycache__", "--exclude=lib", "--exclude=tests", "-cf", "-", "host", "backend"]);
     let archive = tar.output().map_err(|e| format!("tar: {e}"))?;
     if !archive.status.success() {
         return Err("could not pack the host sources".into());
@@ -475,18 +477,15 @@ async fn open_folder_windows(opener: Opener, target: Target, folder: String) -> 
             command
         }
         (Opener::Terminal, None) => {
-            let mut command = tokio::process::Command::new("powershell.exe");
-            // The working directory is data, not a PowerShell source string.
-            command.current_dir(folder).args(["-NoLogo", "-NoExit"]);
-            command.creation_flags(0x00000010); // CREATE_NEW_CONSOLE
-            command
+            return tokio::task::spawn_blocking(move || super::platform::windows::launch_console(
+                "powershell.exe", &["-NoLogo".into(), "-NoExit".into()], Some(&folder)))
+                .await.map_err(|error| error.to_string())?.map_err(|error| error.to_string());
         }
         (Opener::Terminal, Some(destination)) => {
-            let mut command = tokio::process::Command::new("ssh.exe");
             let quote = format!("'{}'", folder.replace('\'', r"'\''"));
-            command.args(["-t", &destination, &format!("cd {quote} && exec \"$SHELL\" -l")]);
-            command.creation_flags(0x00000010);
-            command
+            return tokio::task::spawn_blocking(move || super::platform::windows::launch_console(
+                "ssh.exe", &["-t".into(), destination, format!("cd {quote} && exec \"$SHELL\" -l")], None))
+                .await.map_err(|error| error.to_string())?.map_err(|error| error.to_string());
         }
     };
     if opener == Opener::Zed {

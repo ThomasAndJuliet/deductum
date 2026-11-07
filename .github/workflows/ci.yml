@@ -169,6 +169,28 @@ jobs:
         run: |
           python3 scripts/test-package-windows.py
           python3 scripts/package-windows.py
+      - name: Fetch and verify the Windows Isabelle test runtime
+        run: |
+          python3 - <<'PY'
+          import hashlib, os, pathlib, shutil, time, urllib.request
+          directory = pathlib.Path(os.environ['RUNNER_TEMP']) / 'windows-test-provers'
+          directory.mkdir()
+          destination = directory / 'Isabelle2025.exe'
+          partial = destination.with_suffix('.part')
+          for attempt in range(3):
+              try:
+                  with urllib.request.urlopen('https://isabelle.in.tum.de/website-Isabelle2025/dist/Isabelle2025.exe', timeout=180) as source, partial.open('wb') as target:
+                      shutil.copyfileobj(source, target)
+                  with partial.open('rb') as source:
+                      assert hashlib.file_digest(source, 'sha256').hexdigest() == '5225d0e28a3c9cb3e4e348b508d332165c65b806201f3936a7a861a6bb39a748', 'Windows Isabelle checksum mismatch'
+                  partial.replace(destination)
+                  break
+              except Exception:
+                  partial.unlink(missing_ok=True)
+                  if attempt == 2:
+                      raise
+                  time.sleep(5 * (attempt + 1))
+          PY
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: windows-x86_64
@@ -178,6 +200,14 @@ jobs:
             dist/windows/deductum-tests.exe
           if-no-files-found: error
           retention-days: 7
+          compression-level: 0
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: windows-test-provers
+          path: ${{ runner.temp }}/windows-test-provers/Isabelle2025.exe
+          if-no-files-found: error
+          retention-days: 1
           compression-level: 0
 
   windows-native:
@@ -193,6 +223,10 @@ jobs:
         with:
           name: windows-x86_64
           path: ${{ runner.temp }}/deductum-artifact
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: windows-test-provers
+          path: ${{ runner.temp }}/windows-test-provers
       - name: Extract and verify the portable package
         shell: pwsh
         run: |
@@ -203,14 +237,20 @@ jobs:
           $receipt = Get-Content ([IO.Path]::ChangeExtension($zip[0].FullName, '.json')) -Raw | ConvertFrom-Json
           if ($receipt.source_sha -ne (git rev-parse HEAD) -or $receipt.source_dirty) { throw 'Package is not this clean source revision' }
           if ((Get-FileHash $zip[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant() -ne $receipt.archive_sha256) { throw 'Package checksum mismatch' }
-          $destination = Join-Path $env:RUNNER_TEMP 'deductum-native'
+          # Exercise the actual packaged host/backend outside the ANSI code page.
+          # The system volume supplies the official runtime's short-path aliases.
+          $destination = Join-Path $env:LOCALAPPDATA 'Deductum native β proof 😀'
           Expand-Archive $zip[0].FullName $destination
           $package = @(Get-ChildItem $destination -Directory)
           if ($package.Count -ne 1) { throw 'Expected one package root' }
           "DEDUCTUM_PACKAGE=$($package[0].FullName)" >> $env:GITHUB_ENV
+          "DEDUCTUM_TEST_HOST_ROOT=$($package[0].FullName)/share/deductum/host" >> $env:GITHUB_ENV
+          "DEDUCTUM_TEST_SCRATCH=$env:LOCALAPPDATA/Deductum Lean α proof 😀" >> $env:GITHUB_ENV
           "DEDUCTUM_TEST_ROOT=$env:GITHUB_WORKSPACE" >> $env:GITHUB_ENV
       - name: Install checksum-pinned native test provers
         shell: pwsh
+        env:
+          DEDUCTUM_TEST_PROVER_CACHE: ${{ runner.temp }}/windows-test-provers
         run: ./scripts/install-windows-test-provers.ps1
       - name: Run the full shared host and native app tests
         shell: pwsh

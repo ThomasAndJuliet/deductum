@@ -7,6 +7,10 @@ it does not need a system Python installation or WSL.
 
 Local proofs need native Lean (elan) or the official Isabelle2025 Windows
 distribution, including its bundled Cygwin. Install those separately.
+Its Java command-line tools need existing Windows short-path aliases for
+some Unicode paths. If the volume has no usable alias, Deductum identifies
+the path that must use an ASCII location for that Isabelle operation.
+Local Isabelle logic names and command-line option values must use ASCII.
 Remote Linux connections use Windows OpenSSH and tar. Your SSH key and host
 trust are configured with the normal Windows SSH client, outside Deductum.
 Add machines to %APPDATA%\deductum\machines.json as a JSON array, for example:

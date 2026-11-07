@@ -120,6 +120,79 @@ pub mod windows {
         }
     }
 
+    fn console_arguments(arguments: &[String]) -> String {
+        arguments.iter().map(|argument| {
+            // CRT argument quoting, including trailing slashes and literal quotes.
+            // ShellExecute receives a command line, never a cmd/PowerShell script.
+            let mut quoted = String::from("\"");
+            let mut slashes = 0;
+            for character in argument.chars() {
+                if character == '\\' {
+                    slashes += 1;
+                } else {
+                    quoted.extend(std::iter::repeat_n('\\', slashes * if character == '"' { 2 } else { 1 }));
+                    if character == '"' { quoted.push('\\'); }
+                    quoted.push(character);
+                    slashes = 0;
+                }
+            }
+            quoted.extend(std::iter::repeat_n('\\', slashes * 2));
+            quoted.push('"');
+            quoted
+        }).collect::<Vec<_>>().join(" ")
+    }
+
+    pub fn launch_console(program: &str, arguments: &[String], directory: Option<&str>) -> io::Result<()> {
+        use windows_sys::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED, COINIT_DISABLE_OLE1DDE};
+        use windows_sys::Win32::UI::{Shell::ShellExecuteW, WindowsAndMessaging::SW_SHOWNORMAL};
+        if program.contains('\0') || arguments.iter().any(|value| value.contains('\0')) || directory.is_some_and(|value| value.contains('\0')) {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "a console argument contains NUL"));
+        }
+        let program = wide(program);
+        let arguments = wide(&console_arguments(arguments));
+        let directory = directory.map(wide);
+        unsafe {
+            let initialized = CoInitializeEx(null_mut(), (COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE) as u32);
+            if initialized < 0 {
+                return Err(io::Error::other(format!("could not initialize the console launcher: {initialized:#x}")));
+            }
+            // The shell creates fresh console handles. CreateProcess inheriting
+            // this GUI's absent standard handles produces a noninteractive shell.
+            let result = ShellExecuteW(null_mut(), wide("open").as_ptr(), program.as_ptr(), arguments.as_ptr(),
+                directory.as_ref().map_or(std::ptr::null(), |value| value.as_ptr()), SW_SHOWNORMAL) as isize;
+            CoUninitialize();
+            if result <= 32 {
+                Err(io::Error::other(format!("Windows could not open the console (shell error {result})")))
+            } else {
+                Ok(())
+            }
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn console_arguments_preserve_unicode_quotes_spaces_and_slashes() {
+            let expected = vec!["", "-t", "user@proof-server", "C:\\Å proof 😀\\", "quote\"and\\\"slashes", "cd '/srv/a b' && exec \"$SHELL\" -l"];
+            let arguments = expected.iter().map(|value| value.to_string()).collect::<Vec<_>>();
+            let command = wide(&format!("console.exe {}", console_arguments(&arguments)));
+            unsafe {
+                let mut count = 0;
+                let argv = windows_sys::Win32::UI::Shell::CommandLineToArgvW(command.as_ptr(), &mut count);
+                assert!(!argv.is_null());
+                let actual = std::slice::from_raw_parts(argv, count as usize).iter().skip(1).map(|value| {
+                    let mut length = 0;
+                    while *value.add(length) != 0 { length += 1; }
+                    String::from_utf16_lossy(std::slice::from_raw_parts(*value, length))
+                }).collect::<Vec<_>>();
+                LocalFree(argv.cast());
+                assert_eq!(actual, expected);
+            }
+        }
+    }
+
     /// Owns the descriptor referenced by a named pipe's security attributes.
     pub struct PipeSecurity(*mut c_void);
 

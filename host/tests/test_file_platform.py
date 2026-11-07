@@ -2,8 +2,10 @@
 import asyncio
 import os
 from pathlib import Path
+import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 from unittest.mock import patch
 
@@ -85,6 +87,44 @@ class FileBytes(unittest.IsolatedAsyncioTestCase):
 
 
 class IsabellePathBoundary(unittest.TestCase):
+    def test_windows_cygwin_options_disable_native_argv_globbing_without_changing_the_callers_environment(self):
+        adapter = RuntimeAdapter("unused")
+        for options in (None, "winsymlinks:nativestrict", "glob winsymlinks:nativestrict"):
+            original = {"PATH": "unrelated tools", "LANG": "old-locale"}
+            if options is not None:
+                original["CYGWIN"] = options
+            before = dict(original)
+            with self.subTest(options=options), patch.object(P, "WINDOWS", True):
+                result = adapter.environment(original)
+            self.assertEqual(original, before, "runtime preparation changed the parent environment")
+            self.assertEqual(result["PATH"], original["PATH"])
+            self.assertEqual((result["LANG"], result["LC_ALL"]), ("C.UTF-8", "C.UTF-8"))
+            tokens = result["CYGWIN"].split()
+            self.assertEqual(tokens[-1], "noglob", "native argv is still interpreted by the Cygwin startup globber")
+            for option in (options or "").split():
+                self.assertIn(option, tokens, "an unrelated Cygwin option was discarded")
+
+    def test_unix_cli_paths_and_arguments_are_preserved(self):
+        adapter = RuntimeAdapter("/opt/Isabelle β/bin/isabelle")
+        with patch.object(P, "WINDOWS", False):
+            self.assertEqual(adapter.cli_path("/tmp/Ω project"), "/tmp/Ω project")
+            self.assertEqual(adapter.command(["build", "-d", "/tmp/Ω project", "Logicβ"]),
+                             ["/opt/Isabelle β/bin/isabelle", "build", "-d", "/tmp/Ω project", "Logicβ"])
+
+    def test_invalid_command_output_reports_encoding_and_exit_status_instead_of_none_stdout(self):
+        adapter = RuntimeAdapter("unused", cancel_event=threading.Event())
+        for stream, capture in ((2, {"capture_output": True}),
+                                (1, {"stdout": subprocess.PIPE, "stderr": subprocess.DEVNULL})):
+            code = f"import os; os.write({stream},bytes([255])); raise SystemExit(7)"
+            with self.subTest(stream=stream), patch.object(adapter, "command", return_value=[sys.executable, "-c", code]):
+                with self.assertRaises(H.HostError) as caught:
+                    adapter.run([], text=True, encoding="utf-8", timeout=10, **capture)
+            self.assertEqual(caught.exception.code, "bad_encoding")
+            self.assertIn("stderr" if stream == 2 else "stdout", str(caught.exception))
+            self.assertIn("exit 7", str(caught.exception))
+            if stream == 2:
+                self.assertIn("\\xff", str(caught.exception), "diagnostic lost the invalid raw output")
+
     def test_protocol_converts_only_structured_paths_preserving_proof_text_and_offsets(self):
         adapter = RuntimeAdapter("unused")
         native = "C:\\Å proof 😀\\Main.thy"
@@ -107,8 +147,8 @@ class IsabellePathBoundary(unittest.TestCase):
         if not runtime:
             self.skipTest("Native Isabelle path acceptance requires DEDUCTUM_ISABELLE pointing to official runtime")
         adapter = RuntimeAdapter(runtime)
-        with tempfile.TemporaryDirectory(prefix="Deductum Å proof ") as temp:
-            path = Path(temp) / "Å proof 😀 ' ; $literal.thy"
+        with tempfile.TemporaryDirectory(prefix="Deductum β Ω proof ") as temp:
+            path = Path(temp) / "β Ω 😀 ' ; $literal.thy"
             path.write_text("theory Main imports Main begin end", encoding="utf-8")
             cygwin = adapter.to_posix(str(path))
             self.assertTrue(cygwin.startswith("/"), "Isabelle shell boundary did not produce an absolute POSIX path")
@@ -117,6 +157,82 @@ class IsabellePathBoundary(unittest.TestCase):
             self.assertTrue(os.path.samefile(obj["file"], path))
             self.assertTrue(os.path.samefile(obj["files"][0], path))
             self.assertEqual((obj["text"], obj["start"], obj["end"]), ("/literal/😀", 9, 13))
+            alias = adapter.cli_path(str(path))
+            self.assertTrue(alias.isascii(), "native Java CLI still receives a non-ASCII path")
+            self.assertTrue(os.path.samefile(adapter.to_native(alias), path))
+            self.assertEqual(obj["file"], str(path.resolve()), "a CLI alias leaked into document identity")
+
+    @unittest.skipUnless(os.name == "nt", "Official Windows Isabelle CLI compatibility boundary")
+    def test_non_ascii_logic_names_are_refused_before_starting_the_runtime(self):
+        runtime = os.environ.get("DEDUCTUM_ISABELLE")
+        if not runtime:
+            self.skipTest("Requires official DEDUCTUM_ISABELLE runtime")
+        adapter = RuntimeAdapter(runtime)
+        for args in (["build", "Logicβ"], ["process", "-o", "option=Ω"]):
+            with self.subTest(args=args), patch.object(P, "run", side_effect=AssertionError("runtime started")):
+                with self.assertRaises(H.HostError) as caught:
+                    adapter.run(args)
+                self.assertEqual(caught.exception.code, "unsupported_path")
+                self.assertIn("ASCII", str(caught.exception))
+
+
+@unittest.skipUnless(os.name == "nt", "Native existing NTFS short-name identity")
+class WindowsCliAliases(unittest.TestCase):
+    def test_existing_ascii_alias_resolves_to_the_same_unicode_file_without_creating_a_new_name(self):
+        import _windows as W
+        with tempfile.TemporaryDirectory(prefix="Deductum β Ω ") as temp:
+            path = Path(temp) / "proof β Ω.thy"
+            path.write_text("theory Demo imports Main begin end", encoding="utf-8")
+            before = set(Path(temp).iterdir())
+            alias = W.ascii_short_path(str(path))
+            self.assertTrue(alias.isascii())
+            self.assertTrue(os.path.samefile(alias, path))
+            self.assertEqual(os.path.normcase(os.path.realpath(alias)), os.path.normcase(str(path.resolve())))
+            self.assertEqual(set(Path(temp).iterdir()), before, "alias lookup created a filesystem entry")
+
+    def test_missing_non_ascii_and_truncated_short_names_give_actionable_ascii_path_guidance(self):
+        import _windows as W
+        with tempfile.TemporaryDirectory(prefix="Deductum β ") as temp:
+            path = Path(temp) / "Ω.thy"
+            path.touch()
+            for label, name, size in (("missing", "", 0), ("unicode", str(path), len(str(path))),
+                                       ("oversized", "C:\\SHORT.THY", 32768)):
+                def get_short(original, output, capacity):
+                    self.assertEqual(original, str(path))
+                    output.value = name
+                    return size
+                with self.subTest(case=label), patch.object(W, "api", return_value=get_short):
+                    with self.assertRaises(OSError) as caught:
+                        W.ascii_short_path(str(path))
+                    self.assertIn("ASCII", str(caught.exception))
+                    self.assertIn("move", str(caught.exception))
+
+    def test_alias_to_a_different_existing_file_is_rejected(self):
+        import _windows as W
+        with tempfile.TemporaryDirectory(prefix="Deductum β ") as temp:
+            path = Path(temp) / "Ω.thy"
+            path.write_text("original", encoding="utf-8")
+            other = Path(temp) / "other.thy"
+            other.write_text("unrelated", encoding="utf-8")
+            wrong_alias = W.ascii_short_path(str(other))
+            def get_short(original, output, capacity):
+                output.value = wrong_alias
+                return len(wrong_alias)
+            with patch.object(W, "api", return_value=get_short):
+                with self.assertRaises(OSError) as caught:
+                    W.ascii_short_path(str(path))
+            self.assertIn("does not identify", str(caught.exception))
+            self.assertEqual(path.read_text(encoding="utf-8"), "original")
+            self.assertEqual(other.read_text(encoding="utf-8"), "unrelated")
+
+    def test_adapter_reports_an_unusable_alias_as_a_path_compatibility_error(self):
+        import _windows as W
+        adapter = RuntimeAdapter("unused")
+        with patch.object(W, "ascii_short_path", side_effect=OSError("move to an ASCII path")):
+            with self.assertRaises(H.HostError) as caught:
+                adapter.cli_path("C:\\project β\\Demo.thy")
+        self.assertEqual(caught.exception.code, "unsupported_path")
+        self.assertIn("ASCII", str(caught.exception))
 
 
 @unittest.skipUnless(os.name == "nt", "Native Windows drive-letter identity in Lean definition URIs")
