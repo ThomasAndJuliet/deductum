@@ -68,6 +68,13 @@ also runs as a standard user with a second account for isolation checks,
 and covers visible GUI use and Windows-to-Linux SSH connections. Tests that
 need disposable second-account credentials report an explicit skip when those
 fixtures are unavailable; CI does not claim that this replaces VM acceptance.
+The hosted Windows gate creates disposable standard accounts and runs the
+same suites with a private temporary directory and isolated configuration.
+Its PowerShell 7 command is `./scripts/run-windows-native-ci.ps1`; the default
+gate runs the complete host and Rust suites plus both real prover integrations.
+
+Lean reports a file as checked after its final diagnostics arrive for that
+document revision, so completion includes its warnings and errors.
 
 ## CI and private releases
 

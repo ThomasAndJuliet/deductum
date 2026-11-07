@@ -227,47 +227,13 @@ jobs:
         with:
           name: windows-test-provers
           path: ${{ runner.temp }}/windows-test-provers
-      - name: Extract and verify the portable package
+      - name: Verify the source identity before standard-user execution
         shell: pwsh
         run: |
-          $ErrorActionPreference = 'Stop'
-          $artifact = Join-Path $env:RUNNER_TEMP 'deductum-artifact'
-          $zip = @(Get-ChildItem $artifact -Filter '*.zip')
+          $zip = @(Get-ChildItem "$env:RUNNER_TEMP/deductum-artifact" -Filter '*.zip')
           if ($zip.Count -ne 1) { throw 'Expected exactly one Windows package' }
           $receipt = Get-Content ([IO.Path]::ChangeExtension($zip[0].FullName, '.json')) -Raw | ConvertFrom-Json
           if ($receipt.source_sha -ne (git rev-parse HEAD) -or $receipt.source_dirty) { throw 'Package is not this clean source revision' }
-          if ((Get-FileHash $zip[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant() -ne $receipt.archive_sha256) { throw 'Package checksum mismatch' }
-          # Exercise the actual packaged host/backend outside the ANSI code page.
-          # The system volume supplies the official runtime's short-path aliases.
-          $destination = Join-Path $env:LOCALAPPDATA 'Deductum native β proof 😀'
-          Expand-Archive $zip[0].FullName $destination
-          $package = @(Get-ChildItem $destination -Directory)
-          if ($package.Count -ne 1) { throw 'Expected one package root' }
-          "DEDUCTUM_PACKAGE=$($package[0].FullName)" >> $env:GITHUB_ENV
-          "DEDUCTUM_TEST_HOST_ROOT=$($package[0].FullName)/share/deductum/host" >> $env:GITHUB_ENV
-          "DEDUCTUM_TEST_SCRATCH=$env:LOCALAPPDATA/Deductum Lean α proof 😀" >> $env:GITHUB_ENV
-          "DEDUCTUM_TEST_ROOT=$env:GITHUB_WORKSPACE" >> $env:GITHUB_ENV
-      - name: Install checksum-pinned native test provers
+      - name: Run the full native suite and real provers as a standard user
         shell: pwsh
-        env:
-          DEDUCTUM_TEST_PROVER_CACHE: ${{ runner.temp }}/windows-test-provers
-        run: ./scripts/install-windows-test-provers.ps1
-      - name: Run the full shared host and native app tests
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $python = Join-Path $env:DEDUCTUM_PACKAGE 'python/python.exe'
-          & $python -X utf8 -m unittest discover -s deductum/host/tests -p 'test_*.py' -v
-          if ($LASTEXITCODE -ne 0) { throw 'Windows host tests failed' }
-          & "$env:RUNNER_TEMP/deductum-artifact/deductum-tests.exe" --test-threads=4
-          if ($LASTEXITCODE -ne 0) { throw 'Windows app tests failed' }
-      - name: Run real native Lean and Isabelle integrations
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $python = Join-Path $env:DEDUCTUM_PACKAGE 'python/python.exe'
-          $env:DEDUCTUM_STATE_DIR = Join-Path $env:RUNNER_TEMP 'deductum-isabelle-state'
-          & $python -X utf8 deductum/host/tests/integration_lean.py --skip-dsrv --core-fixture "$env:GITHUB_WORKSPACE/scripts/ci-fixtures/lean"
-          if ($LASTEXITCODE -ne 0) { throw 'Native Lean integration failed' }
-          & $python -X utf8 deductum/host/tests/integration_host.py
-          if ($LASTEXITCODE -ne 0) { throw 'Native Isabelle integration failed' }
+        run: ./scripts/run-windows-native-ci.ps1
