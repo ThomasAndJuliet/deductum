@@ -48,7 +48,7 @@ $elan = Get-Verified 'https://github.com/leanprover/elan/releases/download/v4.2.
 Expand-Archive $elan (Join-Path $Tools 'elan-installer') -Force
 $env:ELAN_HOME = Join-Path $Tools 'elan'
 & "$Tools/elan-installer/elan-init.exe" -y --default-toolchain leanprover/lean4:v4.19.0 --no-modify-path
-if ($LASTEXITCODE -ne 0) { throw 'Native Lean installation failed' }
+if ($LASTEXITCODE -ne 0) { throw "Native Lean installation failed (exit $LASTEXITCODE)" }
 $env:Path = "$env:ELAN_HOME/bin;$env:Path"
 & "$env:ELAN_HOME/bin/lean.exe" --version
 if ($LASTEXITCODE -ne 0) { throw 'Native Lean is unavailable' }
