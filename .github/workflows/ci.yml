@@ -84,6 +84,19 @@ jobs:
       - name: Keep this validated build on neo for its release-branch push
         if: runner.environment == 'self-hosted' && github.event_name == 'push' && github.ref != 'refs/heads/main' && steps.reuse.outputs.reused != 'true'
         run: neo-ci-build-cache store ci-artifact
+      - name: Test standalone Flatpak installation and update
+        run: python3 scripts/test-package-flatpak-bundle.py
+      - name: Bundle the exact tested payload for standalone installation
+        run: python3 scripts/package-flatpak-bundle.py ci-artifact
+      - name: Preserve the standalone Linux package
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: linux-x86_64
+          path: ci-artifact/linux/*
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
       - name: Preserve this successful release-branch build
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7

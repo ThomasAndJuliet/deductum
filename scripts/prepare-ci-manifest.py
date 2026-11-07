@@ -7,7 +7,8 @@ needle = '  - cargo --offline --locked build --release --bin deductum\n'
 assert text.count(needle) == 1
 checks = ('  - cargo --offline --locked test --workspace --all-targets --all-features\n'
           '  - python3 -m unittest discover -s deductum/host/tests -p "test_*.py"\n'
-          '  - python3 scripts/test-publish-windows-release.py\n')
+          '  - python3 scripts/test-publish-release.py\n'
+          '  - python3 scripts/test-release-policy.py\n')
 env_needle = '    CARGO_HOME: /run/build/deductum/cargo\n'
 assert text.count(env_needle) == 1
 # The SDK lacks an icon theme; use real symbolic icons for the headless tests.

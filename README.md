@@ -28,32 +28,70 @@ computer or a Linux machine reached over SSH.
 
 ## Install
 
-Deductum is distributed privately through the household's `home-apps` Flatpak
-repository and this private GitHub repository. You need household tailnet
-access for Flatpak downloads and repository access for GitHub downloads.
-Both packages are built by GitHub Actions; you do not need Rust or a source
-checkout to install them.
+Download prebuilt Linux and Windows packages from this private GitHub
+repository, or install the Linux app through the household's `home-apps`
+Flatpak repository. GitHub downloads need repository access; `home-apps` needs
+household tailnet access. Both packages are built by GitHub Actions; you do
+not need Rust or a source checkout to install them.
 
 ### Release downloads
 
-On Linux, install the prebuilt stable Flatpak below. For Windows:
-
 1. Open [Deductum's releases](https://github.com/ThomasAndJuliet/deductum/releases)
    while signed into GitHub with access to this repository.
-2. Choose a build and download `deductum-…-windows-x86_64.zip` from its
-   **Assets**. The matching JSON file records its source revision and SHA-256
-   checksum; the release notes link to the successful CI run that tested it.
-3. Follow the Windows installation steps below to extract and run the app.
+2. Choose a version (`vMAJOR.MINOR.PATCH`). Download the Linux `.flatpak` or
+   Windows `…-windows-x86_64.zip` file from its **Assets**, plus `SHA256SUMS`
+   if you want to verify the download. Each package also has a JSON receipt
+   recording its source revision and digest.
+3. Follow the installation steps for your platform below. The release notes
+   link to the successful CI run that tested both packages.
 
-Every successful `main` CI build publishes its Windows package to a release
-named for its source commit. These downloads remain available after temporary
-Actions artifacts expire. GitHub's **Source code** archives contain source,
-rather than an installable app.
+Releases are versioned automatically from Conventional Commits after CI passes.
+The downloads remain available after temporary Actions artifacts expire.
+GitHub's **Source code** archives contain source, rather than an installable app.
 
-### Linux: Flatpak
+### Linux: downloaded Flatpak
 
-Install [Flatpak](https://flatpak.org/setup/) for your distribution, then add
-Flathub for the runtime and `home-apps` for Deductum:
+Install [Flatpak](https://flatpak.org/setup/) for your distribution. Download
+the `.flatpak` asset above and open a terminal in its download folder. In the
+commands below, replace `deductum-VERSION-linux-x86_64.flatpak` with the filename
+you downloaded:
+
+```sh
+flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+flatpak install --user --bundle ./deductum-VERSION-linux-x86_64.flatpak
+flatpak run dev.twright.Deductum
+```
+
+Flatpak downloads the required Freedesktop 25.08 runtime from Flathub if it is
+missing. The app bundle does not include the runtime, so the first installation
+needs internet access. This installation needs no `home-apps` remote or tailnet
+access. You can also launch **Deductum** from your application menu afterwards.
+
+For an update, download the newer `.flatpak` asset and install it over the
+existing app:
+
+```sh
+flatpak install --user --or-update --bundle ./deductum-VERSION-linux-x86_64.flatpak
+```
+
+Install each new app version this way; `flatpak update` alone does not fetch
+new Deductum bundles. Settings, proof files and session state are retained.
+The downloadable CI bundles are unsigned. Obtain them from this private
+repository; with the package and `SHA256SUMS` in the same folder, check the
+download using:
+
+```sh
+sha256sum --check --ignore-missing SHA256SUMS
+```
+
+The Flatpak includes the app and its session-host code. Local provers run on
+your Linux system, so install Python 3 and the prover you need there, outside
+the Flatpak. COSMIC Terminal is optional.
+
+### Linux: household Flatpak repository
+
+For signed packages and repository updates on the household tailnet, add
+Flathub for the runtime and `home-apps` for Deductum instead:
 
 ```sh
 flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
@@ -72,10 +110,6 @@ To update:
 ```sh
 flatpak update --user dev.twright.Deductum
 ```
-
-The Flatpak includes the app and its session-host code. Local provers run on
-your Linux system, so install Python 3 and the prover you need there, outside
-the Flatpak. COSMIC Terminal is optional.
 
 ### Windows: portable app
 
@@ -211,7 +245,9 @@ are:
 ```sh
 cargo --offline --locked test --workspace --all-targets --all-features
 python3 -m unittest discover -s deductum/host/tests -p "test_*.py"
-python3 scripts/test-publish-windows-release.py
+python3 scripts/test-publish-release.py
+python3 scripts/test-release-policy.py
+python3 scripts/test-package-flatpak-bundle.py
 ```
 
 CI also validates the finished Flatpak with
