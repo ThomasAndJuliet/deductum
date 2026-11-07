@@ -6,6 +6,61 @@ source repository is `ThomasAndJuliet/deductum`; development starts from the
 complete `multi-prover` source history, preserving the vendored COSMIC toolkit.
 Tom and Juliet administer this repository through the household-admins team.
 
+## Native Windows
+
+The Windows x64 build runs the GUI, session host and local provers natively.
+It also connects to Linux proof hosts over Windows OpenSSH. Local Lean uses
+elan; local Isabelle uses the official Isabelle2025 Windows distribution and
+its bundled Cygwin. WSL is not required. Git must be on PATH for Git project
+actions; SSH connections also require the Windows `ssh` and `tar` commands.
+
+Extract the complete private portable ZIP into a new directory and run
+`deductum.exe`. Python is included. Keep its `python` and `share` directories
+beside the executable. Add remote machines to
+`%APPDATA%\deductum\machines.json`:
+
+```json
+[{"name":"proof-server","host":"proof-server","user":"my-user"}]
+```
+
+Configure authentication and host trust with the normal Windows SSH client.
+Open a local project with `deductum.exe C:\Proofs\Example`, or a server project
+with `deductum.exe --machine proof-server /srv/proofs/Example`. Remote paths
+are interpreted on the server. Settings live in `%APPDATA%\deductum` and
+session/recovery data in `%LOCALAPPDATA%\deductum\state`.
+
+Closing a window leaves sessions running. To update, close the windows, run
+the old package's `stop-host.cmd` to flush and stop its host, then start the
+new package from a different directory. A package never silently replaces a
+running host from another version. Keep the previous package until the update
+has been checked; state lives outside both package directories.
+
+Cross-build and package on Linux with Rust1.99 and MinGW-w64:
+
+```sh
+rustup target add x86_64-pc-windows-gnu
+cargo --locked build --release --bin deductum --no-default-features \
+  --features wgpu --target x86_64-pc-windows-gnu
+python3 scripts/test-package-windows.py
+python3 scripts/package-windows.py
+```
+
+Release packaging requires a clean Git checkout and a binary stamped with its
+exact commit. The script verifies the pinned official embedded Python download
+and writes an immutable ZIP plus a checksum/provenance receipt under
+`dist/windows`. Use `--allow-dirty` only for explicitly marked development
+packages. `deductum.exe --build-info` reports the embedded source identity.
+
+Windows CI executes the shared Python host suite, the cross-built Rust app
+tests and both existing real prover integrations. The portable package's
+interpreter runs them with `-X utf8`; embedded Python ignores `PYTHONUTF8`.
+`scripts/install-windows-test-provers.ps1` installs the pinned native test
+dependencies into a disposable runner directory. The Windows VM acceptance
+also runs as a standard user with a second account for isolation checks,
+and covers visible GUI use and Windows-to-Linux SSH connections. Tests that
+need disposable second-account credentials report an explicit skip when those
+fixtures are unavailable; CI does not claim that this replaces VM acceptance.
+
 ## CI and private releases
 
 Every push and pull request runs `.github/workflows/ci.yml`. The SDK job checks
@@ -15,6 +70,7 @@ Deductum's headless UI/unit tests, and runs all Python host unit-test modules:
 ```sh
 cargo --offline --locked test --workspace --all-targets --all-features
 python3 -m unittest discover -s deductum/host/tests -p "test_*.py"
+python3 scripts/test-package-windows.py
 ```
 
 The app opts into concurrent proof-state and hover/definition reads with
@@ -94,8 +150,8 @@ records its Git SHA, run ID and archive digest. Dependency sources, including
 chartgen revision `50b5b9773dbcbd1e8c9975c9bc3e107f00496bb6`, are vendored in this
 repository; no sibling checkout or private dependency credentials are needed.
 The successful default-branch push preserves its artifact for seven days.
-The release workflow waits for the entire CI workflow, including both prover
-integrations, to succeed before submitting to Neo's trusted reusable publisher.
+The release workflow waits for the entire CI workflow, including Linux and
+Windows prover integrations, to succeed before submitting to Neo's trusted reusable publisher.
 Other branches and pull requests do not publish stable.
 
 CI cancels superseded runs for the same pull request or feature branch to save
