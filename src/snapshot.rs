@@ -1755,7 +1755,9 @@ fn a_block_opened_by_a_click_has_vim_block_cursor() {
 }
 
 fn cursor_navigation_app() -> App {
-    let text = "theory Cursor imports Main begin\n\nlemma first_long_name: \"True\" by simp\n\nvalue \"0\"\n\nlemma last_long_name: \"True\" by simp\n\nend\n";
+    // Equal glyph prefixes make equal columns an oracle for visual alignment,
+    // including when the SDK substitutes a proportional font for Noto Sans Mono.
+    let text = "theory Cursor imports Main begin\n\nlemma shared_long_name_first: \"True\" by simp\n\nvalue \"0\"\n\nlemma shared_long_name_last: \"True\" by simp\n\nend\n";
     cursor_navigation_app_with(text)
 }
 
@@ -1792,7 +1794,7 @@ fn cursor_navigation_keeps_x_through_wrapped_prose_and_paragraphs() {
     use cosmic::iced::keyboard::key::Named;
     use cosmic::widget::text_editor::Position;
     let paragraph = "A paragraph with café and αβ, whose words wrap over several rows as we move vertically through the cell. ".repeat(4);
-    let text = format!("theory Cursor imports Main begin\n\nlemma first_long_name: \"True\" by simp\n\ntext ‹{paragraph}\n\nShort.›\n\nlemma last_long_name: \"True\" by simp\n\nend\n");
+    let text = format!("theory Cursor imports Main begin\n\nlemma shared_long_name_first: \"True\" by simp\n\ntext ‹{paragraph}\n\nShort.›\n\nlemma shared_long_name_last: \"True\" by simp\n\nend\n");
     let mut app = cursor_navigation_app_with(&text);
     let i = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.name == "lemma").unwrap();
     let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(i));
@@ -1806,7 +1808,7 @@ fn cursor_navigation_keeps_x_through_wrapped_prose_and_paragraphs() {
         let t = app.workspace.as_mut().unwrap().theory.as_mut().unwrap();
         assert_eq!(t.vertical_x, Some(desired), "wrapped rows and short paragraphs retain the intended x");
         let be = t.block_editor.as_mut().unwrap();
-        if be.shown_text.starts_with("lemma last") {
+        if be.shown_text.starts_with("lemma shared_long_name_last") {
             assert_eq!(be.content.cursor().position.column, 20);
             reached = true;
             break;
@@ -1889,7 +1891,10 @@ fn cursor_navigation_remembers_horizontal_position_across_short_cells() {
 fn cursor_navigation_horizontal_move_replaces_the_remembered_position() {
     use cosmic::iced::keyboard::key::Named;
     use cosmic::widget::text_editor::Position;
-    let mut app = cursor_navigation_app();
+    // The destination shares the short cell's glyphs around column 11. Left's
+    // new visual x therefore has an exact column oracle under any font.
+    let text = "theory Cursor imports Main begin\n\nlemma first_long_name: \"True\" by simp\n\nlemma \"True\"\n\nlemma \"True\" by simp\n\nend\n";
+    let mut app = cursor_navigation_app_with(text);
     let i = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.name == "lemma").unwrap();
     let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(i));
     let mut h = Harness::new(Size::new(1400.0, 900.0));
@@ -1899,8 +1904,8 @@ fn cursor_navigation_horizontal_move_replaces_the_remembered_position() {
     cursor_navigation_key(&mut h, &mut app, Named::ArrowLeft);
     cursor_navigation_key(&mut h, &mut app, Named::ArrowDown);
     let be = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().block_editor.as_ref().unwrap();
-    assert!(be.shown_text.starts_with("lemma last"));
-    assert_eq!(be.content.cursor().position.column, 8, "Left on the short line establishes the next vertical position");
+    assert_eq!(be.shown_text, "lemma \"True\" by simp", "entered the longer following cell");
+    assert_eq!(be.content.cursor().position.column, 11, "Left on the short line establishes the next vertical position");
 }
 
 #[test]
