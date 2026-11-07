@@ -1,6 +1,7 @@
 name: CI
 on:
   push:
+  pull_request:
   workflow_dispatch:
 permissions:
   contents: read
@@ -134,3 +135,93 @@ jobs:
           DEDUCTUM_ISABELLE: ${{ runner.temp }}/Isabelle2025/bin/isabelle
           DEDUCTUM_STATE_DIR: ${{ runner.temp }}/deductum-isabelle-state
         run: python3 deductum/host/tests/integration_host.py
+
+  windows-build:
+    name: Native Windows portable package
+    runs-on: ${{ vars.CI_RUNNER == 'hosted' && 'ubuntu-24.04' || 'neo-ubuntu' }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install the Windows cross compiler and Rust target
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64
+          rustup toolchain install 1.99.0 --profile minimal --target x86_64-pc-windows-gnu
+      - name: Fetch the private toolkit with read-only build identities
+        env:
+          LIBCOSMIC_DEPLOY_KEY: ${{ secrets.LIBCOSMIC_DEPLOY_KEY }}
+          HOUSEHOLD_KIT_DEPLOY_KEY: ${{ secrets.HOUSEHOLD_KIT_DEPLOY_KEY }}
+        run: scripts/ci-private-crates.sh libcosmic household-kit
+      - name: Build the app and its complete Windows test executable
+        run: |
+          cargo +1.99.0 build --locked --release --bin deductum --no-default-features --features wgpu --target x86_64-pc-windows-gnu
+          cargo +1.99.0 test --locked --release --no-run --bin deductum --no-default-features --features wgpu --target x86_64-pc-windows-gnu --message-format=json > "$RUNNER_TEMP/windows-tests.jsonl"
+          python3 -c 'import json,os,pathlib,shutil; rows=(json.loads(s) for s in pathlib.Path(os.environ["RUNNER_TEMP"],"windows-tests.jsonl").read_text().splitlines()); tests=[r["executable"] for r in rows if r.get("reason")=="compiler-artifact" and r.get("target",{}).get("name")=="deductum" and r.get("profile",{}).get("test") and r.get("executable")]; assert len(tests)==1,tests; pathlib.Path("dist/windows").mkdir(parents=True,exist_ok=True); shutil.copy2(tests[0],"dist/windows/deductum-tests.exe")'
+      - name: Check packaging and assemble the exact source revision
+        run: |
+          python3 scripts/test-package-windows.py
+          python3 scripts/package-windows.py
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: windows-x86_64
+          path: |
+            dist/windows/*.zip
+            dist/windows/*.json
+            dist/windows/deductum-tests.exe
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+
+  windows-native:
+    name: Windows native host, app and real provers
+    needs: [windows-build]
+    runs-on: windows-2025
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: windows-x86_64
+          path: ${{ runner.temp }}/deductum-artifact
+      - name: Extract and verify the portable package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $artifact = Join-Path $env:RUNNER_TEMP 'deductum-artifact'
+          $zip = @(Get-ChildItem $artifact -Filter '*.zip')
+          if ($zip.Count -ne 1) { throw 'Expected exactly one Windows package' }
+          $receipt = Get-Content ([IO.Path]::ChangeExtension($zip[0].FullName, '.json')) -Raw | ConvertFrom-Json
+          if ($receipt.source_sha -ne (git rev-parse HEAD) -or $receipt.source_dirty) { throw 'Package is not this clean source revision' }
+          if ((Get-FileHash $zip[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant() -ne $receipt.archive_sha256) { throw 'Package checksum mismatch' }
+          $destination = Join-Path $env:RUNNER_TEMP 'deductum-native'
+          Expand-Archive $zip[0].FullName $destination
+          $package = @(Get-ChildItem $destination -Directory)
+          if ($package.Count -ne 1) { throw 'Expected one package root' }
+          "DEDUCTUM_PACKAGE=$($package[0].FullName)" >> $env:GITHUB_ENV
+          "DEDUCTUM_TEST_ROOT=$env:GITHUB_WORKSPACE" >> $env:GITHUB_ENV
+      - name: Install checksum-pinned native test provers
+        shell: pwsh
+        run: ./scripts/install-windows-test-provers.ps1
+      - name: Run the full shared host and native app tests
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $python = Join-Path $env:DEDUCTUM_PACKAGE 'python/python.exe'
+          & $python -X utf8 -m unittest discover -s deductum/host/tests -p 'test_*.py' -v
+          if ($LASTEXITCODE -ne 0) { throw 'Windows host tests failed' }
+          & "$env:RUNNER_TEMP/deductum-artifact/deductum-tests.exe" --test-threads=4
+          if ($LASTEXITCODE -ne 0) { throw 'Windows app tests failed' }
+      - name: Run real native Lean and Isabelle integrations
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $python = Join-Path $env:DEDUCTUM_PACKAGE 'python/python.exe'
+          $env:DEDUCTUM_STATE_DIR = Join-Path $env:RUNNER_TEMP 'deductum-isabelle-state'
+          & $python -X utf8 deductum/host/tests/integration_lean.py --skip-dsrv --core-fixture "$env:GITHUB_WORKSPACE/scripts/ci-fixtures/lean"
+          if ($LASTEXITCODE -ne 0) { throw 'Native Lean integration failed' }
+          & $python -X utf8 deductum/host/tests/integration_host.py
+          if ($LASTEXITCODE -ne 0) { throw 'Native Isabelle integration failed' }
