@@ -1069,7 +1069,7 @@ class Loogle(unittest.TestCase):
     def test_local_runs_the_binary(self):
         import tempfile
         from fixture_helpers import json_executable
-        with tempfile.TemporaryDirectory() as d:
+        with tempfile.TemporaryDirectory(prefix="Deductum β proof 😀 ") as d:
             json_executable(d, "loogle", self.ANSWER)
             saved = os.environ.get("PATH", "")
             os.environ["PATH"] = d + os.pathsep + saved
