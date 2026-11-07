@@ -15,10 +15,10 @@ on:
 permissions:
   contents: read
 
-# Each successful source revision keeps its own release. No shared concurrency
-# group can cancel a pending publication or replace a newer build's assets.
+# Each SemVer release keeps immutable assets. There is no shared concurrency
+# group that can cancel a different source revision's pending publication.
 jobs:
-  windows:
+  packages:
     if: >-
       github.repository == 'ThomasAndJuliet/deductum' &&
       github.ref == 'refs/heads/main' &&
@@ -43,10 +43,13 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
       - name: Test publication trust and package checks
-        run: python3 scripts/test-publish-windows-release.py
-      - name: Publish the tested Windows package and receipt
+        run: |
+          python3 scripts/test-publish-release.py
+          python3 scripts/test-release-policy.py
+      - name: Publish the tested packages under their automatic SemVer tag
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_ID: ${{ github.event.workflow_run.id || inputs.run_id }}
-        run: python3 scripts/publish-windows-release.py --run-id "$RUN_ID"
+        run: python3 scripts/publish-release.py --run-id "$RUN_ID"

@@ -42,38 +42,106 @@ revision. Development packages made with `--allow-dirty` are marked as such.
 The Windows CI jobs test the native host, app and real Isabelle/Lean backends;
 cross-compilation alone does not establish that the package works on Windows.
 
-Users can download `windows-x86_64` from a successful `main` CI run instead of
-building. These private Actions artifacts are retained for seven days.
-`.github/workflows/release-binaries.yml` also publishes the portable ZIP and
-its receipt to a permanent private GitHub Release after the **entire** CI run
-succeeds. It downloads the tested artifact instead of rebuilding it.
+The hosted Windows gate uses PowerShell 7:
 
-The publisher accepts only this repository's successful `main` push runs and
-verifies the package's clean source revision, architecture, size and checksum.
-Releases use `build-FULL_GIT_SHA` tags, retain the source CI link, and never
-replace existing assets or move a shared latest pointer. Interrupted draft
-uploads can be retried with the same inputs. To retry a successful run while
-its Actions artifact is still retained:
+```powershell
+./scripts/run-windows-native-ci.ps1
+```
+
+It creates disposable standard accounts and runs the complete host and Rust
+suites plus both real prover integrations with isolated configuration and a
+private temporary directory. `scripts/install-windows-test-provers.ps1`
+installs the pinned test dependencies. The package's embedded Python is run
+with `-X utf8`, because it ignores `PYTHONUTF8`. Separate VM acceptance also
+covers visible GUI use, second-user isolation and Windows-to-Linux SSH.
+`deductum.exe --build-info` reports the package's embedded source identity.
+
+## Automated versioned downloads
+
+`.github/workflows/release-binaries.yml` runs after the **entire** main-branch
+CI run succeeds, including native Windows and Linux prover tests. It publishes
+the tested Windows ZIP and Linux `.flatpak`, their source/checksum receipts,
+`SHA256SUMS` and generated release notes to a permanent private GitHub Release.
+It downloads CI artifacts instead of recompiling either app. Download filenames
+include the release version, such as `deductum-v0.2.0-linux-x86_64.flatpak`;
+renaming preserves the tested package and receipt bytes.
+
+Versions follow [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/)
+and [SemVer](https://semver.org/spec/v2.0.0.html). The highest change since the
+previous reachable final `vMAJOR.MINOR.PATCH` tag determines one bump:
+
+| Commit | Version change |
+| --- | --- |
+| `fix(editor): preserve the caret`, `perf: reduce allocations` | Patch |
+| `feat: add a proof tool` | Minor |
+| `feat!: change the protocol`, or a `BREAKING CHANGE:` / `BREAKING-CHANGE:` footer | Major |
+| Only `docs`, `test`, `chore`, and other changes without a breaking marker | No versioned release |
+
+Use these subjects for commits and for a PR's title when squash-merging it.
+
+This also applies before 1.0: breaking changes advance to the next major.
+`release-config.json` starts the distribution version at `0.1.0` and excludes
+history at or before the adoption commit. Inherited Terminal tags such as
+`epoch-*`, prereleases and unrelated branches do not set the version. The
+source Cargo package version is retained in the Windows build receipt; the
+SemVer tag identifies the downloadable Deductum release.
+
+The publisher accepts only successful, completed CI pushes from this private
+repository's `main`. It verifies the package source revision, architecture,
+size, checksum and Linux run identity. It reserves each version tag atomically
+on that exact tested commit before uploading. Assets are immutable, and an
+interrupted upload can resume without replacing existing files. A newer main
+push supersedes an older candidate that has not reserved a version; its
+release includes those still-unreleased commits. Already reserved releases
+can finish. No shared concurrency group drops pending revisions, and delayed
+runs never move a shared latest pointer backwards.
+
+No human tag or separate release approval is needed. The publisher uses the
+job-scoped `GITHUB_TOKEN`; it creates no version-bump commits, so publication
+does not create a loop of new source builds. To retry a successful run while
+its Actions artifacts are still retained (seven days):
 
 ```sh
 gh workflow run release-binaries.yml --ref main -f run_id=CI_RUN_ID
 ```
 
-This supplements the signed Linux Flatpak publication below. It neither
-changes repository visibility nor needs the Flatpak signing key. The Windows
-package-producing CI jobs come from the Windows support change; merge that
-support before enabling this publisher.
+The `linux-x86_64` and `windows-x86_64` Actions artifacts are also available
+for direct downloads during that retention window. The Windows package jobs
+come from the Windows support change; merge that support before this publisher.
+
+The standalone Linux bundle comes from `ci-artifact/build.tar.gz`, including
+when Neo reuses a previously validated build. Run
+`python3 scripts/package-flatpak-bundle.py ci-artifact` with the CI identity
+environment to reproduce it. The bundler verifies the input digest and source,
+rechecks desktop/AppStream/catalog metadata, exports that payload to a local
+repository and runs `flatpak build-bundle` with Flathub as the runtime source.
+The bundle contains no `home-apps` repository URL. It is unsigned: no signing
+key is exposed to CI. Users install new bundles explicitly using the commands
+in [the README](../README.md#linux-downloaded-flatpak).
+
+The real Flatpak export/install/update test runs on the build runner, outside
+the SDK build sandbox. Its installation and XDG data/config/cache directories
+are temporary, and `--no-deps` keeps the fixture test offline. It leaves the
+user's normal Flatpak installation alone. The policy and publisher unit tests
+also run inside the SDK test manifest.
+
+Every successful main push still publishes the signed private `home-apps`
+Flatpak below, including docs-only pushes. That publication remains on Neo;
+the versioned GitHub downloads neither change its ordering nor repository
+visibility.
 
 ## CI and private releases
 
-Branch pushes run `.github/workflows/ci.yml`. The SDK job checks
+Branch pushes and pull requests run `.github/workflows/ci.yml`. The SDK job checks
 all targets and tests the complete Rust workspace with all features, including
 Deductum's headless UI/unit tests, and runs all Python host unit-test modules:
 
 ```sh
 cargo --offline --locked test --workspace --all-targets --all-features
 python3 -m unittest discover -s deductum/host/tests -p "test_*.py"
-python3 scripts/test-publish-windows-release.py
+python3 scripts/test-publish-release.py
+python3 scripts/test-release-policy.py
+python3 scripts/test-package-flatpak-bundle.py
 ```
 
 The app opts into concurrent proof-state and hover/definition reads with
