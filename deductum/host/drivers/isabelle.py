@@ -47,11 +47,14 @@ class RuntimeAdapter:
         self.cancel_event = cancel_event
 
     def _convert(self, path: str, flag: str) -> str:
-        result = platform.run([str(self.cygpath), flag, "-a", "--", str(path)],
+        args = [str(self.cygpath), flag, "-a"]
+        if flag == "-w":
+            args += ["-C", "UTF8"]  # matches Isabelle's own platform_path function
+        result = self._run_command([*args, "--", str(path)],
                               capture_output=True, text=True, encoding="utf-8", timeout=30,
-                              cancel_event=self.cancel_event, env=self.environment())
+                              env=self.environment())
         if result.returncode or not result.stdout.strip():
-            raise HostError("Isabelle's bundled Cygwin could not convert a path")
+            raise HostError("Isabelle's bundled Cygwin could not convert a path: " + result.stderr[-2000:])
         return result.stdout.strip()
 
     def to_posix(self, path: str) -> str:
@@ -65,30 +68,62 @@ class RuntimeAdapter:
         if not platform.WINDOWS or not path.startswith("/"):
             return os.path.normpath(path) if platform.WINDOWS else path
         if path not in self._native:
-            self._native[path] = self._convert(path, "-w")
+            self._native[path] = os.path.realpath(self._convert(path, "-w"))
         return self._native[path]
+
+    def cli_path(self, path: str) -> str:
+        """Only native Java CLI paths use existing ASCII filesystem aliases.
+
+        The bundled Windows JDK narrows command-line arguments to its ANSI code
+        page even with file.encoding=UTF-8. JSON document paths remain native.
+        """
+        if not platform.WINDOWS:
+            return path
+        from _windows import ascii_short_path
+        native = self.to_native(path) if path.startswith("/") else path
+        try:
+            return self.to_posix(ascii_short_path(native))
+        except OSError as error:
+            raise HostError(f"Isabelle command-line path {native!r}: {error}", "unsupported_path") from error
 
     def command(self, args: List[str]) -> List[str]:
         if not platform.WINDOWS:
             return [self.runtime, *args]
         if not self.bash.is_file() or not self.cygpath.is_file():
             raise HostError("Use the official Isabelle Windows distribution with its bundled Cygwin")
+        if any(not arg.isascii() for arg in args):
+            raise HostError("The Windows Isabelle launcher cannot carry a non-ASCII command-line value. "
+                            "Use an ASCII logic name and option values; project and application paths "
+                            "need an existing ASCII NTFS short name.", "unsupported_path")
         # Bash converts only the executable's Windows path. Remaining arguments
         # are passed as positional data, never interpolated into shell source.
         return [str(self.bash), "--noprofile", "--norc", "-c",
                 'export PATH="/usr/bin:/bin:$PATH"; '
                 'exec /usr/bin/bash "$(/usr/bin/cygpath -u -- "$1")" "${@:2}"',
-                "deductum-isabelle", self.runtime, *args]
+                "deductum-isabelle", self.cli_path(self.runtime), *args]
 
     def environment(self, env=None):
         result = dict(os.environ if env is None else env)
         if platform.WINDOWS:
             result["LANG"] = result["LC_ALL"] = "C.UTF-8"
+            # Native Python already supplies argv as data. Cygwin's startup
+            # globber otherwise removes apostrophes from valid NTFS short
+            # names before cygpath or Bash receives them.
+            result["CYGWIN"] = (result.get("CYGWIN", "") + " noglob").strip()
         return result
 
     def run(self, args: List[str], **kwargs):
         kwargs["env"] = self.environment(kwargs.get("env"))
-        return platform.run(self.command(args), cancel_event=self.cancel_event, **kwargs)
+        return self._run_command(self.command(args), **kwargs)
+
+    def _run_command(self, argv, **kwargs):
+        try:
+            return platform.run(argv, cancel_event=self.cancel_event, **kwargs)
+        except UnicodeDecodeError as error:
+            diagnostic = getattr(error, "stderr", None) or b""
+            raise HostError("Isabelle command returned non-UTF-8 " + getattr(error, "stream", "output") +
+                            f" (exit {getattr(error, 'returncode', 'unknown')}); " +
+                            "raw stderr: " + repr(diagnostic[-2000:]), "bad_encoding") from error
 
     def protocol(self, obj: Any) -> Any:
         """Normalize only structured file fields, preserving text and offsets."""
@@ -307,10 +342,14 @@ def ensure_component(runtime: str, progress, cancel_event=None) -> None:
         raise HostError(f"No Deductum backend for {ident or runtime}", "unsupported_runtime")
     env = dict(os.environ)
     adapter = RuntimeAdapter(runtime, cancel_event=cancel_event)
-    comp_path = adapter.to_posix(str(comp))
-    home_user = _component_ready.get(runtime) or adapter.run(
-        ["getenv", "-b", "ISABELLE_HOME_USER"], capture_output=True, text=True, encoding="utf-8", timeout=120,
-        env=env).stdout.strip()
+    comp_path = adapter.cli_path(str(comp))
+    home_user = _component_ready.get(runtime)
+    if not home_user:
+        settings = adapter.run(["getenv", "-b", "ISABELLE_HOME_USER"], capture_output=True,
+                               text=True, encoding="utf-8", timeout=120, env=env)
+        if settings.returncode:
+            raise HostError("Could not read Isabelle settings: " + settings.stderr[-2000:])
+        home_user = settings.stdout.strip()
     if not home_user:
         raise HostError("Isabelle did not report its per-user component directory")
     registry = Path(adapter.to_native(home_user)) / "etc" / "components"
@@ -558,7 +597,7 @@ class IsabelleDriver(Driver):
             raise
         cmd = ["deductum_backend", "-l", proj.get("logic") or "HOL"]
         for d in proj.get("dirs", []):
-            cmd += ["-d", await asyncio.to_thread(self.runtime_adapter.to_posix, d)]
+            cmd += ["-d", await asyncio.to_thread(self.runtime_adapter.cli_path, d)]
         for name in proj.get("include_sessions", []):
             cmd += ["-i", name]
         threads = resource_limit(s, "prover_threads")

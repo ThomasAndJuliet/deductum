@@ -19,8 +19,9 @@ import tempfile
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+HOST_ROOT = os.path.abspath(os.environ.get("DEDUCTUM_TEST_HOST_ROOT") or os.path.join(HERE, ".."))
 sys.path.insert(0, HERE)  # Embedded Python's isolated path omits the script directory.
-sys.path.insert(0, os.path.join(HERE, ".."))
+sys.path.insert(0, HOST_ROOT)
 from drivers.lean import LeanDriver, STALE_HEADER_ERROR, tool_env  # noqa: E402
 
 SCRATCH = os.path.abspath(os.environ.get("DEDUCTUM_TEST_SCRATCH") or os.path.expanduser("~/tmp-deductum-lean"))
@@ -528,7 +529,7 @@ def run_core(path):
     work = os.path.join(SCRATCH, os.path.basename(os.path.normpath(path)) + "-core")
     shutil.rmtree(work, ignore_errors=True)
     shutil.copytree(path, work)
-    sys.path.insert(0, os.path.join(HERE, ".."))
+    sys.path.insert(0, HOST_ROOT)
     import deductum_host as H
     f = os.path.join(work, "DSRV", "CausalCorrectness.lean")
     text = open(f, encoding="utf-8").read()

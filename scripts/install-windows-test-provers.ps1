@@ -7,13 +7,41 @@ New-Item -ItemType Directory -Path $Tools -Force | Out-Null
 
 function Get-Verified([string]$Url, [string]$Name, [string]$Sha256) {
     $path = Join-Path $Tools $Name
-    if (-not (Test-Path $path) -or (Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant() -ne $Sha256) {
-        Invoke-WebRequest $Url -OutFile $path
+    if ((Test-Path $path) -and (Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant() -eq $Sha256) {
+        return $path
     }
-    if ((Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant() -ne $Sha256) {
-        throw "Checksum mismatch: $Name"
+    $partial = "$path.part"
+    try {
+        # A Linux build job can provide the same pinned bytes when an upstream
+        # download host is unreachable from the hosted Windows runner.
+        $cached = if ($env:DEDUCTUM_TEST_PROVER_CACHE) { Join-Path $env:DEDUCTUM_TEST_PROVER_CACHE $Name }
+        if ($cached -and (Test-Path $cached)) {
+            Copy-Item $cached $partial -Force
+            if ((Get-FileHash $partial -Algorithm SHA256).Hash.ToLowerInvariant() -ne $Sha256) {
+                throw "Checksum mismatch in prover cache: $Name"
+            }
+        } else {
+            for ($attempt = 1; $attempt -le 3; $attempt++) {
+                try {
+                    Write-Host "Downloading $Name (attempt $attempt of 3)"
+                    Invoke-WebRequest $Url -OutFile $partial -TimeoutSec 600
+                    if ((Get-FileHash $partial -Algorithm SHA256).Hash.ToLowerInvariant() -ne $Sha256) {
+                        throw "Checksum mismatch: $Name"
+                    }
+                    break
+                } catch {
+                    Remove-Item $partial -Force -ErrorAction SilentlyContinue
+                    if ($attempt -eq 3) { throw }
+                    Write-Warning "Download of $Name failed; retrying: $($_.Exception.Message)"
+                    Start-Sleep -Seconds (5 * $attempt)
+                }
+            }
+        }
+        Move-Item $partial $path -Force
+        return $path
+    } finally {
+        Remove-Item $partial -Force -ErrorAction SilentlyContinue
     }
-    return $path
 }
 
 $elan = Get-Verified 'https://github.com/leanprover/elan/releases/download/v4.2.4/elan-x86_64-pc-windows-msvc.zip' 'elan.zip' 'fad2e980a191c15884cc1d80d170ffc5fa84f3774541020145b66d1a644c6111'

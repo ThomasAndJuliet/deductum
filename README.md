@@ -14,6 +14,14 @@ elan; local Isabelle uses the official Isabelle2025 Windows distribution and
 its bundled Cygwin. WSL is not required. Git must be on PATH for Git project
 actions; SSH connections also require the Windows `ssh` and `tar` commands.
 
+Isabelle2025's bundled Java narrows some Unicode command-line paths. The
+adapter uses existing Windows short-path aliases for those CLI arguments and
+keeps original document paths in the protocol. On a volume without usable
+short names, an error identifies the path that must use an ASCII location
+for that Isabelle operation. Lean and Linux remote connections keep their
+native Unicode paths. Local Isabelle logic names and command-line option
+values must use ASCII.
+
 Extract the complete private portable ZIP into a new directory and run
 `deductum.exe`. Python is included. Keep its `python` and `share` directories
 beside the executable. Add remote machines to

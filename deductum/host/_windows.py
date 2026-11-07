@@ -296,3 +296,20 @@ def process_parents(pid, depth=4):
         result.append((name, pid))
         pid = parent
     return result
+
+
+def ascii_short_path(path):
+    """Use an existing NTFS name for narrow-argv tools; never create aliases."""
+    path = os.path.abspath(path)
+    if path.isascii():
+        return path
+    get_short = api(k, "GetShortPathNameW", W.DWORD, W.LPCWSTR, W.LPWSTR, W.DWORD)
+    buffer = C.create_unicode_buffer(32768)
+    size = get_short(path, buffer, len(buffer))
+    if not size or size >= len(buffer) or not buffer.value.isascii():
+        raise OSError("Isabelle's Windows launcher needs an existing ASCII NTFS short name for this path; "
+                      "move the installation or project to an ASCII path on a volume with short names enabled")
+    short = buffer.value
+    if not os.path.samefile(path, short) or os.path.normcase(os.path.realpath(path)) != os.path.normcase(os.path.realpath(short)):
+        raise OSError("The existing NTFS short name does not identify the original Isabelle path")
+    return short

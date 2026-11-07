@@ -17,7 +17,7 @@ import tempfile
 import time
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent.parent
+HERE = Path(os.environ.get("DEDUCTUM_TEST_HOST_ROOT") or Path(__file__).resolve().parent.parent).resolve()
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(HERE))
 os.environ.setdefault("DEDUCTUM_STATE_DIR", tempfile.mkdtemp(prefix="deductum-it-"))

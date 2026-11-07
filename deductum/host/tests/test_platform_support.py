@@ -465,6 +465,36 @@ class StdioBridge(unittest.TestCase):
 
 
 class AuxiliaryCommands(unittest.TestCase):
+    def test_strict_text_decoding_failure_reaches_the_caller_without_a_reader_thread_traceback(self):
+        for stream in (1, 2):
+            for cancel in (None, threading.Event()):
+                with self.subTest(stream=stream, cancellable=cancel is not None):
+                    thread_errors = []
+                    code = f"import os; os.write({stream}, bytes([255]))"
+                    with patch.object(threading, "excepthook", side_effect=thread_errors.append):
+                        with self.assertRaises(UnicodeDecodeError):
+                            P.run([sys.executable, "-c", code], cancel_event=cancel,
+                                  capture_output=True, text=True, encoding="utf-8", errors="strict", timeout=10)
+                    self.assertEqual(thread_errors, [], "text decoding escaped in a subprocess reader thread")
+
+    def test_cancellable_text_capture_decodes_both_streams_and_normalizes_newlines(self):
+        code = ("import os,sys; data=sys.stdin.buffer.read(); os.write(1,data); "
+                "os.write(2,'Ω\\r\\nβ\\rγ\\n'.encode('utf-8'))")
+        result = P.run([sys.executable, "-c", code], cancel_event=threading.Event(),
+                       input="Ω\nβ\n", capture_output=True, text=True, encoding="utf-8", timeout=10, check=True)
+        self.assertEqual(result.stdout, "Ω\nβ\n")
+        self.assertEqual(result.stderr, "Ω\nβ\nγ\n")
+        self.assertEqual(result.returncode, 0)
+
+    def test_cancellable_checked_failure_retains_decoded_stdout_and_stderr(self):
+        code = "import os; os.write(1,'Ω'.encode('utf-8')); os.write(2,'β'.encode('utf-8')); raise SystemExit(7)"
+        with self.assertRaises(subprocess.CalledProcessError) as caught:
+            P.run([sys.executable, "-c", code], cancel_event=threading.Event(),
+                  capture_output=True, text=True, encoding="utf-8", timeout=10, check=True)
+        self.assertEqual(caught.exception.returncode, 7)
+        self.assertEqual(caught.exception.stdout, "Ω")
+        self.assertEqual(caught.exception.stderr, "β")
+
     def test_auxiliary_binary_input_output_and_exit_status_are_preserved(self):
         data = b"\x00\xff\r\n\x1a" + bytes(range(256))
         result = P.run([sys.executable, FIXTURE, "echo"], input=data, capture_output=True, timeout=10)

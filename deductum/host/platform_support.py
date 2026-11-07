@@ -7,6 +7,7 @@ import errno
 import hmac
 import hashlib
 import json
+import locale
 import os
 from pathlib import Path
 import secrets
@@ -311,6 +312,41 @@ def run(argv, cancel_event=None, **kwargs):
     """Synchronous auxiliary prover commands, including compiler builds."""
     if cancel_event is None and not WINDOWS:
         return subprocess.run(argv, **kwargs)
+    # Windows communicate() decodes in reader threads. A decoding failure there
+    # can otherwise escape only as a thread traceback and return stdout=None.
+    # Capture bytes first and decode in this caller so strict errors propagate.
+    text = kwargs.pop("text", None)
+    universal = kwargs.pop("universal_newlines", None)
+    if text is not None and universal is not None and bool(text) != bool(universal):
+        raise subprocess.SubprocessError("text and universal_newlines disagree")
+    encoding = kwargs.pop("encoding", None)
+    errors = kwargs.pop("errors", None)
+    text_mode = bool(text or universal or encoding is not None or errors is not None)
+    encoding = encoding or ("utf-8" if sys.flags.utf8_mode else locale.getencoding())
+    errors = errors or "strict"
+    check = kwargs.pop("check", False)
+    if text_mode and isinstance(kwargs.get("input"), str):
+        kwargs["input"] = kwargs["input"].replace("\n", os.linesep).encode(encoding, errors)
+    result = _run_bytes(argv, cancel_event=cancel_event, **kwargs)
+    if text_mode:
+        raw_stdout, raw_stderr = result.stdout, result.stderr
+        for name in ("stdout", "stderr"):
+            data = getattr(result, name)
+            if data is not None:
+                try:
+                    decoded = data.decode(encoding, errors).replace("\r\n", "\n").replace("\r", "\n")
+                except UnicodeDecodeError as error:
+                    error.returncode = result.returncode
+                    error.stdout, error.stderr, error.stream = raw_stdout, raw_stderr, name
+                    raise
+                setattr(result, name, decoded)
+    if check:
+        result.check_returncode()
+    return result
+
+
+def _run_bytes(argv, cancel_event=None, **kwargs):
+    """Run a contained command without text readers in background threads."""
     job = None
     if WINDOWS:
         argv, job = managed_argv(argv)
