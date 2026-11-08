@@ -849,7 +849,7 @@ fn plain_input() -> theme::TextInput {
 
 /// A Secondary button (household rule 7): no fill, a 2 px accent border, an accent semibold label,
 /// a 32 px pill; COSMIC's text-button washes when hovered and pressed, faded when it cannot act
-fn secondary<'a>(label: &'static str, on_press: Option<Message>) -> widget::Button<'a, Message> {
+pub(crate) fn secondary<'a>(label: &'static str, on_press: Option<Message>) -> widget::Button<'a, Message> {
     use widget::button::Catalog as _;
     fn outlined(mut style: widget::button::Style, theme: &cosmic::Theme, wash: Option<Color>, faded: bool) -> widget::button::Style {
         let c = theme.cosmic();
