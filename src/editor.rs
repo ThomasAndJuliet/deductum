@@ -678,6 +678,8 @@ pub struct Theory {
     pub docs: Vec<Option<Arc<Doc>>>,
     pub page_rows: Arc<Vec<super::viewport::Row>>,
     pub page_scope: u64,
+    /// The messages (by where they start) shown whole in their cell; the page's own state, never saved
+    pub open_messages: std::collections::HashSet<usize>,
     pub page_viewport: std::cell::Cell<(f32, f32)>,
     /// Each prose block's Markdown offsets mapped to the source, where the profile can say
     pub prose_maps: Vec<Option<crate::prover::ProseMap>>,
@@ -1011,6 +1013,7 @@ impl Theory {
             docs: Vec::new(),
             page_rows: Arc::new(Vec::new()),
             page_scope: { static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1); NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed) },
+            open_messages: std::collections::HashSet::new(),
             page_viewport: std::cell::Cell::new((0.0, 800.0)),
             prose_maps: Vec::new(),
             rendered_sources: Vec::new(),

@@ -14,6 +14,7 @@ use super::theory::Kind;
 use super::App;
 
 const SIZE: Size = Size::new(900.0, 760.0);
+const TALL: Size = Size::new(900.0, 1000.0);
 const BAND_SIZE: Size = Size::new(900.0, 560.0);
 
 /// A harness (which holds the UI's turn, so that no other test changes the theme under it) with
@@ -461,4 +462,92 @@ fn isabelle_tokens_are_drawn_in_the_household_colours() {
         let n = frame.chunks(4).filter(|p| [r, g, b].iter().zip(p.iter()).all(|(a, b)| a.abs_diff(*b) <= 16)).count();
         assert!(n > 20, "{sem:?}: only {n} pixels are {}", hex(want));
     }
+}
+
+// ----- a cell's message, folded
+
+fn bounds_of(h: &mut Harness, app: &App, id: cosmic::widget::Id) -> Rectangle {
+    let mut all = Bounds(Vec::new());
+    h.operate(app, &mut all);
+    all.0.iter().find(|(x, _)| *x == id).unwrap_or_else(|| panic!("{id:?} is not on the page")).1
+}
+
+/// The index of the demo's failed block, and where its error starts and what it says
+fn failed_cell(app: &App) -> (usize, usize, String) {
+    let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+    let i = t.blocks.iter().enumerate().filter(|(_, b)| b.kind == Kind::Formal).map(|(i, _)| i).nth(2).unwrap();
+    let m = t.messages_in(t.blocks[i].start, t.blocks[i].end).into_iter().find(|m| m.kind == "error").expect("the failed cell's error");
+    (i, m.start, m.text)
+}
+
+fn centre(r: Rectangle) -> cosmic::iced::Point {
+    cosmic::iced::Point::new(r.x + r.width / 2.0, r.y + r.height / 2.0)
+}
+
+/// A long error is one line while collapsed (the card is its code and one row), opens in place
+/// inside the card's border when its summary is pressed, and its copy icon puts the prover's whole
+/// message on the clipboard
+#[test]
+fn a_long_error_is_one_line_opens_inside_the_card_and_copies_whole() {
+    let t = cosmic::Theme::light();
+    let mut app = cells_app(None);
+    let (i, start, text) = failed_cell(&app);
+    let w = TALL.width as u32;
+    in_light(TALL, |h| {
+        let _ = h.draw(&app, "msg-warm");
+        let _ = h.draw(&app, "msg-collapsed");
+        let cell_id = super::view::test_block_id(i);
+        let before = bounds_of(h, &app, cell_id.clone());
+        // one row of message under two lines of code
+        let code_only = 2.0 * super::view::code_line_height() + super::view::CODE_PADDING.top + super::view::CODE_PADDING.bottom;
+        assert!(before.height < code_only + 40.0, "the collapsed card is {} tall, code alone {code_only}: more than one line of message", before.height);
+        assert!(text.lines().count() > 1, "the demo's error is long");
+        let toggle = bounds_of(h, &app, super::view::test_message_id(start, "toggle"));
+        let copy = bounds_of(h, &app, super::view::test_message_id(start, "copy"));
+        assert!(copy.x > toggle.x + toggle.width - 1.0, "the copy icon is at the right of the summary");
+
+        // pressing the summary opens it
+        let pressed = h.click(&app, centre(toggle));
+        assert!(pressed.iter().any(|m| matches!(m, super::Message::ToggleMessage(s) if *s == start)), "pressing the summary toggles the message");
+        let _ = cosmic::Application::update(&mut app, super::Message::ToggleMessage(start));
+        let _ = h.draw(&app, "msg-open-warm");
+        let open = h.draw(&app, "msg-expanded");
+        let after = bounds_of(h, &app, cell_id);
+        assert!(after.height > before.height + 30.0, "the card did not grow: {} then {}", before.height, after.height);
+        // the detail is in the text colour inside the card's border, under the summary's row
+        let page = super::view::page_color(&t);
+        let mut dark = 0;
+        for y in ((before.y + before.height - 8.0) as u32)..((after.y + after.height - 4.0) as u32) {
+            for x in (after.x as u32 + 6)..((after.x + after.width) as u32 - 2) {
+                let p = px(&open, w, x as f32, y as f32);
+                if luminance(Color::from_rgb8(p[0], p[1], p[2])) < luminance(page) - 0.4 {
+                    dark += 1;
+                }
+            }
+        }
+        assert!(dark > 40, "only {dark} pixels of text colour in the opened detail");
+        // the border encloses it: the bottom border is under the detail, at the card's new bottom
+        let grey = card_border_color(&t);
+        let strength = line_strength(&open, w, after.x + after.width * 0.9, after.y + after.height - 2.0, false, grey, page);
+        assert!((0.75..=1.05).contains(&strength), "the card's border under the detail: {strength:.2}");
+        let strip = strip_color(Status::Failed, false, &t);
+        assert!(is(px(&open, w, after.x + 1.0, after.y + after.height - 8.0), strip), "the strip runs beside the detail");
+
+        // the copy icon copies the whole message as plain text
+        let copy = bounds_of(h, &app, super::view::test_message_id(start, "copy"));
+        let pressed = h.click(&app, centre(copy));
+        let Some(super::Message::CopyText(copied)) = pressed.into_iter().find(|m| matches!(m, super::Message::CopyText(_))) else { panic!("the copy icon sends no copy") };
+        use super::codec::Symbols as _;
+        let table = super::prover::isabelle::symbols::Table::fallback();
+        assert_eq!(copied, table.decode(text.trim_end()).text);
+        assert!(copied.contains("goal (1 subgoal):") && copied.contains("1. False"), "the whole message, not its summary: {copied:?}");
+        let task = cosmic::Application::update(&mut app, super::Message::CopyText(copied.clone()));
+        h.run_task(&app, task);
+        assert_eq!(h.copied_text(), Some(copied.as_str()), "the clipboard has the whole message");
+        // pressing it again folds it
+        let _ = cosmic::Application::update(&mut app, super::Message::ToggleMessage(start));
+        let _ = h.draw(&app, "msg-fold-warm");
+        let folded = bounds_of(h, &app, super::view::test_block_id(i));
+        assert!((folded.height - before.height).abs() < 1.0, "folded again: {} vs {}", folded.height, before.height);
+    });
 }
