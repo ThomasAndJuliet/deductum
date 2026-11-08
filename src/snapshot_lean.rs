@@ -337,9 +337,12 @@ fn clicking_a_lean_paragraph_puts_the_caret_there() {
         (app, opened)
     };
     // The page's text column, by where a click opens the block
-    let probe: Vec<i32> = (200..1200).step_by(20).filter(|x| click_at(*x as f32).1).collect();
+    let probe: Vec<i32> = (20..1200).step_by(20).filter(|x| click_at(*x as f32).1).collect();
     assert!(probe.len() > 6, "the paragraph is under the pointer somewhere: {probe:?}");
-    let (lo, hi) = (probe[1] as f32, probe[probe.len() - 2] as f32);
+    // (the first half of the column: Paper sets the closed text justified, and the editor opened by
+    // the click sets it ragged, so a click right of the editor's first row lands at its end)
+    let lo = probe[1] as f32;
+    let hi = lo + (probe[probe.len() - 2] as f32 - lo) / 2.0;
     // Clicks along the module doc's first line of text: the caret goes to the word clicked
     let mut results = Vec::new();
     for x in [lo, lo + (hi - lo) / 3.0, lo + 2.0 * (hi - lo) / 3.0, hi] {
@@ -493,7 +496,7 @@ fn prose_edges(doc: &str, text_of_block: &str, w: f32, dark: bool, tag: &str) ->
         }
     }
     let (x, y) = top.expect("the block under the pointer");
-    let closed = ink_edges(&png, size.width as u32, 900, y as u32, 60).unwrap_or((0, 0));
+    let closed = ink_edges(&png, size.width as u32, 900, y as u32, 10).unwrap_or((0, 0));
     // a click on its first line (a little in from the left)
     let msgs = h.click(&app, cosmic::iced::Point::new(x + 60.0, y + 6.0));
     assert!(msgs.iter().any(|m| matches!(m, super::Message::EditBlock(_))), "a click opens the block");

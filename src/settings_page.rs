@@ -919,11 +919,11 @@ mod tests {
             other => panic!("{other:?}"),
         };
         assert_eq!(chosen(get("interface_size")), "14");
-        assert_eq!(chosen(get("prose_width")), "Fill", "48 em is decided (Q5) but not yet the default: the layout assumes Fill");
+        assert_eq!(chosen(get("prose_width")), "48", "Paper's measure (Q5)");
         assert_eq!(chosen(get("code_font")), "Noto Sans Mono");
         assert_eq!(chosen(get("code_size")), "14");
         assert_eq!(chosen(get("cell_width")), "80");
-        assert_eq!(chosen(get("maths_size")), "× 1.10", "the default stays 1.1 until Juliet agrees to 1.05");
+        assert_eq!(chosen(get("maths_size")), "× 1.05", "Juliet approved x1.05 (household-kit#3)");
         #[cfg(not(windows))]
         assert_eq!(chosen(get("default_rights")), "This theory");
     }
@@ -963,8 +963,8 @@ mod tests {
         assert!(visible(rows(&app), "", true).is_empty());
         for m in [
             Msg::Theme(ThemeChoice::Light),
-            Msg::Display(DisplayChange::MathScale(1.05)),
-            Msg::Display(DisplayChange::Measure(48.0)),
+            Msg::Display(DisplayChange::MathScale(1.1)),
+            Msg::Display(DisplayChange::Measure(60.0)),
             Msg::Setting(Change::CodeSize(16)),
             Msg::Setting(Change::ThickenText(true)),
             Msg::Setting(Change::DefaultRights(Rights::Folder)),
@@ -1137,7 +1137,7 @@ mod tests {
         let mut app = settings_app(false);
         // (the harness holds the UI's turn, so that the published settings are ours meanwhile)
         let mut h = Harness::new(Size::new(1400.0, 900.0));
-        let _ = app.shell_update(Msg::Display(DisplayChange::MathScale(1.05)));
+        let _ = app.shell_update(Msg::Display(DisplayChange::MathScale(1.1)));
         let _ = app.shell_update(Msg::Page(PageMsg::Search("size".into())));
         let _ = h.draw(&app, "settings-search-warm");
         let frame = h.draw(&app, "settings-search");
@@ -1149,7 +1149,7 @@ mod tests {
             let _ = app.shell_update(Msg::Page(PageMsg::Open(sub)));
             let _ = h.draw(&app, &format!("settings-{sub:?}"));
         }
-        let _ = app.shell_update(Msg::Display(DisplayChange::MathScale(1.1)));
+        let _ = app.shell_update(Msg::Display(DisplayChange::MathScale(1.05)));
     }
 
     /// The Settings page at the review widths, light and dark, with the sidebar as the demo has
@@ -1163,7 +1163,7 @@ mod tests {
                     let mut h = Harness::new(Size::new(width, 900.0));
                     if !sidebar {
                         // (a few rows changed from their defaults, so the dots show)
-                        let _ = app.shell_update(Msg::Display(DisplayChange::MathScale(1.05)));
+                        let _ = app.shell_update(Msg::Display(DisplayChange::MathScale(1.1)));
                         let _ = app.shell_update(Msg::Setting(Change::CodeSize(15)));
                     }
                     cosmic::theme::set_active(if light { cosmic::theme::ThemeType::Light } else { cosmic::theme::ThemeType::Dark });
@@ -1172,7 +1172,7 @@ mod tests {
                     let frame = h.draw(&app, &name);
                     cosmic::theme::set_active(cosmic::theme::ThemeType::Dark);
                     assert!(frame.chunks(4).any(|p| p[0] != frame[0]), "the page is not blank");
-                    let _ = app.shell_update(Msg::Display(DisplayChange::MathScale(1.1)));
+                    let _ = app.shell_update(Msg::Display(DisplayChange::MathScale(1.05)));
                     let _ = app.shell_update(Msg::Setting(Change::CodeSize(14)));
                 }
             }

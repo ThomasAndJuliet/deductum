@@ -413,7 +413,8 @@ fn clicking_blocks_opens_their_source() {
     assert!(prose.iter().any(|m| matches!(m, super::Message::EditBlock(_))), "{prose:?}");
     // A lemma takes the click itself, as text: it opens with the caret where the click landed
     let mut app = app;
-    let lemma = click(&app, cosmic::iced::Point::new(500.0, 300.0), Size::new(1400.0, 900.0));
+    // (its second line, `apply simp`: Paper sets the prose larger, so the lemma starts lower)
+    let lemma = click(&app, cosmic::iced::Point::new(500.0, 313.0), Size::new(1400.0, 900.0));
     // the pointer's place (hover), then the press, which the shown block's own editor never sees
     draw(&app, "deductum-literate-click", Size::new(1400.0, 900.0));
     for m in lemma.iter().filter(|m| matches!(m, super::Message::HoverMove(..))) {
@@ -1625,12 +1626,14 @@ fn nothing_on_the_page_runs_into_the_goal_beside_it() {
         let accent = |p: &image::Rgba<u8>| p[2] > 170 && p[1] > 150 && p[0] < 150;
         // (the pill filled with the accent, not accent-coloured text such as a note's Resolve)
         let pill = |x: u32, y: u32| (x..x + 20).all(|xx| accent(img.get_pixel(xx, y)));
-        let button = (w / 2..w - 40).find(|&x| (0..h).any(|y| pill(x, y))).expect("the goal beside");
+        let button = (w * 2 / 3..w - 40).find(|&x| (0..h).any(|y| pill(x, y))).expect("the goal beside");
         let by = (0..h).find(|&y| pill(button, y)).unwrap();
         // (left from the button, to where the card's background ends)
         let card = (0..button).rev().find(|&x| img.get_pixel(x, by) == &bg).map_or(button, |x| x + 1);
         // the gap before it: background on every row
-        let strip = card - super::view::GOAL_GAP_PUB as u32 + 1..card - 1;
+        // (from one pixel in: Paper's justified prose ends exactly at the column's edge, and its last
+        // glyph may be anti-aliased over it)
+        let strip = card - super::view::GOAL_GAP_PUB as u32 + 2..card - 1;
         let crossing: Vec<(u32, u32)> = strip.clone().flat_map(|x| (0..h).map(move |y| (x, y))).filter(|&(x, y)| img.get_pixel(x, y) != &bg).take(5).collect();
         eprintln!("{name}: goal card at x = {card}; strip {strip:?}; crossing {crossing:?}");
         assert!(crossing.is_empty(), "{name}: something on the page reaches into the goal's gap at {crossing:?}");
@@ -1660,7 +1663,9 @@ fn margins_pictures() {
 fn the_margins_collapse_before_the_goal_goes_under() {
     let wide_line = "lemma wide: \"timed_contract_wf true\\<^sub>r skip_unstable (timed_assign_final f) \\<and> timed_reactive P\"\n  by simp\n\n";
     let text = format!("theory W imports Main begin\n\n{wide_line}lemma low: \"(a::nat) + b = b + a\"\nproof -\n  show ?thesis\n    by simp\nqed\n\nend\n");
-    for (w, beside) in [(1320.0f32, true), (1100.0, true), (1000.0, false)] {
+    // (Paper's 48 em column is 960 px: the goal, at least 320 px, goes beside it from about 1310 px,
+    // and under it in narrower windows)
+    for (w, beside) in [(1500.0f32, true), (1320.0, true), (1100.0, false), (1000.0, false)] {
         let mut app = demo_app(Mode::Literate);
         let doc = json!({"text": text, "revision": 1, "prover": prover_json(&text)});
         app.workspace.as_mut().unwrap().theory = Some(Theory::new("/tmp/W.thy".into(), &doc, &Table::fallback(), Arc::new(HashMap::new()), Mode::Literate, crate::prover::profile(None)));
@@ -1995,7 +2000,7 @@ fn vim_up_from_proof_enters_the_last_row_of_wrapped_prose() {
 fn vim_down_from_proof_traverses_wrapped_prose_rows() {
     use cosmic::iced::keyboard::Key;
     use cosmic::widget::text_editor::{Action, Motion};
-    let para = "Paragraph 1: café naïve αβ repeated repeated; see [link](https://example.test) and $x + 0 = x$. This deliberately long paragraph wraps across multiple lines and continues with repeated repeated words for navigation.";
+    let para = "Paragraph 1: café naïve αβ repeated repeated; see [link](https://example.test) and $x + 0 = x$. This deliberately long paragraph wraps across multiple lines and continues with repeated repeated words for navigation. It goes on, with more repeated words, so that it still wraps onto at least four rows in Paper's wide, large type, and then a few more words to be sure of the fourth row, and a few more again.";
     let text = format!("theory P imports Main begin\n\nlemma before: \"True\"\n  by simp\n\ntext \\<open>{para}\\<close>\n\nlemma after: \"True\"\n  by simp\n\nend\n");
     let mut app = demo_app(Mode::Literate);
     let doc = json!({"text": text, "revision": 1});
@@ -2335,7 +2340,7 @@ fn the_goal_is_beside_the_selected_block_with_none_open() {
     let has_goal_beside = |png: Vec<u8>| {
         let img = image::RgbaImage::from_raw(1320, 800, png).unwrap();
         let bg = *img.get_pixel(12, 400);
-        (1000..1290).any(|x| (60..780).step_by(4).any(|y| img.get_pixel(x, y) != &bg))
+        (1150..1290).any(|x| (60..780).step_by(4).any(|y| img.get_pixel(x, y) != &bg))
     };
     assert!(has_goal_beside(h.draw(&app, "selected-beside")), "the goal beside the selected proof");
     let _ = cosmic::Application::update(&mut app, super::Message::ToggleGoalBeside);
