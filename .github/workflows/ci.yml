@@ -146,9 +146,9 @@ jobs:
           retention-days: 7
           compression-level: 0
   # The same steps on the household runners (neo-infrastructure
-  # services/ci-runners), the default for a private repository. Setting the
-  # CI_RUNNER variable to hosted, or a public repository, uses GitHub-hosted
-  # runners instead.
+  # services/ci-runners), the default for this repository's own runs. Setting
+  # the CI_RUNNER variable to hosted uses GitHub-hosted runners instead, as a
+  # fork's pull request always does.
   flatpak-neo:
     needs: [trust, already-validated]
     if: ${{ !cancelled() && needs.trust.outputs.trusted == 'true' && needs.trust.outputs.flatpak == 'neo' && (needs.already-validated.outputs.run == '' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) }}

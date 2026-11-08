@@ -2,8 +2,8 @@
 """Decide what a CI run may use, from GitHub's own description of the event.
 
 Only a run in the configured repository, from that repository's own code, is
-trusted. Household runners additionally require the repository to be private:
-their shared caches treat every job as household code.
+trusted, and only a trusted run uses the household runners: their shared caches
+treat every job as household code.
 
 This keeps honest workflows honest. A fork's pull request can rewrite this file
 and the workflow, so the boundary against hostile code is the runner group and
@@ -29,7 +29,7 @@ def classify(event_name, event, repository, expected, ci_runner=""):
         own_code = head.get("full_name") == repository
     trusted = (event_name in CI_EVENTS and repository == expected
                and base.get("fork") is False and own_code)
-    household = trusted and base.get("private") is True and ci_runner != "hosted"
+    household = trusted and ci_runner != "hosted"
     return {
         "trusted": "true" if trusted else "false",
         "runner": HOUSEHOLD if household else HOSTED,

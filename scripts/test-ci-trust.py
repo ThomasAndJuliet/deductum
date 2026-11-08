@@ -48,12 +48,11 @@ class ClassifyTests(unittest.TestCase):
         self.assertEqual(classify("push", event(head="none"), runner="hosted"),
                          {"trusted": "true", "runner": "ubuntu-24.04", "flatpak": "hosted"})
 
-    def test_public_repository_never_selects_household_runners(self):
+    def test_own_public_runs_use_household_runners_too(self):
         for name, payload in [("push", event(private=False, head="none")),
                               ("pull_request", event(private=False))]:
-            with self.subTest(name=name):
-                self.assertEqual(classify(name, payload),
-                                 {"trusted": "true", "runner": "ubuntu-24.04", "flatpak": "hosted"})
+            self.assertEqual(trust.classify(name, payload, REPOSITORY, REPOSITORY),
+                             {"trusted": "true", "runner": "neo-ubuntu", "flatpak": "neo"})
 
     def test_untrusted_runs_get_hosted_runners_and_no_deploy_keys(self):
         cases = {

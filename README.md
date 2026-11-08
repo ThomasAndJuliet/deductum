@@ -281,17 +281,19 @@ and `appstreamcli validate --no-net`; the guide gives the complete commands.
 ### CI and contributions from forks
 
 A pull request from a fork runs the same jobs on GitHub-hosted runners, with a
-read-only token and no secrets. No job in CI uses a secret. Jobs in this repository
-use household runners only while it is private. `scripts/ci-trust.py` makes these
+read-only token and no secrets. No job in CI uses a secret. This repository's own
+pushes and pull requests use household runners. `scripts/ci-trust.py` makes these
 choices.
 
 A fork can rewrite the workflow in its own pull request, so these choices keep
 honest runs correct but do not stop hostile code. These repository and
 organisation settings do:
 
-- the organisation's runner group leaves **Allow public repositories** off, so a
-  public repository's jobs cannot reach the household runners;
-- workflows from outside contributors wait for an administrator's approval.
+- the organisation's runner group allows public repositories, so that this
+  repository's own runs can use the household runners, which means a fork's
+  rewritten workflow could ask for them too;
+- so workflows from outside contributors wait for an administrator's approval.
+  Never approve a run on code you have not read: it could then reach Neo.
 
 ### Publication
 
