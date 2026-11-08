@@ -56,6 +56,7 @@ fn act_or(label: &str, keys: &'static str, message: Result<Message, &str>) -> Ro
 }
 
 /// The labels of rows, "(label)" for a disabled one, "label ▸" for a submenu and "—" for a divider
+#[cfg(test)]
 pub fn labels(rows: &[Row]) -> Vec<String> {
     rows.iter()
         .map(|r| match r {
@@ -69,6 +70,7 @@ pub fn labels(rows: &[Row]) -> Vec<String> {
 }
 
 /// The row labelled `label`, in a menu or its submenus
+#[cfg(test)]
 pub fn find<'a>(rows: &'a [Row], label: &str) -> Option<&'a Row> {
     rows.iter().find_map(|r| match r {
         Row::Item { label: l, .. } | Row::Check { label: l, .. } | Row::Off { label: l, .. } if l == label => Some(r),
