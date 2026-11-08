@@ -20,6 +20,8 @@
 #[global_allocator]
 static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
+#[cfg(not(windows))]
+mod agent_session;
 mod attention;
 mod chip;
 mod cli;
@@ -2801,6 +2803,18 @@ impl cosmic::Application for App {
     }
 
     fn update(&mut self, message: Self::Message) -> Task<Self::Message> {
+        // Esc closes the agent-session popover (a click outside does too: the popover's own)
+        #[cfg(not(windows))]
+        if self.shell.agent.open
+            && match &message {
+                Message::Escape => true,
+                Message::RawVim(_, press) | Message::WindowKey(press) => matches!(press.key.as_ref(), cosmic::iced::keyboard::Key::Named(cosmic::iced::keyboard::key::Named::Escape)),
+                _ => false,
+            }
+        {
+            self.shell.agent.open = false;
+            return Task::none();
+        }
         let escape = match &message {
             Message::Escape => true,
             Message::RawVim(_, press) | Message::WindowKey(press) => {

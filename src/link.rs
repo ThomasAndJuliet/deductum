@@ -149,7 +149,7 @@ fn sandboxed() -> bool {
 }
 
 /// A command run on this computer's host system, outside a Flatpak sandbox
-fn host_command(program: &str, args: &[String]) -> tokio::process::Command {
+pub(crate) fn host_command(program: &str, args: &[String]) -> tokio::process::Command {
     if sandboxed() {
         let mut cmd = tokio::process::Command::new("flatpak-spawn");
         cmd.arg("--host").arg(program).args(args);

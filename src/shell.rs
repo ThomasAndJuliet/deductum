@@ -40,6 +40,9 @@ pub struct Shell {
     pub page: super::settings_page::PageState,
     /// What passed, said for a few seconds at the window's foot
     pub toasts: super::toast::Toaster,
+    /// The agent-session popover (not on Windows)
+    #[cfg(not(windows))]
+    pub agent: super::agent_session::Popover,
 }
 
 /// A project action's run (`lake build`, building a heap)
@@ -96,6 +99,18 @@ pub enum Msg {
     Quit,
     /// The settings page, on one of its pages (Keyboard shortcuts, About)
     SettingsAt(super::settings_page::Sub),
+    /// The agent-session popover: open or close it, choose the rights and the tool, start the session
+    #[cfg(not(windows))]
+    AgentOpen(bool),
+    #[cfg(not(windows))]
+    AgentRights(super::settings::Rights),
+    #[cfg(not(windows))]
+    AgentTool(super::agent_session::Tool),
+    #[cfg(not(windows))]
+    AgentStart,
+    /// Terminal Agents was asked for the thread's page: how that went
+    #[cfg(not(windows))]
+    AgentLaunched(Result<(), String>),
     /// A toast's time ran out, or it was closed
     ToastGone(cosmic::widget::ToastId),
     /// A toast's Undo was pressed: the toast goes and the last step is undone
@@ -292,6 +307,8 @@ impl App {
                 }
             }
             Msg::OpenDocument(path) => return self.open_document(path),
+            #[cfg(not(windows))]
+            m @ (Msg::AgentOpen(_) | Msg::AgentRights(_) | Msg::AgentTool(_) | Msg::AgentStart | Msg::AgentLaunched(_)) => return self.agent_update(m),
             Msg::Quit => {
                 if self.defer_leave(super::DeferredLeave::Quit) {
                     return self.flush_edits();
@@ -547,7 +564,8 @@ pub fn views_bar(app: &App) -> Element<'_, Message> {
         .into()
 }
 
-/// The Open in button: a menu of the session's folder in Files, in Zed, or in a terminal
+/// The Open in button (Windows': there is no agent session there): a menu of the session's folder in Files, in Zed, or in a terminal
+#[cfg_attr(not(windows), allow(dead_code))]
 pub fn open_in(app: &App) -> Element<'static, Message> {
     let folder = app.workspace.as_ref().and_then(|w| w.info.as_ref()).is_some_and(|i| i["folder"].as_str().is_some());
     let row = |label: &str, opener: link::Opener| {
@@ -595,7 +613,12 @@ pub fn goal_beside_button<'a>() -> Element<'a, Message> {
 /// The header's end: Open in, the views bar, the goal's place and the right sidebar. All of them
 /// are there with no session or the settings page open (the views dimmed), so that nothing moves
 pub fn header_end(app: &App) -> Vec<Element<'_, Message>> {
-    let mut items: Vec<Element<'_, Message>> = vec![open_in(app), views_bar(app)];
+    #[cfg(not(windows))]
+    let open = super::agent_session::split(app);
+    // (on Windows the button holds only the folder in Files, Zed or a terminal, as far as each works there)
+    #[cfg(windows)]
+    let open = open_in(app);
+    let mut items: Vec<Element<'_, Message>> = vec![open, views_bar(app)];
     items.push(goal_beside_button());
     items.push(icon_button("sidebar-right", "Show or hide proof output and tools", Some(Message::ToggleRight)));
     items
@@ -706,6 +729,22 @@ impl Conn {
 /// The status bar's height: fixed, so that the page above never moves for it
 pub const STATUS_BAR_HEIGHT: f32 = 28.0;
 
+/// The name a cell is known by (`lemma add_zero: …` is "add_zero"), when it is a statement
+pub fn block_name(t: &super::editor::Theory, block: &super::theory::Block) -> Option<String> {
+    if block.kind != super::theory::Kind::Formal {
+        return None;
+    }
+    let first: String = t.local.chars().skip(block.start).take(block.end.saturating_sub(block.start).min(200)).collect();
+    first
+        .lines()
+        .next()
+        .unwrap_or("")
+        .split_whitespace()
+        .nth(1)
+        .map(|w| w.trim_matches(|c| c == ':' || c == '"' || c == '[').to_string())
+        .filter(|n| !n.is_empty())
+}
+
 /// The name of the place Back goes to: the cell's name (`lemma add_zero` is "add_zero"), else the
 /// file's
 pub fn back_name(app: &App) -> Option<String> {
@@ -713,10 +752,7 @@ pub fn back_name(app: &App) -> Option<String> {
     let t = app.workspace.as_ref()?.theory.as_ref()?;
     if *path == t.path {
         let local = App::local_offset_pub(t, *at);
-        let block = t.blocks.iter().find(|b| b.start <= local && local < b.end.max(b.start + 1))?;
-        let first: String = t.local.chars().skip(block.start).take(block.end.saturating_sub(block.start).min(200)).collect();
-        let name = first.lines().next().unwrap_or("").split_whitespace().nth(1).map(|w| w.trim_matches(|c| c == ':' || c == '"' || c == '[').to_string());
-        if let Some(n) = name.filter(|n| !n.is_empty() && block.kind == super::theory::Kind::Formal) {
+        if let Some(n) = t.blocks.iter().find(|b| b.start <= local && local < b.end.max(b.start + 1)).and_then(|b| block_name(t, b)) {
             return Some(n);
         }
     }
