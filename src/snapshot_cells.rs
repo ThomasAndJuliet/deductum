@@ -1041,3 +1041,169 @@ fn a_collapsed_error_row_draws_sans_words_and_code_terms() {
         assert!(term > 60, "light={light}: the term is drawn as the words are ({term} pixels differ): not in the code font");
     }
 }
+
+
+// ----- Paper: the code font and Thicken text
+
+use super::settings::{self, Settings};
+
+/// Settings published for the length of a test (under its harness's turn), the defaults again after
+struct Published;
+
+impl Published {
+    fn new(settings: &Settings) -> Self {
+        settings::publish(settings);
+        Published
+    }
+}
+
+impl Drop for Published {
+    fn drop(&mut self) {
+        settings::publish(&Settings::default());
+    }
+}
+
+/// How many pixels of `rect` differ between two frames of the page's width
+fn differing(a: &[u8], b: &[u8], width: u32, rect: Rectangle) -> usize {
+    let mut n = 0;
+    for y in rect.y as u32..(rect.y + rect.height) as u32 {
+        for x in rect.x as u32..(rect.x + rect.width) as u32 {
+            if px(a, width, x as f32, y as f32) != px(b, width, x as f32, y as f32) {
+                n += 1;
+            }
+        }
+    }
+    n
+}
+
+/// The cells' bounds and the frame of the demo theory under `settings`
+fn cells_under(settings: &Settings) -> (Vec<Rectangle>, Vec<u8>) {
+    let app = cells_app(None);
+    in_light(SIZE, |h| {
+        let _published = Published::new(settings);
+        let _ = h.draw(&app, "paper-warm");
+        let frame = h.draw(&app, "paper-cells");
+        let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+        let mut all = Bounds(Vec::new());
+        h.operate(&app, &mut all);
+        let cells = t.blocks.iter().enumerate().filter(|(_, b)| b.kind == Kind::Formal)
+            .map(|(i, _)| all.0.iter().find(|(x, _)| *x == super::view::test_block_id(i)).expect("the cell is on the page").1).collect();
+        (cells, frame)
+    })
+}
+
+/// The code font of Settings ▸ Code reaches the cells, the Source view and the terms in the prose,
+/// and nothing else of the prose
+#[test]
+fn the_code_font_reaches_cells_the_source_view_and_inline_terms() {
+    let mut other = Settings::default();
+    other.change(settings::Change::CodeFont("NewComputerModern".into()));
+    let width = SIZE.width as u32;
+    let (cells, before) = cells_under(&Settings::default());
+    let (cells_after, after) = cells_under(&other);
+    assert_eq!(cells, cells_after.clone(), "the cells keep their place: the font changes only how they are drawn");
+    for (n, cell) in cells.iter().enumerate() {
+        assert!(differing(&before, &after, width, *cell) > 200, "cell {n}: not drawn in the chosen code font");
+    }
+    // the Source view
+    let source = |settings: &Settings| {
+        let mut app = demo_app(Mode::Source);
+        app.show_right = false;
+        app.show_sidebar = false;
+        let mut h = Harness::new(SIZE);
+        let _published = Published::new(settings);
+        let _ = h.draw(&app, "paper-source-warm");
+        h.draw(&app, "paper-source")
+    };
+    let page = Rectangle { x: 0.0, y: 60.0, width: SIZE.width, height: 400.0 };
+    assert!(differing(&source(&Settings::default()), &source(&other), width, page) > 500, "the Source view is not in the code font");
+
+    // an inline term in the prose: the same sentence drawn with the term in two families differs
+    // where the term is, and a sentence with no term does not differ at all
+    let sentence = |settings: &Settings, md: &str| {
+        let _turn = super::snapshot::ui_turn();
+        let _published = Published::new(settings);
+        cosmic::theme::set_active(cosmic::theme::ThemeType::Light);
+        let typo = super::view::typography(&cosmic::theme::active());
+        assert_eq!(typo.mono, settings.code.font, "the prose's terms are set in the code font");
+        let doc = std::sync::Arc::new(prose_render::markdown::parse(md));
+        let frame = super::snapshot::render(prose_render::rich::rich_text(doc, std::sync::Arc::new(typo)).into(), "paper-term", Size::new(500.0, 60.0));
+        cosmic::theme::set_active(cosmic::theme::ThemeType::Dark);
+        frame
+    };
+    let whole = Rectangle { x: 0.0, y: 0.0, width: 500.0, height: 60.0 };
+    assert!(differing(&sentence(&Settings::default(), "We prove `timed_contract` here."), &sentence(&other, "We prove `timed_contract` here."), 500, whole) > 100);
+    assert_eq!(differing(&sentence(&Settings::default(), "We prove it here."), &sentence(&other, "We prove it here."), 500, whole), 0);
+}
+
+/// Thicken text draws regular text in Semibold where the family has one and in Regular where it
+/// does not: no synthetic bold, and no other family's face
+#[test]
+fn thicken_text_draws_semibold_where_the_family_has_one_and_regular_otherwise() {
+    use cosmic::iced::font::Weight;
+    use super::settings::TextFont;
+    use super::text_weight::{BOLD, NORMAL, SEMIBOLD, has_semibold, weight_in};
+    let _turn = super::snapshot::ui_turn();
+    super::load_fonts();
+    let family = |name: &'static str| cosmic_text::Family::Name(name);
+    // the bundled families: Libertinus Serif has a semibold (and italic), New Computer Modern has none
+    assert!(has_semibold(family("Libertinus Serif")), "LibertinusSerif-Semibold.otf is bundled");
+    assert!(!has_semibold(family("NewComputerModern")));
+    assert_eq!((weight_in(family("Libertinus Serif"), SEMIBOLD), weight_in(family("NewComputerModern"), SEMIBOLD)), (SEMIBOLD, NORMAL));
+    assert_eq!((weight_in(family("NewComputerModern"), BOLD), weight_in(family("Libertinus Serif"), BOLD)), (BOLD, BOLD));
+
+    let mut thick = Settings::default();
+    thick.change(settings::Change::ThickenText(true));
+    let weights = |settings: &Settings| {
+        let _published = Published::new(settings);
+        let typo = |font: TextFont| {
+            let mut s = settings.clone();
+            s.display.font = font;
+            settings::publish(&s);
+            super::view::typography(&cosmic::Theme::light()).body_weight
+        };
+        (
+            TextFont::Libertinus.editor_font().weight,
+            TextFont::NewComputerModern.editor_font().weight,
+            typo(TextFont::Libertinus),
+            typo(TextFont::NewComputerModern),
+        )
+    };
+    assert_eq!(weights(&Settings::default()), (Weight::Normal, Weight::Normal, 400, 400), "off: all Regular");
+    assert_eq!(weights(&thick), (Weight::Semibold, Weight::Normal, 600, 400), "on: Semibold where there is one");
+
+    // the code font, by the same rule: Libertinus Serif has a semibold, New Computer Modern has none
+    let code = |settings: &Settings, name: &str| {
+        let mut s = settings.clone();
+        s.change(settings::Change::CodeFont(name.into()));
+        let _published = Published::new(&s);
+        (super::view::code_font(), super::view::code_font_bold())
+    };
+    let (regular, bold) = code(&thick, "Libertinus Serif");
+    assert_eq!((regular.weight, bold.weight), (Weight::Semibold, Weight::Bold));
+    let (regular, bold) = code(&thick, "NewComputerModern");
+    assert_eq!((regular.weight, bold.weight), (Weight::Normal, Weight::Bold), "no semibold: Regular, and its own bold stays");
+    assert_eq!(regular.family, cosmic::iced::font::Family::Name("NewComputerModern"));
+    let (regular, _) = code(&Settings::default(), "Libertinus Serif");
+    assert_eq!(regular.weight, Weight::Normal);
+
+    // and on the page: the Libertinus prose is heavier (more ink), the New Computer Modern prose
+    // is drawn exactly as before
+    let ink = |settings: &Settings, font: TextFont| {
+        let mut s = settings.clone();
+        s.display.font = font;
+        let _published = Published::new(&s);
+        cosmic::theme::set_active(cosmic::theme::ThemeType::Light);
+        let mut typo = super::view::typography(&cosmic::theme::active());
+        typo.size = 20.0;
+        let doc = std::sync::Arc::new(prose_render::markdown::parse("Stop deadlocks but lets time pass, and its trace grows only by time steps."));
+        let frame = super::snapshot::render(prose_render::rich::rich_text(doc, std::sync::Arc::new(typo)).into(), "paper-thicken", Size::new(700.0, 70.0));
+        cosmic::theme::set_active(cosmic::theme::ThemeType::Dark);
+        frame
+    };
+    // (the ink: how far the pixels are from the page's)
+    let dark_ink = |frame: &[u8]| frame.chunks(4).map(|p| u32::from(p[0].abs_diff(frame[0]))).sum::<u32>();
+    let (plain, heavy) = (ink(&Settings::default(), TextFont::Libertinus), ink(&thick, TextFont::Libertinus));
+    assert!(dark_ink(&heavy) as f32 > dark_ink(&plain) as f32 * 1.05, "Semibold Libertinus is not heavier: {} against {}", dark_ink(&heavy), dark_ink(&plain));
+    assert_eq!(ink(&Settings::default(), TextFont::NewComputerModern), ink(&thick, TextFont::NewComputerModern), "no semibold: drawn as before");
+}

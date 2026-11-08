@@ -195,7 +195,8 @@ pub fn typography(theme: &cosmic::Theme) -> Typography {
     Typography {
         display_start: false,
         body: display.font.family().into(),
-        mono: String::new(),
+        body_weight: body_weight(display.font),
+        mono: super::settings::code_font(),
         font_overrides: [(0xE021, 0xE07E), (0xE121, 0xE17E), (0xE211, 0xE249), (0xE311, 0xE349)]
             .into_iter().map(|(start, end)| prose_render::rich::FontOverride {
                 start: char::from_u32(start).unwrap(), end: char::from_u32(end).unwrap(), family: "Isabellum Scripts".into(),
@@ -255,6 +256,7 @@ pub fn set_goal_beside(on: bool) {
 // ----- the window
 
 pub fn view(app: &App) -> Element<'_, Message> {
+    warm_fonts();
     let content: Element<'_, Message> = widget::responsive(move |size| {
         // The editors' keys follow vim's mode, whoever draws the view. Published as the page is
         // laid out, where it is read, rather than when the view is built: another window's view
@@ -540,7 +542,7 @@ fn workspace<'a>(app: &'a App, ws: &'a Workspace, right: bool, main_width: f32) 
         let mut col = widget::column::with_capacity(files.len() + 2).spacing(sp.space_xxs);
         col = col.push(widget::text::heading(format!("{} changed theor{}", files.len(), if files.len() == 1 { "y" } else { "ies" })));
         for f in files {
-            col = col.push(widget::text(f["diff"].as_str().unwrap_or("").to_string()).font(cosmic::font::mono()).size(12));
+            col = col.push(widget::text(f["diff"].as_str().unwrap_or("").to_string()).font(code_font()).size(12));
         }
         col = col.push(widget::row::with_capacity(2).spacing(sp.space_s).push(widget::button::suggested("Merge into the shared session").on_press(Message::Merge("apply".into()))));
         center = center.push(widget::container(widget::scrollable(col)).max_height(360.0).padding(sp.space_s).class(theme::Container::Card));
@@ -1083,7 +1085,7 @@ fn block_line(be: &super::editor::BlockEditor, offset: usize) -> usize {
 
 /// A line of code in a block
 pub fn code_line_height() -> f32 {
-    z(13.0) * CODE_LINE
+    code_size() * CODE_LINE
 }
 
 /// Padding of code in a block, shown or edited: the same, so that opening a block moves nothing
@@ -1097,7 +1099,7 @@ pub fn block_text_inset(be: &super::editor::BlockEditor) -> f32 {
 /// The width of a block of code with this many columns: its text and a little room, not the page
 /// (the page column caps it, and long lines wrap)
 pub fn code_width(columns: usize) -> f32 {
-    (columns.max(30) as f32 + 4.0) * z(13.0) * 0.6 + CODE_PADDING.left + CODE_PADDING.right
+    (columns.max(30) as f32 + 4.0) * code_size() * CODE_ADVANCE + CODE_PADDING.left + CODE_PADDING.right
 }
 
 /// The width of a block of code on the page: as [`code_width`], but never wider than the text
@@ -1268,7 +1270,7 @@ pub fn read_only_binding(press: text_editor::KeyPress) -> Option<text_editor::Bi
 /// Text with Isabelle symbols, in the code font: scripts with no Unicode form are drawn in the
 /// scripts font (as the editors draw them), bold symbols bold
 fn symbol_text<'a>(text: &str, table: &dyn super::codec::Symbols, size: f32) -> Element<'a, Message> {
-    symbol_text_with_font(text, table, size, cosmic::font::mono())
+    symbol_text_with_font(text, table, size, code_font())
 }
 
 fn symbol_text_with_font<'a>(text: &str, table: &dyn super::codec::Symbols, size: f32, normal: cosmic::iced::Font) -> Element<'a, Message> {
@@ -1277,7 +1279,7 @@ fn symbol_text_with_font<'a>(text: &str, table: &dyn super::codec::Symbols, size
 
 /// [`symbol_text`] in the code font, wrapping as `wrapping` says
 fn symbol_text_wrapped<'a>(text: &str, table: &dyn super::codec::Symbols, size: f32, wrapping: iced::widget::text::Wrapping) -> Element<'a, Message> {
-    symbol_text_in(text, table, size, cosmic::font::mono(), wrapping)
+    symbol_text_in(text, table, size, code_font(), wrapping)
 }
 
 fn symbol_text_in<'a>(text: &str, table: &dyn super::codec::Symbols, size: f32, normal: cosmic::iced::Font, wrapping: iced::widget::text::Wrapping) -> Element<'a, Message> {
@@ -1295,7 +1297,7 @@ fn symbol_text_in<'a>(text: &str, table: &dyn super::codec::Symbols, size: f32, 
         .into_iter()
         .map(|(t, st)| iced::widget::span(t).font(match st {
             Some(super::codec::Style::Script) => cosmic::iced::Font::with_name("Isabellum Scripts"),
-            Some(super::codec::Style::Bold) => cosmic::iced::Font { weight: cosmic::iced::font::Weight::Bold, ..normal },
+            Some(super::codec::Style::Bold) => bold_of(normal),
             _ => normal,
         }))
         .collect();
@@ -1305,8 +1307,8 @@ fn symbol_text_in<'a>(text: &str, table: &dyn super::codec::Symbols, size: f32, 
 fn symbol_font(st: Option<super::codec::Style>) -> cosmic::iced::Font {
     match st {
         Some(super::codec::Style::Script) => cosmic::iced::Font::with_name("Isabellum Scripts"),
-        Some(super::codec::Style::Bold) => cosmic::iced::Font { weight: cosmic::iced::font::Weight::Bold, ..cosmic::font::mono() },
-        _ => cosmic::font::mono(),
+        Some(super::codec::Style::Bold) => code_font_bold(),
+        _ => code_font(),
     }
 }
 
@@ -1387,8 +1389,8 @@ fn hover_card<'a>(ws: &'a Workspace, h: &super::Hover) -> Option<Element<'a, Mes
 fn block_code<'a>(ws: Option<&'a Workspace>, t: &'a Theory, i: usize, block: &Block, marked: bool, table: &dyn super::codec::Symbols, current: bool) -> Element<'a, Message> {
     let Some(Some(v)) = t.block_views.get(i) else { return highlighted_block(t, block) };
     let editor = iced::widget::text_editor(&v.content)
-        .font(cosmic::font::mono())
-        .size(z(13.0))
+        .font(code_font())
+        .size(code_size())
         .line_height(iced::widget::text::LineHeight::Relative(CODE_LINE))
         .padding(CODE_PADDING)
         .width(block_code_width(t.code_columns.max(v.columns)))
@@ -1427,7 +1429,7 @@ fn highlighted_block<'a>(t: &Theory, block: &Block) -> Element<'a, Message> {
         .highlighted(block.start, block.end)
         .into_iter()
         .map(|(text, hl)| {
-            let mut span = iced::widget::span(text).font(cosmic::font::mono());
+            let mut span = iced::widget::span(text).font(code_font());
             if let Some(hl) = hl {
                 let format = highlight_format(&hl, &theme);
                 if let Some(color) = format.color {
@@ -1483,6 +1485,97 @@ pub fn vim_mode_now() -> Option<super::vim::Mode> {
 /// A size at the current zoom
 pub fn z(px: f32) -> f32 {
     (px * zoom()).round()
+}
+
+/// The advance of a character of code, in em: Noto Sans Mono's and the usual monospace's. What
+/// the layout widens and wraps by; the editors draw at the font's own advance
+pub const CODE_ADVANCE: f32 = 0.6;
+
+/// Code's size at the current zoom (Settings ▸ Code ▸ Code size): in cells, the Source view and
+/// the proof window
+pub fn code_size() -> f32 {
+    z(super::settings::code_size())
+}
+
+/// An iced family name that lives as long as the app (`Family::Name` takes a `&'static str`; the
+/// few names the human chooses are kept once)
+fn interned(name: &str) -> &'static str {
+    static NAMES: std::sync::LazyLock<std::sync::Mutex<std::collections::HashMap<String, &'static str>>> = std::sync::LazyLock::new(Default::default);
+    let mut names = NAMES.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(found) = names.get(name) {
+        return found;
+    }
+    let leaked: &'static str = Box::leak(name.to_string().into_boxed_str());
+    names.insert(name.to_string(), leaked);
+    leaked
+}
+
+fn weight_of(weight: u16) -> cosmic::iced::font::Weight {
+    use cosmic::iced::font::Weight;
+    match weight {
+        ..=499 => Weight::Normal,
+        500..=649 => Weight::Semibold,
+        _ => Weight::Bold,
+    }
+}
+
+/// The weight regular text of `font` is drawn in: Semibold with Thicken text where the family has
+/// one, else Regular
+fn thick_weight(font: &cosmic::iced::Font) -> cosmic::iced::font::Weight {
+    use super::text_weight::{NORMAL, SEMIBOLD, weight_in};
+    if super::settings::thicken() { weight_of(weight_in(super::settings::cosmic_family(font.family), SEMIBOLD)) } else { weight_of(NORMAL) }
+}
+
+/// The body font's weight for the prose renderer
+fn body_weight(font: super::settings::TextFont) -> u16 {
+    use super::text_weight::{NORMAL, SEMIBOLD, has_semibold};
+    let family = super::settings::cosmic_family(font.editor_font().family);
+    if super::settings::thicken() && has_semibold(family) { SEMIBOLD } else { NORMAL }
+}
+
+/// The bold of `font`: Bold where its family has one, else the weight it has (Regular, or
+/// Semibold when thickened), never another family's face
+pub fn bold_of(font: cosmic::iced::Font) -> cosmic::iced::Font {
+    use super::text_weight::{BOLD, NORMAL, weight_in};
+    let bold = weight_in(super::settings::cosmic_family(font.family), BOLD);
+    cosmic::iced::Font { weight: if bold == NORMAL { font.weight } else { weight_of(bold) }, ..font }
+}
+
+/// Find out, before the view is built and drawn, which weights the chosen fonts have. The answer
+/// is kept; while the widgets draw they hold the font system, so a font looked up then (a
+/// highlighter's bold, the prose editor's body) would wait for itself
+pub fn warm_fonts() {
+    use super::text_weight::{BOLD, SEMIBOLD, has_weight};
+    let code = super::settings::cosmic_family(code_font_family());
+    let _ = (has_weight(code, SEMIBOLD), has_weight(code, BOLD));
+    for font in [super::settings::display().font] {
+        let _ = has_weight(super::settings::cosmic_family(font.editor_font().family), SEMIBOLD);
+    }
+}
+
+fn code_font_family() -> cosmic::iced::font::Family {
+    cosmic::iced::font::Family::Name(interned(&super::settings::code_font()))
+}
+
+/// The code font (Settings ▸ Code ▸ Code font) in regular text, upright: in cells, the Source
+/// view, goals, messages and the names in the text. Semibold with Thicken text where it has one
+pub fn code_font() -> cosmic::iced::Font {
+    let mut font = cosmic::iced::Font { family: code_font_family(), ..cosmic::font::mono() };
+    font.weight = thick_weight(&font);
+    font.style = cosmic::iced::font::Style::Normal;
+    font
+}
+
+/// The code font in bold (the theory's name in the title, bold symbols): its Bold if the family
+/// has one, else its regular weight
+pub fn code_font_bold() -> cosmic::iced::Font {
+    bold_of(code_font())
+}
+
+/// The code font as the highlighter wants a class: bold and/or italic
+pub fn code_font_in(bold: bool, italic: bool) -> cosmic::iced::Font {
+    let font = if bold { code_font_bold() } else { code_font() };
+    cosmic::iced::Font { style: if italic { cosmic::iced::font::Style::Italic } else { cosmic::iced::font::Style::Normal }, ..font }
 }
 
 /// One message in a cell's card, under its code (an error, a warning). Collapsed, one line: a
@@ -1677,7 +1770,7 @@ fn summary_text<'a>(t: &Theory, m: &super::editor::ProverMessage, first: &str, t
     }
     let spans: Vec<iced::widget::text::Span<'a, (), cosmic::iced::Font>> = summary_runs(&line, &terms, t.profile.message_quote())
         .into_iter()
-        .map(|(text, term)| iced::widget::span(text).font(if term { cosmic::font::mono() } else { cosmic::font::default() }))
+        .map(|(text, term)| iced::widget::span(text).font(if term { code_font() } else { cosmic::font::default() }))
         .collect();
     iced::widget::rich_text(spans).size(z(12.0)).wrapping(iced::widget::text::Wrapping::None).into()
 }
@@ -2271,8 +2364,8 @@ fn block_editor_in<'a>(ws: Option<&'a Workspace>, t: &'a Theory, window: bool, i
     }
     let editor = iced::widget::text_editor(&be.content)
         .id(block_editor_id())
-        .font(cosmic::font::mono())
-        .size(z(13.0))
+        .font(code_font())
+        .size(code_size())
         .line_height(iced::widget::text::LineHeight::Relative(CODE_LINE))
         .padding(CODE_PADDING)
         .on_action(Message::BlockAction)
@@ -2363,7 +2456,7 @@ fn block_editor_in<'a>(ws: Option<&'a Workspace>, t: &'a Theory, window: bool, i
                     ..Default::default()
                 }));
                 let inset = widget::row::with_capacity(2).spacing(6).push(rule).push(card).height(Length::Shrink);
-                let left = CODE_PADDING.left + indent as f32 * z(13.0) * 0.6;
+                let left = CODE_PADDING.left + indent as f32 * code_size() * CODE_ADVANCE;
                 banded(super::gap::Gap::new(
                     code,
                     widget::container(inset).padding(Padding { top: 6.0, bottom: 8.0, left, right: 6.0 }).width(Length::Fixed(width)),
@@ -2455,7 +2548,7 @@ fn prose_editor<'a>(t: &'a Theory, be: &'a super::editor::BlockEditor, vim_mode:
         None => (1.0, false),
     };
     let serif = cosmic::iced::Font {
-        weight: if bold { cosmic::iced::font::Weight::Bold } else { cosmic::iced::font::Weight::Normal },
+        weight: if bold { cosmic::iced::font::Weight::Bold } else { super::settings::display().font.editor_font().weight },
         ..super::settings::display().font.editor_font()
     };
     let size = prose_size();
@@ -2558,14 +2651,14 @@ pub fn prose_format(hl: &super::editor::Hl, theme: &cosmic::Theme) -> iced::adva
         // the code's colours already set it apart)
         Hl::Sem(_) | Hl::Keyword => {
             let mut f = highlight_format(hl, theme);
-            f.font = Some(cosmic::font::mono());
+            f.font = Some(code_font());
             f
         }
         // Rendered markup: bold and emphasis in the prose's own font
         Hl::Bold | Hl::Emph => iced::advanced::text::highlighter::Format {
             color: None,
             font: Some(cosmic::iced::Font {
-                weight: if *hl == Hl::Bold { cosmic::iced::font::Weight::Bold } else { cosmic::iced::font::Weight::Normal },
+                weight: if *hl == Hl::Bold { cosmic::iced::font::Weight::Bold } else { super::settings::display().font.editor_font().weight },
                 style: if *hl == Hl::Emph { cosmic::iced::font::Style::Italic } else { cosmic::iced::font::Style::Normal },
                 ..super::settings::display().font.editor_font()
             }),
@@ -2598,8 +2691,8 @@ pub fn reference_window(app: &App, id: iced::window::Id) -> Element<'_, Message>
         let t = &r.theory;
         let pad = Padding::from(sp.space_s as f32);
         let code = iced::widget::text_editor(&t.source)
-            .font(cosmic::font::mono())
-            .size(z(13.0))
+            .font(code_font())
+            .size(code_size())
             .line_height(iced::widget::text::LineHeight::Relative(CODE_LINE))
             .padding(pad)
             .height(Length::Shrink)
@@ -2651,7 +2744,7 @@ fn reference_lines(r: &super::Reference) -> (usize, usize) {
 
 /// Where a reference's lines are drawn, below its text's top, wrapped at this width
 fn reference_rows(r: &super::Reference, width: f32) -> impl Fn(usize) -> f32 {
-    let per_row = (width / (z(13.0) * 0.6)).floor().max(20.0) as usize;
+    let per_row = (width / (code_size() * CODE_ADVANCE)).floor().max(20.0) as usize;
     let rows: Vec<usize> = r.theory.decoded.text.split('\n').map(|l| l.chars().count().div_ceil(per_row).max(1)).collect();
     move |line| rows.iter().take(line).sum::<usize>() as f32 * code_line_height()
 }
@@ -2924,7 +3017,7 @@ fn completion_bar(t: &Theory) -> Option<Element<'_, Message>> {
 
 /// The source view's width for lines this long: their measure, within limits (longer lines wrap)
 pub fn source_width(columns: usize) -> f32 {
-    (columns.clamp(60, 100) as f32 + 4.0) * z(14.0) * 0.6 + 2.0 * spacing().space_s as f32
+    (columns.clamp(60, 100) as f32 + 4.0) * code_size() * CODE_ADVANCE + 2.0 * spacing().space_s as f32
 }
 
 /// Where the proof state goes relative to the proof it belongs to
@@ -3029,7 +3122,7 @@ const CODE_LINE: f32 = 1.4;
 
 /// The source view's line height
 pub fn source_line_height() -> f32 {
-    z(14.0) * CODE_LINE
+    code_size() * CODE_LINE
 }
 
 pub fn popout_scroll_id() -> widget::Id {
@@ -3062,7 +3155,7 @@ fn source<'a>(ws: &'a Workspace, t: &'a Theory, inline: Option<&'a Workspace>, t
             (line(cs), line(ce.saturating_sub(1).max(cs)))
         });
     // (in rows as drawn: a long line wraps onto several)
-    let per_row = ((source_width - pad.left - pad.right) / (z(14.0) * 0.6)).floor().max(20.0) as usize;
+    let per_row = ((source_width - pad.left - pad.right) / (code_size() * CODE_ADVANCE)).floor().max(20.0) as usize;
     let rows: Vec<usize> = t.decoded.text.split('\n').map(|l| l.chars().count().div_ceil(per_row).max(1)).collect();
     let row_top = |line: usize| pad.top + rows.iter().take(line).sum::<usize>() as f32 * source_line_height();
     let line = construct.map_or(t.source.cursor().position.line, |(l0, _)| l0);
@@ -3135,8 +3228,8 @@ fn source_editor(t: &Theory, height: Length) -> Element<'_, Message> {
     let completing = !t.completions.is_empty();
     let editor = iced::widget::text_editor(&t.source)
         .id(source_editor_id())
-        .font(cosmic::font::mono())
-        .size(z(14.0))
+        .font(code_font())
+        .size(code_size())
         .line_height(iced::widget::text::LineHeight::Relative(CODE_LINE))
         .padding(sp.space_s)
         .height(height)
@@ -3326,7 +3419,7 @@ fn message_view<'a>(ws: &'a Workspace, m: &Value, table: &dyn super::codec::Symb
             kind,
             hoverable(Some(ws), super::HoverTarget::Message(key), Padding::from(2.0), {
                 let editor = iced::widget::text_editor(&v.content)
-                    .font(cosmic::font::mono())
+                    .font(code_font())
                     .size(z(13.0))
                     .padding(2)
                     .on_action(move |a| Message::ViewAction(key, a))
@@ -3729,7 +3822,7 @@ fn offer_list<'a>(ws: &'a Workspace, offers: &[super::flow::Offer], active: bool
 fn counterexample_table<'a>(headline: &str, sections: &[super::flow::Section], table: &dyn super::codec::Symbols) -> Element<'a, Message> {
     let sp = spacing();
     let mut col = widget::column::with_capacity(1 + 2 * sections.len()).spacing(sp.space_xxs).push(symbol_text_with_font(headline, table, z(14.0), cosmic::font::default()));
-    let mono = |t: String| widget::text(t).font(cosmic::font::mono()).size(z(13.0));
+    let mono = |t: String| widget::text(t).font(code_font()).size(z(13.0));
     for s in sections {
         // (each section's names in one column, as wide as the longest of them, up to 180 px)
         let longest = s.rows.iter().map(|(n, _)| table.decode(n).text.chars().count()).max().unwrap_or(1);
@@ -3944,14 +4037,14 @@ fn labelled<'a>(label: &'static str, body: Element<'a, Message>) -> Element<'a, 
     if label.chars().count() <= 1 {
         return widget::row::with_capacity(2)
             .spacing(z(4.0))
-            .push(widget::container(widget::text(label).font(cosmic::font::mono()).size(z(13.0)).class(theme::Text::Accent)).padding(Padding { top: 2.0, left: 2.0, ..Padding::ZERO }))
+            .push(widget::container(widget::text(label).font(code_font()).size(z(13.0)).class(theme::Text::Accent)).padding(Padding { top: 2.0, left: 2.0, ..Padding::ZERO }))
             .push(widget::container(body).width(Length::Fill))
             .into();
     }
     widget::row::with_capacity(2)
         .spacing(spacing().space_xs)
         .push(
-            widget::container(widget::text(label).font(cosmic::font::mono()).size(z(12.0)).class(theme::Text::Accent))
+            widget::container(widget::text(label).font(code_font()).size(z(12.0)).class(theme::Text::Accent))
                 .padding(Padding { top: 3.0, ..Padding::ZERO })
                 .width(Length::Fixed(z(52.0))),
         )
@@ -4272,8 +4365,8 @@ fn find_panel<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Eleme
 fn search_hit<'a>(m: &Value) -> Element<'a, Message> {
     let sp = spacing();
     let name = m["name"].as_str().unwrap_or("").to_string();
-    let mono = |t: String, size: f32| widget::text(t).font(cosmic::font::mono()).size(z(size));
-    let bold = cosmic::iced::Font { weight: cosmic::iced::font::Weight::Bold, ..cosmic::font::mono() };
+    let mono = |t: String, size: f32| widget::text(t).font(code_font()).size(z(size));
+    let bold = code_font_bold();
     let mut body = widget::column::with_capacity(3).spacing(1).width(Length::Fill);
     body = body.push(widget::text(name.clone()).font(bold).size(z(13.0)));
     body = body.push(mono(m["type"].as_str().unwrap_or("").to_string(), 12.0));
@@ -4465,7 +4558,7 @@ fn history_panel(ws: &Workspace) -> Element<'_, Message> {
                     .push(widget::text::body(author).font(cosmic::iced::Font { weight: cosmic::iced::font::Weight::Semibold, ..cosmic::font::default() }))
                     .push(widget::text::body(what).class(muted())),
             )
-            .push(widget::text(h["summary"].as_str().unwrap_or("").to_string()).font(cosmic::font::mono()).size(z(12.0)))
+            .push(widget::text(h["summary"].as_str().unwrap_or("").to_string()).font(code_font()).size(z(12.0)))
             .width(Length::Fill);
         if reverted {
             text = text.push(widget::text::caption("reverted").class(muted()));

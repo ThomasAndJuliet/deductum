@@ -1071,13 +1071,14 @@ fn the_goal_opens_a_gap_in_a_long_proof_and_clicks_below_it_land_right() {
     let i = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.name == "lemma").unwrap();
     let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(i));
     app.workspace.as_mut().unwrap().theory.as_mut().unwrap().cursor = text[..text.find("have three").unwrap()].chars().count() + 3;
-    let mut h = Harness::new(Size::new(1000.0, 900.0));
+    // (taller than the old 900: the 14 px code of Paper's cells makes the proof longer than that)
+    let mut h = Harness::new(Size::new(1000.0, 1100.0));
     h.focus(&app, super::view::block_editor_id());
     h.draw(&app, "gap-narrow-long");
     // Click down the left of the proof until the caret lands on "have ten"'s line (below the gap)
     let want = text.lines().skip(2).position(|l| l.contains("have ten")).unwrap();
     let mut landed = None;
-    for y in (150..880).step_by(6) {
+    for y in (150..1080).step_by(6) {
         let msgs = h.click(&app, cosmic::iced::Point::new(130.0, y as f32));
         // (only what reaches the open editor: a click outside the proof would close it)
         for m in msgs.into_iter().filter(|m| matches!(m, super::Message::BlockAction(_))) {
@@ -1367,8 +1368,9 @@ fn the_goal_beside_stays_level_with_its_construct() {
     // page's background
     let img = image::RgbaImage::from_raw(1460, 966, png).expect("the frame's pixels");
     let bg = *img.get_pixel(1440, 5);
-    let x = 1100;
-    let top = (0..img.height()).find(|&y| img.get_pixel(x, y) != &bg);
+    // (right of the cells, which are 14 px code wide; the goal sits past what is level with it,
+    // which is the cell, or the whole column where the page has a wide item there)
+    let top = (0..img.height()).find(|&y| (460..1440).step_by(10).any(|x| img.get_pixel(x, y) != &bg));
     eprintln!("goal card top at {top:?}");
     let top = top.expect("a goal beside") as f32;
     assert!(top > 300.0, "not jumped to the top of the window (top = {top})");
