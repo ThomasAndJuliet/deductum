@@ -92,6 +92,10 @@ pub enum Msg {
     ToggleDocFolder(String),
     /// Go to the next cell that failed or is unfinished
     NextProblem(super::attention::Problem),
+    /// Quit, once the edits have reached the host
+    Quit,
+    /// The settings page, on one of its pages (Keyboard shortcuts, About)
+    SettingsAt(super::settings_page::Sub),
     /// A toast's time ran out, or it was closed
     ToastGone(cosmic::widget::ToastId),
     /// A toast's Undo was pressed: the toast goes and the last step is undone
@@ -288,6 +292,17 @@ impl App {
                 }
             }
             Msg::OpenDocument(path) => return self.open_document(path),
+            Msg::Quit => {
+                if self.defer_leave(super::DeferredLeave::Quit) {
+                    return self.flush_edits();
+                }
+                return cosmic::iced::exit();
+            }
+            Msg::SettingsAt(sub) => {
+                let task = self.shell_update(Msg::Settings(true));
+                self.shell.page.sub = sub;
+                return task;
+            }
             Msg::ToastGone(id) => self.shell.toasts.gone(id),
             Msg::ToastUndo(id) => {
                 self.shell.toasts.gone(id);
@@ -353,6 +368,10 @@ pub fn icon_handle(name: &'static str) -> widget::icon::Handle {
     match name {
         "sidebar-left" => widget::icon::from_svg_bytes(SIDEBAR_LEFT).symbolic(true),
         "sidebar-right" => widget::icon::from_svg_bytes(SIDEBAR_RIGHT).symbolic(true),
+        // Cerea's views icons (res/icons, from its origin/main) and the terminal's agent session
+        "paper-mode-symbolic" => widget::icon::from_svg_bytes(include_bytes!("../res/icons/paper-mode-symbolic.svg").as_slice()).symbolic(true),
+        "source-view-symbolic" => widget::icon::from_svg_bytes(include_bytes!("../res/icons/source-view-symbolic.svg").as_slice()).symbolic(true),
+        "ai-session-symbolic" => widget::icon::from_svg_bytes(include_bytes!("../res/icons/ai-session-symbolic.svg").as_slice()).symbolic(true),
         #[cfg(windows)]
         "view-dual-symbolic" => widget::icon::from_svg_bytes(include_bytes!("../res/icons/view-dual-symbolic.svg").as_slice()).symbolic(true),
         #[cfg(windows)]
@@ -484,73 +503,101 @@ pub fn backend_label(backend: &str) -> &'static str {
 
 // ----- the header bar
 
-/// The header's start: the sidebar's toggle, the view switch, then undo and redo apart from it
+/// The header's start: the sidebar's toggle, then the menu bar
 pub fn header_start(app: &App) -> Vec<Element<'_, Message>> {
-    let mut items: Vec<Element<'_, Message>> = vec![icon_button("sidebar-left", "Show or hide the sidebar", Some(Message::ToggleSidebar))];
-    if app.shell.settings_open {
-        return items;
-    }
-    if let Some(t) = app.workspace.as_ref().and_then(|w| w.theory.as_ref()) {
-        items.push(widget::Space::new().width(Length::Fixed(4.0)).into());
-        // (its chosen part in the muted accent, household rule 6)
-        items.push(widget::segmented_control::horizontal(&app.mode_model)
-            .width(Length::Shrink)
-            .style(super::tones::muted_segmented())
-            .on_activate(Message::SetModeEntity)
-            .into());
-        items.push(widget::Space::new().width(Length::Fixed(sp().space_s as f32)).into());
-        items.push(icon_button("edit-undo-symbolic", "Undo your last edit (Ctrl+Z)", t.can_undo.then_some(Message::Undo)));
-        items.push(icon_button("edit-redo-symbolic", "Redo (Ctrl+Shift+Z)", t.can_redo.then_some(Message::Redo)));
-        if !app.back.is_empty() {
-            items.push(icon_button("go-previous-symbolic", "Back to where Ctrl+click came from (Alt+Left)", Some(Message::Back)));
-        }
-    }
-    items
+    vec![
+        icon_button("sidebar-left", "Show or hide the sidebar (F9)", Some(Message::ToggleSidebar)),
+        super::menubar::bar(app),
+    ]
 }
 
-/// The header's end: the session's lifecycle, its folder in other apps, the goal's place, the
-/// settings and the right sidebar
-pub fn header_end(app: &App) -> Vec<Element<'_, Message>> {
-    let mut items: Vec<Element<'_, Message>> = Vec::new();
-    let settings = icon_button("preferences-system-symbolic", "Settings (Ctrl+,)", Some(Message::Shell(Msg::ToggleSettings)));
-    let Some(ws) = &app.workspace else {
-        if app.new_session.is_none() && !app.shell.settings_open {
-            items.push(widget::button::suggested("New session").on_press(Message::NewSession(true)).into());
+/// Cerea's views bar for Literate and Source: two icon parts joined, rounded at the ends only, the
+/// chosen one in the muted accent; the same two parts with no document open, dimmed, saying why
+pub fn views_bar(app: &App) -> Element<'_, Message> {
+    let t = app.workspace.as_ref().and_then(|w| w.theory.as_ref()).filter(|_| !app.shell.settings_open);
+    let [tl, tr, br, bl] = theme::active().cosmic().corner_radii.radius_xl;
+    let parts = [
+        (Mode::Literate, "paper-mode-symbolic", "Literate: the document as a page of text and proofs"),
+        (Mode::Source, "source-view-symbolic", "Source: the document's own text"),
+    ];
+    let last = parts.len() - 1;
+    let space = sp();
+    let row: Vec<Element<'_, Message>> = parts
+        .into_iter()
+        .enumerate()
+        .map(|(n, (mode, icon, tip))| {
+            let radius = [if n == 0 { tl } else { 0.0 }, if n == last { tr } else { 0.0 }, if n == last { br } else { 0.0 }, if n == 0 { bl } else { 0.0 }];
+            let b = button::custom(widget::icon(icon_handle(icon)).size(16))
+                .class(super::tones::toggled_rounded(t.is_some_and(|t| t.mode == mode), radius))
+                .padding([space.space_xxs, space.space_xs])
+                .on_press_maybe(t.map(|_| Message::SetMode(mode)));
+            let tip = if t.is_some() { tip.to_string() } else { "Open a document to choose how it is shown".to_string() };
+            widget::tooltip(b, widget::text(tip), widget::tooltip::Position::Bottom).into()
+        })
+        .collect();
+    widget::container(widget::Row::with_children(row).align_y(Alignment::Center))
+        .class(theme::Container::custom(|t| {
+            let c = t.cosmic();
+            iced::widget::container::Style {
+                background: Some(Color::from(c.background(t.transparent).component.base).into()),
+                border: Border { radius: c.corner_radii.radius_xl.into(), width: 1.0, color: c.bg_divider().into() },
+                ..Default::default()
+            }
+        }))
+        .into()
+}
+
+/// The Open in button: a menu of the session's folder in Files, in Zed, or in a terminal
+pub fn open_in(app: &App) -> Element<'static, Message> {
+    let folder = app.workspace.as_ref().and_then(|w| w.info.as_ref()).is_some_and(|i| i["folder"].as_str().is_some());
+    let row = |label: &str, opener: link::Opener| {
+        if folder {
+            super::menubar::Row::Item { label: label.into(), keys: "", message: Message::OpenFolder(opener), bold: false }
+        } else {
+            super::menubar::Row::Off { label: label.into(), keys: "", why: "Open a session first".into() }
         }
-        items.push(settings);
-        return items;
     };
-    if !app.shell.settings_open {
-        // (a narrow window keeps its room for the document's own controls)
-        if ws.info.is_some() && app.window_width >= 1250.0 {
-            items.push(widget::Space::new().width(Length::Fixed(sp().space_xxs as f32)).into());
-            items.push(icon_button("folder-open-symbolic", "Open the session's folder in Files", Some(Message::OpenFolder(link::Opener::Files))));
-            items.push(icon_button("accessories-text-editor-symbolic", "Open the session's folder in Zed", Some(Message::OpenFolder(link::Opener::Zed))));
-            items.push(icon_button("utilities-terminal-symbolic", "Open a terminal in the session's folder", Some(Message::OpenFolder(link::Opener::Terminal))));
-        }
-        items.push(widget::Space::new().width(Length::Fixed(sp().space_xxs as f32)).into());
-        // The goal beside the text when there is room (off: under the construct, the page centred)
-        let beside = super::view::goal_beside_on();
-        items.push(
-            widget::tooltip(
-                // (a toggle: on, filled with the muted accent, household rule 6)
-                widget::button::icon(icon_handle(if beside { "view-dual-symbolic" } else { "view-paged-symbolic" }))
-                    .class(if beside { super::tones::muted_button(theme::Button::Icon) } else { theme::Button::Icon })
-                    .on_press(Message::ToggleGoalBeside),
-                widget::text(if beside {
-                    "The goal beside the text when there is room: click to keep it under the proof, the page centred"
-                } else {
-                    "The goal under the proof, the page centred: click to put it beside the text when there is room"
-                }),
-                widget::tooltip::Position::Bottom,
-            )
-            .into(),
-        );
-    }
-    items.push(settings);
-    if !app.shell.settings_open {
-        items.push(icon_button("sidebar-right", "Show or hide proof output and tools", Some(Message::ToggleRight)));
-    }
+    let rows = vec![row("Open in Files", link::Opener::Files), row("Open in Zed", link::Opener::Zed), row("Open a terminal here", link::Opener::Terminal)];
+    let root = widget::tooltip(
+        button::custom(
+            widget::row::with_capacity(2)
+                .spacing(2)
+                .align_y(Alignment::Center)
+                .push(widget::icon(icon_handle("folder-open-symbolic")).size(16))
+                .push(widget::icon(icon_handle("pan-down-symbolic")).size(12)),
+        )
+        .class(theme::Button::MenuRoot)
+        .padding([4, 8]),
+        widget::text("Open the session's folder in Files, Zed or a terminal"),
+        widget::tooltip::Position::Bottom,
+    );
+    super::menubar::dropdown(root.into(), rows)
+}
+
+/// The goal beside the text when there is room (off: under the construct, the page centred)
+pub fn goal_beside_button<'a>() -> Element<'a, Message> {
+    let beside = super::view::goal_beside_on();
+    widget::tooltip(
+        // (a toggle: on, filled with the muted accent, household rule 6)
+        widget::button::icon(icon_handle(if beside { "view-dual-symbolic" } else { "view-paged-symbolic" }))
+            .class(if beside { super::tones::muted_button(theme::Button::Icon) } else { theme::Button::Icon })
+            .on_press(Message::ToggleGoalBeside),
+        widget::text(if beside {
+            "The goal beside the text when there is room: click to keep it under the proof, the page centred"
+        } else {
+            "The goal under the proof, the page centred: click to put it beside the text when there is room"
+        }),
+        widget::tooltip::Position::Bottom,
+    )
+    .into()
+}
+
+/// The header's end: Open in, the views bar, the goal's place and the right sidebar. All of them
+/// are there with no session or the settings page open (the views dimmed), so that nothing moves
+pub fn header_end(app: &App) -> Vec<Element<'_, Message>> {
+    let mut items: Vec<Element<'_, Message>> = vec![open_in(app), views_bar(app)];
+    items.push(goal_beside_button());
+    items.push(icon_button("sidebar-right", "Show or hide proof output and tools", Some(Message::ToggleRight)));
     items
 }
 

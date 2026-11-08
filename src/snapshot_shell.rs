@@ -172,11 +172,13 @@ fn settings_change_at_once_and_vim_has_left_the_header() {
     assert!(written.editing.vim);
     assert_eq!(super::settings::loogle(), super::settings::Loogle::Local, "and published for the Lean search");
     drop(turn);
-    // the header no longer has a Vim button; it has Settings
+    // the header has no Vim or Settings button: Settings is in the Edit menu (Ctrl+,)
     app.shell.settings_open = false;
-    let found: Vec<Message> = (700..1400).step_by(8).flat_map(|x| clicks(header(&app), Point::new(x as f32, 24.0), Size::new(1400.0, 48.0))).collect();
-    assert!(!found.iter().any(|m| matches!(m, Message::ToggleVim)), "{found:?}");
-    assert!(found.iter().any(|m| matches!(m, Message::Shell(Msg::ToggleSettings))), "{found:?}");
+    let found: Vec<Message> = (0..1400).step_by(8).flat_map(|x| clicks(header(&app), Point::new(x as f32, 24.0), Size::new(1400.0, 48.0))).collect();
+    assert!(!found.iter().any(|m| matches!(m, Message::ToggleVim | Message::Shell(Msg::ToggleSettings))), "{found:?}");
+    let menus = super::menubar::menus(&app);
+    let edit = &menus.iter().find(|(t, _)| *t == "Edit").unwrap().1;
+    assert!(matches!(super::menubar::find(edit, "Settings"), Some(super::menubar::Row::Item { message: Message::Shell(Msg::ToggleSettings), keys: "Ctrl+,", .. })));
     // Opening a session leaves the settings for the document
     app.shell.settings_open = true;
     let _ = cosmic::Application::update(&mut app, Message::OpenSession("local".into(), "s2".into()));
@@ -1050,4 +1052,183 @@ fn deleting_a_block_says_so_in_a_toast_with_an_undo() {
     let _ = cosmic::Application::update(&mut app, Message::CopyText("x".into()));
     assert_eq!(app.shell.toasts.live.last().map(|l| (l.text.as_str(), l.undo)), Some(("Copied", false)));
     assert!(app.status.is_none());
+}
+
+// ----- the header's order and the menu bar
+
+#[test]
+fn the_header_is_sidebar_menus_chip_pause_stop_then_open_in_views_goal_and_panel() {
+    let mut app = chip_scene(|a| a.back.push(("/home/me/Research/Demo/Demo.thy".into(), 0)));
+    app.workspace.as_mut().unwrap().theory.as_mut().unwrap().can_undo = true;
+    for width in [1400.0, 1100.0, 900.0] {
+        app.window_width = width;
+        let hits: Vec<(u32, Message)> = (0..1400u32).step_by(2).flat_map(|x| clicks(header(&app), Point::new(x as f32, 24.0), Size::new(1400.0, 48.0)).into_iter().map(move |m| (x, m))).collect();
+        let first = |wanted: &dyn Fn(&Message) -> bool| hits.iter().find(|(_, m)| wanted(m)).map(|h| h.0).unwrap_or_else(|| panic!("no such button at {width}: {hits:?}"));
+        let order = [
+            first(&|m| matches!(m, Message::ToggleSidebar)),
+            first(&|m| matches!(m, Message::Lifecycle("pause"))),
+            first(&|m| matches!(m, Message::Lifecycle("stop"))),
+            first(&|m| matches!(m, Message::SetMode(Mode::Literate))),
+            first(&|m| matches!(m, Message::SetMode(Mode::Source))),
+            first(&|m| matches!(m, Message::ToggleGoalBeside)),
+            first(&|m| matches!(m, Message::ToggleRight)),
+        ];
+        assert!(order.windows(2).all(|w| w[0] < w[1]), "at {width}: {order:?}");
+        // none of what moved to the menus is a button any more
+        for (x, m) in &hits {
+            assert!(
+                !matches!(m, Message::Undo | Message::Redo | Message::Back | Message::OpenFolder(_) | Message::Shell(Msg::ToggleSettings) | Message::NewSession(_)),
+                "{m:?} at {x} is still in the header"
+            );
+        }
+        // the menu bar sits between the sidebar toggle and the chip
+        assert!(order[0] + 40 < order[1] - 400, "room for the menus: {order:?}");
+        draw_in(false, || header(&app), &format!("header-{}-dark", width as u32), Size::new(1400.0, 48.0));
+        draw_in(true, || header(&app), &format!("header-{}-light", width as u32), Size::new(1400.0, 48.0));
+    }
+    // no session: the same places, the views and the buttons dimmed and not gone
+    let none = chip_scene(|a| a.workspace = None);
+    let hits: Vec<Message> = (0..1400u32).step_by(2).flat_map(|x| clicks(header(&none), Point::new(x as f32, 24.0), Size::new(1400.0, 48.0))).collect();
+    assert!(hits.iter().any(|m| matches!(m, Message::ToggleSidebar)) && hits.iter().any(|m| matches!(m, Message::ToggleRight)));
+    assert!(!hits.iter().any(|m| matches!(m, Message::SetMode(_) | Message::Lifecycle(_))), "no session: views, pause and stop are disabled");
+    draw_in(false, || header(&none), "header-no-session-dark", Size::new(1400.0, 48.0));
+    draw_in(true, || header(&none), "header-no-session-light", Size::new(1400.0, 48.0));
+}
+
+#[test]
+fn the_menus_hold_what_the_header_gave_up() {
+    use super::menubar::{Row, find, labels, menus};
+    let app = chip_scene(|a| {
+        a.back.push(("/home/me/Research/Demo/Demo.thy".into(), 0));
+        a.workspace.as_mut().unwrap().theory.as_mut().unwrap().can_undo = true;
+        a.workspace.as_mut().unwrap().caps.interrupt = true;
+        a.workspace.as_mut().unwrap().activity = Some(json!({"prover": {"rss_mb": 1300}, "running": [{"name": "by", "seconds": 9}], "theories": []}));
+    });
+    let all = menus(&app);
+    assert_eq!(all.iter().map(|(t, _)| *t).collect::<Vec<_>>(), ["File", "Edit", "View", "Prover", "Help"]);
+    let menu = |title: &str| all.iter().find(|(t, _)| *t == title).unwrap().1.clone();
+    let msg = |title: &str, label: &str| match find(&menu(title), label) {
+        Some(Row::Item { message, .. } | Row::Check { message, .. }) => message.clone(),
+        other => panic!("{title} > {label}: {other:?}"),
+    };
+    // wired to what exists
+    assert!(matches!(msg("File", "New session\u{2026}"), Message::NewSession(true)));
+    assert!(matches!(msg("File", "Save"), Message::Save));
+    assert!(matches!(msg("File", "Files"), Message::OpenFolder(super::link::Opener::Files)));
+    assert!(matches!(msg("File", "Zed"), Message::OpenFolder(super::link::Opener::Zed)));
+    assert!(matches!(msg("File", "A terminal"), Message::OpenFolder(super::link::Opener::Terminal)));
+    assert!(matches!(msg("File", "Close session"), Message::CloseWorkspace));
+    assert!(matches!(msg("File", "Quit"), Message::Shell(Msg::Quit)));
+    assert!(matches!(msg("Edit", "Undo"), Message::Undo));
+    assert!(matches!(msg("Edit", "Copy"), Message::CopySelection(false)));
+    assert!(matches!(msg("Edit", "Cut"), Message::CopySelection(true)));
+    assert!(matches!(msg("Edit", "Settings"), Message::Shell(Msg::ToggleSettings)));
+    assert!(matches!(msg("View", "Sidebar"), Message::ToggleSidebar));
+    assert!(matches!(msg("View", "Literate"), Message::SetMode(Mode::Literate)));
+    assert!(matches!(msg("View", "Source"), Message::SetMode(Mode::Source)));
+    assert!(matches!(msg("View", "Larger text"), Message::Zoom(1)));
+    assert!(matches!(msg("View", "Back"), Message::Back));
+    assert!(matches!(msg("Prover", "Pause"), Message::Lifecycle("pause")));
+    assert!(matches!(msg("Prover", "Stop"), Message::Lifecycle("stop")));
+    assert!(matches!(msg("Prover", "Next failure"), Message::Shell(Msg::NextProblem(super::attention::Problem::Failed))));
+    assert!(matches!(msg("Prover", "Search theorems\u{2026}"), Message::Panel(super::Panel::Search)));
+    assert!(matches!(msg("Prover", "Interrupt running proofs"), Message::Lifecycle("cancel")));
+    assert!(matches!(msg("Help", "About Deductum"), Message::Shell(Msg::SettingsAt(super::settings_page::Sub::About))));
+    // the shortcuts shown are the ones that exist
+    let keys = |title: &str, label: &str| match find(&menu(title), label) {
+        Some(Row::Item { keys, .. } | Row::Check { keys, .. } | Row::Off { keys, .. }) => *keys,
+        other => panic!("{other:?}"),
+    };
+    assert_eq!(
+        [keys("View", "Literate"), keys("View", "Source"), keys("View", "Sidebar"), keys("View", "Back"), keys("Prover", "Next failure"), keys("Prover", "Next unfinished")],
+        ["Ctrl+1", "Ctrl+2", "F9", "Alt+Left", "F8", "Shift+F8"]
+    );
+    // features not built yet are there, disabled, each saying why
+    let not_built = [("Edit", "Copy as Markdown"), ("Edit", "Find"), ("Edit", "Find and replace"), ("Edit", "Paste"), ("Edit", "Select all"), ("File", "Save all"), ("View", "Full screen")];
+    for (title, label) in not_built {
+        match find(&menu(title), label) {
+            Some(Row::Off { why, .. }) => assert!(why.len() > 10, "{label}: {why}"),
+            other => panic!("{title} > {label} should be disabled with a reason: {other:?}"),
+        }
+    }
+    assert!(labels(&menu("Edit")).contains(&"(Copy as Markdown)".to_string()));
+    // and what cannot be used in this state says why
+    let stopped = chip_scene(|a| set_lifecycle(a, "Stopped"));
+    let prover = menus(&stopped).into_iter().find(|(t, _)| *t == "Prover").unwrap().1;
+    assert!(matches!(find(&prover, "Stop"), Some(Row::Off { .. })));
+    assert!(matches!(find(&prover, "Restart"), Some(Row::Item { message: Message::Lifecycle("resume"), .. })));
+    assert!(matches!(find(&prover, "Start"), Some(Row::Item { message: Message::Lifecycle("resume"), .. })));
+    let none = chip_scene(|a| a.workspace = None);
+    let file = menus(&none).into_iter().find(|(t, _)| *t == "File").unwrap().1;
+    assert!(matches!(find(&file, "Save"), Some(Row::Off { .. })) && matches!(find(&file, "Close session"), Some(Row::Off { .. })));
+    // Ctrl+1, Ctrl+2 and F9 are the app's own keys, F8 and Shift+F8 too: nothing else binds them
+    let main = include_str!("main.rs");
+    for key in ["Character(\"1\") if modifiers.command()", "Character(\"2\") if modifiers.command()", "Named::F9", "Named::F8) if modifiers.shift()"] {
+        assert_eq!(main.matches(key).count(), 1, "{key}");
+    }
+}
+
+#[test]
+fn the_menu_bar_folds_into_one_menu_when_the_window_is_narrow() {
+    let mut app = chip_scene(|_| {});
+    app.window_width = 1400.0;
+    let wide = draw_in(false, || super::menubar::bar(&app), "menubar-wide-dark", Size::new(500.0, 48.0));
+    app.window_width = super::menubar::FOLD_WIDTH - 1.0;
+    let narrow = draw_in(false, || super::menubar::bar(&app), "menubar-folded-dark", Size::new(500.0, 48.0));
+    assert_ne!(wide, narrow, "the folded bar is another drawing");
+    // folded, the bar is narrower than the five words
+    let width_of = |frame: &[u8]| {
+        let (w, h) = (500usize, 48usize);
+        let bg = &frame[0..4];
+        (0..w).rev().find(|x| (0..h).any(|y| &frame[(y * w + x) * 4..(y * w + x) * 4 + 4] != bg)).unwrap_or(0)
+    };
+    assert!(width_of(&narrow) < width_of(&wide), "{} < {}", width_of(&narrow), width_of(&wide));
+}
+
+/// A frame drawn after the pointer has clicked at `at` (a menu opened, a popover shown)
+fn draw_clicked<'a>(light: bool, build: impl FnOnce() -> Element<'a, Message>, at: &[Point], name: &str, size: Size) -> Vec<u8> {
+    use cosmic::iced::advanced::clipboard;
+    use cosmic::iced::advanced::renderer::{Headless, Style};
+    use cosmic::iced::runtime::user_interface::{Cache, UserInterface};
+    use cosmic::iced::{Event, Font, Pixels, mouse};
+    let _turn = ui_turn();
+    cosmic::theme::set_active(if light { cosmic::theme::ThemeType::Light } else { cosmic::theme::ThemeType::Dark });
+    super::load_fonts();
+    let mut renderer = cosmic::iced::futures::executor::block_on(<cosmic::Renderer as Headless>::new(Font::default(), Pixels(14.0), Some("tiny-skia"))).unwrap();
+    let theme = cosmic::theme::active();
+    let mut ui = UserInterface::build(build(), size, Cache::default(), &mut renderer);
+    let mut messages = Vec::new();
+    let mut cursor = mouse::Cursor::Unavailable;
+    for p in at {
+        cursor = mouse::Cursor::Available(*p);
+        for event in [
+            Event::Mouse(mouse::Event::CursorMoved { position: *p }),
+            Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)),
+            Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)),
+            Event::Window(cosmic::iced::window::Event::RedrawRequested(std::time::Instant::now())),
+        ] {
+            let _ = ui.update(&[event], cursor, &mut renderer, &mut clipboard::Null, &mut messages);
+        }
+    }
+    let text: cosmic::iced::Color = theme.cosmic().on_bg_color().into();
+    ui.draw(&mut renderer, &theme, &Style { icon_color: text, text_color: text, scale_factor: 1.0 }, cursor);
+    let physical = Size::new(size.width as u32, size.height as u32);
+    let rgba = renderer.screenshot(physical, 1.0, theme.cosmic().bg_color().into());
+    if let Some(dir) = std::env::var_os("CT_SNAPSHOTS").filter(|d| !d.is_empty()) {
+        image::RgbaImage::from_raw(physical.width, physical.height, rgba.clone()).expect("a frame").save(std::path::Path::new(&dir).join(format!("{name}.png"))).expect("saved");
+    }
+    cosmic::theme::set_active(cosmic::theme::ThemeType::Dark);
+    rgba
+}
+
+#[test]
+fn each_menu_opens_under_its_word() {
+    let app = chip_scene(|a| a.workspace.as_mut().unwrap().theory.as_mut().unwrap().can_undo = true);
+    for (light, theme) in [(true, "light"), (false, "dark")] {
+        let closed = draw_in(light, || header(&app), &format!("menu-closed-{theme}"), Size::new(1400.0, 520.0));
+        for (name, x) in [("file", 65.0), ("edit", 114.0), ("view", 167.0), ("prover", 229.0), ("help", 292.0)] {
+            let open = draw_clicked(light, || header(&app), &[Point::new(x, 24.0)], &format!("menu-{name}-{theme}"), Size::new(1400.0, 520.0));
+            assert_ne!(open, closed, "the {name} menu opened ({theme})");
+        }
+    }
 }
