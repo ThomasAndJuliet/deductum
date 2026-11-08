@@ -30,12 +30,14 @@ pub enum Row {
     Check { label: String, keys: &'static str, on: bool, message: Message },
     /// What cannot be done now or is not built yet: shown disabled, its tooltip saying why
     Off { label: String, keys: &'static str, why: String },
+    /// What destroys something: last in its menu, drawn in red (the context menus' Delete)
+    Danger { label: String, keys: &'static str, message: Message },
     /// A submenu
     Sub { label: String, rows: Vec<Row> },
     Divider,
 }
 
-fn item(label: &str, keys: &'static str, message: Message) -> Row {
+pub(crate) fn item(label: &str, keys: &'static str, message: Message) -> Row {
     Row::Item { label: label.into(), keys, message, bold: false }
 }
 
@@ -43,12 +45,12 @@ fn check(label: &str, keys: &'static str, on: bool, message: Message) -> Row {
     Row::Check { label: label.into(), keys, on, message }
 }
 
-fn off(label: &str, keys: &'static str, why: &str) -> Row {
+pub(crate) fn off(label: &str, keys: &'static str, why: &str) -> Row {
     Row::Off { label: label.into(), keys, why: why.into() }
 }
 
 /// A row that acts, or else is disabled saying why
-fn act_or(label: &str, keys: &'static str, message: Result<Message, &str>) -> Row {
+pub(crate) fn act_or(label: &str, keys: &'static str, message: Result<Message, &str>) -> Row {
     match message {
         Ok(message) => item(label, keys, message),
         Err(why) => off(label, keys, why),
@@ -63,6 +65,7 @@ pub fn labels(rows: &[Row]) -> Vec<String> {
             Row::Item { label, .. } => label.clone(),
             Row::Check { label, on, .. } => format!("{}{label}", if *on { "\u{2713} " } else { "" }),
             Row::Off { label, .. } => format!("({label})"),
+            Row::Danger { label, .. } => format!("!{label}"),
             Row::Sub { label, .. } => format!("{label} \u{25b8}"),
             Row::Divider => "\u{2014}".to_string(),
         })
@@ -73,7 +76,7 @@ pub fn labels(rows: &[Row]) -> Vec<String> {
 #[cfg(test)]
 pub fn find<'a>(rows: &'a [Row], label: &str) -> Option<&'a Row> {
     rows.iter().find_map(|r| match r {
-        Row::Item { label: l, .. } | Row::Check { label: l, .. } | Row::Off { label: l, .. } if l == label => Some(r),
+        Row::Item { label: l, .. } | Row::Check { label: l, .. } | Row::Off { label: l, .. } | Row::Danger { label: l, .. } if l == label => Some(r),
         Row::Sub { label: l, rows } => if l == label { Some(r) } else { find(rows, label) },
         _ => None,
     })
@@ -173,7 +176,10 @@ pub fn menus(app: &App) -> Vec<(&'static str, Vec<Row>)> {
         Row::Divider,
         act_or("Cut", "Ctrl+X", selection.map(|_| Message::CopySelection(true))),
         act_or("Copy", "Ctrl+C", selection.map(|_| Message::CopySelection(false))),
-        off("Copy as Markdown", "", "Not built yet: copying a cell or a selection as Markdown is a new feature"),
+        act_or("Copy as Markdown", "", match app.workspace.as_ref().filter(|_| t.is_some()) {
+            Some(ws) => super::context_menu::edit_markdown(ws, &*app.table(&ws.machine)).map(Message::CopyText),
+            None => Err(no_doc),
+        }),
         off("Paste", "Ctrl+V", "Press Ctrl+V with the caret in a cell: the menu cannot yet tell which editor to paste into"),
         off("Select all", "Ctrl+A", "Press Ctrl+A with the caret in a cell: the menu cannot yet tell which editor to select in"),
         Row::Divider,
@@ -295,7 +301,7 @@ pub fn width(rows: &[Row]) -> u16 {
     let chars = |label: &str, keys: &str| (label.chars().count() + keys.chars().count()) as f32 * 8.0 + 90.0;
     rows.iter()
         .map(|r| match r {
-            Row::Item { label, keys, .. } | Row::Check { label, keys, .. } | Row::Off { label, keys, .. } => chars(label, keys),
+            Row::Item { label, keys, .. } | Row::Check { label, keys, .. } | Row::Off { label, keys, .. } | Row::Danger { label, keys, .. } => chars(label, keys),
             Row::Sub { label, rows } => chars(label, "").max(f32::from(width(rows))),
             Row::Divider => 0.0,
         })
@@ -312,6 +318,7 @@ pub fn tree(rows: Vec<Row>) -> Vec<menu::Tree<Message>> {
         .filter_map(|(i, row)| match row {
             Row::Item { label, keys, message, bold } => Some(menu::Tree::from(Element::from(entry(&label, keys, ticks.then_some(false), bold, Some(message))))),
             Row::Check { label, keys, on, message } => Some(menu::Tree::from(Element::from(entry(&label, keys, Some(on), false, Some(message))))),
+            Row::Danger { label, keys, message } => Some(menu::Tree::from(Element::from(entry(&label, keys, ticks.then_some(false), false, Some(message))))),
             Row::Off { label, keys, why } => Some(menu::Tree::from(Element::from(household_widgets::tooltip_with(
                 entry(&label, keys, ticks.then_some(false), false, None),
                 widget::text(why),

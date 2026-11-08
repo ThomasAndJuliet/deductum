@@ -26,6 +26,7 @@ mod attention;
 mod chip;
 mod cli;
 mod codec;
+mod context_menu;
 mod editor;
 mod flow;
 mod gap;
@@ -71,6 +72,8 @@ mod highlight_tests;
 mod highlight_main_tests;
 #[cfg(test)]
 mod snapshot_cells;
+#[cfg(test)]
+mod snapshot_context;
 #[cfg(test)]
 mod snapshot_code;
 #[cfg(test)]
@@ -308,6 +311,22 @@ pub enum Message {
     HoverTick(u64),
     /// A new block after the one at this index (none: at the end): text, section or lemma
     InsertBlock(Option<usize>, &'static str),
+    /// A cell selected without being opened: its goals show, and the keys act on it
+    SelectBlock(usize),
+    /// A cell moved past its neighbour, up (false) or down (true)
+    MoveBlock(usize, bool),
+    /// The selected cell moved (Alt+Up, Alt+Down)
+    MoveSelected(bool),
+    /// The selected cell's source copied (Ctrl+C with no editor open)
+    CopySelectedCell,
+    /// A goal's conclusion, stated as a step on a new line after the caret's
+    UseStep(String),
+    /// A search for this query, shown in the search panel and run at once if true
+    FindFor(String, bool),
+    /// The definition of the name at the caret, as Ctrl+click goes there
+    GotoDefinition,
+    /// A session forgotten: the host drops its state (the folder's files stay)
+    ForgetSession(String, String),
     DeleteBlock(usize),
     ProsePointer(usize, cosmic::iced::Point),
     /// Where in a rendered prose block's text (its Markdown block and offset in it) the pointer is
@@ -2800,6 +2819,9 @@ impl cosmic::Application for App {
                 K::Named(cosmic::iced::keyboard::key::Named::F8) if modifiers.shift() => Some(Message::Shell(shell::Msg::NextProblem(attention::Problem::Unfinished))),
                 K::Named(cosmic::iced::keyboard::key::Named::F8) => Some(Message::Shell(shell::Msg::NextProblem(attention::Problem::Failed))),
                 K::Named(cosmic::iced::keyboard::key::Named::ArrowLeft) if modifiers.alt() => Some(Message::Back),
+                K::Named(cosmic::iced::keyboard::key::Named::ArrowUp) if modifiers.alt() && !modifiers.shift() => Some(Message::MoveSelected(false)),
+                K::Named(cosmic::iced::keyboard::key::Named::ArrowDown) if modifiers.alt() && !modifiers.shift() => Some(Message::MoveSelected(true)),
+                K::Character("c") if modifiers.command() && !modifiers.shift() => Some(Message::CopySelectedCell),
                 _ if !modifiers.alt() && !modifiers.logo() => Some(Message::WindowKey(cosmic::widget::text_editor::KeyPress {
                     key, modified_key, physical_key, modifiers, text,
                     status: cosmic::widget::text_editor::Status::Focused { is_hovered: false },
@@ -2831,6 +2853,17 @@ impl cosmic::Application for App {
             }
         {
             self.shell.agent.open = false;
+            return Task::none();
+        }
+        // Esc closes a right-click menu
+        if self.shell.context.is_some()
+            && match &message {
+                Message::Escape => true,
+                Message::RawVim(_, press) | Message::WindowKey(press) => matches!(press.key.as_ref(), cosmic::iced::keyboard::Key::Named(cosmic::iced::keyboard::key::Named::Escape)),
+                _ => false,
+            }
+        {
+            self.shell.context = None;
             return Task::none();
         }
         let escape = match &message {
@@ -4051,6 +4084,82 @@ impl cosmic::Application for App {
                 t.selected = Some(i.min(t.blocks.len().saturating_sub(1)));
                 let said = self.toast("Block deleted", true);
                 return Task::batch([said, self.flush_edits(), view::centre_selected(), Self::unfocus_all()]);
+            }
+            Message::SelectBlock(i) => {
+                let closed = self.update(Message::CloseBlock);
+                let Some(t) = self.workspace.as_mut().and_then(|w| w.theory.as_mut()) else { return closed };
+                let Some(start) = t.blocks.get(i).map(|b| b.start) else { return closed };
+                t.selected = Some(i);
+                t.cursor = start;
+                return Task::batch([closed, view::centre_selected(), self.schedule_state(), Self::unfocus_all()]);
+            }
+            Message::MoveSelected(down) => {
+                let Some(t) = self.workspace.as_ref().and_then(|w| w.theory.as_ref()).filter(|t| t.mode == Mode::Literate && t.block_editor.is_none()) else { return Task::none() };
+                if let Some(i) = t.selected {
+                    return self.update(Message::MoveBlock(i, down));
+                }
+            }
+            Message::CopySelectedCell => {
+                let Some(t) = self.workspace.as_ref().and_then(|w| w.theory.as_ref()).filter(|t| t.mode == Mode::Literate && t.block_editor.is_none()) else { return Task::none() };
+                if let Some(b) = t.selected.and_then(|i| t.blocks.get(i)) {
+                    let source = t.source_text(b.start, b.end);
+                    return self.update(Message::CopyText(source));
+                }
+            }
+            Message::MoveBlock(i, down) => {
+                let Some(machine) = self.workspace.as_ref().map(|w| w.machine.clone()) else { return Task::none() };
+                let table = self.table(&machine);
+                let Some(t) = self.workspace.as_mut().and_then(|w| w.theory.as_mut()) else { return Task::none() };
+                let j = if down { i + 1 } else { i.wrapping_sub(1) };
+                let (a, b) = (i.min(j), i.max(j));
+                let (Some(first), Some(second)) = (t.blocks.get(a).cloned(), t.blocks.get(b).cloned()) else { return Task::none() };
+                // (the theory's header and its `end` stay where they are)
+                if [&first, &second].iter().any(|x| matches!(x.kind, theory::Kind::Header | theory::Kind::End)) {
+                    return Task::none();
+                }
+                // Two cells swap places, the blank lines between them staying put (undo brings it back)
+                let chars: Vec<char> = t.local.chars().collect();
+                let text = |from: usize, to: usize| chars[from.min(chars.len())..to.min(chars.len())].iter().collect::<String>();
+                let swapped = format!("{}{}{}", text(second.start, second.end), text(first.end, second.start), text(first.start, first.end));
+                t.block_editor = None;
+                t.break_step();
+                t.replace(first.start, second.end, &swapped, &*table);
+                t.break_step();
+                t.selected = Some(j);
+                if let Some(start) = t.blocks.get(j).map(|b| b.start) {
+                    t.cursor = start;
+                }
+                let said = self.toast(if down { "Cell moved down" } else { "Cell moved up" }, true);
+                return Task::batch([said, self.flush_edits(), view::centre_selected(), Self::unfocus_all()]);
+            }
+            Message::UseStep(statement) => {
+                use cosmic::widget::text_editor::{Action as A, Motion as M};
+                let Some(ws) = self.workspace.as_ref() else { return Task::none() };
+                let Some(t) = ws.theory.as_ref() else { return Task::none() };
+                let in_block = insert::block_in_use(t, self.popout.is_some());
+                if !in_block && t.mode != Mode::Source {
+                    return Task::none();
+                }
+                let content = match &t.block_editor {
+                    Some(be) if in_block => &be.content,
+                    _ => &t.source,
+                };
+                // On a new line after the caret's, indented as that line's next one is
+                let line = content.text().lines().nth(content.cursor().position.line).unwrap_or("").to_string();
+                let indent = ws.profile.next_indent(&line);
+                let step = format!("\n{indent}{}", ws.profile.have_step(&statement, &indent));
+                let act = |a: A| if in_block { Message::BlockAction(a) } else { Message::SourceAction(a) };
+                return Task::batch([self.update(act(A::Move(M::End))), self.update(Message::Wrap(step, String::new()))]);
+            }
+            Message::FindFor(query, run) => {
+                let Some(ws) = &mut self.workspace else { return Task::none() };
+                ws.find_input = query;
+                let panel = self.update(Message::Panel(Panel::Search));
+                return if run { Task::batch([panel, self.update(Message::Find)]) } else { panel };
+            }
+            Message::GotoDefinition => return self.goto_definition(),
+            Message::ForgetSession(machine, sid) => {
+                self.send(&machine, "discard", json!({"session": sid}), Pending::Plain);
             }
             Message::LiterateScrolled(scope, top, height) => {
                 if let Some(t) = self.workspace.as_ref().and_then(|w| w.theory.as_ref()).filter(|t| t.page_scope == scope) { t.page_viewport.set((top, height)); }
