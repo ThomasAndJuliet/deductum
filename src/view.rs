@@ -1228,7 +1228,7 @@ fn hover_card<'a>(ws: &'a Workspace, h: &super::Hover) -> Option<Element<'a, Mes
 }
 
 /// A formal block, shown: read-only text that a click opens for editing at the click
-fn block_code<'a>(ws: Option<&'a Workspace>, t: &'a Theory, i: usize, block: &Block, marked: bool) -> Element<'a, Message> {
+fn block_code<'a>(ws: Option<&'a Workspace>, t: &'a Theory, i: usize, block: &Block, marked: bool, table: &dyn super::codec::Symbols, current: bool) -> Element<'a, Message> {
     let Some(Some(v)) = t.block_views.get(i) else { return highlighted_block(t, block) };
     let editor = iced::widget::text_editor(&v.content)
         .font(cosmic::font::mono())
@@ -1241,11 +1241,12 @@ fn block_code<'a>(ws: Option<&'a Workspace>, t: &'a Theory, i: usize, block: &Bl
         .style(code_style())
         .highlight_with::<super::editor::Highlighter>(v.highlight.themed(), highlight_format);
     let editor = code_selection(editor, on_code(false));
-    let cell = framed(
-        hoverable_press(ws, super::HoverTarget::View(i), CODE_PADDING, editor.into(), Some(Message::ViewPress(i))),
-        t.shown_status(block.start, block.end, block.status),
-        marked,
-    );
+    // The code, and under it inside the same card the prover's messages about it
+    let mut inside = widget::column::with_capacity(2).push(hoverable_press(ws, super::HoverTarget::View(i), CODE_PADDING, editor.into(), Some(Message::ViewPress(i))));
+    if let Some(m) = messages_view(t, block, table, current, block_code_width(t.code_columns.max(v.columns))) {
+        inside = inside.push(m);
+    }
+    let cell = framed(inside.into(), t.shown_status(block.start, block.end, block.status), marked);
     #[cfg(test)]
     { widget::container(cell).id(test_block_id(i)).into() }
     #[cfg(not(test))]
@@ -1321,9 +1322,10 @@ pub fn z(px: f32) -> f32 {
     (px * zoom()).round()
 }
 
-/// One message under a cell (an error, a warning): its icon, what went wrong in the code font
-/// (the goal it lists is the one the goal view shows), and its line, on a tinted container
-/// whose bar is where the cell's status strip is
+/// One message in a cell's card, under its code (an error, a warning): its icon, what went wrong
+/// in the code font (the goal it lists is the one the goal view shows), and its line. All in the
+/// muted status colour of the message (failed, unfinished); no plate and no bar of its own, as
+/// the card's border and strip are the cell's
 fn message_strip<'a>(t: &Theory, kind: &str, start: usize, text: &str, table: &dyn super::codec::Symbols) -> Element<'a, Message> {
     let error = kind == "error";
     let line = super::ot::line_col(&t.local, start).0;
@@ -1337,34 +1339,37 @@ fn message_strip<'a>(t: &Theory, kind: &str, start: usize, text: &str, table: &d
         .push(widget::container(icon).padding(Padding { top: z(1.0), ..Padding::ZERO }))
         .push(widget::container(symbol_text(&t.profile.message_summary(text), table, z(12.0))).width(Length::Fill))
         .push(widget::text::caption(format!("line {line}")).class(muted()));
-    let body = widget::container(body).padding([z(4.0), CODE_PADDING.left]).width(Length::Fill).class(theme::Container::custom(move |theme| {
-        let c = theme.cosmic();
-        iced::widget::container::Style {
-            background: Some(blend(page_color(theme), tone(theme), if c.is_dark { 0.14 } else { 0.10 }).into()),
-            text_color: Some(c.on_bg_color().into()),
-            border: Border { radius: 4.0.into(), ..Default::default() },
-            ..Default::default()
-        }
+    let body = widget::container(body).padding([z(4.0), CODE_PADDING.left]).width(Length::Fill).class(theme::Container::custom(move |theme| iced::widget::container::Style {
+        text_color: Some(tone(theme)),
+        ..Default::default()
     }));
     // (a summary stands for more: the whole message is a tooltip on it)
     let full = text.trim_end();
-    let body: Element<'a, Message> = if t.profile.message_summary(text) != full {
+    if t.profile.message_summary(text) != full {
         widget::tooltip(body, widget::container(symbol_text(full, table, z(12.0))).padding(6), widget::tooltip::Position::Bottom)
             .class(theme::Container::Card)
             .into()
     } else {
         body.into()
-    };
-    let bar = widget::container(widget::Space::new()).width(Length::Fixed(4.0)).height(Length::Fill).class(theme::Container::custom(move |theme| iced::widget::container::Style {
-        background: Some(tone(theme).into()),
-        border: Border { radius: 2.0.into(), ..Default::default() },
-        ..Default::default()
-    }));
-    widget::row::with_capacity(2).spacing(4).push(bar).push(body).height(Length::Shrink).into()
+    }
 }
 
-/// Messages under a block: all for the proof at the caret, errors for failing ones
-fn messages_view<'a>(t: &Theory, block: &Block, table: &dyn super::codec::Symbols, current: bool) -> Option<Element<'a, Message>> {
+/// The errors and warnings of a block being edited, stacked, `width` wide: in the open block's card
+/// under its code, as they are under a shown block
+fn edit_messages<'a>(t: &Theory, be: &super::editor::BlockEditor, table: &dyn super::codec::Symbols, width: f32) -> Option<Element<'a, Message>> {
+    let msgs: Vec<_> = t.messages_in(be.start, be.end).into_iter().filter(|m| (m.kind == "error" || m.kind == "warning") && !t.expected_error(m)).collect();
+    if msgs.is_empty() {
+        return None;
+    }
+    let mut strips = widget::column::with_capacity(msgs.len()).spacing(2);
+    for m in msgs.into_iter().take(6) {
+        strips = strips.push(message_strip(t, &m.kind, m.start, &m.text, table));
+    }
+    Some(widget::container(strips).width(Length::Fixed(width)).into())
+}
+
+/// Messages in a block's card: all for the proof at the caret, errors for failing ones
+fn messages_view<'a>(t: &Theory, block: &Block, table: &dyn super::codec::Symbols, current: bool, width: f32) -> Option<Element<'a, Message>> {
     let all = t.messages_in(block.start, block.end);
     let waiting = all.iter().any(|m| t.expected_error(m));
     let msgs: Vec<_> = all
@@ -1376,14 +1381,14 @@ fn messages_view<'a>(t: &Theory, block: &Block, table: &dyn super::codec::Symbol
         // (a lemma after a proof that ends with a tool waits for that proof, not for a tool of its own)
         let after = t.messages_in(block.start, block.end).iter().any(|m| t.waits_on_previous(m));
         let note = if after { "Checked once the proof before it is finished" } else { "Unfinished: pick a proof the tool finds (beside the proof state)" };
-        return waiting.then(|| widget::text::caption(note).into());
+        return waiting.then(|| widget::container(widget::text::caption(note)).padding([z(4.0), CODE_PADDING.left]).width(Length::Fixed(width)).into());
     }
     let mut col = widget::column::with_capacity(msgs.len()).spacing(2);
     for m in msgs.into_iter().take(6) {
         col = col.push(message_strip(t, &m.kind, m.start, &m.text, table));
     }
-    // As wide as the block it is about, a little below it
-    Some(widget::container(col).padding(Padding { top: ATTACHED - 4.0, ..Padding::ZERO }).width(Length::Fixed(block_code_width(t.code_columns) + CARD_CHROME)).into())
+    // As wide as the code it is about, under it, inside its card
+    Some(widget::container(col).width(Length::Fixed(width)).into())
 }
 
 /// The goal at the caret, under the proof being edited, when the right sidebar is hidden
@@ -1650,10 +1655,7 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
             Kind::Formal => {
                 // (as wide as the cell: what is attached under it is too)
                 let columns = t.block_views.get(i).and_then(Option::as_ref).map_or(0, |v| v.columns);
-                let mut c = widget::column::with_capacity(3).spacing(4).width(Length::Fixed(block_code_width(t.code_columns.max(columns)) + CARD_CHROME)).push(block_code(app.workspace.as_ref(), t, i, block, marked));
-                if let Some(m) = messages_view(t, block, &*table, current) {
-                    c = c.push(m);
-                }
+                let mut c = widget::column::with_capacity(3).spacing(4).width(Length::Fixed(block_code_width(t.code_columns.max(columns)) + CARD_CHROME)).push(block_code(app.workspace.as_ref(), t, i, block, marked, &*table, current));
                 if current && goal_block(t, block) && let Some(g) = inline_goal(inline, &*table) {
                     c = c.push(goal_under(g));
                 }
@@ -2043,7 +2045,12 @@ fn block_editor_in<'a>(ws: Option<&'a Workspace>, t: &'a Theory, window: bool, i
         let pop: Element<'_, Message> = if be.kind == Kind::Formal { pop_out_button() } else { widget::Space::new().width(Length::Fixed(0.0)).height(Length::Fixed(0.0)).into() };
         let inset = pop_out_inset();
         let code: Element<'_, Message> = super::gap::Beside::new(code, pop, iced::Vector::new(inset, inset)).right().fixed().into();
-        framed(code, t.shown_status(be.start, be.end, t.status_in(be.start, be.end).unwrap_or(Status::Finished)), true)
+        // (the prover's errors and warnings are in the card under the code, as under a shown block)
+        let mut inside = widget::column::with_capacity(2).push(code);
+        if let Some(strips) = edit_messages(t, be, table, width) {
+            inside = inside.push(strips);
+        }
+        framed(inside.into(), t.shown_status(be.start, be.end, t.status_in(be.start, be.end).unwrap_or(Status::Finished)), true)
     };
     let mut col = widget::column::with_capacity(6).spacing(4).push(editor);
     if let Some(bar) = completion_bar(t) {
@@ -2056,14 +2063,9 @@ fn block_editor_in<'a>(ws: Option<&'a Workspace>, t: &'a Theory, window: bool, i
     if all.iter().any(|m| t.expected_error(m)) {
         col = col.push(widget::text::caption("Unfinished while the tool runs: pick a proof it finds"));
     }
-    let msgs: Vec<_> = all.into_iter().filter(|m| (m.kind == "error" || m.kind == "warning") && !t.expected_error(m)).collect();
-    if !msgs.is_empty() {
-        let mut strips = widget::column::with_capacity(msgs.len()).spacing(2);
-        for m in msgs.into_iter().take(6) {
-            strips = strips.push(message_strip(t, &m.kind, m.start, &m.text, table));
-        }
-        // (as under a shown block: opening it moves nothing)
-        col = col.push(widget::container(strips).padding(Padding { top: ATTACHED - 4.0, ..Padding::ZERO }));
+    // (in the pop-out window there is no card: its messages are under the code)
+    if window && let Some(strips) = edit_messages(t, be, table, block_code_width(t.code_columns.max(columns))) {
+        col = col.push(strips);
     }
     // Prose has no proof state
     if !window && !floated && formal_at_caret(t) && let Some(g) = inline_goal(inline, table) {
