@@ -104,12 +104,11 @@ class WorkflowShapeTests(unittest.TestCase):
         self.ci = jobs("ci.yml")
         self.all = sorted(WORKFLOWS.glob("*.yml"))
 
-    def test_private_infrastructure_is_used_only_by_the_private_publisher(self):
+    def test_no_workflow_uses_private_infrastructure(self):
         # A public repository cannot use actions or workflows from a private one.
         for path in self.all:
-            if path.name != "release.yml":
-                with self.subTest(path=path.name):
-                    self.assertEqual(re.findall(r"uses:\s*(ThomasAndJuliet/\S+)", path.read_text()), [])
+            with self.subTest(path=path.name):
+                self.assertEqual(re.findall(r"uses:\s*(ThomasAndJuliet/\S+)", path.read_text()), [])
 
     def test_no_workflow_runs_pull_request_code_with_repository_privileges(self):
         for path in self.all:
@@ -119,7 +118,7 @@ class WorkflowShapeTests(unittest.TestCase):
     def test_actions_are_pinned_to_commits(self):
         for path in self.all:
             for action in re.findall(r"uses:\s*(\S+)", path.read_text()):
-                if path.name == "release.yml" or action.startswith("./"):
+                if action.startswith("./"):
                     continue
                 with self.subTest(path=path.name, action=action):
                     self.assertRegex(action, r"@[0-9a-f]{40}$")
@@ -158,10 +157,10 @@ class WorkflowShapeTests(unittest.TestCase):
                 else:
                     self.assertIn(runner, allowed)
 
-    def test_home_apps_artifact_stays_out_of_public_runs(self):
+    def test_home_apps_artifact_comes_only_from_main_pushes(self):
         steps = self.ci["flatpak-neo"]["steps"]
         upload = next(step for step in steps if step.get("with", {}).get("name") == "home-apps-x86_64")
-        self.assertIn("github.event.repository.private", upload["if"])
+        self.assertEqual(upload["if"], "github.event_name == 'push' && github.ref == 'refs/heads/main'")
 
     def test_publisher_is_hosted_only_and_runs_only_after_main_push_ci(self):
         document = yaml.safe_load((WORKFLOWS / "release-binaries.yml").read_text())
@@ -188,10 +187,28 @@ class WorkflowShapeTests(unittest.TestCase):
         checkout = next(step for step in steps if "actions/checkout" in step.get("uses", ""))
         self.assertIs(checkout["with"]["persist-credentials"], False)
 
-    def test_private_publisher_is_scoped_to_this_repository_not_its_forks(self):
-        path = WORKFLOWS / "release.yml"
-        if path.exists():
-            self.assertIn("github.event.repository.fork == false", jobs("release.yml")["publish"]["if"])
+    def test_home_apps_publisher_runs_hosted_only_after_main_push_ci(self):
+        document = yaml.safe_load((WORKFLOWS / "release.yml").read_text())
+        job = document["jobs"]["publish"]
+        self.assertEqual(document["permissions"], {"contents": "read"})
+        self.assertEqual(set(triggers(document)), {"workflow_run", "schedule", "workflow_dispatch"})
+        self.assertEqual(job["runs-on"], "ubuntu-24.04")
+        self.assertEqual(job["permissions"], {"contents": "read", "actions": "write", "id-token": "write"})
+        for clause in ("github.event.repository.fork == false", "github.ref == 'refs/heads/main'",
+                       "github.event.workflow_run.event == 'push'",
+                       "github.event.workflow_run.head_branch == 'main'",
+                       "github.event.workflow_run.conclusion == 'success'",
+                       "github.event.workflow_run.head_repository.full_name == github.repository"):
+            with self.subTest(clause=clause):
+                self.assertIn(clause, job["if"])
+        names = [step.get("id") or step.get("name") for step in job["steps"]]
+        self.assertLess(names.index("discover"), names.index("Join the publishing network with a short-lived identity"))
+
+    def test_only_publishers_hold_an_identity_token(self):
+        for path in self.all:
+            if path.name not in ("release.yml", "release-binaries.yml"):
+                with self.subTest(path=path.name):
+                    self.assertNotIn("id-token", path.read_text())
 
 
 class IdentityTests(unittest.TestCase):
