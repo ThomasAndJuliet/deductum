@@ -380,7 +380,9 @@ fn the_band_runs_edge_to_edge_inside_the_card() {
     // (the page, not the band, outside the construct: the band is not the whole editor)
     assert!(is(on_line(&frame, editor, 1, 1.0), page), "line 1 is outside the construct");
     // (the gap between the strip and the code is the editor's own padding, 0.75 em of the code's
-    // size: the band, which covers the whole editor, reaches the strip with no fill between)
+    // size: the band, which covers the whole editor, reaches the strip with no fill between; read
+    // in the UI's turn, as the code's size is another test's to change between turns)
+    let _turn = super::snapshot::ui_turn();
     assert!((super::view::code_padding().left - 10.5).abs() < 1e-3, "{}", super::view::code_padding().left);
 }
 
