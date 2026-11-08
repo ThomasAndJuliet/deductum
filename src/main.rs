@@ -74,6 +74,9 @@ mod snapshot_cells;
 #[cfg(test)]
 mod snapshot_code;
 #[cfg(test)]
+#[path = "../vendor/cosmic-text/tests/hanging_indent.rs"]
+mod cosmic_text_hanging;
+#[cfg(test)]
 mod live;
 #[cfg(test)]
 mod live_lean;

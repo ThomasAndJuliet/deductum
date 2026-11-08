@@ -79,7 +79,12 @@ debug = true
 
 [workspace]
 members = ["prose/prose-render"]
-exclude = ["vendor/chartgen"]
+exclude = ["vendor/chartgen", "vendor/cosmic-text"]
+
+# cosmic-text with a hanging indent for wrapped lines of code: vendor/cosmic-text/README.md says
+# what changed and why. iced and everything else on 0.19 take it too; nothing changes for them.
+[patch.crates-io]
+cosmic-text = { path = "vendor/cosmic-text" }
 
 # libcosmic and its iced from the household fork (ThomasAndJuliet/libcosmic,
 # branch household, read over ssh); HOUSEHOLD.md there says what it changes and

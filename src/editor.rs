@@ -177,7 +177,7 @@ impl BlockEditor {
             position: new.position(&shown, position),
             selection: selection.map(|anchor| new.position(&shown, anchor)),
         };
-        self.content = text_editor::Content::with_text(&shown);
+        self.content = super::wrap::editor_content(&shown, self.wrap.is_some());
         self.layout_revision = self.layout_revision.wrapping_add(1);
         self.shown_text = shown;
         self.content.move_to(cursor);
@@ -613,7 +613,7 @@ impl CodeView {
             .filter_map(|t| Some((d.to_decoded(t[0].as_u64()? as usize), d.to_decoded(t[1].as_u64()? as usize), t[2].as_str()?.to_string())))
             .collect();
         Self {
-            content: text_editor::Content::with_text(&d.text),
+            content: super::wrap::editor_content(&d.text, false),
             highlight: HighlightSettings(Arc::new(HighlightData { generation, lines: line_spans(&d.text, &class) }), false),
             tips,
         }
@@ -1010,7 +1010,7 @@ impl Theory {
             vim_session: false,
             queued: Default::default(),
             lines: LineIndex::new(&decoded.text),
-            source: text_editor::Content::with_text(&decoded.text),
+            source: super::wrap::editor_content(&decoded.text, false),
             decoded,
             prover: Prover::from_json(&doc["prover"]),
             local_prover: Arc::new(Prover::default()),
@@ -1125,7 +1125,7 @@ impl Theory {
         let caret_after = (start + c.text.chars().count()).saturating_sub(c.back);
         if in_block {
             let be = self.block_editor.as_mut().unwrap();
-            be.content = text_editor::Content::with_text(&new);
+            be.content = super::wrap::editor_content(&new, be.wrap.is_some());
             be.layout_revision = be.layout_revision.wrapping_add(1);
             let li2 = LineIndex::new(&new);
             place(&mut be.content, li2.position(&new, caret_after));
@@ -1149,7 +1149,7 @@ impl Theory {
                 let shown = shown_with_markup(self.profile, &be.decoded, be.wrap.is_some(), Some(caret_after), table);
                 if shown != new {
                     let li = LineIndex::new(&shown);
-                    be.content = text_editor::Content::with_text(&shown);
+                    be.content = super::wrap::editor_content(&shown, be.wrap.is_some());
                     be.layout_revision = be.layout_revision.wrapping_add(1);
                     place(&mut be.content, li.position(&shown, caret_after));
                 }
@@ -1157,13 +1157,13 @@ impl Theory {
             }
             self.decoded = table.decode(&self.local);
             self.lines = LineIndex::new(&self.decoded.text);
-            self.source = text_editor::Content::with_text(&self.decoded.text);
+            self.source = super::wrap::editor_content(&self.decoded.text, false);
         } else {
             let change = self.decoded.source_change(table, &new);
             self.apply_local(&change, table);
             self.decoded = table.decode(&self.local);
             self.lines = LineIndex::new(&self.decoded.text);
-            self.source = text_editor::Content::with_text(&self.decoded.text);
+            self.source = super::wrap::editor_content(&self.decoded.text, false);
             let pos = self.lines.position(&self.decoded.text, caret_after);
             place(&mut self.source, pos);
             self.cursor = self.decoded.to_source(caret_after);
@@ -1476,7 +1476,7 @@ impl Theory {
                     let generation = VIEW_GENERATION.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                     BlockView {
                         columns: text.lines().map(|l| l.chars().count()).max().unwrap_or(0),
-                        content: text_editor::Content::with_text(&text),
+                        content: super::wrap::editor_content(&text, false),
                         highlight: HighlightSettings(Arc::new(HighlightData { generation, lines }), false),
                         text_hash,
                     }
@@ -1789,7 +1789,7 @@ impl Theory {
         if self.decoded.text != shown {
             let caret = self.decoded.to_decoded(self.cursor);
             let _ = caret_dec;
-            self.source = text_editor::Content::with_text(&self.decoded.text);
+            self.source = super::wrap::editor_content(&self.decoded.text, false);
             let pos = self.lines.position(&self.decoded.text, caret);
             place(&mut self.source, pos);
         }
@@ -1866,7 +1866,7 @@ impl Theory {
             let shown = shown_with_markup(self.profile, &dec, be.wrap.is_some(), Some(caret), table);
             if shown != new {
                 let li = LineIndex::new(&shown);
-                be.content = text_editor::Content::with_text(&shown);
+                be.content = super::wrap::editor_content(&shown, be.wrap.is_some());
                 be.layout_revision = be.layout_revision.wrapping_add(1);
                 place(&mut be.content, li.position(&shown, caret));
             }
@@ -1885,7 +1885,7 @@ impl Theory {
         self.decoded = table.decode(&self.local);
         self.lines = LineIndex::new(&self.decoded.text);
         if self.decoded.text != shown {
-            self.source = text_editor::Content::with_text(&self.decoded.text);
+            self.source = super::wrap::editor_content(&self.decoded.text, false);
         }
         self.refresh(table);
         true
@@ -1908,7 +1908,7 @@ impl Theory {
         let src = self.source_text(start, end);
         let decoded = table.decode(&src);
         let shown_text = shown_with_markup(self.profile, &decoded, wrap.is_some(), Some(decoded.text.chars().count()), table);
-        let content = text_editor::Content::with_text(&shown_text);
+        let content = super::wrap::editor_content(&shown_text, wrap.is_some());
         self.cursor = end;
         self.block_editor = Some(BlockEditor { layout_revision: 0, start, end, decoded, content, preview, kind, wrap, shown_text });
         self.compute_block_highlight();
@@ -1965,7 +1965,7 @@ impl Theory {
         let decoded = table.decode(&self.source_text(s, e));
         let caret = decoded.to_decoded(at.clamp(s, e) - s);
         let shown = shown_with_markup(self.profile, &decoded, true, Some(caret), table);
-        let mut content = text_editor::Content::with_text(&shown);
+        let mut content = super::wrap::editor_content(&shown, true);
         let pos = LineIndex::new(&shown).position(&shown, caret);
         place(&mut content, pos);
         self.cursor = at.clamp(s, e);
