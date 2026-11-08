@@ -1,3 +1,9 @@
 Libertinus Serif (SIL OFL 1.1) and New Computer Modern (GUST Font License 1.0),
 copied from typst-assets 0.15.1; see LICENSES.txt for both licences.
 They set threads in maths typesetting mode, as Typst sets documents.
+
+LibertinusSerif-Semibold.otf and LibertinusSerif-SemiboldItalic.otf come from the Fedora
+texlive-libertinus-fonts package (Libertinus Project, SIL OFL 1.1 as the four files above, and
+covered by the same notice in LICENSES.txt). That package's release may differ from typst-assets'
+copy of the other four. The Thicken text setting draws regular text in these two. New Computer
+Modern has no semibold, so Thicken text leaves it Regular.

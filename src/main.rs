@@ -81,13 +81,16 @@ mod live_mixed;
 mod live_tools;
 
 /// The bundled prose fonts, shared with Cerea and Terminal Agents; see `res/fonts/README`
-pub const FONTS: [&[u8]; 9] = [
+pub const FONTS: [&[u8]; 11] = [
     // Raised and lowered small glyphs for \<^sup> and \<^sub>; see res/make-scripts-font.py
     include_bytes!("../res/fonts/IsabellumScripts.ttf"),
     include_bytes!("../res/fonts/LibertinusSerif-Regular.otf"),
     include_bytes!("../res/fonts/LibertinusSerif-Bold.otf"),
     include_bytes!("../res/fonts/LibertinusSerif-Italic.otf"),
     include_bytes!("../res/fonts/LibertinusSerif-BoldItalic.otf"),
+    // Thicken text draws regular text in these
+    include_bytes!("../res/fonts/LibertinusSerif-Semibold.otf"),
+    include_bytes!("../res/fonts/LibertinusSerif-SemiboldItalic.otf"),
     include_bytes!("../res/fonts/NewCM10-Regular.otf"),
     include_bytes!("../res/fonts/NewCM10-Bold.otf"),
     include_bytes!("../res/fonts/NewCM10-Italic.otf"),
