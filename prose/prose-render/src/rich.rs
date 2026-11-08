@@ -1824,7 +1824,12 @@ fn shape_lined(
             SpanKind::Text { style, link, tone } => {
                 let mut attrs = base.clone();
                 if style.code {
-                    attrs = attrs.family(t.mono_family()).color(ct_color(t.code));
+                    // (Regular, not the body's weight: a code font without the
+                    // body's Semibold would fall back to another family)
+                    attrs = attrs
+                        .family(t.mono_family())
+                        .weight(Weight::NORMAL)
+                        .color(ct_color(t.code));
                     if size == t.size {
                         attrs = attrs.metrics(Metrics::new(size * 0.92, line_height));
                     }
