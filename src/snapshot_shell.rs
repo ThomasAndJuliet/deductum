@@ -869,21 +869,29 @@ fn pause_resume_restart_and_stop_are_always_there() {
     let pause = x_where(&app, |m| matches!(m, Message::Lifecycle("pause"))).expect("pause");
     let stop = x_where(&app, |m| matches!(m, Message::Lifecycle("stop"))).expect("stop");
     assert!(stop > pause);
-    // paused: the same place now resumes
+    // (the chip is as wide as its words, so the first button is where the chip ends, whatever the
+    // state: right after it, and no longer at one fixed place)
+    let right_after_chip = |app: &App, x: u32| {
+        let end = span_of(&header_hits(app), |m| matches!(m, Message::Panel(super::Panel::Log) | Message::Shell(Msg::NextProblem(_)))).expect("the chip").1;
+        x > end && x - end <= 14
+    };
+    assert!(right_after_chip(&app, pause));
+    // paused: the first button, right after the chip, now resumes, and stop follows it
     set_lifecycle(&mut app, "Paused");
-    assert_eq!(x_where(&app, |m| matches!(m, Message::Lifecycle("resume"))), Some(pause));
-    assert_eq!(x_where(&app, |m| matches!(m, Message::Lifecycle("stop"))), Some(stop));
+    let resume = x_where(&app, |m| matches!(m, Message::Lifecycle("resume"))).expect("resume");
+    assert!(right_after_chip(&app, resume));
+    assert!(x_where(&app, |m| matches!(m, Message::Lifecycle("stop"))).is_some_and(|s| s > resume));
     assert_eq!(x_where(&app, |m| matches!(m, Message::Lifecycle("pause"))), None);
     // stopped: resume (start again), stop disabled
     set_lifecycle(&mut app, "Stopped");
-    assert_eq!(x_where(&app, |m| matches!(m, Message::Lifecycle("resume"))), Some(pause));
+    assert!(x_where(&app, |m| matches!(m, Message::Lifecycle("resume"))).is_some_and(|x| right_after_chip(&app, x)));
     assert_eq!(x_where(&app, |m| matches!(m, Message::Lifecycle("stop"))), None);
     assert!(!controls_for(&state_of(&app)).stop.1);
     // crashed: Restart (the circular arrow), stop disabled
     set_lifecycle(&mut app, "Failed");
     let c = controls_for(&state_of(&app));
     assert_eq!((c.first.0, c.first.2, c.stop.1), ("view-refresh-symbolic", Some("resume"), false));
-    assert_eq!(x_where(&app, |m| matches!(m, Message::Lifecycle("resume"))), Some(pause));
+    assert!(x_where(&app, |m| matches!(m, Message::Lifecycle("resume"))).is_some_and(|x| right_after_chip(&app, x)));
     // no session: both are there and disabled, not hidden
     let none = chip_scene(|a| a.workspace = None);
     let c = controls_for(&state_of(&none));
@@ -896,35 +904,105 @@ fn pause_resume_restart_and_stop_are_always_there() {
     assert!(hits.iter().any(|m| matches!(m, Message::Shell(Msg::NextProblem(super::attention::Problem::Failed)))), "{hits:?}");
 }
 
-/// Wherever the chip's state changes, pause, stop and everything to the right stay put
+/// Where the header's clickable parts are, by message: every second pixel of the bar's middle row
+/// with what a click there sends
+fn header_hits(app: &App) -> Vec<(u32, Vec<Message>)> {
+    (0..1400u32).step_by(2).map(|x| (x, clicks(header(app), Point::new(x as f32, 24.0), Size::new(1400.0, 48.0)))).collect()
+}
+
+/// The first and last x of the parts whose message `wanted` accepts
+fn span_of(hits: &[(u32, Vec<Message>)], wanted: impl Fn(&Message) -> bool) -> Option<(u32, u32)> {
+    let xs: Vec<u32> = hits.iter().filter(|(_, m)| m.iter().any(&wanted)).map(|(x, _)| *x).collect();
+    Some((*xs.first()?, *xs.last()?))
+}
+
+/// The chip is as wide as its content and pause and stop sit right after it, so they shift when
+/// the state changes (Tom's decided exception to rule 3, 8 Nov); the header's other groups, at its
+/// edges, do not move, and the group of chip, pause and stop stays centred as a whole
 #[test]
-fn nothing_in_the_header_moves_between_states() {
-    use super::chip::{CHIP_WIDTH, chip_width};
-    let scenes: Vec<App> = vec![
-        chip_scene(|_| {}),
-        chip_scene(|a| a.workspace.as_mut().unwrap().activity = None),
-        chip_scene(|a| a.workspace.as_mut().unwrap().theory.as_mut().unwrap().prover.status = json!({"finished": 6, "unprocessed": 6, "consolidated": false})),
-        chip_scene(|a| set_lifecycle(a, "Paused")),
-        chip_scene(|a| set_lifecycle(a, "Stopped")),
-        chip_scene(|a| set_lifecycle(a, "Failed")),
+fn the_chip_hugs_its_content_and_only_its_own_group_shifts_between_states() {
+    let scenes: Vec<(&str, App)> = vec![
+        ("checked", chip_scene(|_| {})),
+        ("starting", chip_scene(|a| a.workspace.as_mut().unwrap().activity = None)),
+        ("checking", chip_scene(|a| a.workspace.as_mut().unwrap().theory.as_mut().unwrap().prover.status = json!({"finished": 6, "unprocessed": 6, "consolidated": false}))),
+        ("paused", chip_scene(|a| set_lifecycle(a, "Paused"))),
+        ("stopped", chip_scene(|a| set_lifecycle(a, "Stopped"))),
+        ("crashed", chip_scene(|a| set_lifecycle(a, "Failed"))),
     ];
-    let probe = |app: &App| {
-        (
-            x_where(app, |m| matches!(m, Message::Lifecycle("pause" | "resume"))),
-            x_where(app, |m| matches!(m, Message::ToggleRight)),
-            x_where(app, |m| matches!(m, Message::ToggleGoalBeside)),
-            x_where(app, |m| matches!(m, Message::ToggleSidebar)),
-        )
-    };
-    let first = probe(&scenes[0]);
-    assert!(first.0.is_some() && first.1.is_some() && first.2.is_some() && first.3.is_some(), "{first:?}");
-    for (i, app) in scenes.iter().enumerate() {
-        assert_eq!(probe(app), first, "scene {i}");
-        assert_eq!(chip_width(app), CHIP_WIDTH);
+    let chip = |m: &Message| matches!(m, Message::Panel(super::Panel::Log) | Message::Shell(Msg::NextProblem(_)));
+    let pause = |m: &Message| matches!(m, Message::Lifecycle("pause" | "resume"));
+    let stop = |m: &Message| matches!(m, Message::Lifecycle("stop"));
+    let measured: Vec<_> = scenes.iter().map(|(name, app)| {
+        let hits = header_hits(app);
+        let get = |wanted: &dyn Fn(&Message) -> bool| span_of(&hits, wanted);
+        let sidebar = get(&|m| matches!(m, Message::ToggleSidebar)).unwrap_or_else(|| panic!("{name}: the sidebar toggle"));
+        let right = get(&|m| matches!(m, Message::ToggleRight)).unwrap_or_else(|| panic!("{name}: the right panel toggle"));
+        let beside = get(&|m| matches!(m, Message::ToggleGoalBeside)).unwrap_or_else(|| panic!("{name}: the goal toggle"));
+        let chip = get(&chip).unwrap_or_else(|| panic!("{name}: the chip"));
+        let pause = get(&pause).unwrap_or_else(|| panic!("{name}: pause"));
+        // (stop is disabled when stopped or crashed: it sits where it would, 2 buttons after the chip)
+        let stop = get(&stop);
+        (*name, sidebar, right, beside, chip, pause, stop)
+    }).collect();
+    let first = &measured[0];
+    for (name, sidebar, right, beside, chip, pause, _) in &measured {
+        // the left and right groups do not move
+        assert_eq!((*sidebar, *right, *beside), (first.1, first.2, first.3), "{name}: the header's other groups moved");
+        // pause is right after the chip: a few pixels, not a fixed width's worth
+        assert!(pause.0 > chip.1 && pause.0 - chip.1 <= 14, "{name}: pause starts at {} and the chip ends at {}", pause.0, chip.1);
     }
+    // the chip is as wide as its content: no two states of different words are the same width, and
+    // the shortest (starting) is well under the longest (checked, with the memory)
+    let width = |s: &(&str, (u32, u32), (u32, u32), (u32, u32), (u32, u32), (u32, u32), Option<(u32, u32)>)| s.4.1 - s.4.0;
+    let widths: Vec<(&str, u32)> = measured.iter().map(|s| (s.0, width(s))).collect();
+    let (least, most) = (widths.iter().map(|w| w.1).min().unwrap(), widths.iter().map(|w| w.1).max().unwrap());
+    assert!(most > least + 60, "the chip is not as wide as its content: {widths:?}");
+    // pause and stop shift with it
+    let pauses: std::collections::BTreeSet<u32> = measured.iter().map(|s| s.5.0).collect();
+    assert!(pauses.len() > 3, "pause stays where it is: {pauses:?}");
+    // the group (chip to the end of the last of pause and stop) stays centred on the same place
+    // (stop, disabled when stopped or crashed, takes no clicks: it is as far past pause as when it does)
+    let stop_past_pause = first.6.expect("stop when checked").1 - first.5.1;
+    let centres: Vec<(&str, f32)> = measured.iter().map(|s| (s.0, (s.4.0 + s.5.1 + stop_past_pause) as f32 / 2.0)).collect();
+    for (name, c) in &centres {
+        assert!((c - centres[0].1).abs() <= 6.0, "{name}: the group is centred at {c}, as against {} when checked: {centres:?}", centres[0].1);
+    }
+    // no session: still there, and the sidebar toggle stays first
     let none = chip_scene(|a| a.workspace = None);
-    assert_eq!(probe(&none).3, first.3, "the sidebar toggle is first, wherever");
-    assert_eq!(chip_width(&none), CHIP_WIDTH);
+    let hits = header_hits(&none);
+    assert_eq!(span_of(&hits, |m| matches!(m, Message::ToggleSidebar)), Some((first.1.0, first.1.1)));
+}
+
+/// The padding inside the chip is even: as far from the pill's left edge to the logo as from the
+/// last of its words to its right edge
+#[test]
+fn the_chip_has_even_padding_at_both_ends() {
+    for (name, app) in [("checked", chip_scene(|_| {})), ("paused", chip_scene(|a| set_lifecycle(a, "Paused")))] {
+        let hits = header_hits(&app);
+        let (from, to) = span_of(&hits, |m| matches!(m, Message::Panel(super::Panel::Log) | Message::Shell(Msg::NextProblem(_)))).expect("the chip");
+        let size = Size::new(1400.0, 48.0);
+        let frame = draw_in(true, || header(&app), &format!("chip-padding-{name}"), size);
+        let px = |x: u32, y: u32| {
+            let i = ((y * 1400 + x) * 4) as usize;
+            [frame[i], frame[i + 1], frame[i + 2]]
+        };
+        let bar = px(4, 2);
+        // the pill's own extent along the middle row: from the first pixel that is not the bar,
+        // a little before the chip's first part, to the last
+        let left = (from.saturating_sub(24)..from + 8).find(|&x| px(x, 24) != bar).expect("the pill's left edge");
+        let right = (to.saturating_sub(8)..to + 24).rev().find(|&x| px(x, 24) != bar).and_then(|_| (to.saturating_sub(8)..to + 24).take_while(|&x| px(x, 24) != bar).last()).expect("the pill's right edge");
+        let fill = px(left + 3, 24);
+        // ink: any pixel inside the pill, between its top and bottom border, that is not its fill
+        let ink = |x: u32| (21..28).any(|y| {
+            let p = px(x, y);
+            p.iter().zip(fill).any(|(a, b)| a.abs_diff(b) > 40)
+        });
+        let first = (left + 4..right - 4).find(|&x| ink(x)).expect("ink in the chip");
+        let last = (left + 4..right - 4).rev().find(|&x| ink(x)).expect("ink in the chip");
+        let (before, after) = (first - left, right - last);
+        assert!((before as i32 - after as i32).abs() <= 4, "{name}: {before} px before the first mark and {after} after the last (the pill {left}..{right})");
+        assert!(before >= 6 && before <= 16, "{name}: {before} px of padding at the start");
+    }
 }
 
 // ----- the status bar and toasts
