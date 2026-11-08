@@ -1006,7 +1006,7 @@ fn the_chosen_part_of_the_header_view_switch_is_the_muted_accent() {
             let turn = super::snapshot::ui_turn();
             let theme = Themed::set(dark);
             let app = demo_app(mode);
-            let row = widget::row::with_children(super::shell::header_start(&app)).align_y(Alignment::Center);
+            let row = widget::row::with_children(vec![super::shell::views_bar(&app)]).align_y(Alignment::Center);
             let element: cosmic::Element<'_, super::Message> = widget::container(row).padding(20).width(Length::Fixed(600.0)).into();
             let rgba = super::snapshot::render(element, &format!("hl-header-switch-{}-{mode:?}", theme.name()), Size::new(600.0, 80.0));
             let f = Frame { width: 600, height: 80, rgba };
@@ -1057,7 +1057,7 @@ fn the_goal_beside_toggle_is_the_muted_accent_when_on() {
         for on in [true, false] {
             let turn = super::snapshot::ui_turn();
             let theme = Themed::set(dark);
-            let row = widget::row::with_children(super::shell::header_end(&app)).align_y(Alignment::Center);
+            let row = widget::row::with_children(vec![super::shell::goal_beside_button()]).align_y(Alignment::Center);
             let element: cosmic::Element<'_, super::Message> = widget::container(row).padding(20).width(Length::Fixed(500.0)).into();
             let rgba = super::snapshot::render(element, &format!("hl-goal-beside-{}-{on}", theme.name()), Size::new(500.0, 80.0));
             let f = Frame { width: 500, height: 80, rgba };

@@ -313,6 +313,24 @@ pub fn muted_button(class: cosmic::theme::Button) -> cosmic::theme::Button {
     }
 }
 
+/// An icon button of a joined bar (Cerea's views bar): the muted fill when it is on, the plain icon
+/// button when not, with its corners `radius` (top left, top right, bottom right, bottom left), so
+/// that only the bar's two ends are rounded
+pub fn toggled_rounded(on: bool, radius: [f32; 4]) -> cosmic::theme::Button {
+    use button::Catalog as _;
+    let class = move || if on { muted_button(cosmic::theme::Button::Icon) } else { cosmic::theme::Button::Icon };
+    let round = move |mut style: button::Style| {
+        style.border_radius = radius.into();
+        style
+    };
+    cosmic::theme::Button::Custom {
+        active: Box::new(move |focused, t| round(t.active(focused, false, &class()))),
+        disabled: Box::new(move |t| round(t.disabled(&class()))),
+        hovered: Box::new(move |focused, t| round(t.hovered(focused, false, &class()))),
+        pressed: Box::new(move |focused, t| round(t.pressed(focused, false, &class()))),
+    }
+}
+
 /// A segmented control in COSMIC's Control look, its chosen part filled with the muted accent and
 /// labelled in the fill's on colour (rules 5 and 6); the other parts, the bar and the hover and
 /// pressed washes are COSMIC's

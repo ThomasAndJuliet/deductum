@@ -31,6 +31,7 @@ mod goals;
 mod input;
 mod insert;
 mod link;
+mod menubar;
 mod new_session;
 mod ot;
 mod platform;
@@ -420,6 +421,7 @@ enum DeferredLeave {
     Theory { path: String, nav: Option<Navigation>, goto: Option<usize> },
     Session { machine: String, sid: String },
     Close,
+    Quit,
 }
 
 impl Navigation {
@@ -2002,6 +2004,7 @@ impl App {
                 }
                 DeferredLeave::Session { machine, sid } => self.update(Message::OpenSession(machine, sid)),
                 DeferredLeave::Close => self.update(Message::CloseWorkspace),
+                DeferredLeave::Quit => self.shell_update(shell::Msg::Quit),
             };
         }
         Task::none()
@@ -2771,6 +2774,11 @@ impl cosmic::Application for App {
                 K::Character("-") if modifiers.command() => Some(Message::Zoom(-1)),
                 K::Character("0") if modifiers.command() => Some(Message::Zoom(0)),
                 K::Character(",") if modifiers.command() => Some(Message::Shell(shell::Msg::ToggleSettings)),
+                K::Character("1") if modifiers.command() && !modifiers.shift() => Some(Message::SetMode(Mode::Literate)),
+                K::Character("2") if modifiers.command() && !modifiers.shift() => Some(Message::SetMode(Mode::Source)),
+                K::Named(cosmic::iced::keyboard::key::Named::F9) => Some(Message::ToggleSidebar),
+                K::Named(cosmic::iced::keyboard::key::Named::F8) if modifiers.shift() => Some(Message::Shell(shell::Msg::NextProblem(attention::Problem::Unfinished))),
+                K::Named(cosmic::iced::keyboard::key::Named::F8) => Some(Message::Shell(shell::Msg::NextProblem(attention::Problem::Failed))),
                 K::Named(cosmic::iced::keyboard::key::Named::ArrowLeft) if modifiers.alt() => Some(Message::Back),
                 _ if !modifiers.alt() && !modifiers.logo() => Some(Message::WindowKey(cosmic::widget::text_editor::KeyPress {
                     key, modified_key, physical_key, modifiers, text,
