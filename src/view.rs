@@ -56,15 +56,76 @@ pub fn status_color(status: Status, theme: &cosmic::Theme) -> Color {
     }
 }
 
-/// An unfinished proof (a `sorry`): amber. COSMIC's warning and destructive colours are almost
+/// An unfinished proof (a `sorry`): yellow. COSMIC's warning and destructive colours are almost
 /// the same salmon in its dark theme, so a cell left unfinished and one that fails read alike;
-/// these two are told apart by hue in both themes
-fn sorry_color(theme: &cosmic::Theme) -> Color {
-    if theme.cosmic().is_dark { Color::from_rgb8(0xf0, 0xb4, 0x29) } else { Color::from_rgb8(0xa8, 0x62, 0x00) }
+/// these two are told apart by hue in both themes. Light: dark mode's hue (82.5 degrees) at OKLCH
+/// lightness 0.62, the household's lightness for yellow on a light theme (S4, Juliet 8 Nov;
+/// mockups/s4); dark keeps its #f0b429
+pub fn sorry_color(theme: &cosmic::Theme) -> Color {
+    if theme.cosmic().is_dark { Color::from_rgb8(0xf0, 0xb4, 0x29) } else { Color::from_rgb8(0xab, 0x7d, 0x01) }
 }
 
-/// A failure: red, as against [`sorry_color`]'s amber
-fn error_color(theme: &cosmic::Theme) -> Color {
+/// A cell's status colour at full strength, in the selected cell's strip and border; none for a
+/// cell not yet processed, which has no status colour of its own
+fn bright_status(status: Status, theme: &cosmic::Theme) -> Option<Color> {
+    let source = match status {
+        Status::Finished => Color::from(theme.cosmic().success_color()),
+        Status::Warned => sorry_color(theme),
+        Status::Failed => error_color(theme),
+        Status::Running => return Some(theme.cosmic().accent_color().into()),
+        Status::Unprocessed => return None,
+    };
+    // (dark: one lightness and chroma, each colour's own hue)
+    Some(if theme.cosmic().is_dark { super::tones::dark_status(source) } else { source })
+}
+
+/// The muted tone of a status (checked, unfinished or failed): the colour of the messages under a
+/// cell, in light mode unfinished #805c00
+pub fn muted_status_color(bright: Color, theme: &cosmic::Theme) -> Color {
+    super::tones::muted_status(bright, theme.cosmic().is_dark)
+}
+
+/// A cell's status strip, its left edge. At rest the halfway tone between the status colour faded
+/// over the page and its muted tone; selected, the status colour itself. A cell being checked is
+/// the accent either way, one not yet processed a faded grey
+pub fn strip_color(status: Status, selected: bool, theme: &cosmic::Theme) -> Color {
+    let page = page_color(theme);
+    match (status, bright_status(status, theme)) {
+        (Status::Unprocessed, _) | (_, None) => super::tones::over(Color { a: 0.3, ..Color::from(theme.cosmic().on_bg_color()) }, page),
+        (Status::Running, Some(accent)) => accent,
+        (_, Some(bright)) if selected => bright,
+        (_, Some(bright)) => super::tones::strip_at_rest(bright, page, theme.cosmic().is_dark),
+    }
+}
+
+/// The 1 px border of a cell at rest, grey. Light: COSMIC's divider on the page, #bcbcbc
+/// (checked by `light_card_border_is_cosmic_divider`); dark: the household's dark border, #5c5c5c
+/// (household-ui's card border in dark mode), which COSMIC has no token for
+pub fn card_border_color(theme: &cosmic::Theme) -> Color {
+    const DARK: Color = Color::from_rgb8(0x5c, 0x5c, 0x5c);
+    let c = theme.cosmic();
+    if c.is_dark { DARK } else { c.primary(false).divider.into() }
+}
+
+/// A cell's border: at rest [`card_border_color`], 1 px. Selected, 2 px in its strip's bright
+/// status colour, in the accent while it is checked and grey if it is not yet processed
+fn card_border(status: Status, selected: bool, theme: &cosmic::Theme) -> (Color, f32) {
+    if !selected {
+        return (card_border_color(theme), 1.0);
+    }
+    (bright_status(status, theme).unwrap_or_else(|| card_border_color(theme)), 2.0)
+}
+
+/// The room a cell's border takes on each of its top, right and bottom sides whatever its state,
+/// so that selecting a cell (1 px of border becoming 2) moves nothing
+const CARD_RIM: f32 = 2.0;
+
+/// What a cell takes beside its code: its status strip, the space before the code (the card's
+/// own fill, where the strip's gap used to be) and the room for its right border
+const CARD_CHROME: f32 = 8.0 + CARD_RIM;
+
+/// A failure: red, as against [`sorry_color`]'s yellow
+pub fn error_color(theme: &cosmic::Theme) -> Color {
     if theme.cosmic().is_dark { Color::from_rgb8(0xf2, 0x5f, 0x5c) } else { Color::from_rgb8(0xc0, 0x1c, 0x28) }
 }
 
@@ -83,12 +144,10 @@ fn cell_color(theme: &cosmic::Theme) -> Color {
     if c.is_dark { c.bg_component_color().into() } else { c.secondary_container_color().into() }
 }
 
-/// The region behind a paragraph being edited or selected, and its bar: a faint wash of the
-/// accent, the bar in the accent
+/// The region behind a paragraph being edited or selected, and its bar: no wash (a cell's
+/// selection is its strip and border, and prose is not a cell), the bar in the accent
 fn marked_region(theme: &cosmic::Theme) -> (Color, Option<Color>) {
-    let c = theme.cosmic();
-    let accent = Color::from(c.accent_color());
-    (Color { a: if c.is_dark { 0.07 } else { 0.09 }, ..accent }, Some(accent))
+    (Color::TRANSPARENT, Some(theme.cosmic().accent_color().into()))
 }
 
 /// Secondary text (a line number, a time, a hint): `tones::secondary_text`, the darkest tone on a
@@ -497,7 +556,7 @@ fn workspace<'a>(app: &'a App, ws: &'a Workspace, right: bool, main_width: f32) 
             // the goal sits just past the blocks, a little apart
             let display = super::settings::display();
             let reading_width = (display.measure > 0.0).then(|| z(display.measure * display.text_size).min((main_width - SCROLLBAR_ROOM - 2.0 * z(PAGE_MARGIN)).max(z(240.0))));
-            let beside_width = reading_width.unwrap_or_else(|| (code_width(t.code_columns) + 8.0).clamp(z(440.0), z(680.0)));
+            let beside_width = reading_width.unwrap_or_else(|| (code_width(t.code_columns) + CARD_CHROME).clamp(z(440.0), z(680.0)));
             // Beside when the text column, the gap and a goal of at least its minimum width fit
             // (room for the scroll bar kept); the side margins go first, before the goal goes under
             let room = main_width - SCROLLBAR_ROOM - beside_width - GOAL_GAP;
@@ -511,7 +570,7 @@ fn workspace<'a>(app: &'a App, ws: &'a Workspace, right: bool, main_width: f32) 
             // moving between blocks never changes the layout. Without it, the page is a wider
             // column, centred, the code blocks as wide as their lines allow
             let beside = fits;
-            let text_width = if fits { beside_width } else { reading_width.unwrap_or_else(|| (code_width(t.code_columns) + 8.0).clamp(z(560.0), z(880.0))) };
+            let text_width = if fits { beside_width } else { reading_width.unwrap_or_else(|| (code_width(t.code_columns) + CARD_CHROME).clamp(z(560.0), z(880.0))) };
             COLUMN_CAP.store(text_width.to_bits(), std::sync::atomic::Ordering::Relaxed);
             WIDE.store(fits, std::sync::atomic::Ordering::Relaxed);
             let inline = if beside { None } else { Some(ws) };
@@ -841,23 +900,8 @@ fn theory_status(t: &Theory) -> Element<'_, Message> {
 }
 
 fn mono_block<'a>(text: String, status: Status, table: &dyn super::codec::Symbols) -> Element<'a, Message> {
-    let strip = widget::container(widget::Space::new())
-        .width(Length::Fixed(4.0))
-        .height(Length::Fill)
-        .class(theme::Container::custom(move |theme| iced::widget::container::Style {
-            background: Some(status_color(status, theme).into()),
-            border: Border { radius: 2.0.into(), ..Default::default() },
-            ..Default::default()
-        }));
-    let body = widget::container(symbol_text(&text, table, 13.0))
-        .padding(Padding { left: 8.0, right: 6.0, top: 4.0, bottom: 4.0 })
-        .width(Length::Fill)
-        .class(theme::Container::custom(move |theme| iced::widget::container::Style {
-            background: Some(cell_color(theme).into()),
-            border: Border { radius: 4.0.into(), ..Default::default() },
-            ..Default::default()
-        }));
-    widget::row::with_capacity(2).spacing(4).height(Length::Shrink).push(strip).push(body).into()
+    let body = widget::container(symbol_text(&text, table, 13.0)).padding(Padding { left: 4.0, right: 6.0, top: 4.0, bottom: 4.0 }).width(Length::Fill);
+    card(body.into(), status, false)
 }
 
 /// Add a block after a block (or at the end) from the profile's templates (a text, section or
@@ -910,7 +954,7 @@ pub fn code_width(columns: usize) -> f32 {
 /// past the column; longer lines wrap
 pub fn block_code_width(columns: usize) -> f32 {
     let cap = f32::from_bits(COLUMN_CAP.load(std::sync::atomic::Ordering::Relaxed));
-    code_width(columns).min(if cap > 0.0 { cap } else { z(680.0) } - 8.0)
+    code_width(columns).min(if cap > 0.0 { cap } else { z(680.0) } - CARD_CHROME)
 }
 
 /// The text column's width as the layout last chose it (blocks are never wider)
@@ -921,13 +965,13 @@ pub fn last_column() -> f32 {
     f32::from_bits(COLUMN_CAP.load(std::sync::atomic::Ordering::Relaxed))
 }
 
-/// How a block of code looks, shown or being edited: the current one outlined in the accent
-fn code_style(marked: bool) -> impl Fn(&cosmic::Theme, iced::widget::text_editor::Status) -> iced::widget::text_editor::Style {
+/// How a block of code looks, shown or being edited: on the page, which is the card's fill
+fn code_style() -> impl Fn(&cosmic::Theme, iced::widget::text_editor::Status) -> iced::widget::text_editor::Style {
     move |theme: &cosmic::Theme, _status| {
         let c = theme.cosmic();
         iced::widget::text_editor::Style {
-            background: code_background(theme, marked).into(),
-            border: Border { radius: 4.0.into(), width: 0.0, color: Color::TRANSPARENT },
+            background: page_color(theme).into(),
+            border: Border { radius: 0.0.into(), width: 0.0, color: Color::TRANSPARENT },
             placeholder: Color { a: 0.5, ..Color::from(c.on_bg_color()) },
             value: c.on_bg_color().into(),
             selection: Color { a: 0.32, ..Color::from(c.accent.base) },
@@ -935,20 +979,11 @@ fn code_style(marked: bool) -> impl Fn(&cosmic::Theme, iced::widget::text_editor
     }
 }
 
-/// A block of code's background. The current block: darker in a dark theme; in a light one a wash
-/// of the accent (a darker grey reads as dull there, not as current); its strip takes the accent
-fn code_background(theme: &cosmic::Theme, marked: bool) -> Color {
-    let c = theme.cosmic();
-    match (marked, c.is_dark) {
-        (false, _) => cell_color(theme),
-        (true, true) => blend(cell_color(theme), Color::BLACK, 0.32),
-        (true, false) => blend(cell_color(theme), Color::from(c.accent_color()), 0.10),
-    }
-}
-
-/// What code on a block's background has beneath it, for its selection's tint
-fn on_code(marked: bool) -> Beneath {
-    Beneath::new(move |theme| code_background(theme, marked))
+/// What code in a cell has beneath it, for its selection's tint: the page, the cell's own fill,
+/// and, where the construct the goal is for is banded, the band over it
+fn on_code(banded: bool) -> Beneath {
+    let page = on_page();
+    if banded { page.under(super::tones::band) } else { page }
 }
 
 /// What code on the page has beneath it, for its selection's tint
@@ -991,18 +1026,37 @@ fn pop_out_button<'a>() -> Element<'a, Message> {
     widget::container(widget::tooltip(button, widget::text("Pop out (the proof in a window of its own)"), widget::tooltip::Position::Bottom)).id(pop_out_button_id()).into()
 }
 
-/// A block's status strip, then its code
-fn framed<'a>(code: Element<'a, Message>, status: Status, marked: bool) -> Element<'a, Message> {
+/// A cell's card on the page: square, its fill the page's, a 1 px border on its top, right and
+/// bottom (see [`card_border`]), and its status strip as its left edge, with no border of its own
+/// on that side. The selected cell's strip and 2 px border are its bright status colour. It takes
+/// the same room selected or not, the border's extra pixel coming out of [`CARD_RIM`]
+fn card<'a>(content: Element<'a, Message>, status: Status, selected: bool) -> Element<'a, Message> {
     let strip = widget::container(widget::Space::new())
         .width(Length::Fixed(4.0))
         .height(Length::Fill)
         .class(theme::Container::custom(move |theme| iced::widget::container::Style {
-            background: Some(if marked { Color::from(theme.cosmic().accent_color()) } else { status_color(status, theme) }.into()),
-            border: Border { radius: 2.0.into(), ..Default::default() },
+            background: Some(strip_color(status, selected, theme).into()),
             ..Default::default()
         }));
+    // (the card's fill, as wide as the gap the strip used to leave: nothing in it moves)
+    let inside = widget::container(content).padding(Padding { left: 4.0, ..Padding::ZERO }).class(theme::Container::custom(|theme| iced::widget::container::Style {
+        background: Some(page_color(theme).into()),
+        ..Default::default()
+    }));
     // (the height after the children: a pushed Fill child would make the row fill)
-    widget::row::with_capacity(2).spacing(4).push(strip).push(code).height(Length::Shrink).into()
+    let row = widget::row::with_capacity(2).push(strip).push(inside).height(Length::Shrink);
+    let width = if selected { 2.0 } else { 1.0 };
+    let bordered = widget::container(row).padding(Padding { top: width, right: width, bottom: width, left: 0.0 }).class(theme::Container::custom(move |theme| iced::widget::container::Style {
+        background: Some(card_border(status, selected, theme).0.into()),
+        ..Default::default()
+    }));
+    let rim = CARD_RIM - width;
+    widget::container(bordered).padding(Padding { top: rim, right: rim, bottom: rim, left: 0.0 }).into()
+}
+
+/// A block's card around its code
+fn framed<'a>(code: Element<'a, Message>, status: Status, marked: bool) -> Element<'a, Message> {
+    card(code, status, marked)
 }
 
 /// An editor that says what is under the pointer: the pointer's place (less the editor's
@@ -1180,9 +1234,9 @@ fn block_code<'a>(ws: Option<&'a Workspace>, t: &'a Theory, i: usize, block: &Bl
         .width(block_code_width(t.code_columns.max(v.columns)))
         .on_action(move |a| Message::BlockViewAction(i, a))
         .key_binding(|_| None)
-        .style(code_style(marked))
+        .style(code_style())
         .highlight_with::<super::editor::Highlighter>(v.highlight.themed(), highlight_format);
-    let editor = code_selection(editor, on_code(marked));
+    let editor = code_selection(editor, on_code(false));
     let cell = framed(
         hoverable_press(ws, super::HoverTarget::View(i), CODE_PADDING, editor.into(), Some(Message::ViewPress(i))),
         t.shown_status(block.start, block.end, block.status),
@@ -1219,24 +1273,8 @@ fn highlighted_block<'a>(t: &Theory, block: &Block) -> Element<'a, Message> {
         })
         .collect();
     let text: Element<'a, Message> = iced::widget::rich_text(spans).size(13).into();
-    let status = block.status;
-    let strip = widget::container(widget::Space::new())
-        .width(Length::Fixed(4.0))
-        .height(Length::Fill)
-        .class(theme::Container::custom(move |theme| iced::widget::container::Style {
-            background: Some(status_color(status, theme).into()),
-            border: Border { radius: 2.0.into(), ..Default::default() },
-            ..Default::default()
-        }));
-    let body = widget::container(text)
-        .padding(Padding { left: 8.0, right: 6.0, top: 4.0, bottom: 4.0 })
-        .width(Length::Fill)
-        .class(theme::Container::custom(move |theme| iced::widget::container::Style {
-            background: Some(cell_color(theme).into()),
-            border: Border { radius: 4.0.into(), ..Default::default() },
-            ..Default::default()
-        }));
-    widget::row::with_capacity(2).spacing(4).height(Length::Shrink).push(strip).push(body).into()
+    let body = widget::container(text).padding(Padding { left: 4.0, right: 6.0, top: 4.0, bottom: 4.0 }).width(Length::Fill);
+    card(body.into(), block.status, false)
 }
 
 /// The text zoom, set with Ctrl+= and Ctrl+-
@@ -1285,7 +1323,7 @@ pub fn z(px: f32) -> f32 {
 fn message_strip<'a>(t: &Theory, kind: &str, start: usize, text: &str, table: &dyn super::codec::Symbols) -> Element<'a, Message> {
     let error = kind == "error";
     let line = super::ot::line_col(&t.local, start).0;
-    let tone = move |theme: &cosmic::Theme| if error { error_color(theme) } else { sorry_color(theme) };
+    let tone = move |theme: &cosmic::Theme| muted_status_color(if error { error_color(theme) } else { sorry_color(theme) }, theme);
     let icon = widget::icon::from_name(if error { "dialog-error-symbolic" } else { "dialog-warning-symbolic" })
         .size(14)
         .icon()
@@ -1298,7 +1336,7 @@ fn message_strip<'a>(t: &Theory, kind: &str, start: usize, text: &str, table: &d
     let body = widget::container(body).padding([z(4.0), CODE_PADDING.left]).width(Length::Fill).class(theme::Container::custom(move |theme| {
         let c = theme.cosmic();
         iced::widget::container::Style {
-            background: Some(blend(cell_color(theme), tone(theme), if c.is_dark { 0.14 } else { 0.10 }).into()),
+            background: Some(blend(page_color(theme), tone(theme), if c.is_dark { 0.14 } else { 0.10 }).into()),
             text_color: Some(c.on_bg_color().into()),
             border: Border { radius: 4.0.into(), ..Default::default() },
             ..Default::default()
@@ -1341,7 +1379,7 @@ fn messages_view<'a>(t: &Theory, block: &Block, table: &dyn super::codec::Symbol
         col = col.push(message_strip(t, &m.kind, m.start, &m.text, table));
     }
     // As wide as the block it is about, a little below it
-    Some(widget::container(col).padding(Padding { top: ATTACHED - 4.0, ..Padding::ZERO }).width(Length::Fixed(block_code_width(t.code_columns) + 8.0)).into())
+    Some(widget::container(col).padding(Padding { top: ATTACHED - 4.0, ..Padding::ZERO }).width(Length::Fixed(block_code_width(t.code_columns) + CARD_CHROME)).into())
 }
 
 /// The goal at the caret, under the proof being edited, when the right sidebar is hidden
@@ -1569,7 +1607,7 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
                 }) {
                     let width = t.block_editor.as_ref().filter(|be| be.kind == Kind::Formal).map(|be| {
                         let columns = be.content.text().lines().map(|l| l.chars().count()).max().unwrap_or(0);
-                        block_code_width(t.code_columns.max(columns)) + 8.0
+                        block_code_width(t.code_columns.max(columns)) + CARD_CHROME
                     });
                     item = item.push(side(note_card(ws, n, width), false));
                 }
@@ -1608,7 +1646,7 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
             Kind::Formal => {
                 // (as wide as the cell: what is attached under it is too)
                 let columns = t.block_views.get(i).and_then(Option::as_ref).map_or(0, |v| v.columns);
-                let mut c = widget::column::with_capacity(3).spacing(4).width(Length::Fixed(block_code_width(t.code_columns.max(columns)) + 8.0)).push(block_code(app.workspace.as_ref(), t, i, block, marked));
+                let mut c = widget::column::with_capacity(3).spacing(4).width(Length::Fixed(block_code_width(t.code_columns.max(columns)) + CARD_CHROME)).push(block_code(app.workspace.as_ref(), t, i, block, marked));
                 if let Some(m) = messages_view(t, block, &*table, current) {
                     c = c.push(m);
                 }
@@ -1654,7 +1692,7 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
             }) {
                 let width = (block.kind == Kind::Formal).then(|| {
                     let columns = t.block_views.get(i).and_then(Option::as_ref).map_or(0, |v| v.columns);
-                    block_code_width(t.code_columns.max(columns)) + 8.0
+                    block_code_width(t.code_columns.max(columns)) + CARD_CHROME
                 });
                 item = item.push(side(note_card(ws, n, width), false));
             }
@@ -1901,12 +1939,36 @@ fn block_editor_in<'a>(ws: Option<&'a Workspace>, t: &'a Theory, window: bool, i
         .padding(CODE_PADDING)
         .on_action(Message::BlockAction)
         .key_binding(key_bindings(!t.completions.is_empty(), vim_mode, super::EditorTarget::Block))
-        .style(code_style(true))
+        .style(code_style())
         .highlight_with::<super::editor::Highlighter>(t.block_highlight.themed(), highlight_format);
-    let editor = code_selection(editor, on_code(true));
+    let lines = be.content.line_count();
+    // The construct the proof state is for, tinted
+    // (from the cell's very top when it starts on the first line, to its very bottom when it ends
+    // on the last, so that the tint and the cell's strip begin and end together)
+    let band_lines = (be.kind == Kind::Formal)
+        .then(|| t.construct_at(be.start, be.end))
+        .flatten()
+        .map(|(cs, ce)| (block_line(be, cs), block_line(be, ce.saturating_sub(1).max(cs))))
+        .filter(|(l0, _)| *l0 < lines);
+    let band = band_lines.map(|(l0, l1)| {
+        let from = if l0 == 0 { 0.0 } else { CODE_PADDING.top + l0 as f32 * code_line_height() };
+        let to = if l1 + 1 >= lines { f32::INFINITY } else { CODE_PADDING.top + (l1 + 1) as f32 * code_line_height() };
+        (from, to)
+    });
+    // (the selection's fill is one colour: the tint over the band if most of the selected lines
+    // are in it, over the page if not, so that a selection within the construct, or outside it,
+    // is exactly the tint over what it lies on)
+    let selected_in_band = band_lines.is_some_and(|(l0, l1)| {
+        let cursor = be.content.cursor();
+        let Some(other) = cursor.selection else { return false };
+        let (a, b) = (cursor.position.line.min(other.line), cursor.position.line.max(other.line));
+        let inside = (a..=b).filter(|l| (l0..=l1).contains(l)).count();
+        inside * 2 > b - a + 1
+    });
+    // (a selection in the band is tinted over it, as it is drawn)
+    let editor = code_selection(editor, on_code(selected_in_band));
     // A long proof in a narrow window: the goal opens a gap in the editor just after the construct
     // the caret is in (the proof stays one editor; what follows moves down, nothing is covered)
-    let lines = be.content.line_count();
     let after = (!window && formal_at_caret(t) && inline.is_some() && goal_placement(false, lines) == GoalPlacement::AfterConstruct)
         .then(|| t.construct_at(be.start, be.end))
         .flatten()
@@ -1917,15 +1979,6 @@ fn block_editor_in<'a>(ws: Option<&'a Workspace>, t: &'a Theory, window: bool, i
             Some((block_line(be, ce), indent, inline_goal(inline, table)?))
         });
     let floated = after.is_some();
-    // The construct the proof state is for, tinted
-    // (from the cell's very top when it starts on the first line, to its very bottom when it ends
-    // on the last, so that the tint and the cell's strip begin and end together)
-    let band = (be.kind == Kind::Formal).then(|| t.construct_at(be.start, be.end)).flatten().map(|(cs, ce)| {
-        let (l0, l1) = (block_line(be, cs), block_line(be, ce.saturating_sub(1).max(cs)));
-        let from = if l0 == 0 { 0.0 } else { CODE_PADDING.top + l0 as f32 * code_line_height() };
-        let to = if l1 + 1 >= lines { f32::INFINITY } else { CODE_PADDING.top + (l1 + 1) as f32 * code_line_height() };
-        (from, to)
-    });
     let tint = construct_tint();
     let banded = move |g: super::gap::Gap<'a, Message, cosmic::Theme, cosmic::Renderer>| match band {
         Some((from, to)) => g.band(from, to, tint),
@@ -2011,7 +2064,7 @@ fn block_editor_in<'a>(ws: Option<&'a Workspace>, t: &'a Theory, window: bool, i
     if window {
         return col.into();
     }
-    col.width(Length::Fixed(block_code_width(t.code_columns.max(columns)) + 8.0)).into()
+    col.width(Length::Fixed(block_code_width(t.code_columns.max(columns)) + CARD_CHROME)).into()
 }
 
 /// The size scale and relative line height the prose editor sets a heading of `level` in
@@ -2074,7 +2127,7 @@ fn prose_editor<'a>(t: &'a Theory, be: &'a super::editor::BlockEditor, vim_mode:
         })
         .highlight_with::<super::editor::Highlighter>(t.block_highlight.themed(), prose_format);
     // (on the page, under the wash of the region marking the paragraph being edited)
-    let editor = code_selection(editor, on_page().under(|theme| marked_region(theme).0));
+    let editor = code_selection(editor, on_page());
     let editor: Element<'a, Message> = super::gap::Halo::new(editor, (z(10.0), z(2.0), z(4.0)), marked_region).into();
     // The block's other paragraphs stay as they read, above and below the one being edited
     let (before, after) = t
@@ -2612,8 +2665,7 @@ pub const GOAL_GAP_PUB: f32 = GOAL_GAP;
 /// The tint over the construct the goal is for
 fn construct_tint() -> Color {
     // (fainter on a light theme, where the text over it is dark and needs the contrast)
-    let c = theme::active();
-    Color { a: if c.cosmic().is_dark { 0.14 } else { 0.08 }, ..Color::from(c.cosmic().accent_color()) }
+    super::tones::band(&theme::active())
 }
 
 /// Code's line height, set on its editors and used to place things level with lines
@@ -3572,12 +3624,12 @@ fn subgoal_card<'a>(ws: &'a Workspace, sg: &super::goals::Subgoal, first: bool, 
 }
 
 /// A subgoal card's background: a later card is a little lighter (darker) than what is round it,
-/// so that it reads as a card in either theme; the first, the one the next step works on, is
-/// tinted
+/// so that it reads as a card in either theme; the first, the one the next step works on, has the
+/// construct's band over it (the accent tint at 10 %, 14 % in dark)
 fn subgoal_background(theme: &cosmic::Theme, first: bool) -> Color {
     let c = theme.cosmic();
     let base = cell_color(theme);
-    if first { blend(base, Color::from(c.accent_color()), 0.08) } else { blend(base, Color::from(c.on_bg_color()), 0.06) }
+    if first { super::tones::over(super::tones::band(theme), base) } else { blend(base, Color::from(c.on_bg_color()), 0.06) }
 }
 
 /// The state as Isabelle prints it, with the command's other output

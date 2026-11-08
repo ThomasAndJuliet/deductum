@@ -172,6 +172,56 @@ where
         .selected_text_color(move |theme, style| on_tint(theme, style.value, under.color(theme)))
 }
 
+// ----- the cells' status tones
+
+/// How much of a status colour shows in its faded tone: the colour at 35 % over the page (Q4,
+/// Juliet 8 Nov; mockups/r2)
+const FADED: f32 = 0.35;
+
+/// The automatic highlight, the accent tint laid over what is beneath it, in a light theme and in
+/// a dark one ("contrast not being symmetric in light vs dark", Juliet 8 Nov, S3). The user's own
+/// selection stays `tint` (32 %), so over the band it is a step darker
+const BAND_LIGHT: f32 = 0.10;
+const BAND_DARK: f32 = 0.14;
+
+/// The colour that marks the construct the current goal is for: the accent at [`BAND_LIGHT`] or
+/// [`BAND_DARK`], translucent, to be laid over what is beneath it
+pub fn band(theme: &cosmic::Theme) -> Color {
+    let a = accent(theme);
+    Color { a: if theme.cosmic().is_dark { BAND_DARK } else { BAND_LIGHT }, ..color(a) }
+}
+
+/// The lightness and chroma of a selected cell's status colour in a dark theme, one pair for all
+/// three, each keeping its own hue (Tom, 8 Nov: checked #58a672, unfinished #b38b39, failed
+/// #cd7670 from the theme's success, #f0b429 and #f25f5c)
+const DARK_STATUS_LIGHTNESS: f32 = 0.66;
+const DARK_STATUS_CHROMA: f32 = 0.11;
+
+/// `source`'s hue at [`DARK_STATUS_LIGHTNESS`] and [`DARK_STATUS_CHROMA`]: a status colour for a
+/// dark theme
+pub fn dark_status(source: Color) -> Color {
+    let hue = srgb(source).to_oklch().hue;
+    color(household_tones::Oklch::new(DARK_STATUS_LIGHTNESS, DARK_STATUS_CHROMA, hue).to_srgb())
+}
+
+/// `bright` at 35 % over `page`, opaque: a status colour faded
+pub fn faded(bright: Color, page: Color) -> Color {
+    over(Color { a: FADED, ..bright }, page)
+}
+
+/// The muted tone of a status colour, as [`muted`] makes one of the accent
+/// (`household_tones::muted_accent`): the colour of the messages under a cell
+pub fn muted_status(bright: Color, dark: bool) -> Color {
+    color(household_tones::muted_accent(srgb(bright), dark))
+}
+
+/// A cell's status strip at rest: halfway between the status colour faded over the page and its
+/// muted tone (S2(e), Juliet 8 Nov; light: checked #609677, unfinished #aa904c, failed #b97676)
+pub fn strip_at_rest(bright: Color, page: Color, dark: bool) -> Color {
+    let (a, b) = (faded(bright, page), muted_status(bright, dark));
+    Color { r: (a.r + b.r) / 2.0, g: (a.g + b.g) / 2.0, b: (a.b + b.b) / 2.0, a: 1.0 }
+}
+
 // ----- the muted accent
 
 /// The muted accent of the theme's accent, and the colour of text and symbolic icons on it
