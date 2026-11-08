@@ -141,6 +141,14 @@ pub fn page_color(theme: &cosmic::Theme) -> Color {
     if c.is_dark { c.bg_color().into() } else { c.primary_container_color().into() }
 }
 
+/// The lightish band the window's header and sidebar and the goal panel's tools are on: COSMIC's
+/// background colour in light (#d7d7d7, a step darker than the page), and in dark the colour a step
+/// lighter than the page (#272727; the page is COSMIC's background, #1b1b1b)
+pub fn chrome_color(theme: &cosmic::Theme) -> Color {
+    let c = theme.cosmic();
+    if c.is_dark { c.primary_container_color().into() } else { c.bg_color().into() }
+}
+
 /// A cell (code, goals, notes) on the page: one layer up, lighter than the page in both themes,
 /// as COSMIC's layers are
 fn cell_color(theme: &cosmic::Theme) -> Color {
@@ -993,7 +1001,7 @@ fn mono_block<'a>(text: String, status: Status, table: &dyn super::codec::Symbol
 
 /// A Tertiary button (household rule 7): no box, its label bold, underlined and in the accent,
 /// and COSMIC's own link states for hover and press
-fn tertiary<'a>(label: &'static str, msg: Message) -> widget::Button<'a, Message> {
+pub(crate) fn tertiary<'a>(label: impl Into<String>, msg: Message) -> widget::Button<'a, Message> {
     widget::button::custom(link_label(label)).padding([z(2.0) as u16, z(2.0) as u16]).class(theme::Button::Link).on_press(msg)
 }
 
@@ -1019,9 +1027,9 @@ fn tertiary_destructive<'a>(label: &'static str, msg: Message) -> widget::Button
         .on_press(msg)
 }
 
-fn link_label<'a>(label: &'static str) -> Element<'a, Message> {
+fn link_label<'a>(label: impl Into<String>) -> Element<'a, Message> {
     let font = cosmic::iced::Font { weight: cosmic::iced::font::Weight::Bold, ..cosmic::font::default() };
-    let spans: Vec<iced::widget::text::Span<'a, (), cosmic::iced::Font>> = vec![iced::widget::span(label).font(font).underline(true)];
+    let spans: Vec<iced::widget::text::Span<'a, (), cosmic::iced::Font>> = vec![iced::widget::span(label.into()).font(font).underline(true)];
     iced::widget::rich_text(spans).size(z(13.0)).into()
 }
 
@@ -1673,28 +1681,11 @@ fn formal_at_caret(t: &Theory) -> bool {
 
 fn inline_goal<'a>(ws: Option<&'a Workspace>, table: &dyn super::codec::Symbols) -> Option<Element<'a, Message>> {
     let ws = ws?;
-    let content: Element<'a, Message> = if ws.output.is_none() && !fill_here(ws) {
-        widget::text::caption(waiting_note(ws).unwrap_or_else(|| "Checking…".into())).into()
-    } else {
-        // (on the page, under this card's wash)
-        state_view(ws, table, &on_page().under(inline_goal_wash))
-    };
-    Some(
-        widget::container(content)
-            .padding([6, 10])
-            .width(Length::Fill)
-            .class(theme::Container::custom(|theme| iced::widget::container::Style {
-                background: Some(inline_goal_wash(theme).into()),
-                border: Border { radius: 6.0.into(), ..Default::default() },
-                ..Default::default()
-            }))
-            .into(),
-    )
-}
-
-/// The wash of the goal's card on the page
-fn inline_goal_wash(theme: &cosmic::Theme) -> Color {
-    Color { a: 0.05, ..Color::from(theme.cosmic().accent_color()) }
+    // (on the page, in the panel's outline)
+    if ws.output.is_none() && !fill_here(ws) {
+        return Some(goal_panel(None, widget::text::caption(waiting_note(ws).unwrap_or_else(|| "Checking…".into())).into()));
+    }
+    Some(state_view(ws, table, &on_page()))
 }
 
 #[allow(dead_code)]
@@ -2602,10 +2593,9 @@ pub fn proof_window(app: &App) -> Element<'_, Message> {
     let content = widget::responsive(move |size| {
         super::insert::set_popout_open(app.popout.is_some());
         let table = app.table(&ws.machine);
-        // (the state on the page, so that its subgoal cards stand out from it as they do there)
+        // (the state on the page, in the goal panel's own outline)
         let state = widget::container(thin(widget::container(state_view(ws, &*table, &on_page())).padding(Padding { right: z(10.0), ..Padding::ZERO }))).padding([sp.space_xs, sp.space_xs]).class(theme::Container::custom(|theme| iced::widget::container::Style {
             background: Some(page_color(theme).into()),
-            border: Border { radius: 8.0.into(), width: 1.0, color: Color { a: 0.12, ..Color::from(theme.cosmic().on_bg_color()) } },
             ..Default::default()
         }));
         let editor = window_card(block_editor_in(Some(ws), t, true, None, &*table));
@@ -3264,11 +3254,29 @@ pub fn waiting_note(ws: &Workspace) -> Option<String> {
 /// The goal panel: the insert bar (symbols, steps or markup for the caret, above the first
 /// subgoal, where they are wanted while the goal is shown), then the proof state
 fn state_view<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols, on: &Beneath) -> Element<'a, Message> {
-    let state = state_body(ws, table, on);
-    match super::insert::insert_bar(ws, table) {
-        Some(bar) => widget::column::with_capacity(2).spacing(spacing().space_xs).push(bar).push(state).into(),
-        None => state,
-    }
+    goal_panel(super::insert::insert_bar(ws, table), state_body(ws, table, on))
+}
+
+/// The goal panel: outlined 2 px grey ([`card_border_color`]: #bcbcbc light, #5c5c5c dark), the
+/// insert bar (the tools and symbol keys) on its lightish band at the top, edge to edge, then
+/// the body
+fn goal_panel<'a>(band: Option<Element<'a, Message>>, body: Element<'a, Message>) -> Element<'a, Message> {
+    let sp = spacing();
+    let body = widget::container(body).padding([sp.space_xs, sp.space_s]).width(Length::Fill);
+    let content = widget::column::with_capacity(2).push_maybe(band).push(body);
+    let panel = widget::container(content).padding(2).width(Length::Fill).clip(true).class(theme::Container::custom(|theme| iced::widget::container::Style {
+        border: Border { radius: 0.0.into(), width: 2.0, color: card_border_color(theme) },
+        ..Default::default()
+    }));
+    #[cfg(test)]
+    let panel = panel.id(test_panel_id("panel"));
+    panel.into()
+}
+
+/// The ids the goal panel's parts have under test
+#[cfg(test)]
+pub fn test_panel_id(part: &str) -> widget::Id {
+    widget::Id::new(format!("deductum-test-panel-{part}"))
 }
 
 /// The proof state: as parts (the chained facts, then each subgoal as fix, assume and show,
@@ -3291,10 +3299,9 @@ fn state_body<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols, on: &Ben
     let have_parts = g.count.is_some() || g.nogoal || !g.facts.is_empty();
     // Goals or Text: two even segments of one small control, as the side panel's tabs are
     let toggle = |label: &'static str, on: bool, msg: Message| {
-        widget::button::custom(widget::text(label).size(z(13.0)).width(Length::Fill).height(Length::Fill).align_x(Alignment::Center).align_y(Alignment::Center))
-            .width(Length::Fixed(z(64.0)))
+        widget::button::custom(widget::text(label).size(z(13.0)).height(Length::Fill).align_y(Alignment::Center))
             .height(Length::Fill)
-            .padding(0)
+            .padding([0, z(12.0) as u16])
             // (the chosen side in the muted accent, household rule 6)
             .class(if on { muted_button(theme::Button::Icon) } else { theme::Button::Icon })
             .on_press(msg)
@@ -3307,12 +3314,47 @@ fn state_body<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols, on: &Ben
             border: Border { radius: 15.0.into(), ..Default::default() },
             ..Default::default()
         }));
-    let controls = widget::row::with_capacity(4)
-        .spacing(sp.space_xxs)
-        .align_y(Alignment::Center)
-        .push(switch)
+    // What the command did: subgoals solved, and new ones
+    let prev = super::goals::Goals::parse(&ws.goals_prev.messages);
+    let before: Vec<String> = prev.subgoals.iter().map(|s| s.key()).collect();
+    let now: Vec<String> = g.subgoals.iter().map(|s| s.key()).collect();
+    // (what the step changed only when the settings ask for it)
+    let compared = prev.count.is_some() && super::settings::show_changes();
+    let solved = before.iter().filter(|k| !now.contains(k)).count();
+    let added = now.iter().filter(|k| !before.contains(k)).count();
+    let n = g.count.unwrap_or(0);
+    let headline = if g.nogoal {
+        "No goal: stating facts (forward mode)".to_string()
+    } else if n == 0 {
+        format!("No {}s left: the proof can be finished", ws.profile.goal_noun())
+    } else {
+        format!("{n} {}{}", ws.profile.goal_noun(), if n == 1 { "" } else { "s" })
+    };
+    // The heading line: "N goals" in bold, and at its right Goals | Text (sized to its parts) and
+    // Types, which stays a checkbox
+    let mut controls = widget::row::with_capacity(8).spacing(sp.space_s).align_y(Alignment::Center);
+    if have_parts {
+        controls = controls.push(widget::text::heading(headline).font(cosmic::font::bold()));
+        if matches!(ws.goals.status.as_str(), "waiting" | "running") {
+            controls = controls.push(widget::text::caption("updating…"));
+        }
+        if compared && (solved > 0 || added > 0) {
+            let mut parts = Vec::new();
+            if solved > 0 {
+                parts.push(format!("{solved} solved"));
+            }
+            if added > 0 {
+                parts.push(format!("{added} new"));
+            }
+            controls = controls.push(widget::text::caption(format!("by this step: {}", parts.join(", "))));
+        }
+    }
+    let controls = controls
         .push(widget::Space::new().width(Length::Fill))
+        .push(switch)
         .push_maybe(ws.profile.goal_types_option().then(|| widget::checkbox(ws.show_types).label("Types").on_toggle(Message::ShowTypes)));
+    #[cfg(test)]
+    let controls = widget::container(controls).id(test_panel_id("heading"));
     // On a proof tool typed in the text (sledgehammer, nitpick, …): what it is doing and what it
     // found, as they come, above the goal it works on, with its settings
     let tool = ws.output.as_ref().and_then(|o| o["command"]["name"].as_str()).and_then(|n| ws.caps.typed_tool(n));
@@ -3362,42 +3404,11 @@ fn state_body<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols, on: &Ben
         }
         return col.into();
     }
-    // What the command did: subgoals solved, and new ones
-    let prev = super::goals::Goals::parse(&ws.goals_prev.messages);
-    let before: Vec<String> = prev.subgoals.iter().map(|s| s.key()).collect();
-    let now: Vec<String> = g.subgoals.iter().map(|s| s.key()).collect();
-    // (what the step changed only when the settings ask for it)
-    let compared = prev.count.is_some() && super::settings::show_changes();
-    let solved = before.iter().filter(|k| !now.contains(k)).count();
-    let added = now.iter().filter(|k| !before.contains(k)).count();
-    let n = g.count.unwrap_or(0);
-    let headline = if g.nogoal {
-        "No goal: stating facts (forward mode)".to_string()
-    } else if n == 0 {
-        format!("No {}s left: the proof can be finished", ws.profile.goal_noun())
-    } else {
-        format!("{n} {}{}", ws.profile.goal_noun(), if n == 1 { "" } else { "s" })
-    };
     // The command's own output (a theorem it proved, a value, a warning) comes first: it is
     // what the step did
     if !in_tool {
         col = col.push(tool_output(ws, table, on));
     }
-    let mut head = widget::row::with_capacity(3).spacing(sp.space_s).align_y(Alignment::Center).push(widget::text::heading(headline));
-    if matches!(ws.goals.status.as_str(), "waiting" | "running") {
-        head = head.push(widget::text::caption("updating…"));
-    }
-    if compared && (solved > 0 || added > 0) {
-        let mut parts = Vec::new();
-        if solved > 0 {
-            parts.push(format!("{solved} solved"));
-        }
-        if added > 0 {
-            parts.push(format!("{added} new"));
-        }
-        head = head.push(widget::text::caption(format!("by this step: {}", parts.join(", "))));
-    }
-    col = col.push(head);
     if !g.facts.is_empty() {
         let mut facts = widget::column::with_capacity(g.facts.len()).spacing(2);
         for f in &g.facts {
@@ -3409,7 +3420,10 @@ fn state_body<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols, on: &Ben
     let shown = if ws.all_goals { g.subgoals.len() } else { g.subgoals.len().min(4) };
     for (i, sg) in g.subgoals.iter().take(shown).enumerate() {
         let new = compared && !before.contains(&sg.key());
-        col = col.push(subgoal_card(ws, sg, i == 0, new, table));
+        if i > 0 {
+            col = col.push(hairline(i));
+        }
+        col = col.push(subgoal_card(ws, sg, i == 0, new, table, on));
     }
     if g.subgoals.len() > shown {
         col = col.push(widget::button::text(format!("Show {} more", g.subgoals.len() - shown)).on_press(Message::AllGoals(true)));
@@ -3810,19 +3824,20 @@ fn labelled<'a>(label: &'static str, body: Element<'a, Message>) -> Element<'a, 
 
 /// One subgoal as the backend's users read it, laid out by the profile (Isabelle: the variables it
 /// fixes, what it assumes, what it shows)
-fn subgoal_card<'a>(ws: &'a Workspace, sg: &super::goals::Subgoal, first: bool, new: bool, table: &dyn super::codec::Symbols) -> Element<'a, Message> {
+fn subgoal_card<'a>(ws: &'a Workspace, sg: &super::goals::Subgoal, first: bool, new: bool, table: &dyn super::codec::Symbols, on: &Beneath) -> Element<'a, Message> {
     let sp = spacing();
-    let mut head = widget::row::with_capacity(2).spacing(sp.space_xs).push(widget::text::caption(format!("{}{}", if ws.profile.goal_noun() == "goal" { "Goal " } else { "Subgoal " }, sg.n)));
-    // (the first is tinted: it is the one the next step works on, which says so)
+    // (flat on the panel, no plate: the first, the one the next step works on, says so in bold,
+    // and its label in the accent)
+    let name = format!("{}{}", if ws.profile.goal_noun() == "goal" { "Goal " } else { "Subgoal " }, sg.n);
+    let name = widget::text::caption(name);
+    let mut head = widget::row::with_capacity(3).spacing(sp.space_xs).push(if first { name.font(cosmic::font::bold()) } else { name });
     if first {
-        head = head.push(widget::text::caption("· next").class(muted()));
+        head = head.push(widget::text::caption("· next").class(theme::Text::Accent).font(cosmic::font::bold()));
     }
     if new {
         head = head.push(widget::text::caption("· new").class(theme::Text::Accent));
     }
     let mut col = widget::column::with_capacity(4).spacing(2).push(head);
-    // (its code on the card)
-    let on = &Beneath::new(move |theme| subgoal_background(theme, first));
     let stack = |parts: &[Value]| -> Element<'a, Message> {
         let mut c = widget::column::with_capacity(parts.len()).spacing(2);
         for p in parts {
@@ -3844,24 +3859,21 @@ fn subgoal_card<'a>(ws: &'a Workspace, sg: &super::goals::Subgoal, first: bool, 
             None => body,
         });
     }
-    widget::container(col)
-        .padding([sp.space_xxs, sp.space_xs])
-        .width(Length::Fill)
-        .class(theme::Container::custom(move |theme| iced::widget::container::Style {
-            background: Some(subgoal_background(theme, first).into()),
-            border: Border { radius: 6.0.into(), ..Default::default() },
-            ..Default::default()
-        }))
-        .into()
+    let card = widget::container(col).padding([sp.space_xxs, sp.space_xs]).width(Length::Fill);
+    #[cfg(test)]
+    let card = card.id(test_panel_id(&format!("subgoal-{}", sg.n)));
+    card.into()
 }
 
-/// A subgoal card's background: a later card is a little lighter (darker) than what is round it,
-/// so that it reads as a card in either theme; the first, the one the next step works on, has the
-/// construct's band over it (the accent tint at 10 %, 14 % in dark)
-fn subgoal_background(theme: &cosmic::Theme, first: bool) -> Color {
-    let c = theme.cosmic();
-    let base = cell_color(theme);
-    if first { super::tones::over(super::tones::band(theme), base) } else { blend(base, Color::from(c.on_bg_color()), 0.06) }
+/// The hairline between subgoals, in the card divider colour
+fn hairline<'a>(#[allow(unused)] i: usize) -> Element<'a, Message> {
+    let line = widget::container(widget::Space::new())
+        .width(Length::Fill)
+        .height(Length::Fixed(1.0))
+        .class(theme::Container::custom(|theme| iced::widget::container::Style { background: Some(card_border_color(theme).into()), ..Default::default() }));
+    #[cfg(test)]
+    let line = line.id(test_panel_id(&format!("hairline-{i}")));
+    line.into()
 }
 
 /// The state as Isabelle prints it, with the command's other output

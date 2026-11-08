@@ -697,3 +697,246 @@ fn a_note_is_inside_its_cells_border_with_no_plate_and_a_violet_heading() {
     assert!(near(&frame, w, b.x + b.width * 0.7, b.y + b.height - 1.0, bright), "the selected border under the note");
     assert!(is(px(&frame, w, b.x + 1.0, y), bright), "the strip beside the note is the status colour");
 }
+
+// ----- the goal panel
+
+/// The demo's proof being edited with the caret at a step (`apply`), where the bar offers the proof
+/// tools, and its two goals shown under the proof
+fn goal_app() -> App {
+    let mut app = demo_app(Mode::Literate);
+    app.show_right = false;
+    app.show_sidebar = false;
+    app.window_width = 1000.0;
+    let i = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.name == "lemma").unwrap();
+    let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(i));
+    super::snapshot::caret_in_block(&mut app, "apply", 0);
+    app
+}
+
+const PANEL: Size = Size::new(1000.0, 900.0);
+
+/// The goal panel's frame and the bounds of its identified parts, in the theme asked for (the
+/// dark one is the tests' default, so it is set again after the light)
+fn goal_frame(light: bool) -> (Vec<u8>, Vec<(cosmic::widget::Id, Rectangle)>) {
+    let app = goal_app();
+    let mut h = Harness::new(PANEL);
+    cosmic::theme::set_active(if light { cosmic::theme::ThemeType::Light } else { cosmic::theme::ThemeType::Dark });
+    super::view::set_goal_beside(false);
+    let _ = h.draw(&app, "panel-warm");
+    let frame = h.draw(&app, if light { "panel-light" } else { "panel-dark" });
+    let mut all = Bounds(Vec::new());
+    h.operate(&app, &mut all);
+    cosmic::theme::set_active(cosmic::theme::ThemeType::Dark);
+    (frame, all.0)
+}
+
+fn part(all: &[(cosmic::widget::Id, Rectangle)], id: cosmic::widget::Id) -> Rectangle {
+    all.iter().find(|(x, _)| *x == id).unwrap_or_else(|| panic!("{id:?} is not on the page")).1
+}
+
+/// The panel is outlined 2 px grey (#bcbcbc light, #5c5c5c dark), and its tools sit on a band in
+/// the window chrome's lightish colour (#d7d7d7 light, #272727 dark) that runs edge to edge inside it
+#[test]
+fn the_goal_panel_has_a_two_pixel_grey_outline_and_a_lightish_band() {
+    for light in [true, false] {
+        let (frame, all) = goal_frame(light);
+        let theme = if light { cosmic::Theme::light() } else { cosmic::Theme::dark() };
+        let w = PANEL.width as u32;
+        let panel = part(&all, super::view::test_panel_id("panel"));
+        let grey = card_border_color(&theme);
+        assert_eq!(hex(grey), if light { "#bcbcbc" } else { "#5c5c5c" });
+        // two pixels of grey at each side: the panel's edges are at fractions of a pixel, so the
+        // strength of the line is summed across the edge (2 is two whole pixels of grey; at the
+        // top, the band beside it adds a little)
+        let page = super::view::page_color(&theme);
+        let (mx, my) = (panel.x + panel.width / 2.0, panel.y + panel.height / 2.0);
+        for (what, n) in [
+            ("left", line_strength(&frame, w, panel.x + 1.0, my, true, grey, page)),
+            ("right", line_strength(&frame, w, panel.x + panel.width - 1.0, my, true, grey, page)),
+            ("top", line_strength(&frame, w, mx, panel.y + 1.0, false, grey, page)),
+            ("bottom", line_strength(&frame, w, mx, panel.y + panel.height - 1.0, false, grey, page)),
+        ] {
+            assert!((1.6..=2.5).contains(&n), "light={light}: the {what} outline is {n:.2} px of grey (2 wanted)");
+        }
+        // the band: COSMIC's background colour, inside the outline, at the panel's top
+        let band = part(&all, super::insert::insert_bar_id());
+        let bg = super::view::chrome_color(&theme);
+        assert_eq!(hex(bg), if light { "#d7d7d7" } else { "#272727" });
+        assert!((band.x - (panel.x + 2.0)).abs() < 1.0 && (band.width - (panel.width - 4.0)).abs() < 1.5, "the band is {band:?} in {panel:?}");
+        assert!((band.y - (panel.y + 2.0)).abs() < 1.0, "the band is at the panel's top: {band:?} in {panel:?}");
+        for x in [band.x + 2.0, band.x + band.width - 3.0] {
+            assert!(is(px(&frame, w, x, band.y + 2.0), bg), "light={light}: the band at {x}: {:?}", px(&frame, w, x, band.y + 2.0));
+        }
+        // and the body under it is not the band's colour
+        let sub = part(&all, super::view::test_panel_id("subgoal-1"));
+        assert!(!is(px(&frame, w, sub.x + sub.width - 10.0, sub.y + sub.height / 2.0), bg), "light={light}: the body is on the band's colour");
+    }
+}
+
+/// The tools and the symbol keys are accent links: bold, underlined, with no chip fill (only the
+/// search field, a field, is filled)
+#[test]
+fn the_tools_are_accent_links_with_no_chip_fill() {
+    for light in [true, false] {
+        let (frame, all) = goal_frame(light);
+        let theme = if light { cosmic::Theme::light() } else { cosmic::Theme::dark() };
+        let w = PANEL.width as u32;
+        let band = part(&all, super::insert::insert_bar_id());
+        let bg = super::view::chrome_color(&theme);
+        let accent: Color = theme.cosmic().accent_text_color().into();
+        // right of the search field (110 px and its padding): the links
+        let (x0, x1) = ((band.x + 150.0) as u32, (band.x + band.width - 40.0) as u32);
+        let (y0, y1) = (band.y as u32 + 2, (band.y + band.height) as u32 - 2);
+        let (mut ink, mut stray) = (0, Vec::new());
+        for y in y0..=y1 {
+            for x in x0..x1 {
+                let p = px(&frame, w, x as f32, y as f32);
+                if is(p, bg) {
+                    continue;
+                }
+                if on_ink_line(p, bg, accent) {
+                    ink += 1;
+                } else {
+                    stray.push((x, y, p));
+                }
+            }
+        }
+        assert!(ink > 150, "light={light}: only {ink} pixels of the accent {} on the band", hex(accent));
+        assert!(stray.len() < 8, "light={light}: {} pixels that are neither the band nor the accent (a chip's fill?): {:?}", stray.len(), &stray[..stray.len().min(4)]);
+        // an underline: a row with a long run of the accent
+        let underline = (y0..=y1).any(|y| {
+            let (mut run, mut best) = (0, 0);
+            for x in x0..x1 {
+                let p = px(&frame, w, x as f32, y as f32);
+                if !is(p, bg) && on_ink_line(p, bg, accent) { run += 1; best = best.max(run) } else { run = 0 }
+            }
+            best >= 30
+        });
+        assert!(underline, "light={light}: no underline under the tools");
+    }
+}
+
+/// Where along the heading line's middle a click sends `wanted`, scanning from the right
+fn click_x(h: &mut Harness, app: &App, heading: Rectangle, wanted: impl Fn(&super::Message) -> bool) -> f32 {
+    let y = heading.y + heading.height / 2.0;
+    let mut x = heading.x + heading.width - 2.0;
+    while x > heading.x {
+        if h.click(app, cosmic::iced::Point::new(x, y)).iter().any(&wanted) {
+            return x;
+        }
+        x -= 3.0;
+    }
+    panic!("nothing on the heading line sends the message, in {heading:?}")
+}
+
+/// "N goals" is a bold heading at the left of its line; Goals | Text, sized to its two parts, and
+/// Types are on the same line at the right, and no row of their own is above the first subgoal
+#[test]
+fn goals_text_and_types_are_on_the_headings_line() {
+    let app = goal_app();
+    let mut h = Harness::new(PANEL);
+    cosmic::theme::set_active(cosmic::theme::ThemeType::Light);
+    super::view::set_goal_beside(false);
+    let _ = h.draw(&app, "heading-warm");
+    let frame = h.draw(&app, "heading-line");
+    let mut all = Bounds(Vec::new());
+    h.operate(&app, &mut all);
+    let heading = part(&all.0, super::view::test_panel_id("heading"));
+    let first = part(&all.0, super::view::test_panel_id("subgoal-1"));
+    let (goals, text, types) = (
+        click_x(&mut h, &app, heading, |m| matches!(m, super::Message::StateText(false))),
+        click_x(&mut h, &app, heading, |m| matches!(m, super::Message::StateText(true))),
+        click_x(&mut h, &app, heading, |m| matches!(m, super::Message::ShowTypes(_))),
+    );
+    cosmic::theme::set_active(cosmic::theme::ThemeType::Dark);
+    assert!(goals < text && text < types, "Goals {goals}, Text {text}, Types {types}: in that order along the line");
+    assert!(types > heading.x + heading.width - 120.0 && goals > heading.x + heading.width * 0.5, "the controls are at the right of the line");
+    // sized to their parts: Goals and Text are no more than a part's width apart
+    assert!(text - goals < 90.0, "Goals and Text are {} px apart: not sized to their parts", text - goals);
+    // one line: it is under 40 px, and the first subgoal follows it directly
+    assert!(heading.height < 40.0, "the heading line is {} px tall: two rows", heading.height);
+    let band = part(&all.0, super::insert::insert_bar_id());
+    assert!(heading.y >= band.y + band.height && heading.y - (band.y + band.height) < 16.0, "the heading line at {} is not directly under the band ending at {}", heading.y, band.y + band.height);
+    assert!(first.y >= heading.y + heading.height, "the first subgoal is above the heading line");
+    // the heading itself is bold ink at the line's left
+    let w = PANEL.width as u32;
+    let page = super::view::page_color(&cosmic::Theme::light());
+    let mut dark = 0;
+    for x in (heading.x as u32 + 4)..(heading.x as u32 + 120) {
+        for y in (heading.y as u32)..((heading.y + heading.height) as u32) {
+            let p = px(&frame, w, x as f32, y as f32);
+            if luminance(Color::from_rgb8(p[0], p[1], p[2])) < luminance(page) - 0.4 {
+                dark += 1;
+            }
+        }
+    }
+    assert!(dark > 80, "the heading's text: {dark} dark pixels");
+}
+
+/// Subgoals are flat: no plate fill (the first has no accent tint either), a hairline in the card
+/// divider colour between them, and the labels in the accent
+#[test]
+fn subgoals_are_flat_with_a_hairline_and_accent_labels() {
+    for light in [true, false] {
+        let (frame, all) = goal_frame(light);
+        let theme = if light { cosmic::Theme::light() } else { cosmic::Theme::dark() };
+        let w = PANEL.width as u32;
+        let (one, two) = (part(&all, super::view::test_panel_id("subgoal-1")), part(&all, super::view::test_panel_id("subgoal-2")));
+        // no plate: well inside each card at the right, away from its text, the colour is the same
+        // and the page's
+        let page = super::view::page_color(&theme);
+        for card in [one, two] {
+            for dy in [4.0, card.height / 2.0, card.height - 4.0] {
+                let p = px(&frame, w, card.x + card.width - 30.0, card.y + dy);
+                assert!(is(p, page), "light={light}: a plate at {dy} of a subgoal: {p:?} on {}", hex(page));
+            }
+        }
+        // the hairline between them: one pixel, in the divider colour, the cards' width
+        let line = part(&all, super::view::test_panel_id("hairline-1"));
+        assert!((line.height - 1.0).abs() < 0.1 && line.y >= one.y + one.height - 1.0 && line.y + 1.0 <= two.y + 1.0, "the hairline {line:?} between {one:?} and {two:?}");
+        let grey = card_border_color(&theme);
+        for x in [line.x + 10.0, line.x + line.width / 2.0, line.x + line.width - 10.0] {
+            let strength = line_strength(&frame, w, x, line.y, false, grey, page);
+            assert!((0.75..=1.1).contains(&strength), "light={light}: the hairline at {x} is {strength:.2} of a grey line");
+        }
+        // labels in the accent: "· next" beside Subgoal 1's name, "show" in each card's column
+        let accent: Color = theme.cosmic().accent_color().into();
+        let in_accent = |r: Rectangle| {
+            let mut n = 0;
+            for y in (r.y as u32)..((r.y + r.height) as u32) {
+                for x in (r.x as u32)..((r.x + r.width) as u32) {
+                    let p = px(&frame, w, x as f32, y as f32);
+                    if !is(p, page) && on_ink_line(p, page, accent) && p[2] >= p[0] {
+                        n += 1;
+                    }
+                }
+            }
+            n
+        };
+        let name_row = |c: Rectangle, x0: f32, x1: f32| Rectangle { x: c.x + x0, y: c.y, width: x1 - x0, height: 18.0 };
+        assert!(in_accent(name_row(one, 70.0, 200.0)) > 25, "light={light}: '· next' is not in the accent");
+        assert_eq!(in_accent(name_row(two, 70.0, 200.0)), 0, "light={light}: the second subgoal has an accent label beside its name");
+        let label = |c: Rectangle| Rectangle { x: c.x + 4.0, y: c.y + 18.0, width: 52.0, height: c.height - 18.0 };
+        assert!(in_accent(label(one)) > 20 && in_accent(label(two)) > 20, "light={light}: the 'show' labels are not in the accent");
+    }
+}
+
+/// Subgoal 1 is bold while it is next, and the second is not
+#[test]
+fn the_next_subgoals_name_is_bold() {
+    let (frame, all) = goal_frame(true);
+    let w = PANEL.width as u32;
+    let page = super::view::page_color(&cosmic::Theme::light());
+    let ink = |c: Rectangle| {
+        let mut n = 0.0;
+        for y in (c.y as u32)..(c.y as u32 + 18) {
+            for x in (c.x as u32 + 8)..(c.x as u32 + 62) {
+                let p = px(&frame, w, x as f32, y as f32);
+                n += 1.0 - luminance(Color::from_rgb8(p[0], p[1], p[2])) / luminance(page).max(0.01);
+            }
+        }
+        n
+    };
+    let (one, two) = (ink(part(&all, super::view::test_panel_id("subgoal-1"))), ink(part(&all, super::view::test_panel_id("subgoal-2"))));
+    assert!(one > two * 1.12, "the next subgoal's name has {one:.1} of ink, the other {two:.1}: not bolder");
+}

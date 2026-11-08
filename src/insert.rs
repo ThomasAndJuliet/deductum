@@ -206,8 +206,9 @@ pub fn chip<'a>(item: Item, compact: bool) -> Element<'a, Message> {
     let wrap = Message::Wrap(item.entry.before, item.entry.after);
     // A symbol on its own: its character as large as the Symbols panel sets it (the code font's
     // arrows and connectives are small for their size, and at 16 px → and ↔ were hard to tell
-    // apart), on a squarish chip of one width so that a row of them is even. 30 px high, it is
-    // no taller than the search field, so the bar stays one row and the goals do not move
+    // apart), a bare accent glyph (household rule 7: no key cap) in a space of one width so that a
+    // row of them is even. 30 px high, it is no taller than the search field, so the bar stays
+    // one row and the goals do not move
     let glyph = item.symbol && (compact || item.detail.is_empty());
     let button = if glyph {
         widget::button::custom(
@@ -223,35 +224,25 @@ pub fn chip<'a>(item: Item, compact: bool) -> Element<'a, Message> {
         .padding(0)
         .width(Length::Fixed(z(if item.entry.label.chars().count() > 1 { 42.0 } else { 32.0 })))
         .height(Length::Fixed(z(30.0)))
-        .class(squarish())
-    } else {
-        let label = if compact || item.detail.is_empty() { item.entry.label.clone() } else { format!("{}  {}", item.entry.label, item.detail) };
-        widget::button::custom(widget::text(label).size(z(13.0)).font(if item.symbol { cosmic::font::mono() } else { cosmic::font::default() }).wrapping(iced::widget::text::Wrapping::None))
+        .class(theme::Button::Link)
+        .on_press(wrap)
+    } else if item.symbol {
+        // (a symbol found by a search, with its name: the glyph bare, in the accent)
+        let label = format!("{}  {}", item.entry.label, item.detail);
+        widget::button::custom(widget::text(label).size(z(13.0)).font(cosmic::font::mono()).wrapping(iced::widget::text::Wrapping::None))
             .padding([z(4.0), z(9.0)])
-            .class(theme::Button::Standard)
+            .class(theme::Button::Link)
+            .on_press(wrap)
+    } else {
+        // A step or a proof tool (sledgehammer, nitpick, have, using…): a Tertiary link
+        let label = if compact || item.detail.is_empty() { item.entry.label.clone() } else { format!("{}  {}", item.entry.label, item.detail) };
+        super::view::tertiary(label, wrap)
     };
-    let button = button.on_press(wrap);
     // (its name, when only its character shows, in a tooltip)
     if glyph && !item.detail.is_empty() {
         widget::tooltip(button, widget::text(item.detail).font(cosmic::font::mono()).size(z(13.0)), widget::tooltip::Position::Bottom).into()
     } else {
         button.into()
-    }
-}
-
-/// A standard button's look with small rounded corners: a symbol chip is a key to press, and
-/// the pill shape of a 32 px button is a circle that crowds its glyph
-fn squarish() -> theme::Button {
-    use cosmic::widget::button::Catalog;
-    fn corners(mut s: cosmic::widget::button::Style) -> cosmic::widget::button::Style {
-        s.border_radius = z(6.0).into();
-        s
-    }
-    theme::Button::Custom {
-        active: Box::new(|focused, t: &cosmic::Theme| corners(t.active(focused, false, &theme::Button::Standard))),
-        disabled: Box::new(|t: &cosmic::Theme| corners(t.disabled(&theme::Button::Standard))),
-        hovered: Box::new(|focused, t: &cosmic::Theme| corners(t.hovered(focused, false, &theme::Button::Standard))),
-        pressed: Box::new(|focused, t: &cosmic::Theme| corners(t.pressed(focused, false, &theme::Button::Standard))),
     }
 }
 
@@ -386,7 +377,8 @@ pub fn insert_bar<'a>(ws: &'a Workspace, table: &dyn Symbols) -> Option<Element<
     Some(bar_band(col.into()))
 }
 
-/// The bar's band: of its own above the state, faintly set off from it
+/// The bar's band: the panel's top, on the lightish band colour of the window's chrome (#d7d7d7 in
+/// light, #272727 in dark: [`chrome_color`](super::view::chrome_color)), edge to edge inside the panel's border
 fn bar_band<'a>(content: Element<'a, Message>) -> Element<'a, Message> {
     {
         widget::container(content)
@@ -394,8 +386,7 @@ fn bar_band<'a>(content: Element<'a, Message>) -> Element<'a, Message> {
             .padding([z(4.0), z(6.0)])
             .width(Length::Fill)
             .class(theme::Container::custom(|theme| iced::widget::container::Style {
-                background: Some(Color { a: if theme.cosmic().is_dark { 0.05 } else { 0.06 }, ..Color::from(theme.cosmic().on_bg_color()) }.into()),
-                border: Border { radius: 8.0.into(), ..Default::default() },
+                background: Some(super::view::chrome_color(theme).into()),
                 ..Default::default()
             }))
             .into()
