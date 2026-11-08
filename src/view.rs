@@ -1125,6 +1125,15 @@ fn symbol_text<'a>(text: &str, table: &dyn super::codec::Symbols, size: f32) -> 
 }
 
 fn symbol_text_with_font<'a>(text: &str, table: &dyn super::codec::Symbols, size: f32, normal: cosmic::iced::Font) -> Element<'a, Message> {
+    symbol_text_in(text, table, size, normal, iced::widget::text::Wrapping::default())
+}
+
+/// [`symbol_text`] in the code font, wrapping as `wrapping` says
+fn symbol_text_wrapped<'a>(text: &str, table: &dyn super::codec::Symbols, size: f32, wrapping: iced::widget::text::Wrapping) -> Element<'a, Message> {
+    symbol_text_in(text, table, size, cosmic::font::mono(), wrapping)
+}
+
+fn symbol_text_in<'a>(text: &str, table: &dyn super::codec::Symbols, size: f32, normal: cosmic::iced::Font, wrapping: iced::widget::text::Wrapping) -> Element<'a, Message> {
     let d = table.decode(text);
     let style_at: std::collections::HashMap<usize, super::codec::Style> = d.styles.iter().map(|(i, st)| (*i, *st)).collect();
     let mut runs: Vec<(String, Option<super::codec::Style>)> = Vec::new();
@@ -1143,7 +1152,7 @@ fn symbol_text_with_font<'a>(text: &str, table: &dyn super::codec::Symbols, size
             _ => normal,
         }))
         .collect();
-    iced::widget::rich_text(spans).size(size).into()
+    iced::widget::rich_text(spans).size(size).wrapping(wrapping).into()
 }
 
 fn symbol_font(st: Option<super::codec::Style>) -> cosmic::iced::Font {
@@ -1322,36 +1331,117 @@ pub fn z(px: f32) -> f32 {
     (px * zoom()).round()
 }
 
-/// One message in a cell's card, under its code (an error, a warning): its icon, what went wrong
-/// in the code font (the goal it lists is the one the goal view shows), and its line. All in the
-/// muted status colour of the message (failed, unfinished); no plate and no bar of its own, as
-/// the card's border and strip are the cell's
-fn message_strip<'a>(t: &Theory, kind: &str, start: usize, text: &str, table: &dyn super::codec::Symbols) -> Element<'a, Message> {
+/// One message in a cell's card, under its code (an error, a warning). Collapsed, one line: a
+/// disclosure, the message's icon and what went wrong (the first line of its summary, in the code
+/// font; the goal it lists is the one the goal view shows), all in the muted status colour of the
+/// message (failed, unfinished) and 8 px apart; at the right a copy icon and the line. The
+/// disclosure and the summary open the prover's whole message in place, in the text colour, wrapped
+/// at the card's `width`. No plate and no bar of its own, as the card's border and strip are the
+/// cell's
+fn message_strip<'a>(t: &Theory, kind: &str, start: usize, text: &str, table: &dyn super::codec::Symbols, width: f32) -> Element<'a, Message> {
     let error = kind == "error";
     let line = super::ot::line_col(&t.local, start).0;
     let tone = move |theme: &cosmic::Theme| muted_status_color(if error { error_color(theme) } else { sorry_color(theme) }, theme);
-    let icon = widget::icon::from_name(if error { "dialog-error-symbolic" } else { "dialog-warning-symbolic" })
-        .size(14)
-        .icon()
-        .class(theme::Svg::custom(move |theme| iced::widget::svg::Style { color: Some(tone(theme)) }));
-    let body = widget::row::with_capacity(3)
-        .spacing(z(8.0))
-        .push(widget::container(icon).padding(Padding { top: z(1.0), ..Padding::ZERO }))
-        .push(widget::container(symbol_text(&t.profile.message_summary(text), table, z(12.0))).width(Length::Fill))
-        .push(widget::text::caption(format!("line {line}")).class(muted()));
-    let body = widget::container(body).padding([z(4.0), CODE_PADDING.left]).width(Length::Fill).class(theme::Container::custom(move |theme| iced::widget::container::Style {
-        text_color: Some(tone(theme)),
-        ..Default::default()
-    }));
-    // (a summary stands for more: the whole message is a tooltip on it)
-    let full = text.trim_end();
-    if t.profile.message_summary(text) != full {
-        widget::tooltip(body, widget::container(symbol_text(full, table, z(12.0))).padding(6), widget::tooltip::Position::Bottom)
-            .class(theme::Container::Card)
-            .into()
-    } else {
-        body.into()
+    let tinted = move |name: &'static str| {
+        widget::icon::from_name(name).size(14).icon().class(theme::Svg::custom(move |theme| iced::widget::svg::Style { color: Some(tone(theme)) }))
+    };
+    let full = table.decode(text.trim_end()).text;
+    let summary = t.profile.message_summary(text);
+    let first = summary.lines().next().unwrap_or("").to_string();
+    // (there is more to show when the whole message is more than the one line shown)
+    let expandable = full.trim() != first.trim();
+    let open = expandable && t.open_messages.contains(&start);
+    let gap = z(8.0);
+    let mut head = widget::row::with_capacity(3).spacing(gap).align_y(Alignment::Center);
+    if expandable {
+        head = head.push(tinted(if open { "go-down-symbolic" } else { "go-next-symbolic" }));
     }
+    head = head
+        .push(tinted(if error { "dialog-error-symbolic" } else { "dialog-warning-symbolic" }))
+        .push(widget::container(symbol_text_wrapped(&first, table, z(12.0), iced::widget::text::Wrapping::None)).width(Length::Fill).clip(true));
+    let head: Element<'a, Message> = if expandable {
+        // (the whole row but its copy icon and line is the disclosure)
+        let button = widget::button::custom(head)
+            .padding(Padding::ZERO)
+            .width(Length::Fill)
+            .class(theme::Button::Custom {
+                active: Box::new(move |_, theme| plain_button(tone(theme))),
+                disabled: Box::new(move |theme| plain_button(tone(theme))),
+                hovered: Box::new(move |_, theme| plain_button(tone(theme))),
+                pressed: Box::new(move |_, theme| plain_button(tone(theme))),
+            })
+            .on_press(Message::ToggleMessage(start));
+        #[cfg(test)]
+        { widget::container(button).id(test_message_id(start, "toggle")).width(Length::Fill).into() }
+        #[cfg(not(test))]
+        { button.into() }
+    } else {
+        widget::container(head).width(Length::Fill).into()
+    };
+    let copy = widget::tooltip(
+        widget::button::custom(widget::icon::from_name("edit-copy-symbolic").size(16).icon())
+            .padding(2)
+            .class(theme::Button::Link)
+            .on_press(Message::CopyText(full.trim_end().to_string())),
+        widget::text("Copy the whole message"),
+        widget::tooltip::Position::Top,
+    );
+    #[cfg(test)]
+    let copy = widget::container(copy).id(test_message_id(start, "copy"));
+    let row = widget::row::with_capacity(3)
+        .spacing(gap)
+        .align_y(Alignment::Center)
+        .push(head)
+        .push(copy)
+        .push(widget::text::caption(format!("line {line}")).class(muted()));
+    let mut col = widget::column::with_capacity(2).push(
+        widget::container(row).padding([z(4.0), CODE_PADDING.left]).width(Length::Fill).class(theme::Container::custom(move |theme| iced::widget::container::Style {
+            text_color: Some(tone(theme)),
+            ..Default::default()
+        })),
+    );
+    if open {
+        // (under the summary's text; its continuation lines further in)
+        let indent = CODE_PADDING.left + 2.0 * (z(14.0) + gap);
+        let columns = ((width - indent - CODE_PADDING.right) / (z(12.0) * 0.6)).floor().max(20.0) as usize;
+        col = col.push(
+            widget::container(symbol_text_wrapped(&wrap_message(&full, columns), table, z(12.0), iced::widget::text::Wrapping::None))
+                .padding(Padding { left: indent, right: CODE_PADDING.right, top: 0.0, bottom: z(4.0) })
+                .width(Length::Fill)
+                .class(theme::Container::custom(|theme| iced::widget::container::Style { text_color: Some(super::tones::body_text(theme, 12.0)), ..Default::default() })),
+        );
+    }
+    col.into()
+}
+
+/// A button with no box, its label and icons in `tone`, whatever its state
+fn plain_button(tone: Color) -> widget::button::Style {
+    widget::button::Style { background: None, text_color: Some(tone), icon_color: Some(tone), ..Default::default() }
+}
+
+#[cfg(test)]
+pub fn test_message_id(start: usize, part: &str) -> widget::Id {
+    widget::Id::new(format!("deductum-test-message-{start}-{part}"))
+}
+
+/// A message's lines wrapped to `columns` characters at spaces, keeping each line's own
+/// indentation; what a wrap leaves of a line is indented two columns further
+fn wrap_message(text: &str, columns: usize) -> String {
+    let mut out = Vec::new();
+    for line in text.lines() {
+        let indent = line.chars().take_while(|c| *c == ' ').count();
+        let cont = (indent + 2).min(columns / 2);
+        let mut rest: Vec<char> = line.chars().collect();
+        while rest.len() > columns {
+            // (the last space inside the line, after its indentation; else mid-word)
+            let cut = (indent.max(cont) + 1..=columns).rev().find(|&i| rest[i] == ' ').unwrap_or(columns);
+            out.push(rest[..cut].iter().collect::<String>().trim_end().to_string());
+            let tail: String = rest[cut..].iter().collect::<String>().trim_start().to_string();
+            rest = std::iter::repeat_n(' ', cont).chain(tail.chars()).collect();
+        }
+        out.push(rest.iter().collect());
+    }
+    out.join("\n")
 }
 
 /// The errors and warnings of a block being edited, stacked, `width` wide: in the open block's card
@@ -1363,7 +1453,7 @@ fn edit_messages<'a>(t: &Theory, be: &super::editor::BlockEditor, table: &dyn su
     }
     let mut strips = widget::column::with_capacity(msgs.len()).spacing(2);
     for m in msgs.into_iter().take(6) {
-        strips = strips.push(message_strip(t, &m.kind, m.start, &m.text, table));
+        strips = strips.push(message_strip(t, &m.kind, m.start, &m.text, table, width));
     }
     Some(widget::container(strips).width(Length::Fixed(width)).into())
 }
@@ -1385,7 +1475,7 @@ fn messages_view<'a>(t: &Theory, block: &Block, table: &dyn super::codec::Symbol
     }
     let mut col = widget::column::with_capacity(msgs.len()).spacing(2);
     for m in msgs.into_iter().take(6) {
-        col = col.push(message_strip(t, &m.kind, m.start, &m.text, table));
+        col = col.push(message_strip(t, &m.kind, m.start, &m.text, table, width));
     }
     // As wide as the code it is about, under it, inside its card
     Some(widget::container(col).width(Length::Fixed(width)).into())

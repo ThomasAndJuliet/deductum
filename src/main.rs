@@ -329,6 +329,8 @@ pub enum Message {
     /// Start the helper conversation again
     HelperReset,
     CopyText(String),
+    /// Fold or unfold a message in its cell (by where it starts)
+    ToggleMessage(usize),
     RefOpenHere(cosmic::iced::window::Id),
     RefBack(cosmic::iced::window::Id),
     RefAction(cosmic::iced::window::Id, Action),
@@ -3836,6 +3838,13 @@ impl cosmic::Application for App {
                         ws.fill.conversation = None;
                     }
                     self.status = Some(format!("The next {agent} query starts a new conversation"));
+                }
+            }
+            Message::ToggleMessage(start) => {
+                if let Some(t) = self.workspace.as_mut().and_then(|w| w.theory.as_mut()) {
+                    if !t.open_messages.remove(&start) {
+                        t.open_messages.insert(start);
+                    }
                 }
             }
             Message::CopyText(text) => {
