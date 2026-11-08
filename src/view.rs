@@ -604,6 +604,7 @@ fn workspace<'a>(app: &'a App, ws: &'a Workspace, right: bool, main_width: f32) 
             COLUMN_CAP.store(page.column.to_bits(), std::sync::atomic::Ordering::Relaxed);
             CELL_CAP.store(page.cell.to_bits(), std::sync::atomic::Ordering::Relaxed);
             WIDE.store(beside, std::sync::atomic::Ordering::Relaxed);
+            WINDOW_HEIGHT.store(app.window_height.to_bits(), std::sync::atomic::Ordering::Relaxed);
             GOAL_HEADING_STACKED.store(t.mode == Mode::Literate && beside && goal_width < z(GOAL_HEADING_ROOM), std::sync::atomic::Ordering::Relaxed);
             let inline = if beside { None } else { Some(ws) };
             let _ = right;
@@ -2072,7 +2073,7 @@ fn inline_goal<'a>(ws: Option<&'a Workspace>, table: &dyn super::codec::Symbols)
     let ws = ws?;
     // (on the page, in the panel's outline)
     if ws.output.is_none() && !fill_here(ws) {
-        return Some(goal_panel(None, widget::text::caption(waiting_note(ws).unwrap_or_else(|| "Checking…".into())).into()));
+        return Some(goal_panel(None, widget::text::caption(waiting_note(ws).unwrap_or_else(|| "Checking…".into())).into(), None));
     }
     Some(state_view(ws, table, &on_page()))
 }
@@ -2334,7 +2335,7 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
     };
     let goal: Element<'a, Message> = match (beside, anchor) {
         _ if palette.is_some() => palette.unwrap_or_else(|| widget::Space::new().into()),
-        (Some((ws, width, _)), Some(_)) => match inline_goal(Some(ws), &*table) {
+        (Some((ws, width, _)), Some(_)) => match goal_beside(ws, &*table) {
             Some(g) => widget::container(g)
                 .width(Length::Fixed(width))
                 .class(theme::Container::custom(|theme| iced::widget::container::Style {
@@ -3311,7 +3312,7 @@ fn source<'a>(ws: &'a Workspace, t: &'a Theory, inline: Option<&'a Workspace>, t
     // The goal level with the construct, over its reserved column (moving only as far as it
     // must to stay in sight)
     let formal = formal_at_caret(t);
-    let (goal_width, goal): (f32, Element<'a, Message>) = match beside.filter(|_| formal).and_then(|(w, _)| Some((w, inline_goal(Some(ws), table)?))) {
+    let (goal_width, goal): (f32, Element<'a, Message>) = match beside.filter(|_| formal).and_then(|(w, _)| Some((w, goal_beside(ws, table)?))) {
         Some((w, g)) => (w, widget::container(g).width(Length::Fixed(w)).class(theme::Container::custom(|theme| iced::widget::container::Style {
             background: Some(page_color(theme).into()),
             border: Border { radius: 6.0.into(), ..Default::default() },
@@ -3625,17 +3626,50 @@ pub fn waiting_note(ws: &Workspace) -> Option<String> {
 /// The goal panel: the insert bar (symbols, steps or markup for the caret, above the first
 /// subgoal, where they are wanted while the goal is shown), then the proof state
 fn state_view<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols, on: &Beneath) -> Element<'a, Message> {
-    goal_panel(super::insert::insert_bar(ws, table), state_body(ws, table, on))
+    goal_panel(super::insert::insert_bar(ws, table), state_body(ws, table, on, false), None)
 }
+
+/// The goal beside its cell: no taller than a share of the page ([`goal_max_height`], which only
+/// the window's height changes, so that scrolling the page does not resize it), its tools and
+/// heading staying where they are while the goals scroll inside it. The page scrolls as far as
+/// it takes to show all of the panel
+fn goal_beside<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Option<Element<'a, Message>> {
+    if ws.output.is_none() && !fill_here(ws) {
+        return inline_goal(Some(ws), table);
+    }
+    Some(goal_panel(super::insert::insert_bar(ws, table), state_body(ws, table, &on_page(), true), Some(goal_max_height())))
+}
+
+/// The share of the page a goal beside its cell may fill, and the least it may be
+const GOAL_MAX_SHARE: f32 = 0.75;
+const GOAL_MIN_MAX_HEIGHT: f32 = 240.0;
+/// What the window's height holds besides the page: the header and the status bar
+const PAGE_CHROME_HEIGHT: f32 = 76.0;
+
+/// How tall the window is, as last drawn
+static WINDOW_HEIGHT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+/// The tallest a goal beside its cell may be, in this window
+pub fn goal_max_height() -> f32 {
+    let window_height = f32::from_bits(WINDOW_HEIGHT.load(std::sync::atomic::Ordering::Relaxed));
+    #[cfg(test)]
+    if let Some(forced) = *GOAL_MAX_FORCED.lock().unwrap_or_else(|e| e.into_inner()) {
+        return forced;
+    }
+    ((window_height - PAGE_CHROME_HEIGHT) * GOAL_MAX_SHARE).max(GOAL_MIN_MAX_HEIGHT)
+}
+
+#[cfg(test)]
+pub static GOAL_MAX_FORCED: std::sync::Mutex<Option<f32>> = std::sync::Mutex::new(None);
 
 /// The goal panel: outlined 2 px grey ([`card_border_color`]: #bcbcbc light, #5c5c5c dark), the
 /// insert bar (the tools and symbol keys) on its lightish band at the top, edge to edge, then
 /// the body
-fn goal_panel<'a>(band: Option<Element<'a, Message>>, body: Element<'a, Message>) -> Element<'a, Message> {
+fn goal_panel<'a>(band: Option<Element<'a, Message>>, body: Element<'a, Message>, max_height: Option<f32>) -> Element<'a, Message> {
     let sp = spacing();
     let body = widget::container(body).padding([sp.space_xs, sp.space_s]).width(Length::Fill);
     let content = widget::column::with_capacity(2).push_maybe(band).push(body);
-    let panel = widget::container(content).padding(2).width(Length::Fill).clip(true).class(theme::Container::custom(|theme| iced::widget::container::Style {
+    let panel = widget::container(content).padding(2).width(Length::Fill).max_height(max_height.unwrap_or(f32::INFINITY)).clip(true).class(theme::Container::custom(|theme| iced::widget::container::Style {
         border: Border { radius: 0.0.into(), width: 2.0, color: card_border_color(theme) },
         ..Default::default()
     }));
@@ -3644,15 +3678,33 @@ fn goal_panel<'a>(band: Option<Element<'a, Message>>, body: Element<'a, Message>
     panel.into()
 }
 
+/// The goals' own scrolling, in a panel with a greatest height
+pub fn goal_scroll_id() -> widget::Id {
+    widget::Id::new("deductum-goal-scroll")
+}
+
 /// The ids the goal panel's parts have under test
 #[cfg(test)]
 pub fn test_panel_id(part: &str) -> widget::Id {
     widget::Id::new(format!("deductum-test-panel-{part}"))
 }
 
+/// Goals, Text and Types as one dropdown, for a goal panel too narrow to show them beside the
+/// count: it says what is shown, with its arrow at the right
+fn goal_view_menu<'a>(ws: &Workspace) -> Element<'a, Message> {
+    const WITH_TYPES: &[&str] = &["Goals", "Goals, types", "Text", "Text, types"];
+    const PLAIN: &[&str] = &["Goals", "Text"];
+    let types = ws.profile.goal_types_option();
+    let selected = if types { usize::from(ws.state_text) * 2 + usize::from(ws.show_types) } else { usize::from(ws.state_text) };
+    widget::dropdown(if types { WITH_TYPES } else { PLAIN }, Some(selected), move |i| {
+        if types { Message::GoalView { text: i >= 2, types: i % 2 == 1 } } else { Message::GoalView { text: i == 1, types: false } }
+    })
+    .into()
+}
+
 /// The proof state: as parts (the chained facts, then each subgoal as fix, assume and show,
 /// with what the command changed), or as Isabelle prints it; then any other output
-fn state_body<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols, on: &Beneath) -> Element<'a, Message> {
+fn state_body<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols, on: &Beneath, scrolls: bool) -> Element<'a, Message> {
     let sp = spacing();
     // While Isabelle has yet to check what changed at the caret, output about another command
     // (the one that was there before the edit) is not shown as if it were this one's
@@ -3702,12 +3754,16 @@ fn state_body<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols, on: &Ben
         format!("{n} {}{}", ws.profile.goal_noun(), if n == 1 { "" } else { "s" })
     };
     // The heading line: "N goals" in bold, and at its right Goals | Text (sized to its parts) and
-    // Types, which stays a checkbox
-    let mut controls = widget::row::with_capacity(8).spacing(sp.space_s).align_y(Alignment::Center);
+    // Types, which stays a checkbox; or, where those do not fit beside the count, one dropdown
+    // holding all three
+    let stacked = GOAL_HEADING_STACKED.load(std::sync::atomic::Ordering::Relaxed);
+    let heading = have_parts.then(|| widget::text::heading(headline).font(cosmic::font::bold()));
+    let mut notes = widget::row::with_capacity(2).spacing(sp.space_s).align_y(Alignment::Center);
+    let mut has_notes = false;
     if have_parts {
-        controls = controls.push(widget::text::heading(headline).font(cosmic::font::bold()));
         if matches!(ws.goals.status.as_str(), "waiting" | "running") {
-            controls = controls.push(widget::text::caption("updating…"));
+            notes = notes.push(widget::text::caption("updating…"));
+            has_notes = true;
         }
         if compared && (solved > 0 || added > 0) {
             let mut parts = Vec::new();
@@ -3717,21 +3773,30 @@ fn state_body<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols, on: &Ben
             if added > 0 {
                 parts.push(format!("{added} new"));
             }
-            controls = controls.push(widget::text::caption(format!("by this step: {}", parts.join(", "))));
+            notes = notes.push(widget::text::caption(format!("by this step: {}", parts.join(", "))));
+            has_notes = true;
         }
     }
-    // (in a narrow panel the count has a row of its own, and nothing is cut off at the panel's edge)
-    let stacked = GOAL_HEADING_STACKED.load(std::sync::atomic::Ordering::Relaxed);
-    let (count, controls) = if stacked {
-        (Some(controls), widget::row::with_capacity(3).spacing(sp.space_s).align_y(Alignment::Center))
+    let controls: Element<'a, Message> = if stacked {
+        // (what the step did goes under, so that the count and the dropdown stay on one line)
+        let line = widget::row::with_capacity(3)
+            .spacing(sp.space_s)
+            .align_y(Alignment::Center)
+            .push_maybe(heading)
+            .push(widget::Space::new().width(Length::Fill))
+            .push(goal_view_menu(ws));
+        widget::column::with_capacity(2).spacing(sp.space_xxs).push(line).push_maybe(has_notes.then_some(notes)).into()
     } else {
-        (None, controls)
+        widget::row::with_capacity(5)
+            .spacing(sp.space_s)
+            .align_y(Alignment::Center)
+            .push_maybe(heading)
+            .push_maybe(has_notes.then_some(notes))
+            .push(widget::Space::new().width(Length::Fill))
+            .push(switch)
+            .push_maybe(ws.profile.goal_types_option().then(|| widget::checkbox(ws.show_types).label("Types").on_toggle(Message::ShowTypes)))
+            .into()
     };
-    let controls = controls
-        .push(widget::Space::new().width(Length::Fill))
-        .push(switch)
-        .push_maybe(ws.profile.goal_types_option().then(|| widget::checkbox(ws.show_types).label("Types").on_toggle(Message::ShowTypes)));
-    let controls = widget::column::with_capacity(2).spacing(sp.space_xxs).push_maybe(count).push(controls);
     #[cfg(test)]
     let controls = widget::container(controls).id(test_panel_id("heading"));
     // On a proof tool typed in the text (sledgehammer, nitpick, …): what it is doing and what it
@@ -3759,7 +3824,18 @@ fn state_body<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols, on: &Ben
         };
         return widget::text::caption(text).into();
     }
-    let mut col = widget::column::with_capacity(16).spacing(sp.space_xs).push(controls);
+    // The heading, then what is under it: in a panel with a greatest height, scrolling by itself
+    // (with room at its right for the scrollbar)
+    let done = |col: Element<'a, Message>| -> Element<'a, Message> {
+        // (the dropdown is taller than Goals | Text, and leaves room enough by itself)
+        let all = widget::column::with_capacity(2).spacing(if stacked { 0 } else { sp.space_xs }).push(controls);
+        if scrolls {
+            all.push(thin(widget::container(col).padding(Padding { right: 10.0, ..Padding::ZERO }).width(Length::Fill)).id(goal_scroll_id())).into()
+        } else {
+            all.push(col).into()
+        }
+    };
+    let mut col = widget::column::with_capacity(16).spacing(sp.space_xs);
     let in_tool = tool_section.is_some();
     if let Some(section) = tool_section {
         col = col.push(section);
@@ -3767,10 +3843,10 @@ fn state_body<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols, on: &Ben
     if ws.state_text && let Some(text) = &g.text {
         // Isabelle's own text of the state, printed with the Types setting
         if !in_tool {
-            col = col.push(tool_output(ws, table, on));
+            col = col.push_maybe(tool_output(ws, table, on));
         }
         col = col.push(message_view(ws, text, table, on));
-        return col.into();
+        return done(col.into());
     }
     if ws.state_text || !have_parts {
         // (Text shows the command's output as it is; with no goal in parts, the tool's section
@@ -3781,12 +3857,12 @@ fn state_body<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols, on: &Ben
         if fill_here(ws) {
             col = col.push(fill_results(ws, table));
         }
-        return col.into();
+        return done(col.into());
     }
     // The command's own output (a theorem it proved, a value, a warning) comes first: it is
     // what the step did
     if !in_tool {
-        col = col.push(tool_output(ws, table, on));
+        col = col.push_maybe(tool_output(ws, table, on));
     }
     if !g.facts.is_empty() {
         let mut facts = widget::column::with_capacity(g.facts.len()).spacing(2);
@@ -3809,7 +3885,7 @@ fn state_body<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols, on: &Ben
     } else if ws.all_goals && g.subgoals.len() > 4 {
         col = col.push(widget::button::text("Show fewer").on_press(Message::AllGoals(false)));
     }
-    col.into()
+    done(col.into())
 }
 
 /// A typed tool's section above its goal: its name, what it is doing (how long it has been at
@@ -4045,12 +4121,14 @@ fn tool_settings<'a>(ws: &'a Workspace, tool: &'a Tool) -> Element<'a, Message> 
 /// What the command at the caret printed besides the state (a theorem, sledgehammer's or
 /// nitpick's findings typed in the text, a warning), with Insert for the proofs it offers; then
 /// an LLM's proofs for a hole, when one was asked for (typing `claude` or `codex`)
-fn tool_output<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols, on: &Beneath) -> Element<'a, Message> {
+fn tool_output<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols, on: &Beneath) -> Option<Element<'a, Message>> {
     let sp = spacing();
     let mut col = widget::column::with_capacity(8).spacing(sp.space_xxs);
+    let mut any = false;
     if let Some(out) = ws.output.as_ref().filter(|_| !super::flow::stale_tool_output(ws)) {
         // (a tool's Interrupt is its being stopped: said in its heading, not as an error)
         for m in out["messages"].as_array().into_iter().flatten().filter(|m| m["kind"] != "state" && !(m["kind"] == "error" && m["text"].as_str().is_some_and(|t| ws.profile.interrupted(t)))) {
+            any = true;
             col = col.push(message_view(ws, m, table, on));
             for sb in m["sendbacks"].as_array().into_iter().flatten().filter_map(|s| s.as_str()) {
                 col = col.push(
@@ -4069,12 +4147,15 @@ fn tool_output<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols, on: &Be
         && let Some(line) = super::keyword_line(t)
     {
         let who = line.split_whitespace().find(|w| w.starts_with("claude") || w.starts_with("codex") || w.starts_with('@')).unwrap_or("claude").to_string();
+        any = true;
         col = col.push(widget::text::caption(format!("{who}: asks when you pause typing (Enter asks now)")));
     }
     if fill_here(ws) && !ws.fill.status.is_empty() {
+        any = true;
         col = col.push(fill_section(ws, table));
     }
-    col.into()
+    // (nothing at all when there is nothing to say: an empty column would still take its spacing)
+    any.then(|| col.into())
 }
 
 /// A `claude`, `codex` or `@name` line's job, as a typed tool's section shows: who was asked,

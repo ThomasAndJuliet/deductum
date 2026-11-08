@@ -291,7 +291,10 @@ where
         let main = self.main.as_widget_mut().layout(&mut tree.children[0], renderer, limits);
         let side = self.side.as_widget_mut().layout(&mut tree.children[1], renderer, &layout::Limits::new(Size::ZERO, Size::new(f32::INFINITY, f32::INFINITY)));
         let x = if self.right { main.size().width - side.size().width - self.at.x } else { self.at.x };
-        layout::Node::with_children(main.size(), vec![main, side.move_to((x, self.at.y))])
+        // (what stays in sight may be the goal, which the end of the page must not cut off)
+        let reach = if self.follow { self.at.y + side.size().height + GOAL_ROOM } else { 0.0 };
+        let size = Size::new(main.size().width, main.size().height.max(reach));
+        layout::Node::with_children(size, vec![main, side.move_to((x, self.at.y))])
     }
 
     fn draw(&self, tree: &Tree, renderer: &mut Renderer, theme: &Theme, style: &renderer::Style, layout: Layout<'_>, cursor: mouse::Cursor, viewport: &Rectangle) {
@@ -412,9 +415,15 @@ pub struct GoalLayer<'a, Message, Theme, Renderer> {
 static GOAL_MOVED: std::sync::Mutex<Vector> = std::sync::Mutex::new(Vector::new(0.0, 0.0));
 
 #[cfg(test)]
+pub static GOAL_VIEWPORT: std::sync::Mutex<Rectangle> = std::sync::Mutex::new(Rectangle { x: 0.0, y: 0.0, width: 0.0, height: 0.0 });
+
+#[cfg(test)]
 pub fn goal_moved() -> Vector {
     GOAL_MOVED.lock().map_or(Vector::ZERO, |v| *v)
 }
+
+/// What is left under the goal when the page has gone on to show it
+const GOAL_ROOM: f32 = 16.0;
 
 impl<'a, Message, Theme, Renderer> GoalLayer<'a, Message, Theme, Renderer> {
     pub fn new(page: impl Into<Element<'a, Message, Theme, Renderer>>, goal: impl Into<Element<'a, Message, Theme, Renderer>>, anchor: Option<(usize, f32)>, gap: f32) -> Self {
@@ -487,7 +496,17 @@ where
     fn layout(&mut self, tree: &mut Tree, renderer: &Renderer, limits: &layout::Limits) -> layout::Node {
         let page = self.page.as_widget_mut().layout(&mut tree.children[0], renderer, limits);
         let goal = self.goal.as_widget_mut().layout(&mut tree.children[1], renderer, &layout::Limits::new(Size::ZERO, Size::new(f32::INFINITY, f32::INFINITY)));
-        layout::Node::with_children(page.size(), vec![page, goal])
+        // The page goes on far enough to show all of the goal: under the theory's last cell, there
+        // may be less page than there is goal
+        let reach = self.anchor.and_then(|(index, top)| {
+            let slot = match &self.indices {
+                Some(indices) => indices.lock().unwrap_or_else(|e| e.into_inner()).binary_search(&index).ok()?,
+                None => index,
+            };
+            Some(page.children().get(slot)?.bounds().y + top + goal.size().height + GOAL_ROOM)
+        });
+        let size = Size::new(page.size().width, page.size().height.max(reach.unwrap_or(0.0)));
+        layout::Node::with_children(size, vec![page, goal])
     }
 
     fn draw(&self, tree: &Tree, renderer: &mut Renderer, theme: &Theme, style: &renderer::Style, layout: Layout<'_>, cursor: mouse::Cursor, viewport: &Rectangle) {
@@ -497,6 +516,10 @@ where
         let Some(at) = self.place(layout, viewport) else { return };
         if let Ok(mut last) = GOAL_MOVED.lock() {
             *last = at;
+        }
+        #[cfg(test)]
+        if let Ok(mut last) = GOAL_VIEWPORT.lock() {
+            *last = *viewport;
         }
         let cursor = match cursor.position() {
             Some(p) => mouse::Cursor::Available(p - at),
