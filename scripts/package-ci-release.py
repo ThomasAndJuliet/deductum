@@ -9,6 +9,8 @@ import runpy
 import subprocess
 import sys
 
+import release_config
+
 APP_ID = "dev.twright.Deductum"
 root = Path(__file__).resolve().parents[1]
 if len(sys.argv) != 2:
@@ -33,7 +35,7 @@ assert os.environ["GITHUB_SHA"] == sha, "Build must package the checked-out CI r
 subprocess.run([*git, "diff", "--quiet"], cwd=root, check=True)
 subprocess.run([*git, "diff", "--cached", "--quiet"], cwd=root, check=True)
 repository = os.environ["GITHUB_REPOSITORY"]
-assert repository == "ThomasAndJuliet/deductum"
+assert repository == release_config.repository()
 run_id = int(os.environ["GITHUB_RUN_ID"])
 assert run_id > 0
 output = root / "ci-artifact"

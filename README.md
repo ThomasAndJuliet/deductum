@@ -29,16 +29,15 @@ computer or a Linux machine reached over SSH.
 
 ## Install
 
-Download prebuilt Linux and Windows packages from this private GitHub
-repository, or install the Linux app through the household's `home-apps`
-Flatpak repository. GitHub downloads need repository access; `home-apps` needs
-household tailnet access. Both packages are built by GitHub Actions; you do
-not need Rust or a source checkout to install them.
+Download prebuilt Linux and Windows packages from GitHub Releases, or install
+the Linux app through the household's `home-apps` Flatpak repository. While
+this repository is private, GitHub downloads need repository access; `home-apps`
+needs household tailnet access. Both packages are built by GitHub Actions; you
+do not need Rust or a source checkout to install them.
 
 ### Release downloads
 
-1. Open [Deductum's releases](https://github.com/ThomasAndJuliet/deductum/releases)
-   while signed into GitHub with access to this repository.
+1. Open [Deductum's releases](https://github.com/ThomasAndJuliet/deductum/releases).
 2. Choose a version (`vMAJOR.MINOR.PATCH`). Download the Linux `.flatpak` or
    Windows `…-windows-x86_64.zip` file from its **Assets**, plus `SHA256SUMS`
    if you want to verify the download. Each package also has a JSON receipt
@@ -77,13 +76,14 @@ flatpak install --user --or-update --bundle ./deductum-VERSION-linux-x86_64.flat
 
 Install each new app version this way; `flatpak update` alone does not fetch
 new Deductum bundles. Settings, proof files and session state are retained.
-The downloadable CI bundles are unsigned. Obtain them from this private
-repository; with the package and `SHA256SUMS` in the same folder, check the
-download using:
+The downloadable bundles have no repository signature. With the package and
+`SHA256SUMS` in the same folder, check the download using:
 
 ```sh
 sha256sum --check --ignore-missing SHA256SUMS
 ```
+
+A public release also carries a [GitHub artifact attestation](#checking-where-a-download-came-from).
 
 The Flatpak includes the app and its session-host code. Local provers run on
 your Linux system, so install Python 3 and the prover you need there, outside
@@ -237,6 +237,23 @@ Installing it does not migrate or delete Isabellum data. See the
 [development guide](docs/development.md#existing-isabellum-sessions) for explicit
 migration; avoid running both hosts against the same project folder.
 
+## Checking where a download came from
+
+Every file of a public release is attested by this repository's release
+workflow. With the [GitHub CLI](https://cli.github.com/), check a download
+using:
+
+```sh
+gh attestation verify ./deductum-VERSION-linux-x86_64.flatpak \
+  --repo ThomasAndJuliet/deductum \
+  --signer-workflow ThomasAndJuliet/deductum/.github/workflows/release-binaries.yml
+```
+
+This shows that the release workflow published those exact bytes after checking
+them against the successful CI run named in the release. To see which source
+revision that run tested, verify the JSON receipt beside the package in the same
+way and read its `source_sha` and `archive_sha256`.
+
 ## Development
 
 For source builds, backend integrations and packaging, see
@@ -246,11 +263,46 @@ are:
 ```sh
 cargo --offline --locked test --workspace --all-targets --all-features
 python3 -m unittest discover -s host/tests -p "test_*.py"
+python3 scripts/test-ci-trust.py
 python3 scripts/test-publish-release.py
 python3 scripts/test-release-policy.py
 python3 scripts/test-package-flatpak-bundle.py
+python3 scripts/test-package-windows.py
+python3 scripts/prepare-ci-manifest.py
 ```
+
+`scripts/test-ci-trust.py` needs PyYAML (`python3-yaml`).
 
 CI also validates the finished Flatpak with
 `python3 scripts/check-flatpak-catalog build-flatpak`, `desktop-file-validate`
 and `appstreamcli validate --no-net`; the guide gives the complete commands.
+
+### CI and contributions from forks
+
+A pull request from a fork runs on GitHub-hosted runners with a read-only token
+and no secrets: `source-checks` and the real prover integrations run, and jobs
+that fetch the private crates are skipped, with a notice saying why. Jobs in this
+repository also use those deploy keys, and household runners only while the
+repository is private. `scripts/ci-trust.py` makes these choices.
+
+A fork can rewrite the workflow in its own pull request, so these choices keep
+honest runs correct but do not stop hostile code. These repository and
+organisation settings do:
+
+- the organisation's runner group leaves **Allow public repositories** off, so a
+  public repository's jobs cannot reach the household runners;
+- workflows from outside contributors wait for an administrator's approval.
+
+### Publication
+
+`.github/workflows/release-binaries.yml` runs on a GitHub-hosted runner after a
+successful `main` push run of CI. To retry a run whose artifacts are retained:
+
+```sh
+gh workflow run release-binaries.yml --ref main -f run_id=CI_RUN_ID
+```
+
+In a public repository it publishes only after a person records the signing
+identity as `"public_signing": "github-attestation"` in `release-config.json`.
+`release-config.json` is also the only place the scripts and workflows name this
+repository.

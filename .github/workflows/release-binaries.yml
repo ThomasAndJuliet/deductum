@@ -1,4 +1,4 @@
-name: Publish private release binaries
+name: Publish release binaries
 
 on:
   workflow_run:
@@ -20,24 +20,27 @@ permissions:
 jobs:
   packages:
     if: >-
-      github.repository == 'ThomasAndJuliet/deductum' &&
+      github.event.repository.fork == false &&
       github.ref == 'refs/heads/main' &&
       (github.event_name == 'workflow_dispatch' ||
        (github.event.workflow_run.event == 'push' &&
         github.event.workflow_run.head_branch == 'main' &&
         github.event.workflow_run.conclusion == 'success' &&
         github.event.workflow_run.head_repository.full_name == github.repository))
-    runs-on: ${{ vars.CI_RUNNER == 'hosted' && 'ubuntu-24.04' || 'neo-ubuntu' }}
-    timeout-minutes: 15
+    # Always GitHub-hosted: this job needs nothing from the household, and it
+    # holds the write token and the identity that attests public releases.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
     permissions:
       contents: write
       actions: read
+      # Used only when the repository is public; see the attest step.
+      id-token: write
+      attestations: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RUN_ID: ${{ github.event.workflow_run.id || inputs.run_id }}
     steps:
-      - name: Install GitHub CLI on household runners
-        if: runner.environment == 'self-hosted'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gh
       # workflow_run executes the trusted default-branch publisher, never code
       # from the downloaded artifact. Downloaded packages are not executed.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -48,8 +51,22 @@ jobs:
         run: |
           python3 scripts/test-publish-release.py
           python3 scripts/test-release-policy.py
-      - name: Publish the tested packages under their automatic SemVer tag
+      - name: Stage the tested packages in a draft under their automatic SemVer tag
+        id: stage
+        run: |
+          mkdir "$RUNNER_TEMP/release"
+          python3 scripts/publish-release.py stage --run-id "$RUN_ID" --root "$RUNNER_TEMP/release"
+      # Attestations are only available here in a public repository, where
+      # stage reports attest=true once release-config.json records the decision.
+      - name: Attest every release file
+        id: attest
+        if: steps.stage.outputs.attest == 'true'
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: ${{ runner.temp }}/release/downloads/*
+      - name: Make the complete release visible
+        id: finish
+        if: steps.stage.outputs.tag != ''
         env:
-          GH_TOKEN: ${{ github.token }}
-          RUN_ID: ${{ github.event.workflow_run.id || inputs.run_id }}
-        run: python3 scripts/publish-release.py --run-id "$RUN_ID"
+          TAG: ${{ steps.stage.outputs.tag }}
+        run: python3 scripts/publish-release.py finish --run-id "$RUN_ID" --root "$RUNNER_TEMP/release" --tag "$TAG"
