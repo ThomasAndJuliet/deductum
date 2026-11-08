@@ -37,7 +37,9 @@ mod menubar;
 mod new_session;
 mod ot;
 mod platform;
+mod start_page;
 mod prover;
+mod recent;
 mod settings;
 mod settings_page;
 mod shell;
@@ -1401,6 +1403,7 @@ impl App {
                         theory.replace_change(&rebased, &*table);
                     }
                     ws.theory = Some(theory);
+                    recent::note(&ws.machine, &ws.sid, &path);
                     let goto = if ws.opening.as_deref() == Some(path.as_str()) {
                         ws.opening = None;
                         ws.pending_goto.take()

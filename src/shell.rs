@@ -70,6 +70,8 @@ pub enum Msg {
     Keywords(bool),
     /// The pause before a keyword line asks, in milliseconds
     KeywordPause(u32),
+    /// Forget a session on the start page: discard it on its host
+    ForgetSession(String, String),
     ShowTypes(bool),
     ShowChanges(bool),
     /// One of the settings the Settings page added (see `settings::Change`)
@@ -144,7 +146,8 @@ impl App {
         super::view::set_goal_beside(settings.appearance.goal_beside);
         self.left_width = settings.layout.left_width;
         self.right_width = settings.layout.right_width;
-        self.show_sidebar = settings.layout.show_left;
+        // (the sidebar starts closed: the start page is the way in; F9 opens it)
+        self.show_sidebar = false;
         self.show_right = settings.layout.show_right;
         let theme = settings.appearance.theme;
         super::settings::publish(&settings);
@@ -229,6 +232,11 @@ impl App {
                 self.shell.settings.editing.keywords = on;
                 self.save_settings();
                 self.tell_hosts();
+            }
+            Msg::ForgetSession(machine, sid) => {
+                self.send(&machine, "discard", json!({"session": sid}), Pending::Plain);
+                super::recent::forget(&machine, &sid);
+                self.sessions.remove(&(machine, sid));
             }
             Msg::KeywordPause(ms) => {
                 self.shell.settings.editing.keyword_pause_ms = ms.clamp(500, 10_000);

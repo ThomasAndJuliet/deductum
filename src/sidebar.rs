@@ -151,7 +151,7 @@ fn gigabytes(mb: u64) -> String {
 
 /// A folder as a heading: under the machine's home as `~/…`, and no more than its last two parts
 /// (the whole path in its tooltip)
-fn short_folder(folder: &str, home: Option<&str>) -> String {
+pub(crate) fn short_folder(folder: &str, home: Option<&str>) -> String {
     let folder = folder.trim_end_matches('/');
     let (prefix, rest) = match home.map(|h| h.trim_end_matches('/')).filter(|h| !h.is_empty()).and_then(|h| folder.strip_prefix(h)) {
         Some(rest) if rest.starts_with('/') => ("~/", rest.trim_start_matches('/')),
