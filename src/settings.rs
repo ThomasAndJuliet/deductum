@@ -173,15 +173,15 @@ impl TextFont {
     }
 
     pub fn editor_font(self) -> cosmic::iced::Font {
-        use cosmic::iced::font::Family;
-        cosmic::iced::Font {
-            family: match self {
-                Self::Sans => Family::SansSerif,
-                Self::Serif => Family::Serif,
-                _ => Family::Name(self.family()),
-            },
-            ..cosmic::font::default()
-        }
+        use cosmic::iced::font::{Family, Weight};
+        let family = match self {
+            Self::Sans => Family::SansSerif,
+            Self::Serif => Family::Serif,
+            _ => Family::Name(self.family()),
+        };
+        // (Thicken text: Semibold where the family has one)
+        let weight = if thicken() && super::text_weight::has_semibold(cosmic_family(family)) { Weight::Semibold } else { Weight::Normal };
+        cosmic::iced::Font { family, weight, ..cosmic::font::default() }
     }
 }
 
@@ -643,6 +643,39 @@ pub fn show_changes() -> bool {
 
 pub fn display() -> Display {
     read(|s| s.display.clone())
+}
+
+/// Whether regular text is drawn in semibold (Appearance ▸ Thicken text)
+pub fn thicken() -> bool {
+    read(|s| s.appearance.thicken_text)
+}
+
+/// The family of code in cells, the Source view, goals and names in the text
+pub fn code_font() -> String {
+    read(|s| s.code.font.clone())
+}
+
+/// Code's size in px, before the zoom
+pub fn code_size() -> f32 {
+    read(|s| f32::from(s.code.size))
+}
+
+/// A cell's width in characters of code; zero is the page's whole column (Fill)
+pub fn cell_width() -> u16 {
+    read(|s| s.code.cell_width)
+}
+
+/// iced's family as cosmic-text's
+pub fn cosmic_family(family: cosmic::iced::font::Family) -> cosmic_text::Family<'static> {
+    use cosmic::iced::font::Family;
+    match family {
+        Family::Name(name) => cosmic_text::Family::Name(name),
+        Family::Serif => cosmic_text::Family::Serif,
+        Family::SansSerif => cosmic_text::Family::SansSerif,
+        Family::Cursive => cosmic_text::Family::Cursive,
+        Family::Fantasy => cosmic_text::Family::Fantasy,
+        Family::Monospace => cosmic_text::Family::Monospace,
+    }
 }
 
 #[cfg(test)]

@@ -42,6 +42,7 @@ mod settings;
 mod settings_page;
 mod shell;
 mod sidebar;
+mod text_weight;
 mod theory;
 mod toast;
 mod tones;

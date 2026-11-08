@@ -524,11 +524,7 @@ pub fn highlight_format(hl: &Hl, theme: &cosmic::Theme) -> highlighter::Format<c
         Hl::Running => (Color { a: 0.75, ..Color::from(cosmic.accent_text_color()) }, false, false),
         Hl::Comment => (k.comment, false, true),
     };
-    let font = (weight || italic).then(|| cosmic::iced::Font {
-        weight: if weight { cosmic::iced::font::Weight::Bold } else { cosmic::iced::font::Weight::Normal },
-        style: if italic { cosmic::iced::font::Style::Italic } else { cosmic::iced::font::Style::Normal },
-        ..cosmic::font::mono()
-    });
+    let font = (weight || italic).then(|| super::view::code_font_in(weight, italic));
     highlighter::Format { color: Some(color), font }
 }
 

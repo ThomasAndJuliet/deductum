@@ -491,6 +491,7 @@ mod tests {
         Typography {
             display_start: false,
             body: String::new(),
+            body_weight: 400,
             mono: String::new(),
             font_overrides: Vec::new(),
             size: 16.0,

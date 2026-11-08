@@ -88,6 +88,10 @@ pub struct FontOverride {
 pub struct Typography {
     /// The body font's family, or empty for the theme's sans-serif
     pub body: String,
+    /// The weight regular body text is drawn in: 400, or 600 (Semibold) where the app has
+    /// thickened text and the body font has one. Bold stays bold
+    pub body_weight: u16,
+    /// The family of inline code and names (empty: the generic monospace family)
     pub mono: String,
     /// Optional font families for particular characters. The first matching range wins;
     /// overriding a font does not change the text or its offsets.
@@ -136,6 +140,7 @@ impl Typography {
         let mut hasher = std::hash::DefaultHasher::new();
         (
             &self.body,
+            self.body_weight,
             &self.mono,
             &self.font_overrides,
             self.justify,
@@ -1804,7 +1809,7 @@ fn shape_lined(
     buffer.set_size(Some(width.max(1.0)), None);
     let base = Attrs::new()
         .family(t.family())
-        .weight(if bold { Weight::BOLD } else { Weight::NORMAL })
+        .weight(if bold { Weight::BOLD } else { Weight(t.body_weight) })
         .style(if t.italic {
             FontStyle::Italic
         } else {
@@ -2917,6 +2922,7 @@ mod tests {
         Arc::new(Typography {
             display_start: false,
             body: String::new(),
+            body_weight: 400,
             mono: String::new(),
             font_overrides: Vec::new(),
             size: 16.0,
@@ -3201,6 +3207,7 @@ mod tests {
         Typography {
             display_start: false,
             body: String::new(),
+            body_weight: 400,
             mono: String::new(),
             font_overrides: Vec::new(),
             size: 16.0,
