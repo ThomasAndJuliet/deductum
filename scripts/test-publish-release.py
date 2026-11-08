@@ -187,11 +187,19 @@ class PublicationTests(unittest.TestCase):
             (directory / name).write_bytes(self.uploaded[name])
         elif args[:2] == ("release", "edit"):
             self.assertEqual(len(self.release["assets"]), 5, "publish only after both packages, receipts and checksums exist")
-            self.assertIn("--latest=false", args)
+            self.latest = next(arg for arg in args if str(arg).startswith("--latest="))
             self.release["draft"] = False
         else:
             self.fail(f"Unexpected gh call: {args}")
         return ""
+
+    def test_only_the_highest_version_becomes_latest(self):
+        with patch.object(publisher, "gh", self.gh):
+            self.publish()
+            self.assertEqual(self.latest, "--latest=true")
+            self.tags["v9.0.0"] = "f" * 40
+            self.assertFalse(publisher.newest_version("v0.2.0"))
+            self.assertTrue(publisher.newest_version("v9.0.0"))
 
     def test_creates_complete_release_and_retries_without_replacing_assets(self):
         with patch.object(publisher, "gh", self.gh):
