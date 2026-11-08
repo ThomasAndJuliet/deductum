@@ -212,14 +212,14 @@ struct Themed {
 
 impl Themed {
     fn set(dark: bool) -> Self {
-        cosmic::theme::set_active(if dark { cosmic::theme::ThemeType::Dark } else { cosmic::theme::ThemeType::Light });
+        cosmic::theme::set_active(if dark { cosmic::theme::ThemeType::Dark } else { crate::tones::light_type_for_tests() });
         Self { dark, theme: cosmic::theme::active() }
     }
 
     /// The theme with its text colour set to a grey that does not read on the tint
     /// (the real themes' text always does, and is left as it is)
     fn with_text(dark: bool, grey: u8) -> Self {
-        let base = if dark { cosmic::cosmic_theme::Theme::dark_default() } else { cosmic::cosmic_theme::Theme::light_default() };
+        let base = if dark { cosmic::cosmic_theme::Theme::dark_default() } else { crate::tones::light_for_tests().cosmic().clone() };
         // (the background's text colour is a private field: set through the theme's serde form)
         let mut value = serde_json::to_value(&base).expect("the theme as JSON");
         assert!(value["background"]["on"].is_string(), "the text colour's form changed: {:?}", value["background"]["on"]);

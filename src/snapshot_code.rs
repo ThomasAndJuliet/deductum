@@ -68,7 +68,7 @@ fn frame(dark: bool, name: &str) {
     be.preview = None;
     t.block_highlight = highlight();
     let mut h = Harness::new(Size::new(640.0, 460.0));
-    cosmic::theme::set_active(if dark { cosmic::theme::ThemeType::Dark } else { cosmic::theme::ThemeType::Light });
+    cosmic::theme::set_active(if dark { cosmic::theme::ThemeType::Dark } else { crate::tones::light_type_for_tests() });
     h.focus(&app, super::view::block_editor_id());
     let _ = h.draw(&app, &format!("{name}-warm"));
     h.draw(&app, name);

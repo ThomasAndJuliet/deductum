@@ -129,7 +129,7 @@ fn update(app: &mut App, m: super::Message) {
 
 /// (tests hold the UI's turn through their Harness before changing the theme or toggles)
 fn light(on: bool) {
-    cosmic::theme::set_active(if on { cosmic::theme::ThemeType::Light } else { cosmic::theme::ThemeType::Dark });
+    cosmic::theme::set_active(if on { crate::tones::light_type_for_tests() } else { cosmic::theme::ThemeType::Dark });
 }
 
 /// The pixels differing from the background in a region: something was drawn there

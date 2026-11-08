@@ -139,29 +139,27 @@ pub fn error_color(theme: &cosmic::Theme) -> Color {
     if theme.cosmic().is_dark { Color::from_rgb8(0xf2, 0x5f, 0x5c) } else { Color::from_rgb8(0xc0, 0x1c, 0x28) }
 }
 
-/// The page the theory is set on. In the dark theme COSMIC's background; in the light one its
-/// primary container, the lighter layer COSMIC sets content on (its background is a mid grey
-/// meant for the frame around content)
+/// The page the theory is set on, and the header (libcosmic draws it in the same colour): COSMIC's
+/// background, which `tones::household` sets to the plan's light, #ebebeb, in the light theme (dark
+/// is COSMIC's #1b1b1b). "Window surfaces", 8 Nov: header and page are one colour
 pub fn page_color(theme: &cosmic::Theme) -> Color {
-    let c = theme.cosmic();
-    if c.is_dark { c.bg_color().into() } else { c.primary_container_color().into() }
+    theme.cosmic().bg_color().into()
 }
 
-/// The lightish band the window's header and sidebar and the goal panel's tools are on: COSMIC's
-/// background colour in light (#d7d7d7, a step darker than the page), and in dark the colour a step
-/// lighter than the page (#272727; the page is COSMIC's background, #1b1b1b)
+/// The lightish surface of the sidebar and side panel cards and the goal panel's tools: COSMIC's
+/// primary container, the plan's lightish, #d7d7d7 in light (`tones::household`) and #272727 in
+/// dark, a step off the page in both
 pub fn chrome_color(theme: &cosmic::Theme) -> Color {
-    let c = theme.cosmic();
-    if c.is_dark { c.primary_container_color().into() } else { c.bg_color().into() }
+    theme.cosmic().primary_container_color().into()
 }
 
-/// The surface of the left sidebar and the side panel: [`chrome_color`], as the header's, the
-/// plan's lightish (#d7d7d7 light, #272727 dark), edge to edge with square corners, so that
-/// nothing of the window behind shows at the corners and the panels sit flush with the header
+/// The surface of the left sidebar and the side panel: [`chrome_color`], a card of `radius_s`
+/// inset on the page (`sidebar::inset` gives it its margin)
 pub fn chrome_panel() -> theme::Container<'static> {
     theme::Container::custom(|theme| iced::widget::container::Style {
         background: Some(chrome_color(theme).into()),
         text_color: Some(theme.cosmic().on_bg_color().into()),
+        border: Border { radius: theme.cosmic().radius_s().into(), ..Default::default() },
         ..Default::default()
     })
 }
@@ -315,7 +313,7 @@ fn layout(app: &App, width: f32) -> Element<'_, Message> {
     } else if let Some(ns) = &app.new_session {
         super::new_session::page(app, ns)
     } else if let Some(ws) = &app.workspace {
-        let main_width = width - if left { app.left_width + 6.0 } else { 0.0 } - if right { app.right_width + 6.0 } else { 0.0 };
+        let main_width = width - if left { app.left_width + super::sidebar::INSET_SPAN + 6.0 } else { 0.0 } - if right { app.right_width + super::sidebar::INSET_SPAN + 6.0 } else { 0.0 };
         workspace(app, ws, right, main_width)
     } else {
         welcome(app)
@@ -355,12 +353,10 @@ fn splitter<'a>(left: bool) -> Element<'a, Message> {
     widget::mouse_area(
         widget::container(widget::Space::new())
             .width(Length::Fixed(6.0))
-            .height(Length::Fill)
-            .class(theme::Container::custom(|theme| iced::widget::container::Style {
-                background: Some(Color { a: 0.12, ..Color::from(theme.cosmic().on_bg_color()) }.into()),
-                ..Default::default()
-            })),
+            .height(Length::Fill),
     )
+    // (no fill: invisible at rest, so no grey strip stands beside a card; the resize cursor shows
+    // the edge on hover and during a drag, over the same 6 px)
     .on_press(Message::DragStart(left))
     .interaction(cosmic::iced::mouse::Interaction::ResizingHorizontally)
     .into()
@@ -3434,12 +3430,12 @@ fn side_panel<'a>(app: &'a App, ws: &'a Workspace) -> Element<'a, Message> {
         Panel::Log => activity_panel(ws),
         Panel::Counterexamples => counterexamples_panel(ws, &*table),
     };
-    widget::container(widget::column::with_capacity(2).spacing(sp.space_xs).push(bar).push(content))
+    let card = widget::container(widget::column::with_capacity(2).spacing(sp.space_xs).push(bar).push(content))
         .padding(sp.space_s)
         .width(Length::Fixed(app.right_width))
         .height(Length::Fill)
-        .class(chrome_panel())
-        .into()
+        .class(chrome_panel());
+    super::sidebar::inset(card.into(), false)
 }
 
 /// The side panel's tabs: one row of equal segments in a fixed-height bar, never wrapping. When

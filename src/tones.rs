@@ -66,7 +66,7 @@ pub fn household(theme: cosmic::Theme) -> cosmic::Theme {
     for component in [&mut inner.button, &mut inner.icon_button, &mut inner.text_button, &mut inner.list_button] {
         component.on = on;
     }
-    let inner = std::sync::Arc::new(with_container_text(inner, on));
+    let inner = std::sync::Arc::new(with_surfaces(with_container_text(inner, on)));
     let theme_type = match theme.theme_type {
         ThemeType::System { prefer_dark, .. } => ThemeType::System { prefer_dark, theme: inner },
         _ => ThemeType::Custom(inner),
@@ -90,6 +90,25 @@ fn with_container_text(theme: cosmic::cosmic_theme::Theme, on: cosmic::cosmic_th
             if let Some(component) = container.get_mut("component") {
                 component["on"] = on.clone();
             }
+        }
+    }
+    serde_json::from_value(record).unwrap_or(theme)
+}
+
+/// `theme` with the window's surfaces in the household's tones (Window surfaces, 8 Nov): the
+/// background container's base, which libcosmic draws the header in, is the page's tone, light
+/// (#ebebeb), and the primary container's base the cards' (the sidebar's and side panel's), lightish
+/// (#d7d7d7). Set through the theme's record, as [`with_container_text`] is, and left as it was if
+/// a revision renames the fields (the test `household_surfaces_are_the_plans_tones` fails)
+fn with_surfaces(theme: cosmic::cosmic_theme::Theme) -> cosmic::cosmic_theme::Theme {
+    let hex = |role: Role| {
+        let c = role.tone(Mode::Light).expect("a surface role has a tone");
+        serde_json::to_value(cosmic::cosmic_theme::palette::Srgba::new(c.r, c.g, c.b, 1.0))
+    };
+    let (Ok(mut record), Ok(page), Ok(card)) = (serde_json::to_value(&theme), hex(Role::Light), hex(Role::Lightish)) else { return theme };
+    for (path, tone) in [("/background/base", page), ("/primary/base", card)] {
+        if let Some(field) = record.pointer_mut(path) {
+            *field = tone;
         }
     }
     serde_json::from_value(record).unwrap_or(theme)
@@ -392,9 +411,19 @@ mod tests {
         let (before, after) = (cosmic::Theme::light(), household(cosmic::Theme::light()));
         let (b, a) = (before.cosmic(), after.cosmic());
         assert_eq!(hex(b.accent_color()), hex(a.accent_color()));
-        assert_eq!(hex(b.bg_color()), hex(a.bg_color()));
-        assert_eq!(hex(b.primary_container_color()), hex(a.primary_container_color()));
+        // (the background and primary container are the household's surfaces: `household_surfaces_are_the_plans_tones`)
         assert_eq!(hex(b.secondary_container_color()), hex(a.secondary_container_color()));
+    }
+
+    /// The header (libcosmic draws it in the background container) is the page's tone and the
+    /// primary container the cards': #ebebeb and #d7d7d7
+    #[test]
+    fn household_surfaces_are_the_plans_tones() {
+        let toned = household(cosmic::Theme::light());
+        assert_eq!(hex(toned.cosmic().bg_color()), "#ebebeb");
+        assert_eq!(hex(toned.cosmic().primary_container_color()), "#d7d7d7");
+        assert_eq!(hex(toned.cosmic().background(false).base), "#ebebeb");
+        assert_eq!(hex(toned.cosmic().primary(false).base), "#d7d7d7");
     }
 
     /// Dark and high-contrast themes keep COSMIC's text for now
@@ -416,4 +445,25 @@ mod tests {
         assert_eq!(body_text(&dark), Color::from(dark.cosmic().on_bg_color()));
         assert_eq!(secondary_text(&dark, 0.65).a, 0.65);
     }
+}
+
+/// The light theme as the app has it, for tests: COSMIC's light theme through [`household`], with
+/// the household's surfaces and text, not libcosmic's plain `Theme::light()`
+#[cfg(test)]
+pub fn light_for_tests() -> cosmic::Theme {
+    household(cosmic::Theme::light())
+}
+
+/// The theme type to hand `cosmic::theme::set_active` for the light mode in tests ([`light_for_tests`])
+#[cfg(test)]
+pub fn light_type_for_tests() -> cosmic::theme::ThemeType {
+    light_for_tests().theme_type
+}
+
+/// COSMIC's light theme with only the household's surfaces ([`with_surfaces`]) and its own text:
+/// the page and cards the app has, drawn with the text a frame recorded before the household's
+/// text tones, for the tests that compare frames with such recordings
+#[cfg(test)]
+pub fn light_surfaces_only_type_for_tests() -> cosmic::theme::ThemeType {
+    cosmic::theme::ThemeType::Custom(std::sync::Arc::new(with_surfaces(cosmic::Theme::light().cosmic().clone())))
 }

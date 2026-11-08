@@ -99,7 +99,7 @@ pub fn sidebar(app: &App) -> Element<'_, Message> {
         },
         _ => sessions(app),
     };
-    widget::container(
+    let card = widget::container(
         widget::column::with_capacity(3)
             .spacing(s.space_xxs)
             .padding(Padding { top: s.space_xs as f32, bottom: s.space_xs as f32, left: s.space_xs as f32, right: s.space_xs as f32 })
@@ -109,8 +109,26 @@ pub fn sidebar(app: &App) -> Element<'_, Message> {
     )
     .width(Length::Fixed(app.left_width))
     .height(Length::Fill)
-    .class(super::view::chrome_panel())
-    .into()
+    .class(super::view::chrome_panel());
+    inset(card.into(), true)
+}
+
+/// COSMIC's `space_xxs` (8 px), the margin a card keeps from the window's edges and the header
+pub fn card_margin() -> f32 {
+    super::view::spacing().space_xxs as f32
+}
+
+/// What an inset card adds to its width besides the 6 px splitter beside it: the margin outside
+/// (8 px) and the 2 px inside that, with the splitter, make the gap to the page 8 px as well
+pub const INSET_SPAN: f32 = 10.0;
+
+/// `card` inset on the page: `space_xxs` from the window's edge, the header above and the status
+/// bar below, and the splitter's 6 px and 2 more between it and the page. `left` is the left
+/// sidebar's side
+pub fn inset<'a>(card: Element<'a, Message>, left: bool) -> Element<'a, Message> {
+    let m = card_margin();
+    let (l, r) = if left { (m, INSET_SPAN - m) } else { (INSET_SPAN - m, m) };
+    widget::container(card).padding(Padding { top: m, bottom: m, left: l, right: r }).height(Length::Fill).into()
 }
 
 // ----- sessions

@@ -126,7 +126,7 @@ fn frame(scene: Scene, dark: bool) -> (Vec<u8>, Compared) {
     let mode = if matches!(scene, Scene::Source) { Mode::Source } else { Mode::Literate };
     let mut app = proof_app(mode);
     let mut h = Harness::new(if matches!(scene, Scene::BlockNarrow) { NARROW } else { WIDE });
-    cosmic::theme::set_active(if dark { cosmic::theme::ThemeType::Dark } else { cosmic::theme::ThemeType::Light });
+    cosmic::theme::set_active(if dark { cosmic::theme::ThemeType::Dark } else { crate::tones::light_surfaces_only_type_for_tests() });
     let id = if matches!(scene, Scene::Source) {
         super::view::source_editor_id()
     } else {

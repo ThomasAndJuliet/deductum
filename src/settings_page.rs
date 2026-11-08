@@ -1166,7 +1166,7 @@ mod tests {
                         let _ = app.shell_update(Msg::Display(DisplayChange::MathScale(1.1)));
                         let _ = app.shell_update(Msg::Setting(Change::CodeSize(15)));
                     }
-                    cosmic::theme::set_active(if light { cosmic::theme::ThemeType::Light } else { cosmic::theme::ThemeType::Dark });
+                    cosmic::theme::set_active(if light { crate::tones::light_type_for_tests() } else { cosmic::theme::ThemeType::Dark });
                     let name = format!("settings-{}-{}{}", width as u32, if light { "light" } else { "dark" }, if sidebar { "" } else { "-nosidebar" });
                     let _ = h.draw(&app, &format!("{name}-warm"));
                     let frame = h.draw(&app, &name);

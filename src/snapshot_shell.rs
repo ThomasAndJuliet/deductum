@@ -22,7 +22,7 @@ use super::{App, LeftMode, Link, Message, link};
 /// element is built in that theme, as the app builds its view in the theme in use
 fn draw_in<'a>(light: bool, build: impl FnOnce() -> Element<'a, Message>, name: &str, size: Size) -> Vec<u8> {
     let _turn = ui_turn();
-    cosmic::theme::set_active(if light { cosmic::theme::ThemeType::Light } else { cosmic::theme::ThemeType::Dark });
+    cosmic::theme::set_active(if light { crate::tones::light_type_for_tests() } else { cosmic::theme::ThemeType::Dark });
     let frame = render(build(), name, size);
     cosmic::theme::set_active(cosmic::theme::ThemeType::Dark);
     frame
@@ -518,7 +518,7 @@ fn a_project_s_documents_collapse_all_at_once_or_by_folder() {
 use cosmic::iced::Color;
 
 fn theme_of(light: bool) -> cosmic::Theme {
-    if light { cosmic::Theme::light() } else { cosmic::Theme::dark() }
+    if light { crate::tones::light_for_tests() } else { cosmic::Theme::dark() }
 }
 
 fn px(frame: &[u8], width: u32, x: u32, y: u32) -> [u8; 3] {
@@ -672,10 +672,11 @@ fn the_tabs_are_no_wider_than_their_content() {
         let app = mixed_app();
         let w = 300u32;
         let frame = draw_in(light, || super::sidebar::sidebar(&app), "sidebar-tabs", Size::new(w as f32, 200.0));
-        let right_bg = px(&frame, w, w - 1, 24);
-        let edge = (0..w).rev().find(|x| px(&frame, w, *x, 24) != right_bg).expect("a bar");
-        // Five tabs of a 16 px icon and 12 px either side, inside the card's padding
-        assert!(edge < 12 + 5 * 40 + 8, "the bar ends at {edge}");
+        // (the card is inset 8 px from the left, 290 wide: look from its inside right edge)
+        let right_bg = px(&frame, w, 290, 24);
+        let edge = (0..290).rev().find(|x| px(&frame, w, *x, 24) != right_bg).expect("a bar");
+        // Five tabs of a 16 px icon and 12 px either side, inside the card's padding and inset
+        assert!(edge < 8 + 12 + 5 * 40 + 8, "the bar ends at {edge}");
         assert!(edge > 100, "the bar ends at {edge}");
         let fill = super::tones::muted(&theme_of(light)).0;
         assert!(count_of(&frame, fill, 1) > 500, "the chosen tab is the muted accent");
@@ -1007,12 +1008,12 @@ fn the_chip_has_even_padding_at_both_ends() {
 
 // ----- the sidebar and the side panel's surface
 
-/// The sidebar and the side panel are the plan's lightish, as the header is: COSMIC's background
-/// colour in light (#d7d7d7), `chrome_color` (#272727) in dark; edge to edge, square, with nothing
-/// of the window behind showing at their corners. Rows, the chosen tab and the disabled tabs still
-/// read on it
+/// "Window surfaces" (8 Nov): header and page are one colour (#ebebeb light, #1b1b1b dark); the
+/// sidebar and the side panel are rounded cards (`radius_s`) of the lightish (#d7d7d7 light,
+/// #272727 dark), inset 8 px on it, with no grey strip of a resize handle beside them. Rows, the
+/// chosen tab and the disabled tabs still read on it
 #[test]
-fn the_sidebar_and_the_side_panel_are_the_lightish_surface() {
+fn the_sidebar_and_the_side_panel_are_cards_on_the_page() {
     use cosmic::iced::Color;
     let lum = |c: Color| {
         let f = |v: f32| if v <= 0.03928 { v / 12.92 } else { ((v + 0.055) / 1.055).powf(2.4) };
@@ -1029,7 +1030,7 @@ fn the_sidebar_and_the_side_panel_are_the_lightish_surface() {
         a: 1.0,
     };
     for (light, theme_name) in [(true, "light"), (false, "dark")] {
-        let theme = if light { cosmic::Theme::light() } else { cosmic::Theme::dark() };
+        let theme = if light { crate::tones::light_for_tests() } else { cosmic::Theme::dark() };
         let chrome = super::view::chrome_color(&theme);
         assert_eq!(super::view::chrome_color(&theme).into_rgba8()[..3], if light { [0xd7, 0xd7, 0xd7] } else { [0x27, 0x27, 0x27] });
         let mut app = mixed_app();
@@ -1045,26 +1046,49 @@ fn the_sidebar_and_the_side_panel_are_the_lightish_surface() {
             let i = ((y * 1000 + x) * 4) as usize;
             [frame[i], frame[i + 1], frame[i + 2]]
         };
-        let same = |p: [u8; 3]| p.iter().zip(chrome.into_rgba8()).all(|(a, b)| a.abs_diff(b) <= 1);
-        // the sidebar's and the panel's corners and edges:
-        // under the header, at the window's edge, and above the status bar
-        // (the header is COSMIC's background colour: the same in light, #1b1b1b and not #272727 in dark)
-        assert!(!light || same(px(500, 3)), "{theme_name}: the header is not chrome: {:?}", px(500, 3));
-        for (what, x, y) in [
-            ("the sidebar's top left corner", 0, 49),
-            ("the sidebar's bottom left corner", 0, 726),
-            ("the sidebar's top right corner", 239, 49),
-            ("the sidebar's bottom right corner", 239, 726),
-            ("the side panel's top left corner", 706, 49),
-            ("the side panel's bottom left corner", 706, 726),
-            ("the side panel's top right corner", 999, 49),
-            ("the side panel's bottom right corner", 999, 726),
-        ] {
-            assert!(same(px(x, y)), "{theme_name}: {what} is {:?}, not the lightish surface", px(x, y));
+        let same_as = |p: [u8; 3], c: cosmic::iced::Color| p.iter().zip(c.into_rgba8()).all(|(a, b)| a.abs_diff(b) <= 1);
+        let same = |p: [u8; 3]| same_as(p, chrome);
+        let page = super::view::page_color(&theme);
+        let on_page = |x: u32, y: u32| same_as(px(x, y), page);
+        // the page and the header are one colour, COSMIC's background (what libcosmic draws the
+        // header in: #ebebeb light, #1b1b1b dark), and the cards are the lightish on it
+        let hex = |c: cosmic::iced::Color| c.into_rgba8()[..3].to_vec();
+        assert_eq!(hex(page), if light { vec![0xeb; 3] } else { vec![0x1b; 3] });
+        assert_eq!(hex(theme.cosmic().background(false).base.into()), hex(page), "{theme_name}: the header's colour is the page's");
+        assert_eq!(hex(theme.cosmic().primary(false).base.into()), hex(chrome), "{theme_name}: the cards' colour is the primary container");
+        assert!(on_page(500, 3) && on_page(500, 47), "{theme_name}: the header is not the page's colour: {:?}", px(500, 3));
+        // the cards: the sidebar from x 8 to 248 and the side panel from 692 to 992, 8 px from the
+        // header and the window's edges, with `radius_s` corners
+        let r = theme.cosmic().radius_s()[0] as u32;
+        assert!(r >= 4, "{theme_name}: radius_s {r}");
+        let top = 48 + 8;
+        let bottom = (top..size.height as u32).rev().find(|y| same(px(24, *y))).expect("the card");
+        assert!(bottom > 600, "{theme_name}: the sidebar card ends at {bottom}");
+        for (what, left, right) in [("sidebar", 8u32, 247u32), ("side panel", 692, 991)] {
+            assert!(same(px(left, 300)) && same(px(right, 300)), "{theme_name}: the {what}'s edges at y 300: {:?} {:?}", px(left, 300), px(right, 300));
+            assert!(on_page(left - 1, 300) && on_page(right + 1, 300), "{theme_name}: the {what} is not inset 1 px beyond its edges");
+            assert!(on_page(left + (right - left) / 2, top - 1) && on_page(left + (right - left) / 2, bottom + 1), "{theme_name}: the {what} is not inset above and below");
+            // rounded: the corner pixel is not the card's, and the straight edge starts `radius` in
+            for (x, y) in [(left, top), (right, top), (left, bottom), (right, bottom)] {
+                assert!(!same(px(x, y)), "{theme_name}: the {what}'s square corner at ({x}, {y}): {:?}", px(x, y));
+            }
+            assert!(same(px(left + r, top + 1)) && same(px(right - r, top + 1)) && same(px(left + r, bottom - 1)), "{theme_name}: the {what}'s radius");
         }
+        // 8 px of page at the window's edge and between each card and the header; no grey strip
+        // between the sidebar and the page (its resize handle is invisible, 6 px)
+        assert!(on_page(0, 300) && on_page(7, 300) && on_page(999, 300) && on_page(995, 300), "{theme_name}: the margin at the window's edge");
+        assert!(on_page(120, 49) && on_page(120, 55) && on_page(850, 49) && on_page(850, 55), "{theme_name}: the margin under the header");
+        for x in 248..258u32 {
+            assert!(on_page(x, 300) && on_page(x, 400), "{theme_name}: a strip beside the sidebar at x {x}: {:?}", px(x, 300));
+        }
+        for x in 684..692u32 {
+            assert!(on_page(x, 300) && on_page(x, 400), "{theme_name}: a strip beside the side panel at x {x}: {:?}", px(x, 300));
+        }
+        // the status bar below is the page's too
+        assert!(on_page(500, 758) && on_page(20, 758), "{theme_name}: the status bar is not the page's colour: {:?}", px(500, 758));
         // (an empty stretch of each, below its content)
-        assert!(same(px(120, 722)) || same(px(120, 700)), "{theme_name}: the sidebar's body: {:?}", px(120, 700));
-        assert!(same(px(850, 722)), "{theme_name}: the side panel's body: {:?}", px(850, 722));
+        assert!(same(px(120, bottom - 4)), "{theme_name}: the sidebar's body: {:?}", px(120, bottom - 4));
+        assert!(same(px(850, bottom - 4)), "{theme_name}: the side panel's body: {:?}", px(850, bottom - 4));
 
         // the selected row's wash (COSMIC's hover wash) shows on it
         let wash = over(theme.cosmic().icon_button.hover.into(), chrome);
@@ -1091,7 +1115,7 @@ fn the_sidebar_and_the_side_panel_are_the_lightish_surface() {
 #[test]
 fn menus_and_tooltips_are_recorded_against_the_lightest() {
     for (light, name, lightest) in [(true, "light", 0xf5f5f5u32), (false, "dark", 0x343434)] {
-        let theme = if light { cosmic::Theme::light() } else { cosmic::Theme::dark() };
+        let theme = if light { crate::tones::light_for_tests() } else { cosmic::Theme::dark() };
         let hex = |c: cosmic::iced::Color| {
             let [r, g, b, _] = c.into_rgba8();
             format!("#{r:02x}{g:02x}{b:02x}")
@@ -1138,7 +1162,7 @@ fn the_agent_popovers_cancel_is_a_secondary_button() {
     let bottom = (cy..cy + 40).rev().find(|&y| hit(cx, y)).expect("Cancel's bottom edge");
     assert_eq!(bottom - top + 1, 32, "a 32 px button, as Reply is");
     for (light, name) in [(true, "light"), (false, "dark")] {
-        let theme = if light { cosmic::Theme::light() } else { cosmic::Theme::dark() };
+        let theme = if light { crate::tones::light_for_tests() } else { cosmic::Theme::dark() };
         let frame = draw_in(light, || body(&app), &format!("agent-popover-cancel-{name}"), size);
         let px = |x: u32, y: u32| {
             let i = ((y * 580 + x) * 4) as usize;
@@ -1446,7 +1470,7 @@ fn draw_clicked<'a>(light: bool, build: impl FnOnce() -> Element<'a, Message>, a
     use cosmic::iced::runtime::user_interface::{Cache, UserInterface};
     use cosmic::iced::{Event, Font, Pixels, mouse};
     let _turn = ui_turn();
-    cosmic::theme::set_active(if light { cosmic::theme::ThemeType::Light } else { cosmic::theme::ThemeType::Dark });
+    cosmic::theme::set_active(if light { crate::tones::light_type_for_tests() } else { cosmic::theme::ThemeType::Dark });
     super::load_fonts();
     let mut renderer = cosmic::iced::futures::executor::block_on(<cosmic::Renderer as Headless>::new(Font::default(), Pixels(14.0), Some("tiny-skia"))).unwrap();
     let theme = cosmic::theme::active();
