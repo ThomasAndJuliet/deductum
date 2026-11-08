@@ -43,6 +43,8 @@ pub struct Shell {
     /// The agent-session popover (not on Windows)
     #[cfg(not(windows))]
     pub agent: super::agent_session::Popover,
+    /// The right-click menu that is open, if one is
+    pub context: Option<super::context_menu::Open>,
 }
 
 /// A project action's run (`lake build`, building a heap)
@@ -122,6 +124,12 @@ pub enum Msg {
     /// Terminal Agents was asked for the thread's page: how that went
     #[cfg(not(windows))]
     AgentLaunched(Result<(), String>),
+    /// A right-click menu opens on a thing (where the pointer was in it), closes, has a submenu
+    /// out (by its row) or none, or has an item chosen: the menu closes and the messages go
+    ContextOpen(super::context_menu::Target, cosmic::iced::Point),
+    ContextClose,
+    ContextSub(Option<usize>),
+    ContextDo(Vec<Message>),
     /// A toast's time ran out, or it was closed
     ToastGone(cosmic::widget::ToastId),
     /// A toast's Undo was pressed: the toast goes and the last step is undone
@@ -342,6 +350,18 @@ impl App {
                 if let Some(ns) = &mut self.new_session {
                     ns.picker = None;
                 }
+            }
+            Msg::ContextOpen(target, at) => self.shell.context = Some(super::context_menu::Open { target, at, sub: None }),
+            Msg::ContextClose => self.shell.context = None,
+            Msg::ContextSub(sub) => {
+                if let Some(open) = &mut self.shell.context {
+                    open.sub = sub;
+                }
+            }
+            Msg::ContextDo(messages) => {
+                self.shell.context = None;
+                let tasks: Vec<Task<Message>> = messages.into_iter().map(|m| self.update(m)).collect();
+                return Task::batch(tasks);
             }
             #[cfg(not(windows))]
             m @ (Msg::AgentOpen(_) | Msg::AgentRights(_) | Msg::AgentTool(_) | Msg::AgentStart | Msg::AgentLaunched(_)) => return self.agent_update(m),

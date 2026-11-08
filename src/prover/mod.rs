@@ -326,6 +326,15 @@ pub trait Profile: Send + Sync {
     /// The tool [`Self::facts_line`] finishes with
     fn facts_tool(&self) -> &'static str;
 
+    /// A goal's statement as a step that states it (a `have`), on one line: what "Copy as a have"
+    /// copies. Isabelle: `have "P"`; Lean: `have : P`
+    fn have_line(&self, statement: &str) -> String;
+
+    /// The same step with a placeholder for its proof, as "Use as the next step" inserts it; the
+    /// lines after the first are indented by `indent` and the proof's own step. Isabelle: `have
+    /// "P"` then `sorry` under it; Lean: `have : P := by` then `sorry` under it
+    fn have_step(&self, statement: &str, indent: &str) -> String;
+
     /// A tool's text run at the caret with options the human typed
     fn tool_invocation(&self, name: &str, params: &str) -> String;
 

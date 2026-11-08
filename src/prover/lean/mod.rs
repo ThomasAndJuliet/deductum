@@ -568,6 +568,14 @@ impl Profile for Lean {
         "simp"
     }
 
+    fn have_line(&self, statement: &str) -> String {
+        format!("have : {statement}")
+    }
+
+    fn have_step(&self, statement: &str, indent: &str) -> String {
+        format!("{} := by\n{indent}  {}", self.have_line(statement), self.placeholder())
+    }
+
     fn tool_invocation(&self, name: &str, params: &str) -> String {
         if params.is_empty() { name.to_string() } else { format!("{name} {params}") }
     }

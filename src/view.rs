@@ -280,6 +280,7 @@ pub fn view(app: &App) -> Element<'_, Message> {
         super::insert::set_popout_open(app.popout.is_some());
         set_placement_override(app.goal_placement_override);
         set_view_height(size.height);
+        super::context_menu::publish(app.shell.context.as_ref());
         layout(app, size.width)
     }).into();
     content.map(move |message| match message {
@@ -2029,7 +2030,7 @@ fn goal_with_edge<'a>(goal: Element<'a, Message>) -> Element<'a, Message> {
 pub const GOAL_EDGE: f32 = 4.0;
 
 /// Goal ownership follows the edited construct, not whether a prover reply has arrived.
-fn goal_block(t: &Theory, block: &super::theory::Block) -> bool {
+pub(crate) fn goal_block(t: &Theory, block: &super::theory::Block) -> bool {
     if block.kind != Kind::Formal {
         return false;
     }
@@ -2227,7 +2228,13 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
             },
             Kind::Formal => {
                 // (as wide as the cell: what is attached under it is too)
-                let mut c = widget::column::with_capacity(3).spacing(4).width(Length::Fixed(block_code_width() + CARD_CHROME)).push(block_code(app.workspace.as_ref(), t, i, block, marked, &*table, current));
+                // (a right press on the cell opens its menu)
+                let cell = block_code(app.workspace.as_ref(), t, i, block, marked, &*table, current);
+                let cell = match app.workspace.as_ref() {
+                    Some(ws) => super::context_menu::area(cell, super::context_menu::Target::Cell(i), || super::context_menu::cell_rows(ws, &*table, i)),
+                    None => cell,
+                };
+                let mut c = widget::column::with_capacity(3).spacing(4).width(Length::Fixed(block_code_width() + CARD_CHROME)).push(cell);
                 if current && goal_block(t, block) && let Some(g) = inline_goal(inline, &*table) {
                     c = c.push(goal_under(g));
                 }
@@ -2257,7 +2264,12 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
         } else {
             let area = widget::mouse_area(content).on_press(Message::EditBlock(i));
             let area = if matches!(block.kind, Kind::Heading(_) | Kind::Text) { area.on_move(move |p| Message::ProsePointer(i, p)) } else { area };
-            item = item.push(side(area.into(), marked && editing.is_none() && block.kind == Kind::Formal));
+            // (prose and comments have the cell menu too)
+            let area: Element<'a, Message> = match app.workspace.as_ref() {
+                Some(ws) if block.kind != Kind::Header && block.kind != Kind::Formal => super::context_menu::area(area, super::context_menu::Target::Cell(i), || super::context_menu::cell_rows(ws, &*table, i)),
+                _ => area.into(),
+            };
+            item = item.push(side(area, marked && editing.is_none() && block.kind == Kind::Formal));
         }
         let selected_here = t.selected == Some(i) && editing.is_none() && block.kind != Kind::Header;
         // Agents' notes on this block: in its card if it is a cell, else a card of their own under it
@@ -2589,6 +2601,11 @@ fn block_editor_in<'a>(ws: Option<&'a Workspace>, t: &'a Theory, window: bool, i
     } else {
         let width = block_code_width();
         let code = hoverable(ws, super::HoverTarget::Block, code_padding(), editor.width(width).into());
+        // (a right press in the code opens the editor's menu: Copy, Cut, Paste, Find uses)
+        let code = match ws {
+            Some(ws) => super::context_menu::area(code, super::context_menu::Target::Editor(super::EditorTarget::Block), || super::context_menu::editor_rows(ws, super::EditorTarget::Block)),
+            None => code,
+        };
         // (always in a gap, empty when there is nothing to put there: the editor keeps its state)
         let code: Element<'_, Message> = match after {
             Some((line, indent, goal)) => {
@@ -3314,7 +3331,9 @@ fn source<'a>(ws: &'a Workspace, t: &'a Theory, inline: Option<&'a Workspace>, t
     // (the caret's line in COSMIC's grey wash, over the band)
     let caret = t.source.cursor().position.line;
     code = code.band(row_top(caret), row_top(caret + 1), super::tones::caret_line(&theme::active()));
-    let editor = widget::container(hoverable(Some(ws), super::HoverTarget::Source, pad, code.into())).width(Length::Fixed(source_width));
+    // (a right press in the text opens the editor's menu)
+    let code = super::context_menu::area(hoverable(Some(ws), super::HoverTarget::Source, pad, code.into()), super::context_menu::Target::Editor(super::EditorTarget::Source), || super::context_menu::editor_rows(ws, super::EditorTarget::Source));
+    let editor = widget::container(code).width(Length::Fixed(source_width));
     // The goal level with the construct, over its reserved column (moving only as far as it
     // must to stay in sight)
     let formal = formal_at_caret(t);
@@ -4327,7 +4346,8 @@ fn subgoal_card<'a>(ws: &'a Workspace, sg: &super::goals::Subgoal, first: bool, 
     let card = widget::container(col).padding([sp.space_xxs, sp.space_xs]).width(Length::Fill);
     #[cfg(test)]
     let card = card.id(test_panel_id(&format!("subgoal-{}", sg.n)));
-    card.into()
+    // (a right press on a goal opens its menu: Use as the next step, Copy as a have, ...)
+    super::context_menu::area(card, super::context_menu::Target::Goal(sg.n), || super::context_menu::goal_rows(ws, sg.n))
 }
 
 /// The hairline between subgoals, in the card divider colour

@@ -326,6 +326,9 @@ fn session_row<'a>(app: &'a App, machine: &str, sid: &str, v: &'a Value, indent:
         widget::text(tip.join("\n")),
         widget::tooltip::Position::Bottom,
     );
+    // (a right press on a session's row opens its menu: Open, the folder's path, Forget)
+    let folder = v["folder"].as_str();
+    let row = super::context_menu::area(row, super::context_menu::Target::Session(machine.to_string(), sid.to_string()), || super::context_menu::session_rows(machine, sid, folder));
     widget::container(row).padding(Padding { left: indent, ..Padding::ZERO }).into()
 }
 

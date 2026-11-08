@@ -1498,7 +1498,7 @@ fn the_header_is_sidebar_menus_chip_pause_stop_then_open_in_views_goal_and_panel
 
 #[test]
 fn the_menus_hold_what_the_header_gave_up() {
-    use super::menubar::{Row, find, labels, menus};
+    use super::menubar::{Row, find, menus};
     let app = chip_scene(|a| {
         a.back.push(("/home/me/Research/Demo/Demo.thy".into(), 0));
         a.workspace.as_mut().unwrap().theory.as_mut().unwrap().can_undo = true;
@@ -1545,14 +1545,14 @@ fn the_menus_hold_what_the_header_gave_up() {
         ["Ctrl+1", "Ctrl+2", "F9", "Alt+Left", "F8", "Shift+F8"]
     );
     // features not built yet are there, disabled, each saying why
-    let not_built = [("Edit", "Copy as Markdown"), ("Edit", "Find"), ("Edit", "Find and replace"), ("Edit", "Paste"), ("Edit", "Select all"), ("File", "Save all"), ("View", "Full screen")];
+    let not_built = [("Edit", "Find"), ("Edit", "Find and replace"), ("Edit", "Paste"), ("Edit", "Select all"), ("File", "Save all"), ("View", "Full screen")];
     for (title, label) in not_built {
         match find(&menu(title), label) {
             Some(Row::Off { why, .. }) => assert!(why.len() > 10, "{label}: {why}"),
             other => panic!("{title} > {label} should be disabled with a reason: {other:?}"),
         }
     }
-    assert!(labels(&menu("Edit")).contains(&"(Copy as Markdown)".to_string()));
+    // (Copy as Markdown is built now: see the context menus' tests)
     // and what cannot be used in this state says why
     let stopped = chip_scene(|a| set_lifecycle(a, "Stopped"));
     let prover = menus(&stopped).into_iter().find(|(t, _)| *t == "Prover").unwrap().1;
