@@ -39,6 +39,10 @@ pub struct Settings {
     pub proof_state: ProofState,
     pub llm: Llm,
     pub lean: Lean,
+    /// Code's font, size and cell width (the Settings page's Code section)
+    pub code: Code,
+    /// What new agent sessions start with
+    pub agents: Agents,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -49,6 +53,69 @@ pub struct Appearance {
     pub zoom: f32,
     /// The goal beside the text when the window has room (else under the proof, the page centred)
     pub goal_beside: bool,
+    /// The interface's text size in px (labels, menus, buttons); the content zooms separately
+    pub interface_size: u8,
+    /// Regular text drawn in semibold, as in Cerea and Terminal
+    pub thicken_text: bool,
+}
+
+/// The interface sizes the Settings page offers
+pub const INTERFACE_SIZES: [u8; 4] = [13, 14, 15, 16];
+/// The code sizes the Settings page offers
+pub const CODE_SIZES: [u8; 4] = [13, 14, 15, 16];
+/// The code font before the human chooses one
+pub const DEFAULT_CODE_FONT: &str = "Noto Sans Mono";
+
+/// Where code is set. Stored and shown; the document view applies them as it learns to
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Code {
+    /// The family of code in cells, the Source view, goals and names in the text
+    pub font: String,
+    /// Code's size in px
+    pub size: u8,
+    /// A cell's width in characters of code; zero is the page's whole column (Fill)
+    pub cell_width: u16,
+}
+
+impl Default for Code {
+    fn default() -> Self {
+        Self { font: DEFAULT_CODE_FONT.to_string(), size: 14, cell_width: 80 }
+    }
+}
+
+/// The editing rights a new agent session starts with
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Rights {
+    /// None until the agent asks and the human answers
+    Ask,
+    Proof,
+    Folder,
+    /// (also what a name this app does not know reads as)
+    #[serde(other)]
+    #[default]
+    Theory,
+}
+
+impl Rights {
+    pub const ALL: [Rights; 4] = [Rights::Ask, Rights::Proof, Rights::Theory, Rights::Folder];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Rights::Ask => "Ask first",
+            Rights::Proof => "This proof",
+            Rights::Theory => "This theory",
+            Rights::Folder => "Whole folder",
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Agents {
+    /// The rights a new agent session starts with (not on Windows)
+    pub default_rights: Rights,
 }
 
 /// Reading controls shared in vocabulary with Cerea and Terminal Agents' threads.
@@ -180,6 +247,8 @@ pub struct Editing {
     pub keywords: bool,
     /// How long typing must pause on such a line before it asks (Enter asks at once)
     pub keyword_pause_ms: u32,
+    /// Check the spelling of the theory's prose
+    pub spelling: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -306,13 +375,15 @@ impl Default for Settings {
             proof_state: ProofState::default(),
             llm: Llm::default(),
             lean: Lean::default(),
+            code: Code::default(),
+            agents: Agents::default(),
         }
     }
 }
 
 impl Default for Appearance {
     fn default() -> Self {
-        Self { theme: ThemeChoice::System, zoom: 1.0, goal_beside: true }
+        Self { theme: ThemeChoice::System, zoom: 1.0, goal_beside: true, interface_size: 14, thicken_text: false }
     }
 }
 
@@ -325,7 +396,7 @@ impl Default for Layout {
 
 impl Default for Editing {
     fn default() -> Self {
-        Self { vim: false, indent_width: 2, complete_while_typing: true, keywords: true, keyword_pause_ms: 2500 }
+        Self { vim: false, indent_width: 2, complete_while_typing: true, keywords: true, keyword_pause_ms: 2500, spelling: true }
     }
 }
 
@@ -335,7 +406,34 @@ impl Default for ProofState {
     }
 }
 
+/// A change to one of the settings the Settings page added (those not held in the older
+/// sections' own messages)
+#[derive(Clone, Debug, PartialEq)]
+pub enum Change {
+    InterfaceSize(u8),
+    ThickenText(bool),
+    Spelling(bool),
+    CodeFont(String),
+    CodeSize(u8),
+    /// Characters of code across a cell; zero is Fill
+    CellWidth(u16),
+    DefaultRights(Rights),
+}
+
 impl Settings {
+    pub fn change(&mut self, change: Change) {
+        match change {
+            Change::InterfaceSize(v) => self.appearance.interface_size = v,
+            Change::ThickenText(v) => self.appearance.thicken_text = v,
+            Change::Spelling(v) => self.editing.spelling = v,
+            Change::CodeFont(v) => self.code.font = v,
+            Change::CodeSize(v) => self.code.size = v,
+            Change::CellWidth(v) => self.code.cell_width = v,
+            Change::DefaultRights(v) => self.agents.default_rights = v,
+        }
+        self.clamp();
+    }
+
     /// Settings from a file's JSON, of any version. Version 0 (no `version` field) kept its few
     /// fields at the top level; they move into their sections here. A field that does not parse
     /// takes its default rather than losing the whole file
@@ -363,6 +461,8 @@ impl Settings {
                 s.proof_state = part(&v, "proof_state");
                 s.llm = part(&v, "llm");
                 s.lean = part(&v, "lean");
+                s.code = part(&v, "code");
+                s.agents = part(&v, "agents");
                 s.clamp();
                 s
             }
@@ -375,6 +475,12 @@ impl Settings {
         self.appearance.zoom = if self.appearance.zoom.is_finite() { self.appearance.zoom.clamp(0.5, 3.0) } else { 1.0 };
         self.editing.indent_width = self.editing.indent_width.clamp(1, 8);
         self.editing.keyword_pause_ms = self.editing.keyword_pause_ms.clamp(250, 30_000);
+        self.appearance.interface_size = self.appearance.interface_size.clamp(10, 24);
+        self.code.size = self.code.size.clamp(8, 36);
+        self.code.cell_width = if self.code.cell_width == 0 { 0 } else { self.code.cell_width.clamp(40, 240) };
+        if self.code.font.trim().is_empty() {
+            self.code.font = DEFAULT_CODE_FONT.to_string();
+        }
         self.layout.left_width = self.layout.left_width.clamp(180.0, 1200.0);
         self.layout.right_width = self.layout.right_width.clamp(260.0, 1600.0);
     }
@@ -588,5 +694,81 @@ mod tests {
         assert_eq!(future.display.font, TextFont::default());
         assert_eq!(future.display.line_height, 1.6);
         assert_eq!(future.appearance.zoom, 1.2);
+    }
+
+    #[test]
+    fn settings_files_from_before_the_settings_page_load_with_the_new_fields_at_their_defaults() {
+        let d = Settings::default();
+        let new_fields = |s: &Settings| {
+            assert_eq!(s.appearance.interface_size, 14);
+            assert!(!s.appearance.thicken_text);
+            assert!(s.editing.spelling);
+            assert_eq!((s.code.font.as_str(), s.code.size, s.code.cell_width), ("Noto Sans Mono", 14, 80));
+            assert_eq!(s.agents.default_rights, Rights::Theory);
+            assert_eq!((s.appearance.interface_size, s.code.clone(), s.agents.clone()), (d.appearance.interface_size, d.code.clone(), d.agents.clone()));
+        };
+        // the first previews' flat file
+        let v0 = Settings::from_json(&json!({"vim": true, "zoom": 1.1}));
+        new_fields(&v0);
+        assert!(v0.editing.vim);
+        // a version-1 file as the app wrote it before: whole sections, none of the new fields
+        let v1 = json!({"version": 1,
+            "appearance": {"theme": "dark", "zoom": 1.3, "goal_beside": false},
+            "display": {"font": "Libertinus", "text_size": 20.0, "line_height": 1.6, "measure": 0.0,
+                        "paragraph_spacing": 0.9, "math_scale": 1.3, "justify": true, "centred": false},
+            "editing": {"vim": true, "indent_width": 4, "complete_while_typing": false, "keywords": false, "keyword_pause_ms": 1000},
+            "proof_state": {"show_types": true, "show_changes": false},
+            "llm": {"claude_model": "opus", "codex_model": ""},
+            "lean": {"loogle": "off"}});
+        let old = Settings::from_json(&v1);
+        new_fields(&old);
+        // what the file had is kept
+        assert_eq!(old.appearance.theme, ThemeChoice::Dark);
+        assert_eq!(old.appearance.zoom, 1.3);
+        assert!(!old.appearance.goal_beside);
+        assert_eq!((old.display.font, old.display.text_size, old.display.measure, old.display.math_scale), (TextFont::Libertinus, 20.0, 0.0, 1.3));
+        assert_eq!((old.editing.indent_width, old.editing.complete_while_typing, old.editing.keywords, old.editing.keyword_pause_ms), (4, false, false, 1000));
+        assert_eq!(old.llm.claude_model, "opus");
+        assert_eq!(old.lean.loogle, Loogle::Off);
+        // and a file with a broken new section loses only that section
+        let mut broken = serde_json::to_value(&old).unwrap();
+        broken["code"] = json!({"size": "big"});
+        broken["lean"]["loogle"] = json!("everywhere");
+        let read = Settings::from_json(&broken);
+        assert_eq!(read.code, Code::default());
+        assert_eq!(read.llm.claude_model, "opus");
+    }
+
+    #[test]
+    fn the_new_fields_round_trip_and_stay_in_range() {
+        let mut s = Settings::default();
+        for change in [
+            Change::InterfaceSize(16), Change::ThickenText(true), Change::Spelling(false),
+            Change::CodeFont("Source Code Pro".into()), Change::CodeSize(15), Change::CellWidth(0),
+            Change::DefaultRights(Rights::Folder),
+        ] {
+            s.change(change);
+        }
+        let v = serde_json::to_value(&s).unwrap();
+        assert_eq!(v["agents"]["default_rights"], "folder");
+        assert_eq!(v["code"]["font"], "Source Code Pro");
+        assert_eq!(Settings::from_json(&v), s);
+        assert_eq!((s.appearance.interface_size, s.appearance.thicken_text, s.editing.spelling, s.code.cell_width), (16, true, false, 0));
+        s.change(Change::CodeSize(200));
+        s.change(Change::InterfaceSize(1));
+        s.change(Change::CellWidth(5));
+        s.change(Change::CodeFont("  ".into()));
+        assert_eq!((s.code.size, s.appearance.interface_size, s.code.cell_width, s.code.font.as_str()), (36, 10, 40, "Noto Sans Mono"));
+        let future = Settings::from_json(&json!({"version": 1, "agents": {"default_rights": "everything"}}));
+        assert_eq!(future.agents.default_rights, Rights::Theory, "a name this app does not know takes the default");
+        assert_eq!(Rights::ALL.map(Rights::label), ["Ask first", "This proof", "This theory", "Whole folder"]);
+    }
+
+    #[test]
+    fn the_prose_column_default_stays_fill_until_the_layout_takes_48_em() {
+        // (Q5 decides 48 em; the layout tests and the document view assume Fill today)
+        assert_eq!(Display::default().measure, 0.0);
+        assert_eq!(Settings::from_json(&json!({"version": 1, "display": {"measure": 48.0}})).display.measure, 48.0);
+        assert_eq!(Settings::from_json(&json!({"version": 1, "display": {"text_size": 18.0}})).display.measure, 0.0);
     }
 }
