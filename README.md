@@ -1,6 +1,6 @@
 # Deductum
 
-Deductum is a household application for shared Isabelle and Lean proof work on
+Deductum is a desktop application for shared Isabelle and Lean proof work on
 Linux and Windows, built with the COSMIC toolkit (libcosmic, iced and
 cosmic-text). Read and edit proofs as literate documents, inspect goals as you work,
 and share a live prover session with coding agents. Projects can run on your
@@ -29,11 +29,8 @@ computer or a Linux machine reached over SSH.
 
 ## Install
 
-Download prebuilt Linux and Windows packages from GitHub Releases, or install
-the Linux app through the household's `home-apps` Flatpak repository. While
-this repository is private, GitHub downloads need repository access; `home-apps`
-needs household tailnet access. Both packages are built by GitHub Actions; you
-do not need Rust or a source checkout to install them.
+Download prebuilt Linux and Windows packages from GitHub Releases. Both are built
+by GitHub Actions; you do not need Rust or a source checkout to install them.
 
 ### Release downloads
 
@@ -64,8 +61,7 @@ flatpak run dev.twright.Deductum
 
 Flatpak downloads the required Freedesktop 25.08 runtime from Flathub if it is
 missing. The app bundle does not include the runtime, so the first installation
-needs internet access. This installation needs no `home-apps` remote or tailnet
-access. You can also launch **Deductum** from your application menu afterwards.
+needs internet access. You can also launch **Deductum** from your application menu afterwards.
 
 For an update, download the newer `.flatpak` asset and install it over the
 existing app:
@@ -88,29 +84,6 @@ A public release also carries a [GitHub artifact attestation](#checking-where-a-
 The Flatpak includes the app and its session-host code. Local provers run on
 your Linux system, so install Python 3 and the prover you need there, outside
 the Flatpak. The separate Terminal Agents app is optional.
-
-### Linux: household Flatpak repository
-
-For signed packages and repository updates on the household tailnet, add
-Flathub for the runtime and `home-apps` for Deductum instead:
-
-```sh
-flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
-flatpak remote-add --user --if-not-exists home-apps http://neo:8099/home-apps.flatpakrepo
-flatpak install --user home-apps dev.twright.Deductum//stable
-```
-
-Open **Deductum** from your application launcher, or run:
-
-```sh
-flatpak run dev.twright.Deductum
-```
-
-To update:
-
-```sh
-flatpak update --user dev.twright.Deductum
-```
 
 ### Windows: portable app
 
@@ -282,7 +255,7 @@ and `appstreamcli validate --no-net`; the guide gives the complete commands.
 
 A pull request from a fork runs the same jobs on GitHub-hosted runners, with a
 read-only token and no secrets. No job in CI uses a secret. This repository's own
-pushes and pull requests use household runners. `scripts/ci-trust.py` makes these
+pushes and pull requests use self-hosted runners. `scripts/ci-trust.py` makes these
 choices.
 
 A fork can rewrite the workflow in its own pull request, so these choices keep
@@ -290,10 +263,10 @@ honest runs correct but do not stop hostile code. These repository and
 organisation settings do:
 
 - the organisation's runner group allows public repositories, so that this
-  repository's own runs can use the household runners, which means a fork's
+  repository's own runs can use the self-hosted runners, which means a fork's
   rewritten workflow could ask for them too;
 - so workflows from outside contributors wait for an administrator's approval.
-  Never approve a run on code you have not read: it could then reach Neo.
+  Never approve a run on code you have not read: it could then reach those runners.
 
 ### Publication
 
@@ -308,9 +281,3 @@ In a public repository it publishes only if `release-config.json` records a sign
 identity; `"public_signing": "github-attestation"` is the one implemented.
 `release-config.json` is also the only place the scripts and workflows name this
 repository.
-
-`.github/workflows/release.yml` separately submits every successful `main` build to
-the private `home-apps` Flatpak repository, using `scripts/submit-home-apps.py` on a
-GitHub-hosted runner. It joins the tailnet with a short-lived identity limited to
-Neo's CI ingress, and uses no stored secret. Neo checks the build and signs it; the
-signing key never leaves Neo.
