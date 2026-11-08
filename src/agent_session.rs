@@ -318,7 +318,7 @@ pub fn popover_body<'a>(app: &'a App, ctx: &Context) -> Element<'a, Message> {
             widget::row::with_capacity(2)
                 .spacing(s.space_xs)
                 .push(widget::button::suggested("Open agent session").on_press(Message::Shell(Msg::AgentStart)))
-                .push(widget::button::standard("Cancel").on_press(Message::Shell(Msg::AgentOpen(false)))),
+                .push(super::view::secondary("Cancel", Some(Message::Shell(Msg::AgentOpen(false))))),
         );
     widget::container(body)
         .padding(s.space_m)

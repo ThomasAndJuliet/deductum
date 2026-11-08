@@ -1106,6 +1106,81 @@ fn menus_and_tooltips_are_recorded_against_the_lightest() {
     }
 }
 
+/// The agent popover's Cancel is the household's Secondary button (the same as a note's Reply):
+/// no fill, a 2 px accent border and an accent semibold label, on the popover's own surface
+#[cfg(not(windows))]
+#[test]
+fn the_agent_popovers_cancel_is_a_secondary_button() {
+    use super::agent_session as ag;
+    use cosmic::iced::Color;
+    let mut app = demo_app(Mode::Literate);
+    let _ = cosmic::Application::update(&mut app, Message::Shell(Msg::AgentOpen(true)));
+    fn body(app: &App) -> Element<'_, Message> {
+        ag::popover_body(app, &ag::context(app).unwrap())
+    }
+    let size = Size::new(580.0, 300.0);
+    let is_cancel = |m: &Message| matches!(m, Message::Shell(Msg::AgentOpen(false)));
+    let hit = |x: u32, y: u32| clicks(body(&app), Point::new(x as f32, y as f32), size).iter().any(is_cancel);
+    // where Cancel is: found coarsely, then its edges to the pixel
+    let (mut sx, mut sy, mut n) = (0, 0, 0);
+    for x in (0..580u32).step_by(10) {
+        for y in (150..300u32).step_by(6) {
+            if hit(x, y) {
+                (sx, sy, n) = (sx + x, sy + y, n + 1);
+            }
+        }
+    }
+    assert!(n > 0, "Cancel is in the popover");
+    let (cx, cy) = (sx / n, sy / n);
+    let left = (cx.saturating_sub(120)..=cx).find(|&x| hit(x, cy)).expect("Cancel's left edge");
+    let right = (cx..cx + 120).rev().find(|&x| hit(x, cy)).expect("Cancel's right edge");
+    let top = (cy.saturating_sub(40)..=cy).find(|&y| hit(cx, y)).expect("Cancel's top edge");
+    let bottom = (cy..cy + 40).rev().find(|&y| hit(cx, y)).expect("Cancel's bottom edge");
+    assert_eq!(bottom - top + 1, 32, "a 32 px button, as Reply is");
+    for (light, name) in [(true, "light"), (false, "dark")] {
+        let theme = if light { cosmic::Theme::light() } else { cosmic::Theme::dark() };
+        let frame = draw_in(light, || body(&app), &format!("agent-popover-cancel-{name}"), size);
+        let px = |x: u32, y: u32| {
+            let i = ((y * 580 + x) * 4) as usize;
+            [frame[i], frame[i + 1], frame[i + 2]]
+        };
+        let near = |p: [u8; 3], c: Color, tol: u8| p.iter().zip(c.into_rgba8()).all(|(a, b)| a.abs_diff(b) <= tol);
+        let accent: Color = theme.cosmic().accent_text_color().into();
+        let surface: Color = theme.cosmic().bg_component_color().into();
+        let mid = (top + bottom) / 2;
+        // a 2 px border in the accent at both ends (at a fraction of a pixel, so its strength is
+        // summed across the edge: 2 is two whole pixels of the accent), the surface inside it (no fill)
+        let (a, s) = (accent.into_rgba8()[0] as f32, surface.into_rgba8()[0] as f32);
+        let strength = |x0: u32| (x0..x0 + 10).map(|x| (s - px(x, mid)[0] as f32) / (s - a)).sum::<f32>();
+        let (l, r) = (strength(left.saturating_sub(3)), strength(right - 6));
+        let vertical = |y0: u32| (y0..y0 + 10).map(|y| (s - px(cx, y)[0] as f32) / (s - a)).sum::<f32>();
+        let (t, b) = (vertical(top.saturating_sub(3)), vertical(bottom - 6));
+        // (the top and bottom are 2 px; the vertical sides, at a fraction of a pixel, may be drawn a
+        // half pixel thin by the renderer: Reply, the same helper, is the same)
+        assert!((1.8..=2.2).contains(&t) && (1.8..=2.2).contains(&b), "{name}: the top and bottom borders are {t:.2} and {b:.2} px of the accent (2 wanted)");
+        assert!((1.4..=2.3).contains(&l) && (1.4..=2.3).contains(&r), "{name}: the side borders are {l:.2} and {r:.2} px of the accent (2 wanted)");
+        for (what, x) in [("left", left + 4), ("right", right - 4)] {
+            assert!(near(px(x, mid), surface, 3), "{name}: Cancel has a fill beside its {what} border: {:?}", px(x, mid));
+        }
+        // and none inside it: the corner of the inside, and the middle of the gap above the label
+        assert!(near(px(left + 8, top + 4), surface, 3), "{name}: Cancel is filled: {:?}", px(left + 8, top + 4));
+        // the label: accent ink, and bolder than the regular weight (more ink than a regular one would
+        // have: measured against the same words set in the regular weight)
+        let ink = |frame: &[u8]| {
+            (left + 8..right - 8).flat_map(|x| (top + 6..bottom - 5).map(move |y| (x, y))).filter(|&(x, y)| {
+                let i = ((y * 580 + x) * 4) as usize;
+                near([frame[i], frame[i + 1], frame[i + 2]], accent, 40)
+            }).count()
+        };
+        let ours = ink(&frame);
+        assert!(ours > 60, "{name}: little accent ink in the label: {ours}");
+        // (no other colour of ink: the label is not the text colour)
+        let text: Color = theme.cosmic().on_bg_color().into();
+        let stray = (left + 8..right - 8).flat_map(|x| (top + 6..bottom - 5).map(move |y| (x, y))).filter(|&(x, y)| near(px(x, y), text, 10)).count();
+        assert!(stray < ours / 20, "{name}: the label has {stray} pixels in the text colour against {ours} in the accent");
+    }
+}
+
 // ----- the status bar and toasts
 
 /// The status bar on the page, as the window draws it
