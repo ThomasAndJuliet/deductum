@@ -432,9 +432,13 @@ impl highlighter::Highlighter for Highlighter {
     }
 }
 
-/// The syntax colours, after the human's Zed theme (COSMIC Dark Tritanopia: keywords
-/// purple, names yellow, types teal, strings mint, constants orange, comments grey
-/// italic) and, on a light theme, the same hues made deep enough to read
+/// The colours of Isabelle's token classes, from the household's code palette
+/// (`household_highlight`, rule 25b; Q3(a), Juliet 8 Nov) with Isabelle's classes mapped onto
+/// its own: keywords (and quasi-keywords and antiquotations) are Keyword; free variables and
+/// names Function; bound and inner syntax String; fixed (skolem) and schematic variables
+/// Constant; type variables, dynamic facts and class parameters Type; comments the muted text,
+/// darker on a light theme. Improper input is Tag, the palette's red. Every colour is the
+/// palette's, as it is for every household app: none is Deductum's own
 struct Scheme {
     keyword: Color,
     name: Color,
@@ -442,36 +446,27 @@ struct Scheme {
     string: Color,
     constant: Color,
     comment: Color,
-    operator: Color,
     error: Color,
 }
 
-fn scheme(dark: bool) -> Scheme {
-    let rgb = |hex: u32| Color::from_rgb8((hex >> 16) as u8, (hex >> 8) as u8, hex as u8);
-    if dark {
-        Scheme {
-            keyword: rgb(0xdf94f6),
-            name: rgb(0xf4dd60),
-            kind: rgb(0x34aab8),
-            string: rgb(0xadecb7),
-            constant: rgb(0xd78b00),
-            comment: rgb(0x909090),
-            operator: rgb(0xbebebe),
-            error: rgb(0xffa3a2),
+fn scheme(theme: &cosmic::Theme) -> Scheme {
+    use household_highlight::{Class, Colour, colour};
+    let dark = theme.cosmic().is_dark;
+    let of = |class: Class| match colour(class) {
+        Colour::Fixed { light, dark: on_dark } => {
+            let hex = if dark { on_dark } else { light };
+            Color::from_rgb8((hex >> 16) as u8, (hex >> 8) as u8, hex as u8)
         }
-    } else {
-        // The dark scheme's hues, deep enough to read on COSMIC's light backgrounds: at least
-        // 4.5:1 against the page (#d6d6d6) and more on the code cards
-        Scheme {
-            keyword: rgb(0x7a1fa2),
-            name: rgb(0x7a5200),
-            kind: rgb(0x00606e),
-            string: rgb(0x1f6324),
-            constant: rgb(0x9a3f00),
-            comment: rgb(0x55555f),
-            operator: rgb(0x4a4a52),
-            error: rgb(0xb0201f),
-        }
+        _ => super::tones::code_muted(theme),
+    };
+    Scheme {
+        keyword: of(Class::Keyword),
+        name: of(Class::Function),
+        kind: of(Class::Type),
+        string: of(Class::String),
+        constant: of(Class::Constant),
+        comment: super::tones::code_muted(theme),
+        error: of(Class::Tag),
     }
 }
 
@@ -479,7 +474,7 @@ fn scheme(dark: bool) -> Scheme {
 pub fn highlight_format(hl: &Hl, theme: &cosmic::Theme) -> highlighter::Format<cosmic::iced::Font> {
     let cosmic = theme.cosmic();
     let text: Color = cosmic.on_bg_color().into();
-    let k = scheme(cosmic.is_dark);
+    let k = scheme(theme);
     if let Hl::Script(sem) = hl {
         let base = sem.map_or(highlighter::Format { color: Some(text), font: None }, |s| highlight_format(&Hl::Sem(s), theme));
         return highlighter::Format { color: base.color, font: Some(cosmic::iced::Font::with_name("Isabellum Scripts")) };
@@ -504,7 +499,7 @@ pub fn highlight_format(hl: &Hl, theme: &cosmic::Theme) -> highlighter::Format<c
             Sem::ClassParameter => (k.kind, false, false),
             Sem::Antiquote => (k.keyword, true, false),
             Sem::Comment => (k.comment, false, true),
-            Sem::Raw => (k.operator, false, false),
+            Sem::Raw => (text, false, false),
         },
         Hl::Bold => (text, true, false),
         Hl::Emph => (text, false, true),

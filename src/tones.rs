@@ -172,6 +172,17 @@ where
         .selected_text_color(move |theme, style| on_tint(theme, style.value, under.color(theme)))
 }
 
+/// A comment's colour: the page's muted text, darker on a light theme (the palette's Muted,
+/// Juliet 8 Nov: #525252, italic as comments are); on a dark one the text faded
+pub fn code_muted(theme: &cosmic::Theme) -> Color {
+    let c = theme.cosmic();
+    if household_light(c) {
+        Role::Dark.tone(Mode::Light).map_or_else(|| secondary_text(theme, 0.65), color)
+    } else {
+        secondary_text(theme, 0.65)
+    }
+}
+
 // ----- the cells' status tones
 
 /// How much of a status colour shows in its faded tone: the colour at 35 % over the page (Q4,

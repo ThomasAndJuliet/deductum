@@ -285,3 +285,55 @@ fn the_construct_band_is_the_ten_percent_tint_and_a_selection_is_darker_over_it(
     assert!(count(&selected, tint_over_band) > 300, "the selection over the band is not the tint over the band, {}", hex(tint_over_band));
     assert!(luminance(tint_over_band) < luminance(band), "{} is not darker than the band {}", hex(tint_over_band), hex(band));
 }
+
+// ----- the colours of code
+
+/// A block of code being edited, all of it one Isabelle token class, in the light theme: the
+/// frame, drawn headless
+fn class_frame(sem: super::editor::Sem) -> Vec<u8> {
+    use super::editor::{HighlightData, HighlightSettings, Hl, next_generation};
+    const TEXT: &str = "MMMMMMMM WWWWWWWW\nHHHHHHHH MMMMMMMM\nWWWWWWWW HHHHHHHH";
+    let mut app = cells_app(None);
+    let t = app.workspace.as_mut().unwrap().theory.as_mut().unwrap();
+    let i = t.blocks.iter().position(|b| b.kind == Kind::Formal).unwrap();
+    let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(i));
+    let t = app.workspace.as_mut().unwrap().theory.as_mut().unwrap();
+    let be = t.block_editor.as_mut().expect("an open block");
+    be.content = cosmic::widget::text_editor::Content::with_text(TEXT);
+    be.preview = None;
+    let lines = TEXT.split('\n').map(|l| vec![(0..l.len(), Hl::Sem(sem))]).collect();
+    t.block_highlight = HighlightSettings(std::sync::Arc::new(HighlightData { generation: next_generation(), lines }), false);
+    in_light(BAND_SIZE, |h| {
+        h.focus(&app, super::view::block_editor_id());
+        let _ = h.draw(&app, "code-warm");
+        h.draw(&app, &format!("code-{sem:?}").to_lowercase())
+    })
+}
+
+/// Isabelle's classes are drawn in the household's code palette (rule 25b): keywords, a free
+/// variable, bound and inner syntax, fixed and schematic variables and type variables,
+/// in their light-mode colours
+#[test]
+fn isabelle_tokens_are_drawn_in_the_household_colours() {
+    use super::editor::Sem;
+    for (sem, rgb) in [
+        (Sem::Keyword1, 0x7a2fd6),
+        (Sem::Keyword2, 0x7a2fd6),
+        (Sem::Free, 0x1a5aa8),
+        (Sem::Bound, 0x2a6e2e),
+        (Sem::Inner, 0x2a6e2e),
+        (Sem::Skolem, 0xa64500),
+        (Sem::Var, 0xa64500),
+        (Sem::TFree, 0x7f5500),
+        (Sem::Dynamic, 0x7f5500),
+    ] {
+        let frame = class_frame(sem);
+        let want = Color::from_rgb8((rgb >> 16) as u8, (rgb >> 8) as u8, rgb as u8);
+        // (text is anti-aliased and its gamma darkens it a little: the pixels within 16 units of
+        // the colour in each channel are the stems of the capitals; no other class's colour is
+        // that near, and the page and the cell's strip are not)
+        let [r, g, b, _] = want.into_rgba8();
+        let n = frame.chunks(4).filter(|p| [r, g, b].iter().zip(p.iter()).all(|(a, b)| a.abs_diff(*b) <= 16)).count();
+        assert!(n > 30, "{sem:?}: only {n} pixels are {}", hex(want));
+    }
+}

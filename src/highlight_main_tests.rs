@@ -18,7 +18,8 @@
 //! font sets are kept separately; the drawn editor must exactly match one of them.
 //! The `-warm` frames are not kept. When a later change to how the editor draws is
 //! meant, make them again the same way from the commit before it, and say so in the commit.
-//! The cells redesign (square cards on the page, the band at 10 %) was such a change: the Neo
+//! The cells redesign (square cards on the page, the band at 10 %) and the household code colours
+//! were such changes: the Neo
 //! set was made again for the frames it changed, from that commit. The original and SDK sets of
 //! those frames (made with other fonts) still show the old look and need making again the same
 //! way in the SDK build.

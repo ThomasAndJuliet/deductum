@@ -25,6 +25,9 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg",
 # muted accent of its chosen tabs and toggles; the highlight tests read the expected colours from
 # it too. From the private household-kit, read over ssh; pinned in Cargo.lock
 household-tones = { git = "ssh://git@github.com/ThomasAndJuliet/household-kit.git" }
+# The household's code colours by token class (rule 25b): the colours of the editors' Isabelle
+# token classes, mapped in editor.rs; the same household-kit revision as household-tones
+household-highlight = { git = "ssh://git@github.com/ThomasAndJuliet/household-kit.git" }
 
 [dependencies.cosmic-text]
 version = "0.19"
