@@ -223,16 +223,6 @@ fn the_header_and_status_bar_in_their_states() {
         t.prover.status = json!({"finished": 15, "unprocessed": 0, "running": 0, "failed": 0, "consolidated": true});
     }
     draw_in(false, || header(&app), "shell-header-checked", Size::new(1400.0, 48.0));
-    // a typed sledgehammer running, with its own Stop
-    app.workspace.as_mut().unwrap().activity = Some(json!({"prover": {"cpu": 390, "rss_mb": 3200},
-        "running": [{"name": "sledgehammer", "seconds": 12, "line": 9}, {"name": "by", "seconds": 7, "line": 12}], "theories": []}));
-    draw_in(false, || header(&app), "shell-header-tool", Size::new(1400.0, 48.0));
-    let stops = (600..1300).step_by(4).flat_map(|x| clicks(header(&app), Point::new(x as f32, 24.0), Size::new(1400.0, 48.0))).collect::<Vec<_>>();
-    assert!(stops.iter().any(|m| matches!(m, Message::StopTools)), "the tool's Stop: {stops:?}");
-    // no Interrupt where the session cannot interrupt
-    app.workspace.as_mut().unwrap().caps.interrupt = false;
-    let none = (700..1300).step_by(4).flat_map(|x| clicks(header(&app), Point::new(x as f32, 24.0), Size::new(1400.0, 48.0))).collect::<Vec<_>>();
-    assert!(!none.iter().any(|m| matches!(m, Message::Lifecycle("cancel"))), "{none:?}");
     // paused, in the light theme too
     app.sessions.get_mut(&("local".to_string(), "s1".to_string())).unwrap()["lifecycle"] = json!("Paused");
     draw_in(false, || header(&app), "shell-header-paused", Size::new(1400.0, 48.0));
@@ -643,7 +633,7 @@ fn a_long_name_wraps_after_an_underscore_without_clipping() {
     }
 }
 
-/// Status is a mark and words, never ▶ ⏸ ■: a filled green dot, a hollow amber ring, nothing for
+/// Status is a mark and words, never ▶ ⏸ ■: a filled green dot, a hollow amber ring, a grey dot for
 /// a stopped session, the error icon for a failed one, a spinner while it checks
 #[test]
 fn a_running_session_shows_a_dot_and_the_word_running() {
@@ -651,7 +641,7 @@ fn a_running_session_shows_a_dot_and_the_word_running() {
     assert_eq!(mark_of("Running", false), Mark::Dot);
     assert_eq!(mark_of("Running", true), Mark::Spinner);
     assert_eq!(mark_of("Paused", false), Mark::Ring);
-    assert_eq!(mark_of("Stopped", false), Mark::Blank);
+    assert_eq!(mark_of("Stopped", false), Mark::Grey);
     assert_eq!(mark_of("Failed", false), Mark::Error);
     assert_eq!(caption_line("neo", "Running"), "neo \u{b7} running");
     assert_eq!(caption_line("this computer", "Paused"), "this computer \u{b7} paused");
@@ -667,6 +657,9 @@ fn a_running_session_shows_a_dot_and_the_word_running() {
         assert!(count_of(&frame, green, 2) >= 30, "the running dot");
         assert!(count_of(&frame, amber, 30) >= 8, "the paused ring");
         assert!(count_of(&frame, red, 40) >= 8, "the failed icon");
+        // (and CausalSemantics is stopped: a grey dot of its own, not nothing)
+        let grey = super::sidebar::muted_grey(&t);
+        assert!(count_of(&frame, grey, 6) >= 20, "the stopped dot");
     }
 }
 
@@ -776,4 +769,158 @@ fn the_outline_marks_the_heading_the_caret_is_under() {
         assert!(count_of(&frame, wash, 1) > 3_000, "light={light}: the current heading is not washed");
         assert!(count_of(&frame, theme.cosmic().accent_color().into(), 24) > 40, "light={light}: the current heading is not in the accent");
     }
+}
+
+// ----- the status chip, pause and stop
+
+/// The first x on the header's row where a click sends a message `wanted` accepts
+fn x_where(app: &App, wanted: impl Fn(&Message) -> bool) -> Option<u32> {
+    (0..1400u32).step_by(2).find(|x| clicks(header(app), Point::new(*x as f32, 24.0), Size::new(1400.0, 48.0)).iter().any(&wanted))
+}
+
+fn set_lifecycle(app: &mut App, lifecycle: &str) {
+    app.sessions.get_mut(&("local".to_string(), "s1".to_string())).unwrap()["lifecycle"] = json!(lifecycle);
+}
+
+/// A scene with the prover running and checked, changed by `f`
+fn chip_scene(f: impl FnOnce(&mut App)) -> App {
+    let mut app = mixed_app();
+    app.show_right = false;
+    set_lifecycle(&mut app, "Running");
+    let ws = app.workspace.as_mut().unwrap();
+    ws.activity = Some(json!({"prover": {"cpu": 2, "rss_mb": 1300}, "running": [], "theories": []}));
+    ws.theory.as_mut().unwrap().prover.status = json!({"finished": 15, "unprocessed": 0, "running": 0, "failed": 0, "consolidated": true});
+    f(&mut app);
+    app
+}
+
+#[test]
+fn the_chip_says_its_state_with_a_mark_in_each() {
+    use super::chip::{State, state_of};
+    use super::sidebar::Mark;
+    let path = "/home/me/Research/Demo/Demo.thy";
+    let cases: Vec<(&str, App, State, &str, Mark)> = vec![
+        ("no session", chip_scene(|a| a.workspace = None), State::NoSession, "No session", Mark::Blank),
+        ("starting", chip_scene(|a| a.workspace.as_mut().unwrap().activity = None), State::Starting, "Starting\u{2026}", Mark::Spinner),
+        (
+            "loading imports",
+            chip_scene(|a| {
+                a.workspace.as_mut().unwrap().activity = Some(json!({"prover": {"rss_mb": 900}, "running": [], "theories": [
+                    {"path": path, "imports": ["/x/A.thy", "/x/B.thy", "/x/C.thy"], "consolidated": false},
+                    {"path": "/x/A.thy", "consolidated": true, "percentage": 100},
+                    {"path": "/x/B.thy", "consolidated": true, "percentage": 100},
+                    {"path": "/x/C.thy", "consolidated": false, "percentage": 40}]}));
+            }),
+            State::Loading { done: 2, total: 3 },
+            "Loading imports \u{b7} 2 of 3",
+            Mark::Spinner,
+        ),
+        (
+            "checking",
+            chip_scene(|a| a.workspace.as_mut().unwrap().theory.as_mut().unwrap().prover.status = json!({"finished": 6, "unprocessed": 6, "running": 0, "failed": 0, "consolidated": false})),
+            State::Checking(50),
+            "Checking \u{b7} 50 %",
+            Mark::Spinner,
+        ),
+        ("problems", chip_scene(|_| {}), State::Problems { failed: 1, unfinished: 1 }, "1 failed \u{b7} 1 unfinished", Mark::RedDot),
+        ("paused", chip_scene(|a| set_lifecycle(a, "Paused")), State::Paused, "Paused", Mark::Ring),
+        ("stopped", chip_scene(|a| set_lifecycle(a, "Stopped")), State::Stopped, "Stopped", Mark::Grey),
+        ("crashed", chip_scene(|a| set_lifecycle(a, "Failed")), State::Crashed, "The prover stopped unexpectedly", Mark::Error),
+    ];
+    for (name, app, state, label, mark) in &cases {
+        assert_eq!(&state_of(app), state, "{name}");
+        assert_eq!(state.label(), *label, "{name}");
+        assert_eq!(state.mark(), *mark, "{name}");
+        assert!(!state.label().contains('\u{25b6}') && !state.label().contains('\u{23f8}'), "no play or pause sign as a status: {name}");
+    }
+    // nothing failed or unfinished: Checked, with a check
+    let mut app = chip_scene(|_| {});
+    {
+        let t = app.workspace.as_mut().unwrap().theory.as_mut().unwrap();
+        for b in &mut t.blocks {
+            b.status = super::theory::Status::Finished;
+            b.commands.retain(|c| c.name != "sorry");
+        }
+    }
+    assert_eq!(state_of(&app), State::Checked);
+    assert_eq!((State::Checked.label().as_str(), State::Checked.mark()), ("Checked", Mark::Check));
+    // a failed proof alone says only that
+    {
+        let t = app.workspace.as_mut().unwrap().theory.as_mut().unwrap();
+        let i = t.blocks.iter().position(|b| b.name == "lemma").unwrap();
+        t.blocks[i].status = super::theory::Status::Failed;
+    }
+    assert_eq!(state_of(&app).label(), "1 failed");
+    // frames, in both themes
+    for (light, theme) in [(true, "light"), (false, "dark")] {
+        for (name, app, ..) in &cases {
+            draw_in(light, || header(app), &format!("chip-{}-{theme}", name.replace(' ', "-")), Size::new(1400.0, 48.0));
+        }
+    }
+}
+
+#[test]
+fn pause_resume_restart_and_stop_are_always_there() {
+    use super::chip::{controls_for, state_of};
+    let mut app = chip_scene(|_| {});
+    // running: pause and stop
+    let pause = x_where(&app, |m| matches!(m, Message::Lifecycle("pause"))).expect("pause");
+    let stop = x_where(&app, |m| matches!(m, Message::Lifecycle("stop"))).expect("stop");
+    assert!(stop > pause);
+    // paused: the same place now resumes
+    set_lifecycle(&mut app, "Paused");
+    assert_eq!(x_where(&app, |m| matches!(m, Message::Lifecycle("resume"))), Some(pause));
+    assert_eq!(x_where(&app, |m| matches!(m, Message::Lifecycle("stop"))), Some(stop));
+    assert_eq!(x_where(&app, |m| matches!(m, Message::Lifecycle("pause"))), None);
+    // stopped: resume (start again), stop disabled
+    set_lifecycle(&mut app, "Stopped");
+    assert_eq!(x_where(&app, |m| matches!(m, Message::Lifecycle("resume"))), Some(pause));
+    assert_eq!(x_where(&app, |m| matches!(m, Message::Lifecycle("stop"))), None);
+    assert!(!controls_for(&state_of(&app)).stop.1);
+    // crashed: Restart (the circular arrow), stop disabled
+    set_lifecycle(&mut app, "Failed");
+    let c = controls_for(&state_of(&app));
+    assert_eq!((c.first.0, c.first.2, c.stop.1), ("view-refresh-symbolic", Some("resume"), false));
+    assert_eq!(x_where(&app, |m| matches!(m, Message::Lifecycle("resume"))), Some(pause));
+    // no session: both are there and disabled, not hidden
+    let none = chip_scene(|a| a.workspace = None);
+    let c = controls_for(&state_of(&none));
+    assert_eq!((c.first.2, c.stop.1), (None, false));
+    assert_eq!(super::chip::controls(&none).len(), 2, "both buttons are drawn");
+    assert_eq!(x_where(&none, |m| matches!(m, Message::Lifecycle(_))), None);
+    // and the chip's state goes to the next failure when there is one
+    let app = chip_scene(|_| {});
+    let hits = (0..1400u32).step_by(2).flat_map(|x| clicks(header(&app), Point::new(x as f32, 24.0), Size::new(1400.0, 48.0))).collect::<Vec<_>>();
+    assert!(hits.iter().any(|m| matches!(m, Message::Shell(Msg::NextProblem(super::attention::Problem::Failed)))), "{hits:?}");
+}
+
+/// Wherever the chip's state changes, pause, stop and everything to the right stay put
+#[test]
+fn nothing_in_the_header_moves_between_states() {
+    use super::chip::{CHIP_WIDTH, chip_width};
+    let scenes: Vec<App> = vec![
+        chip_scene(|_| {}),
+        chip_scene(|a| a.workspace.as_mut().unwrap().activity = None),
+        chip_scene(|a| a.workspace.as_mut().unwrap().theory.as_mut().unwrap().prover.status = json!({"finished": 6, "unprocessed": 6, "consolidated": false})),
+        chip_scene(|a| set_lifecycle(a, "Paused")),
+        chip_scene(|a| set_lifecycle(a, "Stopped")),
+        chip_scene(|a| set_lifecycle(a, "Failed")),
+    ];
+    let probe = |app: &App| {
+        (
+            x_where(app, |m| matches!(m, Message::Lifecycle("pause" | "resume"))),
+            x_where(app, |m| matches!(m, Message::ToggleRight)),
+            x_where(app, |m| matches!(m, Message::ToggleGoalBeside)),
+            x_where(app, |m| matches!(m, Message::ToggleSidebar)),
+        )
+    };
+    let first = probe(&scenes[0]);
+    assert!(first.0.is_some() && first.1.is_some() && first.2.is_some() && first.3.is_some(), "{first:?}");
+    for (i, app) in scenes.iter().enumerate() {
+        assert_eq!(probe(app), first, "scene {i}");
+        assert_eq!(chip_width(app), CHIP_WIDTH);
+    }
+    let none = chip_scene(|a| a.workspace = None);
+    assert_eq!(probe(&none).3, first.3, "the sidebar toggle is first, wherever");
+    assert_eq!(chip_width(&none), CHIP_WIDTH);
 }

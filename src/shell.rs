@@ -21,7 +21,7 @@ use serde_json::{Value, json};
 use super::editor::Mode;
 use super::settings::{Change, DisplayChange, Loogle, Settings, ThemeChoice};
 use super::theory::Status;
-use super::{App, Message, Panel, Pending, Workspace, file_name, link};
+use super::{App, Message, Pending, Workspace, file_name, link};
 
 /// What the shell keeps between frames
 #[derive(Default)]
@@ -88,6 +88,8 @@ pub enum Msg {
     ToggleDocuments,
     /// Collapse or expand one folder of the open session's document list
     ToggleDocFolder(String),
+    /// Go to the next cell that failed or is unfinished
+    NextProblem(super::attention::Problem),
 }
 
 impl App {
@@ -275,6 +277,10 @@ impl App {
                 }
             }
             Msg::OpenDocument(path) => return self.open_document(path),
+            Msg::NextProblem(kind) => {
+                let Some(at) = self.workspace.as_ref().and_then(|w| w.theory.as_ref()).and_then(|t| super::attention::next(t, kind)) else { return Task::none() };
+                return self.update(Message::Goto(at));
+            }
         }
         Task::none()
     }
@@ -427,14 +433,18 @@ pub fn dimmed(theme: &cosmic::Theme) -> Color {
 
 /// A backend's mark: a small rounded square with its initial, in its colour
 pub fn backend_mark<'a>(backend: &str) -> Element<'a, Message> {
+    widget::tooltip(backend_glyph(backend), widget::text(backend_label(backend)), widget::tooltip::Position::Bottom).into()
+}
+
+/// A backend's mark without its tooltip
+pub fn backend_glyph<'a>(backend: &str) -> Element<'a, Message> {
     let (letter, rgb): (&str, [u8; 3]) = match backend {
         "lean" => ("L", [0x3a, 0x8f, 0xe8]),
         "rocq" | "coq" => ("R", [0xe8, 0x7a, 0x2c]),
         _ => ("I", [0xd9, 0x9a, 0x1e]),
     };
     let base = Color::from_rgb8(rgb[0], rgb[1], rgb[2]);
-    widget::tooltip(
-        widget::container(widget::text(letter).size(11.0).font(cosmic::font::bold()))
+    widget::container(widget::text(letter).size(11.0).font(cosmic::font::bold()))
             .width(Length::Fixed(18.0))
             .height(Length::Fixed(18.0))
             .center_x(Length::Fixed(18.0))
@@ -444,11 +454,8 @@ pub fn backend_mark<'a>(backend: &str) -> Element<'a, Message> {
                 text_color: Some(readable_on(theme, base)),
                 border: Border { radius: 4.0.into(), width: 1.0, color: Color { a: 0.55, ..base } },
                 ..Default::default()
-            })),
-        widget::text(backend_label(backend)),
-        widget::tooltip::Position::Bottom,
-    )
-    .into()
+            }))
+        .into()
 }
 
 pub fn backend_label(backend: &str) -> &'static str {
@@ -498,23 +505,6 @@ pub fn header_end(app: &App) -> Vec<Element<'_, Message>> {
         return items;
     };
     if !app.shell.settings_open {
-        let summary = app.sessions.get(&(ws.machine.clone(), ws.sid.clone()));
-        let lifecycle = summary.and_then(|s| s["lifecycle"].as_str()).unwrap_or("?").to_string();
-        match lifecycle.as_str() {
-            "Running" => {
-                items.push(icon_button("media-playback-pause-symbolic", "Pause: keep the prover loaded, stop checking", Some(Message::Lifecycle("pause"))));
-                items.push(icon_button("system-shutdown-symbolic", "Stop the prover (buffers are kept)", Some(Message::Lifecycle("stop"))));
-            }
-            "Paused" => {
-                items.push(icon_button("media-playback-start-symbolic", "Resume checking", Some(Message::Lifecycle("resume"))));
-                items.push(icon_button("system-shutdown-symbolic", "Stop the prover (buffers are kept)", Some(Message::Lifecycle("stop"))));
-            }
-            "Stopped" | "Failed" => {
-                items.push(widget::button::suggested("Resume").on_press(Message::Lifecycle("resume")).into());
-                items.push(icon_button("user-trash-symbolic", "Forget this session (documents are saved; an agent's unmerged work is refused)", Some(Message::Lifecycle("discard"))));
-            }
-            _ => {}
-        }
         // (a narrow window keeps its room for the document's own controls)
         if ws.info.is_some() && app.window_width >= 1250.0 {
             items.push(widget::Space::new().width(Length::Fixed(sp().space_xxs as f32)).into());
@@ -548,73 +538,11 @@ pub fn header_end(app: &App) -> Vec<Element<'_, Message>> {
     items
 }
 
-/// The prover's state in the header bar, as COSMIC apps show work in progress: never an idle-looking
-/// editor while the prover is busy. Its parts are apart (the toolchain, the state, what fails,
-/// what it uses), a running tool has its own Stop, and Interrupt shows when the session can
+/// The prover's state in the header: the status chip, then pause and stop (see `chip`)
 pub fn header_center(app: &App) -> Vec<Element<'_, Message>> {
-    let Some(ws) = &app.workspace else { return Vec::new() };
-    if app.shell.settings_open {
-        return Vec::new();
-    }
-    let summary = app.sessions.get(&(ws.machine.clone(), ws.sid.clone()));
-    let lifecycle = summary.and_then(|s| s["lifecycle"].as_str()).unwrap_or("").to_string();
-    let toolchain = summary.and_then(|s| s["toolchain"]["label"].as_str()).filter(|l| !l.is_empty()).map(str::to_string);
-    let backend = summary.and_then(|s| s["backend"].as_str()).unwrap_or("isabelle").to_string();
-    match (&ws.theory, lifecycle.as_str()) {
-        (Some(t), "Running") => prover_status(ws, t, &backend, toolchain, app.window_width < 1250.0, app.window_width < 1100.0, app.window_width < 900.0).into_iter().collect(),
-        (_, "") => Vec::new(),
-        (_, lc) => {
-            let (icon_name, tint): (&'static str, fn(&cosmic::Theme) -> Color) = match lc {
-                "Paused" => ("media-playback-pause-symbolic", warning),
-                "Failed" => ("dialog-error-symbolic", destructive),
-                "Stopped" => ("media-playback-stop-symbolic", |t: &cosmic::Theme| Color::from(t.cosmic().on_bg_color())),
-                _ => ("media-playback-start-symbolic", success),
-            };
-            let mut row = widget::row::with_capacity(5).spacing(sp().space_xs).align_y(Alignment::Center);
-            row = row.push(backend_mark(&backend));
-            if let Some(tc) = toolchain {
-                row = row.push(widget::text::caption(tc)).push(divider(14.0));
-            }
-            row = row.push(tinted_icon(icon_name, 16, tint)).push(widget::text::body(match lc {
-                "Paused" => "Paused".to_string(),
-                "Stopped" => "Stopped".to_string(),
-                "Failed" => "Failed".to_string(),
-                other => other.to_string(),
-            }));
-            vec![chip(row.into(), "Prover activity and log", Some(Message::Panel(Panel::Log)))]
-        }
-    }
-}
-
-/// A rounded chip in the header, pressable, with a tooltip
-fn chip<'a>(content: Element<'a, Message>, tip: impl Into<String>, press: Option<Message>) -> Element<'a, Message> {
-    widget::tooltip(
-        button::custom(content).padding([3, 12]).class(chip_style()).on_press_maybe(press),
-        widget::text(tip.into()),
-        widget::tooltip::Position::Bottom,
-    )
-    .into()
-}
-
-fn chip_style() -> theme::Button {
-    fn style(theme: &cosmic::Theme, hover: bool) -> button::Style {
-        let c = theme.cosmic();
-        let text: Color = c.on_bg_color().into();
-        let mut s = button::Style::new();
-        s.border_radius = 16.0.into();
-        s.background = Some(blend(Color::from(c.bg_component_color()), text, if hover { 0.08 } else { 0.0 }).into());
-        s.border_width = 1.0;
-        s.border_color = Color { a: 0.10, ..text };
-        s.text_color = Some(text);
-        s.icon_color = Some(text);
-        s
-    }
-    theme::Button::Custom {
-        active: Box::new(|_, t| style(t, false)),
-        disabled: Box::new(|t| style(t, false)),
-        hovered: Box::new(|_, t| style(t, true)),
-        pressed: Box::new(|_, t| style(t, true)),
-    }
+    let mut items = vec![super::chip::chip(app)];
+    items.extend(super::chip::controls(app));
+    items
 }
 
 /// The theory's imports, transitively, that the prover has not finished checking: each one's
@@ -644,136 +572,6 @@ pub fn pending_imports(ws: &Workspace, t: &super::editor::Theory) -> Vec<(String
         }
     }
     waiting
-}
-
-/// (`compact`, in a narrow window: the state and what fails only)
-/// (`narrow`, narrower still: no backend mark, and a running tool without its time)
-fn prover_status<'a>(ws: &'a Workspace, t: &'a super::editor::Theory, backend: &str, toolchain: Option<String>, compact: bool, narrow: bool, icon_only: bool) -> Option<Element<'a, Message>> {
-    let act = ws.activity.as_ref()?;
-    let theories = act["theories"].as_array()?;
-    let waiting = pending_imports(ws, t);
-    let running = act["running"].as_array().cloned().unwrap_or_default();
-    let busy_theories = theories.iter().filter(|th| th["running"].as_u64().unwrap_or(0) > 0).count();
-    let (finished, unprocessed, run_here, failed, consolidated) = t.status();
-    let total = (finished + unprocessed + run_here + failed).max(1);
-    let prover = &act["prover"];
-    let busy = !running.is_empty() || busy_theories > 0;
-    let s = sp();
-    // The state, in words
-    let state = if !waiting.is_empty() {
-        let blocked = waiting.iter().filter(|w| w.2).count();
-        if blocked > 0 {
-            format!("{blocked} import{} cannot load", if blocked == 1 { "" } else { "s" })
-        } else {
-            format!("Waiting for {} import{}", waiting.len(), if waiting.len() == 1 { "" } else { "s" })
-        }
-    } else if busy || (!consolidated && !t.prover.status.is_null()) {
-        format!("Checking {}%", (finished + failed) * 100 / total)
-    } else if !t.prover.status.is_null() {
-        "Checked".to_string()
-    } else {
-        "Starting".to_string()
-    };
-    let mut row = widget::row::with_capacity(10).spacing(s.space_xs).align_y(Alignment::Center);
-    if !narrow {
-        row = row.push(backend_mark(backend));
-    }
-    if let Some(tc) = toolchain.filter(|_| !compact) {
-        row = row.push(widget::text::caption(tc).wrapping(iced::widget::text::Wrapping::None)).push(divider(14.0));
-    }
-    if busy {
-        row = row.push(spinner(14.0));
-    } else if waiting.is_empty() && !t.prover.status.is_null() && failed == 0 {
-        row = row.push(tinted_icon("emblem-ok-symbolic", 14, success));
-    } else if icon_only {
-        row = row.push(tinted_icon(if failed > 0 { "dialog-error-symbolic" } else { "dialog-information-symbolic" }, 14, if failed > 0 { destructive } else { muted }));
-    }
-    if !icon_only {
-        row = row.push(widget::text::body(state.clone()).wrapping(iced::widget::text::Wrapping::None));
-    }
-    if failed > 0 && !icon_only {
-        row = row.push(badge(format!("{failed} failing"), destructive));
-    }
-    let is_tool = |r: &Value| r["name"].as_str().is_some_and(|n| ws.caps.typed_tool(n).is_some());
-    // The command that has run longest, by its name as typed
-    if let Some(longest) = running.iter().find(|r| !is_tool(r))
-        && longest["seconds"].as_u64().unwrap_or(0) >= 5
-        && !compact
-    {
-        row = row
-            .push(widget::text(longest["name"].as_str().unwrap_or("").to_string()).size(12.0).font(cosmic::font::mono()).wrapping(iced::widget::text::Wrapping::None))
-            .push(widget::text::caption(format!("{} s", longest["seconds"])).wrapping(iced::widget::text::Wrapping::None));
-    }
-    let mut resources = Vec::new();
-    if let Some(cpu) = prover["cpu"].as_u64().filter(|c| *c >= 5) {
-        resources.push(format!("CPU {cpu}%"));
-    }
-    if let Some(mb) = prover["rss_mb"].as_u64() {
-        resources.push(format!("{:.1} GB", mb as f64 / 1000.0));
-    }
-    if !resources.is_empty() && !compact {
-        row = row.push(divider(14.0));
-        for r in resources {
-            row = row.push(widget::text::caption(r).wrapping(iced::widget::text::Wrapping::None));
-        }
-    }
-    let detail = if failed > 0 { format!("{state}; {failed} failing") } else { state };
-    let tip = if waiting.is_empty() {
-        format!("{detail} — prover activity and log")
-    } else {
-        let mut w = waiting.clone();
-        w.sort_by_key(|w| (!w.2, w.1));
-        format!(
-            "{detail} — waiting for: {}",
-            w.iter().take(8).map(|(n, p, f)| if *f { format!("{n} (cannot load)") } else { format!("{n} {p}%") }).collect::<Vec<_>>().join(", ")
-        )
-    };
-    let mut out = widget::row::with_capacity(4).spacing(s.space_xxs).align_y(Alignment::Center).push(chip(row.into(), tip, Some(Message::Panel(Panel::Log))));
-    // A proof tool typed in the text, running: its own chip, its Stop inside it where it has one
-    if let Some(tool) = running.iter().find(|r| is_tool(r)) {
-        let name = tool["name"].as_str().unwrap_or("").to_string();
-        let seconds = tool["seconds"].as_u64().unwrap_or(0);
-        let mut trow = widget::row::with_capacity(3).spacing(s.space_xs).align_y(Alignment::Center).push(spinner(14.0));
-        if ws.tools_stopping {
-            trow = trow.push(widget::text::body(format!("{name}: stopping…")));
-        } else {
-            trow = trow.push(widget::text(name.clone()).size(13.0).font(cosmic::font::mono()));
-            if !narrow {
-                trow = trow.push(widget::text::body(format!("{seconds} s")));
-            }
-            if ws.caps.typed_tool(&name).is_some_and(|t| t.stop) {
-                trow = trow.push(
-                    widget::tooltip(
-                        button::text("Stop").on_press(Message::StopTools),
-                        widget::text(format!("Stop {name} (as if its time ran out)")),
-                        widget::tooltip::Position::Bottom,
-                    ),
-                );
-            }
-        }
-        out = out.push(
-            widget::container(trow)
-                .padding(Padding { left: 12.0, right: 4.0, top: 2.0, bottom: 2.0 })
-                .height(Length::Fixed(30.0))
-                .center_y(Length::Fixed(30.0))
-                .class(theme::Container::custom(|theme| {
-                    let c = theme.cosmic();
-                    let text: Color = c.on_bg_color().into();
-                    iced::widget::container::Style {
-                        background: Some(blend(Color::from(c.bg_component_color()), Color::from(c.accent_color()), 0.12).into()),
-                        border: Border { radius: 16.0.into(), width: 1.0, color: Color { a: 0.10, ..text } },
-                        text_color: Some(text),
-                        ..Default::default()
-                    }
-                })),
-        );
-    }
-    // Interrupt: for proofs other than the tools, where the session's prover can
-    let others = running.iter().any(|r| !is_tool(r));
-    if busy && others && ws.caps.interrupt {
-        out = out.push(icon_button("process-stop-symbolic", "Interrupt the running proofs (the prover keeps going with the rest)", Some(Message::Lifecycle("cancel"))));
-    }
-    Some(out.into())
 }
 
 // ----- a machine's connection, as every part of the window says it
