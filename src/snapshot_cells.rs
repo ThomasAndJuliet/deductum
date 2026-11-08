@@ -2473,3 +2473,25 @@ fn the_page_scrolls_right_up_to_the_header() {
         assert_eq!(view.y, 0.0, "the scroll view starts at the top: {view:?}");
     });
 }
+
+/// Thicken text leaves inline code in the code font, Regular: asking the code font for the body's
+/// Semibold would fall back to another family where it has none
+#[test]
+fn thicken_text_leaves_inline_code_as_it_was() {
+    let _turn = super::snapshot::ui_turn();
+    super::load_fonts();
+    let mut thick = Settings::default();
+    thick.change(settings::Change::ThickenText(true));
+    let frame = |s: &Settings| {
+        let _published = Published::new(s);
+        cosmic::theme::set_active(crate::tones::light_type_for_tests());
+        let mut typo = super::view::typography(&cosmic::theme::active());
+        typo.size = 20.0;
+        let doc = std::sync::Arc::new(prose_render::markdown::parse("`timed_contract` `timed_action`"));
+        let frame = super::snapshot::render(prose_render::rich::rich_text(doc, std::sync::Arc::new(typo)).into(), "thicken-inline-code", Size::new(700.0, 70.0));
+        cosmic::theme::set_active(cosmic::theme::ThemeType::Dark);
+        frame
+    };
+    assert_eq!(frame(&Settings::default()), frame(&thick), "the code is drawn as before");
+}
+
