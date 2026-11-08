@@ -7,7 +7,7 @@ treat every job as household code.
 
 This keeps honest workflows honest. A fork's pull request can rewrite this file
 and the workflow, so the boundary against hostile code is the runner group and
-the absence of secrets in fork runs, never this script. See the README.
+the absence of secrets in fork runs, never this script.
 """
 import json
 import os

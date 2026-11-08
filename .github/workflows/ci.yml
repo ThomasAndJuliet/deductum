@@ -10,7 +10,7 @@ permissions:
 # The trust job decides what each run may use (scripts/ci-trust.py): fork pull
 # requests run only on hosted runners, and no job in this workflow uses a secret.
 # A fork can rewrite this file, so that is not what stops hostile code reaching
-# the household runners: their runner group does, as the README explains.
+# the household runners: their runner group and fork-approval setting do.
 concurrency:
   group: >-
     ${{ github.workflow }}-${{ github.event_name }}-${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.run_id || github.event.pull_request.number || github.ref }}
