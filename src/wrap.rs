@@ -16,6 +16,17 @@ use cosmic::iced::advanced::graphics::text as graphics;
 /// nothing ever runs past the cell's edge
 pub const WRAPPING: cosmic::iced::widget::text::Wrapping = cosmic::iced::widget::text::Wrapping::WordOrGlyph;
 
+/// A wrapped line of code continues at its own indentation plus this: Tom, 8 Nov
+pub const HANGING: cosmic_text::HangingIndent = cosmic_text::HangingIndent { columns: 2.0 };
+
+/// What an editor holds: the text of a code editor, whose wrapped lines hang, or of prose, whose do
+/// not. The setting goes with the editor's buffer from here on (iced makes the buffer inside
+/// `Content` and gives no way to reach it after: vendor/cosmic-text/README.md). Nothing else in the
+/// window is affected, and the document's text is not touched
+pub fn editor_content(text: &str, prose: bool) -> cosmic::widget::text_editor::Content {
+    cosmic_text::with_hanging_indent((!prose).then_some(HANGING), || cosmic::widget::text_editor::Content::with_text(text))
+}
+
 /// What a line costs to measure is its shaping, so results are kept (a window being resized asks
 /// for many widths; this many lines are more than a screenful at each)
 const CACHE_LIMIT: usize = 16_384;
@@ -40,6 +51,7 @@ fn measured(line: &str, width: f32, font: Font, size: f32) -> usize {
         let mut buffer = cosmic_text::Buffer::new_empty(cosmic_text::Metrics::new(size, size));
         buffer.set_size(Some(width), None);
         buffer.set_wrap(graphics::to_wrap(WRAPPING));
+        buffer.set_hanging_indent(Some(HANGING));
         buffer.set_text(line, &graphics::to_attributes(font), cosmic_text::Shaping::Advanced, None);
         buffer.line_layout(font_system.raw(), 0).map_or(1, |layout| layout.len().max(1))
     };

@@ -2886,8 +2886,7 @@ fn reference_lines(r: &super::Reference) -> (usize, usize) {
 
 /// Where a reference's lines are drawn, below its text's top, wrapped at this width
 fn reference_rows(r: &super::Reference, width: f32) -> impl Fn(usize) -> f32 {
-    let per_row = (width / (code_size() * CODE_ADVANCE)).floor().max(20.0) as usize;
-    let rows: Vec<usize> = r.theory.decoded.text.split('\n').map(|l| l.chars().count().div_ceil(per_row).max(1)).collect();
+    let rows = super::wrap::rows(&r.theory.decoded.text, width, code_font(), code_size(), code_size() * CODE_ADVANCE);
     move |line| rows.iter().take(line).sum::<usize>() as f32 * code_line_height()
 }
 
@@ -3297,8 +3296,7 @@ fn source<'a>(ws: &'a Workspace, t: &'a Theory, inline: Option<&'a Workspace>, t
             (line(cs), line(ce.saturating_sub(1).max(cs)))
         });
     // (in rows as drawn: a long line wraps onto several)
-    let per_row = ((source_width - pad.left - pad.right) / (code_size() * CODE_ADVANCE)).floor().max(20.0) as usize;
-    let rows: Vec<usize> = t.decoded.text.split('\n').map(|l| l.chars().count().div_ceil(per_row).max(1)).collect();
+    let rows = super::wrap::rows(&t.decoded.text, source_width - pad.left - pad.right, code_font(), code_size(), code_size() * CODE_ADVANCE);
     let row_top = |line: usize| pad.top + rows.iter().take(line).sum::<usize>() as f32 * source_line_height();
     let line = construct.map_or(t.source.cursor().position.line, |(l0, _)| l0);
     let top = row_top(line);

@@ -216,7 +216,8 @@ hosted runner.
 
 After the SDK tests, CI builds `deductum` in Freedesktop SDK 25.08 and packages
 that exact tested checkout. It validates desktop/AppStream/catalog/icons and
-records its Git SHA, run ID and archive digest. Chartgen is vendored in this repository;
+records its Git SHA, run ID and archive digest. Chartgen and a patched cosmic-text
+(`vendor/cosmic-text/README.md`) are vendored in this repository;
 libcosmic and household-tones are fetched from private household repositories
 using read-only deploy keys. No sibling checkout is needed.
 The successful default-branch push preserves its artifact for seven days.

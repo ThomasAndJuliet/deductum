@@ -883,6 +883,10 @@ struct Beside {
     others: Vec<Rectangle>,
     wide: bool,
     column: f32,
+    /// The cell's width in characters, and the rows of the open cell's lines, read under the test's
+    /// turn (another test's view changes what they are worked out from)
+    characters: f32,
+    rows: Vec<usize>,
     frame: Vec<u8>,
     size: Size,
 }
@@ -909,6 +913,8 @@ fn beside(app: &App, width: f32) -> Beside {
             others,
             wide: super::view::last_wide(),
             column: super::view::last_column(),
+            characters: super::view::cell_characters(part(&all.0, super::view::selected_block_id()).width),
+            rows: t.block_editor.as_ref().map_or_else(Vec::new, super::view::open_rows),
             frame,
             size,
         }
@@ -969,14 +975,12 @@ fn a_long_line_wraps_instead_of_widening_the_cell() {
             assert!(!overlaps(b.panel, *other), "lemma {name}: the panel {:?} covers a cell {other:?}", b.panel);
         }
         gap_is_clear(&b);
-        let rows = super::view::open_rows(app.workspace.as_ref().unwrap().theory.as_ref().unwrap().block_editor.as_ref().unwrap());
-        eprintln!("lemma {name}, {long}: {:?} rows {rows:?}", b.cell);
-        seen.push((b.cell.width, b.panel.x, b.cell.height, rows[0]));
+        seen.push((b.cell.width, b.panel.x, b.cell.height, b.rows[0]));
     }
     let near = |a: f32, b: f32| (a - b).abs() < 1.0;
     assert!(near(seen[0].0, seen[1].0) && near(seen[0].0, seen[2].0), "the long line's cell is as wide as the short one's: {seen:?}");
     assert!(near(seen[0].1, seen[1].1) && near(seen[0].1, seen[2].1), "the panel does not move: {seen:?}");
-    let lh = super::view::code_line_height();
+    let lh = 14.0 * 1.4;
     // (`lemma b: ` then the token, too long for a row, from a row of its own)
     assert_eq!((seen[0].3, seen[1].3, seen[2].3), (1, 3, 5), "{seen:?}");
     assert!(near(seen[1].2 - seen[0].2, 2.0 * lh), "the cell is taller by the rows the line takes: {seen:?}");
@@ -1219,7 +1223,7 @@ fn the_page_on_screen_with_the_sidebar_open_and_closed() {
         let b = beside(&app, window);
         let name = format!("{window} px, sidebar {sidebar}");
         assert_eq!(b.wide, goal.is_some(), "{name}");
-        assert_eq!(characters(b.cell.width), chars, "{name}: the cell is {} wide", b.cell.width);
+        assert_eq!(b.characters, chars, "{name}: the cell is {} wide", b.cell.width);
         match goal {
             Some(goal) => {
                 assert!((b.panel.width - goal).abs() < 0.2, "{name}: the panel is {} wide, wanted {goal}", b.panel.width);
@@ -1978,4 +1982,281 @@ fn the_title_sets_theory_in_sans_and_the_name_and_imports_in_the_code_font() {
     let title = super::view::title_runs("Timed_Circus_Stop");
     assert_eq!((title[1].1.family, title[1].1.weight), (family, Weight::Normal), "{unbolded} has no bold: the same family, regular");
     assert_eq!(title[0].1.weight, Weight::Bold, "Theory stays bold");
+}
+
+// ----- a wrapped line of code continues at its own indentation and two characters
+
+/// A proof with an indented line too long for a cell, and the line's words at 80 characters
+const HANGING_LINE: &str = "    \"alpha_one beta_two gamma_three delta_four epsilon_five zeta_six eta_seven theta_eight iota_nine kappa_ten lambda_eleven mu_twelve nu_thirteen xi_fourteen omicron_fifteen pi_sixteen rho_seventeen\"";
+
+fn hanging_app() -> App {
+    let text = format!("theory H imports Main begin\n\nlemma hanging:\n{HANGING_LINE}\n  by simp\n\nend\n");
+    let mut app = demo_app(Mode::Literate);
+    let doc = serde_json::json!({"text": text, "revision": 1, "prover": super::snapshot::prover_json(&text)});
+    app.workspace.as_mut().unwrap().theory = Some(super::editor::Theory::new("/tmp/H.thy".into(), &doc, &super::prover::isabelle::symbols::Table::fallback(), std::sync::Arc::new(std::collections::HashMap::new()), Mode::Literate, super::prover::profile(None)));
+    app.show_right = false;
+    app.show_sidebar = false;
+    app.workspace.as_mut().unwrap().output = None;
+    app
+}
+
+fn open_hanging(app: &mut App) {
+    let i = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.kind == Kind::Formal).unwrap();
+    let _ = cosmic::Application::update(app, super::Message::EditBlock(i));
+}
+
+/// Each row of `line` in a cell at this text width, as cosmic-text lays it out: where each of its
+/// glyphs starts in the line and across the row
+fn hanging_rows(line: &str, width: f32) -> Vec<Vec<(usize, f32)>> {
+    use cosmic::iced::advanced::graphics::text as graphics;
+    let mut font_system = graphics::font_system().write().unwrap();
+    let size = super::view::code_size();
+    let mut buffer = cosmic_text::Buffer::new_empty(cosmic_text::Metrics::new(size, size));
+    buffer.set_size(Some(width), None);
+    buffer.set_wrap(graphics::to_wrap(super::wrap::WRAPPING));
+    buffer.set_hanging_indent(Some(super::wrap::HANGING));
+    buffer.set_text(line, &graphics::to_attributes(super::view::code_font()), cosmic_text::Shaping::Advanced, None);
+    buffer.line_layout(font_system.raw(), 0).unwrap().iter().map(|row| row.glyphs.iter().map(|g| (g.start, g.x)).collect()).collect()
+}
+
+/// The first pixel of a row of an editor's text that is not the row's background
+fn ink_left(frame: &[u8], width: u32, text_x: f32, top: f32, row: usize) -> f32 {
+    let lh = super::view::code_line_height();
+    let background = px(frame, width, text_x - 4.0, top + (row as f32 + 0.5) * lh);
+    let y = |dy: f32| top + row as f32 * lh + dy;
+    (text_x as u32 - 2..text_x as u32 + 400)
+        .find(|&x| (2..(lh as u32 - 2)).any(|dy| px(frame, width, x as f32, y(dy as f32)) != background))
+        .expect("ink on the row") as f32
+}
+
+/// What differs on a row of an editor's text between two frames: the leftmost and rightmost pixels
+fn row_changes(a: &[u8], b: &[u8], width: u32, editor: Rectangle, row: usize) -> Option<(f32, f32)> {
+    let lh = super::view::code_line_height();
+    let top = editor.y + super::view::code_padding().top + row as f32 * lh;
+    let changed: Vec<u32> = (editor.x as u32..(editor.x + editor.width) as u32)
+        // (not the row's first and last pixels: the rows either side reach into them at a fraction)
+        .filter(|&x| (2..lh as u32 - 2).any(|dy| px(a, width, x as f32, top + dy as f32) != px(b, width, x as f32, top + dy as f32)))
+        .collect();
+    Some((*changed.first()? as f32, *changed.last()? as f32))
+}
+
+/// A wrapped line continues at its own indentation and two characters, in an open cell and a shown
+/// one; its first row stays where it was, and the document's text is untouched
+#[test]
+fn a_wrapped_line_of_code_continues_at_its_indentation_and_two_characters() {
+    let size = Size::new(1400.0, 800.0);
+    let mut app = hanging_app();
+    let i = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.kind == Kind::Formal).unwrap();
+    let source = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().local.clone();
+    in_light(size, |h| {
+        let pad = super::view::code_padding();
+        let advance = super::view::code_size() * super::view::CODE_ADVANCE;
+        // shown
+        let _ = h.draw(&app, "hanging-shown-warm");
+        let shown = h.draw(&app, "hanging-shown");
+        let mut all = Bounds(Vec::new());
+        h.operate(&app, &mut all);
+        let card = part(&all.0, super::view::test_block_id(i));
+        // open
+        open_hanging(&mut app);
+        let _ = h.draw(&app, "hanging-open-warm");
+        let open = h.draw(&app, "hanging-open");
+        let mut all = Focusable(None);
+        h.operate(&app, &mut all);
+        let editor = all.0.expect("the open editor");
+        let rows = hanging_rows(HANGING_LINE, super::view::block_code_width() - pad.left - pad.right);
+        assert!(rows.len() >= 3, "the line wraps twice: {} rows", rows.len());
+        for (frame, x, top, name) in [(&shown, card.x + 4.0 + pad.left, card.y + 1.0 + pad.top, "shown"), (&open, editor.x + pad.left, editor.y + pad.top, "open")] {
+            // (the line's first row is the cell's second, starting with a quote at its four blanks)
+            let first = ink_left(frame, size.width as u32, x, top, 1);
+            assert!((first - (x + 4.0 * advance)).abs() < 6.0, "{name}: the first row's ink is at {first}, its indentation at {}", x + 4.0 * advance);
+            for row in 1..rows.len() {
+                let ink = ink_left(frame, size.width as u32, x, top, 1 + row);
+                let want = x + 6.0 * advance;
+                assert!(ink >= want - 1.0 && ink <= want + 3.0, "{name}: row {row} of the line starts at {ink}, not at 4 + 2 characters ({want})");
+            }
+            // the line after it is at its own indentation
+            let after = ink_left(frame, size.width as u32, x, top, 1 + rows.len());
+            assert!((after - (x + 2.0 * advance)).abs() < 3.0, "{name}: `by simp` starts at {after}");
+        }
+    });
+    let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+    assert_eq!(t.local, source, "the document's text is untouched");
+    assert_eq!(t.block_editor.as_ref().unwrap().content.text().lines().nth(1), Some(HANGING_LINE), "and the editor's");
+}
+
+/// A click on a continuation row puts the caret on the character drawn there; one in the indent, on
+/// the row's first character; and the caret is drawn at that character
+#[test]
+fn a_click_on_a_continuation_row_puts_the_caret_on_the_character_there() {
+    let size = Size::new(1400.0, 800.0);
+    let mut app = hanging_app();
+    open_hanging(&mut app);
+    let mut h = Harness::new(size);
+    let pad = super::view::code_padding();
+    cosmic::theme::set_active(cosmic::theme::ThemeType::Light);
+    h.focus(&app, super::view::block_editor_id());
+    let _ = h.draw(&app, "hanging-click-warm");
+    let _ = h.draw(&app, "hanging-click");
+    let mut all = Focusable(None);
+    h.operate(&app, &mut all);
+    let editor = all.0.expect("the open editor");
+    let rows = hanging_rows(HANGING_LINE, super::view::block_code_width() - pad.left - pad.right);
+    let row = &rows[1];
+    let text_x = editor.x + pad.left;
+    let lh = super::view::code_line_height();
+    // (the second row of the line is the cell's third)
+    let y = editor.y + pad.top + 2.5 * lh;
+    let advance = row[1].1 - row[0].1;
+    let mut click = |app: &mut App, x: f32| {
+        for m in h.click(app, cosmic::iced::Point::new(x, y)) {
+            let _ = cosmic::Application::update(app, m);
+        }
+        let _ = h.draw(app, "hanging-click");
+        app.workspace.as_ref().unwrap().theory.as_ref().unwrap().block_editor.as_ref().unwrap().content.cursor().position
+    };
+    // the fourth character of the row, on its left half
+    let position = click(&mut app, text_x + row[3].1 + advance * 0.25);
+    assert_eq!((position.line, position.column), (1, row[3].0), "on the fourth character of the row");
+    // past the middle of another (far enough off not to be a double click): the caret after it
+    let position = click(&mut app, text_x + row[7].1 + advance * 0.75);
+    assert_eq!((position.line, position.column), (1, row[8].0), "after the eighth character of the row");
+    // in the indent: the row's first character, not the end of the row
+    let position = click(&mut app, text_x + advance);
+    assert_eq!((position.line, position.column), (1, row[0].0), "in the indent");
+
+    // the caret as drawn: at two places on the row, what differs is at those places
+    let mut at = |app: &mut App, column: usize| {
+        let be = app.workspace.as_mut().unwrap().theory.as_mut().unwrap().block_editor.as_mut().unwrap();
+        super::editor::place(&mut be.content, cosmic::widget::text_editor::Position { line: 1, column });
+        let _ = h.draw(app, "hanging-caret-warm");
+        h.draw(app, "hanging-caret")
+    };
+    let (a, b) = (at(&mut app, row[3].0), at(&mut app, row[8].0));
+    cosmic::theme::set_active(cosmic::theme::ThemeType::Dark);
+    let (left, right) = row_changes(&a, &b, size.width as u32, editor, 2).expect("the caret moved");
+    assert!((left - (text_x + row[3].1)).abs() <= 2.0, "the caret at the fourth character is drawn at {left}, the glyph at {}", text_x + row[3].1);
+    assert!((right - (text_x + row[8].1)).abs() <= 3.0, "the caret at the ninth character is drawn at {right}, the glyph at {}", text_x + row[8].1);
+}
+
+/// A selection across the wrap is drawn from the character it starts at, to the end of that row, and
+/// on the next row from the indent, not from the left edge, to the character it ends at
+#[test]
+fn a_selection_across_a_wrap_is_drawn_at_the_characters() {
+    let size = Size::new(1400.0, 800.0);
+    let mut app = hanging_app();
+    open_hanging(&mut app);
+    let mut h = Harness::new(size);
+    let pad = super::view::code_padding();
+    cosmic::theme::set_active(cosmic::theme::ThemeType::Light);
+    h.focus(&app, super::view::block_editor_id());
+    let _ = h.draw(&app, "hanging-selection-warm");
+    let _ = h.draw(&app, "hanging-selection-warm");
+    let mut all = Focusable(None);
+    h.operate(&app, &mut all);
+    let editor = all.0.expect("the open editor");
+    let rows = hanging_rows(HANGING_LINE, super::view::block_code_width() - pad.left - pad.right);
+    let text_x = editor.x + pad.left;
+    let position = cosmic::widget::text_editor::Position { line: 1, column: rows[1][5].0 };
+    let anchor = cosmic::widget::text_editor::Position { line: 1, column: rows[0][20].0 };
+    let mut with = |app: &mut App, selection: Option<cosmic::widget::text_editor::Position>| {
+        let be = app.workspace.as_mut().unwrap().theory.as_mut().unwrap().block_editor.as_mut().unwrap();
+        be.content.move_to(cosmic::widget::text_editor::Cursor { position, selection });
+        let _ = h.draw(app, "hanging-selection-warm");
+        h.draw(app, "hanging-selection")
+    };
+    let (plain, selected) = (with(&mut app, None), with(&mut app, Some(anchor)));
+    cosmic::theme::set_active(cosmic::theme::ThemeType::Dark);
+    let width = size.width as u32;
+    // the cell's second row, the line's first: from the anchor's character on
+    let (left, _) = row_changes(&plain, &selected, width, editor, 1).expect("the selection on the first row");
+    assert!((left - (text_x + rows[0][20].1)).abs() <= 2.0, "the first row's selection starts at {left}, its character at {}", text_x + rows[0][20].1);
+    // the cell's third row, the line's second: the indent to the caret's character
+    let (left, right) = row_changes(&plain, &selected, width, editor, 2).expect("the selection on the continuation row");
+    assert!((left - (text_x + rows[1][0].1)).abs() <= 2.0, "the continuation's selection starts at {left}, its first character at {}", text_x + rows[1][0].1);
+    assert!((right - (text_x + rows[1][5].1)).abs() <= 3.0, "the continuation's selection ends at {right}, the caret's character at {}", text_x + rows[1][5].1);
+}
+
+/// Prose being edited, a paragraph on the page and interface text wrap at their left edge, even with
+/// indentation in them
+#[test]
+fn prose_and_interface_text_do_not_hang() {
+    // where each of the lines of text in a box starts: leftmost ink, in bands a line tall
+    fn starts(frame: &[u8], width: u32, area: Rectangle, line: f32, background: [u8; 3]) -> Vec<f32> {
+        let mut out = Vec::new();
+        let mut y = area.y;
+        while y + line <= area.y + area.height {
+            let ink = (area.x as u32..(area.x + area.width) as u32).find(|&x| (0..line as u32).any(|dy| px(frame, width, x as f32, y + dy as f32) != background));
+            if let Some(ink) = ink {
+                out.push(ink as f32);
+            }
+            y += line;
+        }
+        out
+    }
+    // prose being edited
+    let para = "We prove that the reactive design is healthy, and that its refinement follows from the refinement of its pre and postconditions, which is the main theorem of this section and is used throughout the rest of the development without further comment, as the reader will see in the chapters that follow.";
+    let text = format!("theory P imports Main begin\n\ntext \\<open>    {para}\\<close>\n\nlemma after: \"True\"\n  by simp\n\nend\n");
+    let mut app = demo_app(Mode::Literate);
+    let doc = serde_json::json!({"text": text, "revision": 1, "prover": super::snapshot::prover_json(&text)});
+    app.workspace.as_mut().unwrap().theory = Some(super::editor::Theory::new("/tmp/P.thy".into(), &doc, &super::prover::isabelle::symbols::Table::fallback(), std::sync::Arc::new(std::collections::HashMap::new()), Mode::Literate, super::prover::profile(None)));
+    app.show_right = false;
+    app.show_sidebar = false;
+    let i = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.kind == Kind::Text).unwrap();
+    let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(i));
+    let size = Size::new(900.0, 800.0);
+    let (frame, editor, line) = in_light(size, |h| {
+        let _ = h.draw(&app, "prose-wrap-warm");
+        let frame = h.draw(&app, "prose-wrap");
+        let mut all = Focusable(None);
+        h.operate(&app, &mut all);
+        let display = super::settings::display();
+        (frame, all.0.expect("the prose editor"), super::view::z(display.text_size) * display.line_height)
+    });
+    let background = px(&frame, size.width as u32, editor.x + editor.width - 2.0, editor.y + 2.0);
+    let lines = starts(&frame, size.width as u32, editor, line, background);
+    assert!(lines.len() >= 3, "the paragraph wraps: {lines:?}");
+    // (after the first, with the paragraph's own blanks, every line starts at the left edge)
+    let rest = &lines[1..];
+    let (least, most) = rest.iter().fold((f32::MAX, f32::MIN), |(a, b), x| (a.min(*x), b.max(*x)));
+    assert!(most - least < 6.0, "the prose's wrapped lines all start at its left edge: {lines:?}");
+    assert!(least - editor.x < 6.0, "and that is the editor's: {lines:?}, the editor at {}", editor.x);
+
+    // interface text
+    let long = "    Interface text with indentation, long enough to wrap in its box at this width, and to wrap again after that";
+    let element: cosmic::Element<'_, super::Message> = cosmic::widget::container(cosmic::widget::text(long).size(14.0)).width(cosmic::iced::Length::Fixed(280.0)).into();
+    let size = Size::new(300.0, 120.0);
+    let frame = super::snapshot::draw_element(element, "interface-wrap", size);
+    let area = Rectangle { x: 0.0, y: 0.0, width: 290.0, height: 110.0 };
+    let lines = starts(&frame, size.width as u32, area, 14.0 * 1.4, px(&frame, size.width as u32, 295.0, 115.0));
+    assert!(lines.len() >= 3, "the text wraps: {lines:?}");
+    let rest = &lines[1..];
+    let (least, most) = rest.iter().fold((f32::MAX, f32::MIN), |(a, b), x| (a.min(*x), b.max(*x)));
+    assert!(most - least < 6.0 && least < 6.0, "interface text's wrapped lines start at its left edge: {lines:?}");
+}
+
+/// A term in the goal panel is a code view: its wrapped lines hang too
+#[test]
+fn a_wrapped_term_in_the_goal_continues_at_its_indentation_and_two_characters() {
+    let _turn = super::snapshot::ui_turn();
+    super::load_fonts();
+    let term = "  alpha_one beta_two gamma_three delta_four epsilon_five zeta_six eta_seven theta_eight iota_nine";
+    let view = super::editor::CodeView::from_message(&serde_json::json!({"text": term}), &super::prover::isabelle::symbols::Table::fallback());
+    let size = Size::new(320.0, 200.0);
+    let font = super::view::code_font();
+    let element: cosmic::Element<'_, super::Message> = cosmic::iced::widget::text_editor(&view.content).font(font).size(14.0).padding(0).line_height(cosmic::iced::widget::text::LineHeight::Relative(1.4)).width(300.0).style(|_: &cosmic::Theme, _| cosmic::iced::widget::text_editor::Style {
+        background: Color::TRANSPARENT.into(),
+        border: cosmic::iced::Border::default(),
+        placeholder: Color::TRANSPARENT,
+        value: Color::BLACK,
+        selection: Color::TRANSPARENT,
+    }).into();
+    let frame = super::snapshot::render(element, "goal-term-wrap", size);
+    let lh = 14.0 * 1.4;
+    let background = px(&frame, size.width as u32, 310.0, 190.0);
+    let ink = |row: f32| (0..300u32).find(|&x| (2..18u32).any(|dy| px(&frame, size.width as u32, x as f32, row * lh + dy as f32) != background));
+    let (first, second) = (ink(0.0).expect("the first row") as f32, ink(1.0).expect("the second row") as f32);
+    let advance = 14.0 * super::view::CODE_ADVANCE;
+    assert!((first - 2.0 * advance).abs() < 3.0, "the term starts at its two blanks: {first}");
+    assert!((second - 4.0 * advance).abs() < 3.0, "its next row at two blanks and two characters: {second}");
 }
