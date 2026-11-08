@@ -376,7 +376,7 @@ fn new_session_cards_for_a_folder_of_both_backends() {
 #[test]
 fn a_card_picks_its_backend_and_start_sends_it() {
     let mut app = new_session_app(None, both());
-    let picks: Vec<Message> = (500..1100).step_by(8).flat_map(|y| clicks(window(&app), Point::new(800.0, y as f32), Size::new(1400.0, 1100.0))).collect();
+    let picks: Vec<Message> = (300..700).step_by(8).flat_map(|y| clicks(window(&app), Point::new(800.0, y as f32), Size::new(1400.0, 1100.0))).collect();
     let backends: Vec<String> = picks.iter().filter_map(|m| if let Message::Shell(Msg::NewBackend(b)) = m { Some(b.clone()) } else { None }).collect();
     assert!(backends.contains(&"isabelle".to_string()) && backends.contains(&"lean".to_string()), "{picks:?}");
     let _ = cosmic::Application::update(&mut app, Message::Shell(Msg::NewBackend("lean".into())));
@@ -397,6 +397,129 @@ fn a_card_picks_its_backend_and_start_sends_it() {
     assert!(ns.reason.as_deref().is_some_and(|r| r.contains("Scratch.lean is a Lean document")), "{:?}", ns.reason);
 }
 
+
+/// A neo link whose requests the test can read
+fn neo_with_requests() -> (Link, tokio::sync::mpsc::UnboundedReceiver<String>) {
+    let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+    let mut neo = connected("neo", "neo", Some(hello()));
+    neo.sender = Some(sender);
+    (neo, receiver)
+}
+
+fn requests(receiver: &mut tokio::sync::mpsc::UnboundedReceiver<String>) -> Vec<Value> {
+    let mut out = Vec::new();
+    while let Ok(line) = receiver.try_recv() {
+        out.push(serde_json::from_str(&line).unwrap());
+    }
+    out
+}
+
+/// Browse on a remote machine opens Deductum's own dialog, listing folders through the link's
+/// `list_dir` (no mount, so it works on Windows too); going into folders asks again, a late reply
+/// to an earlier request is dropped, and Choose hands the folder to the form's own lookup
+#[test]
+fn browse_on_a_remote_machine_lists_folders_over_the_link_and_choose_fills_the_form() {
+    let mut app = new_session_app(None, json!([]));
+    let (neo, mut receiver) = neo_with_requests();
+    app.links[1] = neo;
+    let update = |app: &mut App, m: Message| {
+        let _ = cosmic::Application::update(app, m);
+    };
+    update(&mut app, Message::NewMachine(1));
+    assert!(requests(&mut receiver).iter().any(|r| r["op"] == "list_dir"), "the form's own lookup of the machine's home");
+    app.new_session.as_mut().unwrap().folder = "/home/me/Proofs".into();
+    update(&mut app, Message::Shell(Msg::NewBrowseOpen));
+    let asked = requests(&mut receiver);
+    assert_eq!(asked.len(), 1, "{asked:?}");
+    assert_eq!((asked[0]["op"].as_str(), asked[0]["path"].as_str()), (Some("list_dir"), Some("/home/me/Proofs")), "it opens where the form is");
+    assert!(app.new_session.as_ref().unwrap().picker.is_some());
+    // the reply fills the dialog; only folders are offered, and the way up is the host's parent
+    let pending = |app: &App| {
+        let mut seqs: Vec<u64> = app.pending.values().filter_map(|(_, p)| if let super::Pending::PickDir(seq) = p { Some(*seq) } else { None }).collect();
+        seqs.sort();
+        seqs
+    };
+    let reply = |app: &mut App, seq: u64, path: &str| {
+        let listing = json!({"ok": true, "path": path, "parent": "/home/me", "entries": [
+            {"name": "tock-circus", "dir": true}, {"name": "notes.thy", "dir": false}, {"name": "utp", "dir": true}]});
+        let _ = app.on_reply("neo".into(), super::Pending::PickDir(seq), listing);
+    };
+    let first = pending(&app);
+    assert_eq!(first.len(), 1);
+    update(&mut app, Message::Shell(Msg::PickerGo("/home/me/Proofs/utp".into())));
+    let second = pending(&app);
+    assert_eq!(second.len(), 2, "a second request is out");
+    // (the late reply to the first request is dropped; the second one is shown)
+    reply(&mut app, second[1], "/home/me/Proofs/utp");
+    reply(&mut app, first[0], "/home/me/Proofs");
+    let picker = app.new_session.as_ref().unwrap().picker.as_ref().unwrap();
+    assert_eq!(picker.path, "/home/me/Proofs/utp");
+    assert_eq!(picker.folders(), vec!["tock-circus", "utp"], "no documents in a folder dialog");
+    assert_eq!(picker.child("utp"), "/home/me/Proofs/utp/utp");
+    assert_eq!(picker.parent().as_deref(), Some("/home/me"));
+    draw_in(false, || window(&app), "shell-new-session-remote-dialog", Size::new(1000.0, 800.0));
+    draw_in(true, || window(&app), "shell-new-session-remote-dialog-light", Size::new(1000.0, 800.0));
+    // Choose closes the dialog and looks at the folder, as typing it and pressing Enter does
+    let _ = requests(&mut receiver);
+    update(&mut app, Message::Shell(Msg::PickerChoose));
+    let ns = app.new_session.as_ref().unwrap();
+    assert!(ns.picker.is_none());
+    assert_eq!(ns.folder, "/home/me/Proofs/utp");
+    let asked = requests(&mut receiver);
+    assert!(asked.iter().any(|r| r["op"] == "list_dir" && r["path"] == "/home/me/Proofs/utp"), "{asked:?}");
+    // Cancel closes it without touching the folder
+    update(&mut app, Message::Shell(Msg::NewBrowseOpen));
+    update(&mut app, Message::Shell(Msg::PickerClose));
+    let ns = app.new_session.as_ref().unwrap();
+    assert!(ns.picker.is_none());
+    assert_eq!(ns.folder, "/home/me/Proofs/utp");
+}
+
+/// A host that cannot list the folder is said in the dialog, and Choose stays unavailable
+#[test]
+fn the_remote_dialog_says_when_the_host_cannot_list_a_folder() {
+    let mut app = new_session_app(None, json!([]));
+    let (neo, _receiver) = neo_with_requests();
+    app.links[1] = neo;
+    let update = |app: &mut App, m: Message| {
+        let _ = cosmic::Application::update(app, m);
+    };
+    update(&mut app, Message::NewMachine(1));
+    update(&mut app, Message::Shell(Msg::NewBrowseOpen));
+    app.picker_failed("No such directory".into());
+    let picker = app.new_session.as_ref().unwrap().picker.as_ref().unwrap();
+    assert_eq!(picker.error.as_deref(), Some("No such directory"));
+    assert!(picker.listing.is_none());
+    update(&mut app, Message::Shell(Msg::PickerChoose));
+    // (nothing was listed, so there is no folder to choose; the page asks for nothing more)
+    assert!(app.new_session.as_ref().unwrap().picker.is_none());
+}
+
+/// The prover is one line; Change shows the other choices, and picking one hides them again
+#[test]
+fn the_prover_is_a_line_and_change_shows_the_others() {
+    let mut app = new_session_app(Some("isabelle"), both());
+    assert!(!app.new_session.as_ref().unwrap().changing);
+    let _ = cosmic::Application::update(&mut app, Message::Shell(Msg::NewChange));
+    assert!(app.new_session.as_ref().unwrap().changing);
+    draw_in(false, || window(&app), "shell-new-session-change", Size::new(1000.0, 900.0));
+    // the form as the mock-up draws it: no sidebar, the machines as a bar
+    app.show_sidebar = false;
+    app.new_session.as_mut().unwrap().changing = false;
+    draw_in(true, || window(&app), "new-session-light", Size::new(1280.0, 640.0));
+    draw_in(false, || window(&app), "new-session-dark", Size::new(1280.0, 640.0));
+    let _ = cosmic::Application::update(&mut app, Message::Shell(Msg::NewBackend("lean".into())));
+    let ns = app.new_session.as_ref().unwrap();
+    assert!((ns.changing, ns.backend.as_deref()) == (false, Some("lean")));
+    // a new folder forgets it
+    let ns = app.new_session.as_mut().unwrap();
+    ns.changing = true;
+    ns.invalidate_folder();
+    assert!(!ns.changing);
+    let found = both();
+    assert_eq!(super::new_session::found_from(&found[0]), "the ROOT file");
+    assert_eq!(super::new_session::found_from(&found[1]), "the lakefile");
+}
 
 /// The sidebar, the status bar and the settings read a machine's connection from one place, so
 /// they never disagree in one frame

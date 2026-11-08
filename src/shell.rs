@@ -91,6 +91,15 @@ pub enum Msg {
     NewToolchain(usize),
     NewDirs(String),
     OpenDocument(String),
+    /// Browse (the folder dialog), the folder it returned or why it could not, Change (the other
+    /// provers), and the remote folder dialog: into a folder, Choose, Cancel
+    NewBrowseOpen,
+    NewBrowseTo(String),
+    NewBrowseFailed(String),
+    NewChange,
+    PickerGo(String),
+    PickerChoose,
+    PickerClose,
     /// Collapse or expand the open session's whole document list
     ToggleDocuments,
     /// Collapse or expand one folder of the open session's document list
@@ -315,6 +324,25 @@ impl App {
                 }
             }
             Msg::OpenDocument(path) => return self.open_document(path),
+            Msg::NewBrowseOpen => return self.new_session_browse(),
+            Msg::NewBrowseTo(path) => return self.update(Message::NewBrowse(path)),
+            Msg::NewBrowseFailed(why) => {
+                if let Some(ns) = &mut self.new_session {
+                    ns.error = Some(format!("The folder dialog could not open: {why}"));
+                }
+            }
+            Msg::NewChange => {
+                if let Some(ns) = &mut self.new_session {
+                    ns.changing = !ns.changing;
+                }
+            }
+            Msg::PickerGo(path) => return self.picker_go(Some(path)),
+            Msg::PickerChoose => return self.picker_choose(),
+            Msg::PickerClose => {
+                if let Some(ns) = &mut self.new_session {
+                    ns.picker = None;
+                }
+            }
             #[cfg(not(windows))]
             m @ (Msg::AgentOpen(_) | Msg::AgentRights(_) | Msg::AgentTool(_) | Msg::AgentStart | Msg::AgentLaunched(_)) => return self.agent_update(m),
             Msg::Quit => {
