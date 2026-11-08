@@ -13,6 +13,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import deductum_mcp as M  # noqa: E402
 import register_mcp as R  # noqa: E402
 
+if os.name == "nt":
+    # (the app registers the server only where it starts agent sessions: not on Windows)
+    raise unittest.SkipTest("MCP registration is not on Windows")
+
 ROOT = Path("/opt/deductum")
 ENTRY = {"type": "stdio", "command": "python3", "args": ["/opt/deductum/host/deductum_host.py", "mcp"], "env": {}}
 
