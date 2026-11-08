@@ -385,9 +385,9 @@ fn nav_item<'a>(label: String, detail: Option<String>, indent: f32, color: Optio
     }
     // (the one row style of the sidebar: COSMIC's wash on hover, the current row bold in the accent,
     // a long name wrapping after an underscore)
-    let mut col = widget::column::with_capacity(2).width(Length::Fill).push(super::sidebar::name_text(&table.decode(&label).text, z(14.0), current));
+    let mut col = widget::column::with_capacity(2).width(Length::Fill).push(super::sidebar::name_text(&table.decode(&label).text, 14.0, current));
     if let Some(d) = detail {
-        col = col.push(symbol_text_with_font(&d, table, z(12.0), cosmic::font::default()));
+        col = col.push(symbol_text_with_font(&d, table, 12.0, cosmic::font::default()));
     }
     row = row.push(col);
     let button = widget::button::custom(row)
@@ -447,11 +447,11 @@ pub fn theorems<'a>(app: &'a App, t: &'a Theory) -> Element<'a, Message> {
             ..Default::default()
         }));
         let current = block.start <= t.cursor && t.cursor < block.end;
-        let mut names = widget::column::with_capacity(2).width(Length::Fill).push(super::sidebar::name_text(&name, z(13.0), current));
+        let mut names = widget::column::with_capacity(2).width(Length::Fill).push(super::sidebar::name_text(&name, 13.0, current));
         if !rest.is_empty() {
             names = names.push(
                 widget::text(rest)
-                    .size(z(13.0))
+                    .size(13.0)
                     .font(cosmic::font::mono())
                     .wrapping(iced::widget::text::Wrapping::None)
                     .ellipsize(iced::core::text::Ellipsize::End(iced::core::text::EllipsizeHeightLimit::Lines(1)))
@@ -459,12 +459,12 @@ pub fn theorems<'a>(app: &'a App, t: &'a Theory) -> Element<'a, Message> {
                     .width(Length::Fill),
             );
         }
-        let row = widget::row::with_capacity(2).spacing(z(8.0)).align_y(Alignment::Center).push(dot).push(names);
+        let row = widget::row::with_capacity(2).spacing(8.0).align_y(Alignment::Center).push(dot).push(names);
         let tip = if sorry { format!("{first}  (unfinished)") } else { first };
-        let button = widget::button::custom(row).width(Length::Fill).padding([z(4.0), z(8.0)]).class(super::sidebar::nav_style(current)).on_press(Message::Goto(block.start));
+        let button = widget::button::custom(row).width(Length::Fill).padding([4.0, 8.0]).class(super::sidebar::nav_style(current)).on_press(Message::Goto(block.start));
         #[cfg(test)]
         let button = widget::container(button).id(test_nav_id(&statement_name(&tip)));
-        col = col.push(widget::tooltip(button, widget::text(tip).font(cosmic::font::mono()).size(z(12.0)), widget::tooltip::Position::Right));
+        col = col.push(widget::tooltip(button, widget::text(tip).font(cosmic::font::mono()).size(12.0), widget::tooltip::Position::Right));
     }
     col.into()
 }
@@ -842,9 +842,9 @@ fn secondary<'a>(label: &'static str, on_press: Option<Message>) -> widget::Butt
     }
     let text = || theme::Button::Text;
     let font = cosmic::iced::Font { weight: cosmic::iced::font::Weight::Semibold, ..cosmic::font::default() };
-    widget::button::custom(widget::container(widget::text(label).size(z(14.0)).font(font)).center_y(Length::Fill))
-        .padding([z(6.0) as u16, spacing().space_s])
-        .height(Length::Fixed(z(32.0)))
+    widget::button::custom(widget::container(widget::text(label).size(14.0).font(font)).center_y(Length::Fill))
+        .padding([6, spacing().space_s])
+        .height(Length::Fixed(32.0))
         .class(theme::Button::Custom {
             active: Box::new(move |focused, theme| outlined(theme.active(focused, false, &text()), theme, None, false)),
             disabled: Box::new(move |theme| outlined(theme.disabled(&text()), theme, None, true)),
@@ -955,7 +955,7 @@ fn activity_panel(ws: &Workspace) -> Element<'_, Message> {
         col = col.push(widget::text::caption("No prover activity yet."));
     }
     col = col.push(widget::text::caption_heading("Log"));
-    col = col.push(widget::text(ws.log.iter().rev().take(80).rev().cloned().collect::<Vec<_>>().join("\n")).font(cosmic::font::mono()).size(z(12.0)));
+    col = col.push(widget::text(ws.log.iter().rev().take(80).rev().cloned().collect::<Vec<_>>().join("\n")).font(cosmic::font::mono()).size(12.0));
     thin(col).height(Length::Fill).into()
 }
 
@@ -1033,7 +1033,7 @@ fn mono_block<'a>(text: String, status: Status, table: &dyn super::codec::Symbol
 /// A Tertiary button (household rule 7): no box, its label bold, underlined and in the accent,
 /// and COSMIC's own link states for hover and press
 pub(crate) fn tertiary<'a>(label: impl Into<String>, msg: Message) -> widget::Button<'a, Message> {
-    widget::button::custom(link_label(label)).padding([z(2.0) as u16, z(2.0) as u16]).class(theme::Button::Link).on_press(msg)
+    widget::button::custom(link_label(label)).padding([2, 2]).class(theme::Button::Link).on_press(msg)
 }
 
 /// A Tertiary button that destroys what it acts on, in the failed colour of the cell palette (the
@@ -1061,7 +1061,7 @@ fn tertiary_destructive<'a>(label: &'static str, msg: Message) -> widget::Button
 fn link_label<'a>(label: impl Into<String>) -> Element<'a, Message> {
     let font = cosmic::iced::Font { weight: cosmic::iced::font::Weight::Bold, ..cosmic::font::default() };
     let spans: Vec<iced::widget::text::Span<'a, (), cosmic::iced::Font>> = vec![iced::widget::span(label.into()).font(font).underline(true)];
-    iced::widget::rich_text(spans).size(z(13.0)).into()
+    iced::widget::rich_text(spans).size(13.0).into()
 }
 
 /// Add a block after a block (or at the end) from the profile's templates (a text, section or
@@ -1182,7 +1182,7 @@ pub fn pop_out_button_id() -> widget::Id {
 /// The pop-out button's size: no taller than a line of the source view, so that, centred on the
 /// proof's first line, it stays inside the proof's band there and inside a code cell's corner
 pub fn pop_out_size() -> f32 {
-    z(16.0).round() + 2.0 * z(2.0)
+    16.0 + 2.0 * 2.0
 }
 
 /// How far the pop-out button is inside the top right corner of the code it floats over: as far
@@ -1197,8 +1197,8 @@ fn pop_out_button<'a>() -> Element<'a, Message> {
     let button = widget::button::custom(widget::icon::from_svg_bytes(include_bytes!("../res/icons/window-pop-out-symbolic.svg").as_slice())
         .symbolic(true)
         .icon()
-        .size(z(16.0).round() as u16))
-        .padding(z(2.0))
+        .size(16))
+        .padding(2.0)
         .width(Length::Fixed(pop_out_size()))
         .height(Length::Fixed(pop_out_size()))
         .class(theme::Button::Icon)
@@ -1267,9 +1267,9 @@ fn hoverable_press<'a>(ws: Option<&'a Workspace>, target: super::HoverTarget, pa
         super::HoverTarget::Source => source_line_height(),
         _ => code_line_height(),
     };
-    let below = ((h.point.y.max(0.0) / lh).floor() + 1.0) * lh + z(4.0);
+    let below = ((h.point.y.max(0.0) / lh).floor() + 1.0) * lh + 4.0;
     pop.popup(card)
-        .position(widget::popover::Position::Point(iced::Point::new((h.point.x + pad.left - z(8.0)).max(0.0), below + pad.top)))
+        .position(widget::popover::Position::Point(iced::Point::new((h.point.x + pad.left - 8.0).max(0.0), below + pad.top)))
         .into()
 }
 
@@ -1374,7 +1374,7 @@ fn code_text<'a>(ws: &Workspace, m: &Value) -> Element<'a, Message> {
             span
         })
         .collect();
-    iced::widget::rich_text(spans).size(z(13.0)).into()
+    iced::widget::rich_text(spans).size(13.0).into()
 }
 
 /// What Isabelle says about the place under the pointer: types, what a name is, messages there
@@ -1397,7 +1397,7 @@ fn hover_card<'a>(ws: &'a Workspace, h: &super::Hover) -> Option<Element<'a, Mes
     }
     Some(
         widget::container(col)
-            .max_width(z(520.0))
+            .max_width(520.0)
             .padding([sp.space_xxs as f32 + 2.0, sp.space_xs as f32])
             .class(theme::Container::custom(|theme| {
                 let c = theme.cosmic();
@@ -2797,8 +2797,8 @@ fn window_header<'a>(title: String, actions: Vec<Element<'a, Message>>) -> Eleme
     }
     widget::container(row)
         .padding([0, sp.space_s])
-        .height(Length::Fixed(z(48.0)))
-        .center_y(Length::Fixed(z(48.0)))
+        .height(Length::Fixed(48.0))
+        .center_y(Length::Fixed(48.0))
         .width(Length::Fill)
         .class(theme::Container::custom(|theme| {
             let c = theme.cosmic();
@@ -3331,9 +3331,9 @@ fn side_panel<'a>(app: &'a App, ws: &'a Workspace) -> Element<'a, Message> {
 /// the panel is too narrow for all of them, the last segment is a "More" button that steps
 /// through the ones left out (named in its tooltip), and the open panel always has a segment
 fn panel_tabs<'a>(open: Panel, tabs: Vec<(Panel, String)>, width: f32) -> Element<'a, Message> {
-    let size = z(12.5);
+    let size = 12.5;
     // (a segment's width for its label: the label as set, and room either side)
-    let wanted = |label: &str| label.chars().count() as f32 * size * 0.56 + z(18.0);
+    let wanted = |label: &str| label.chars().count() as f32 * size * 0.56 + 18.0;
     let fits = |tabs: &[(Panel, String)], more: bool| tabs.iter().map(|(_, l)| wanted(l) + 2.0).sum::<f32>() + if more { wanted("More") } else { 0.0 } <= width - 4.0;
     let (shown, hidden): (Vec<(Panel, String)>, Vec<(Panel, String)>) = if fits(&tabs, false) {
         (tabs, Vec::new())
@@ -3386,7 +3386,7 @@ fn panel_tabs<'a>(open: Panel, tabs: Vec<(Panel, String)>, width: f32) -> Elemen
         ));
     }
     widget::container(row)
-        .height(Length::Fixed(z(34.0)))
+        .height(Length::Fixed(34.0))
         .padding(2)
         .width(Length::Fill)
         .class(theme::Container::custom(|theme| iced::widget::container::Style {
@@ -3556,15 +3556,15 @@ fn state_body<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols, on: &Ben
     let have_parts = g.count.is_some() || g.nogoal || !g.facts.is_empty();
     // Goals or Text: two even segments of one small control, as the side panel's tabs are
     let toggle = |label: &'static str, on: bool, msg: Message| {
-        widget::button::custom(widget::text(label).size(z(13.0)).height(Length::Fill).align_y(Alignment::Center))
+        widget::button::custom(widget::text(label).size(13.0).height(Length::Fill).align_y(Alignment::Center))
             .height(Length::Fill)
-            .padding([0, z(12.0) as u16])
+            .padding([0, 12])
             // (the chosen side in the muted accent, household rule 6)
             .class(if on { muted_button(theme::Button::Icon) } else { theme::Button::Icon })
             .on_press(msg)
     };
     let switch = widget::container(widget::row::with_capacity(2).spacing(2).height(Length::Fill).push(toggle("Goals", !ws.state_text, Message::StateText(false))).push(toggle("Text", ws.state_text, Message::StateText(true))))
-        .height(Length::Fixed(z(30.0)))
+        .height(Length::Fixed(30.0))
         .padding(2)
         .class(theme::Container::custom(|theme| iced::widget::container::Style {
             background: Some(Color { a: if theme.cosmic().is_dark { 0.06 } else { 0.07 }, ..Color::from(theme.cosmic().on_bg_color()) }.into()),
@@ -4030,7 +4030,7 @@ pub(super) fn query_route_row<'a>(ws: &'a Workspace) -> Element<'a, Message> {
         .filter_map(|l| Some((l["key"].as_str()?.to_string(), l["label"].as_str()?.to_string())))
         .collect();
     // (as a row that wraps: in a narrow panel the helper's buttons go to a line of their own)
-    let mut items: Vec<Element<'a, Message>> = vec![widget::container(widget::text::caption("Queries go to")).padding([z(6.0), 0.0]).into()];
+    let mut items: Vec<Element<'a, Message>> = vec![widget::container(widget::text::caption("Queries go to")).padding([6.0, 0.0]).into()];
     let choice = |label: String, value: String| -> Element<'a, Message> {
         let on = route == value;
         // (the chosen one in the muted accent, household rule 6)
@@ -4221,7 +4221,7 @@ fn tool_panel<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Eleme
             let (name, key) = (tool.name.clone(), s.key.clone());
             widget::text_input(s.placeholder.as_str(), tool.value(&ws.tool_settings, &s.key)).on_input(move |v| Message::ToolSetting(name.clone(), key.clone(), v))
         };
-        let label_width = Length::Fixed(z(72.0));
+        let label_width = Length::Fixed(72.0);
         for s in tool.settings.iter().filter(|s| s.kind != "bool") {
             let input = setting(s);
             if s.label.is_empty() {
@@ -4233,7 +4233,7 @@ fn tool_panel<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Eleme
                     .spacing(sp.space_xs)
                     .align_y(Alignment::Center)
                     .push(widget::text::body(s.label.as_str()).width(label_width))
-                    .push(if s.kind == "number" { input.width(Length::Fixed(z(72.0))) } else { input.width(Length::Fill) })
+                    .push(if s.kind == "number" { input.width(Length::Fixed(72.0)) } else { input.width(Length::Fill) })
                     .push(widget::text::body(s.unit.as_str())),
             );
         }
@@ -4286,7 +4286,7 @@ fn tool_panel<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Eleme
                 "Insert adds the proof after the command:".to_string()
             }));
             for (n, (p, by)) in found.into_iter().enumerate() {
-                let mut text = widget::column::with_capacity(2).push(symbol_text(&p, table, z(13.0)));
+                let mut text = widget::column::with_capacity(2).push(symbol_text(&p, table, 13.0));
                 if !by.is_empty() {
                     text = text.push(widget::text::caption(format!("found by {}", by.join("; "))).class(muted()));
                 }
@@ -4380,7 +4380,7 @@ fn find_panel<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Eleme
         col = col.push(row);
     }
     if let Some(err) = &q.error {
-        col = col.push(tinted("error".into(), widget::text(err.clone()).size(z(13.0)).into()));
+        col = col.push(tinted("error".into(), widget::text(err.clone()).size(13.0).into()));
     }
     for m in &q.messages {
         col = col.push(if m["name"].is_string() { search_hit(m) } else { message_text(m, table) });
@@ -4436,13 +4436,13 @@ fn symbols_panel<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> El
         }
         let tip = if ways.is_empty() { sym } else { format!("{sym}   type {}", ways.join(" or ")) };
         widget::tooltip(
-            widget::button::custom(widget::text(c.to_string()).size(z(19.0)).font(cosmic::font::mono()).width(Length::Fill).height(Length::Fill).align_x(Alignment::Center).align_y(Alignment::Center))
-                .width(Length::Fixed(z(36.0)))
-                .height(Length::Fixed(z(36.0)))
+            widget::button::custom(widget::text(c.to_string()).size(19.0).font(cosmic::font::mono()).width(Length::Fill).height(Length::Fill).align_x(Alignment::Center).align_y(Alignment::Center))
+                .width(Length::Fixed(36.0))
+                .height(Length::Fixed(36.0))
                 .padding(0)
                 .class(theme::Button::Icon)
                 .on_press(Message::InsertSymbol(c.to_string())),
-            widget::text(tip).font(cosmic::font::mono()).size(z(13.0)),
+            widget::text(tip).font(cosmic::font::mono()).size(13.0),
             widget::tooltip::Position::Bottom,
         )
         .into()

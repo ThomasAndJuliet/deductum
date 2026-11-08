@@ -27,7 +27,7 @@ use super::codec::Symbols;
 use super::editor::{Mode, Theory};
 use super::prover::{InsertContext, PaletteEntry};
 use super::theory::Kind;
-use super::view::{muted, page_color, spacing, vim_mode_now, z};
+use super::view::{muted, page_color, spacing, vim_mode_now};
 use super::{Message, Workspace};
 
 /// Whether the proof window is open, as the view last drew it: the palette then edits the block
@@ -213,7 +213,7 @@ pub fn chip<'a>(item: Item, compact: bool) -> Element<'a, Message> {
     let button = if glyph {
         widget::button::custom(
             widget::text(item.entry.label.clone())
-                .size(z(19.0))
+                .size(19.0)
                 .font(cosmic::font::mono())
                 .wrapping(iced::widget::text::Wrapping::None)
                 .width(Length::Fill)
@@ -222,15 +222,15 @@ pub fn chip<'a>(item: Item, compact: bool) -> Element<'a, Message> {
                 .align_y(Alignment::Center),
         )
         .padding(0)
-        .width(Length::Fixed(z(if item.entry.label.chars().count() > 1 { 42.0 } else { 32.0 })))
-        .height(Length::Fixed(z(30.0)))
+        .width(Length::Fixed(if item.entry.label.chars().count() > 1 { 42.0 } else { 32.0 }))
+        .height(Length::Fixed(30.0))
         .class(theme::Button::Link)
         .on_press(wrap)
     } else if item.symbol {
         // (a symbol found by a search, with its name: the glyph bare, in the accent)
         let label = format!("{}  {}", item.entry.label, item.detail);
-        widget::button::custom(widget::text(label).size(z(13.0)).font(cosmic::font::mono()).wrapping(iced::widget::text::Wrapping::None))
-            .padding([z(4.0), z(9.0)])
+        widget::button::custom(widget::text(label).size(13.0).font(cosmic::font::mono()).wrapping(iced::widget::text::Wrapping::None))
+            .padding([4.0, 9.0])
             .class(theme::Button::Link)
             .on_press(wrap)
     } else {
@@ -240,7 +240,7 @@ pub fn chip<'a>(item: Item, compact: bool) -> Element<'a, Message> {
     };
     // (its name, when only its character shows, in a tooltip)
     if glyph && !item.detail.is_empty() {
-        widget::tooltip(button, widget::text(item.detail).font(cosmic::font::mono()).size(z(13.0)), widget::tooltip::Position::Bottom).into()
+        widget::tooltip(button, widget::text(item.detail).font(cosmic::font::mono()).size(13.0), widget::tooltip::Position::Bottom).into()
     } else {
         button.into()
     }
@@ -324,7 +324,7 @@ pub fn insert_bar<'a>(ws: &'a Workspace, table: &dyn Symbols) -> Option<Element<
         // A block selected but not open: the bar stands where it will be, saying how to use it,
         // so that opening the block does not move the goals down by its row
         None if t.mode == Mode::Literate && t.selected.is_some() && t.block_editor.is_none() => {
-            let search = widget::container(widget::search_input("Symbol", "")).width(Length::Fixed(z(110.0)));
+            let search = widget::container(widget::search_input("Symbol", "")).width(Length::Fixed(110.0));
             let more = widget::button::icon(widget::icon::from_name("pan-down-symbolic"));
             let row = widget::row::with_capacity(3)
                 .spacing(sp.space_xs)
@@ -348,14 +348,14 @@ pub fn insert_bar<'a>(ws: &'a Workspace, table: &dyn Symbols) -> Option<Element<
         InsertContext::Prose => "Markup",
         InsertContext::Proof => "Step",
     };
-    let search = widget::container(search_field(placeholder, &ws.palette_query)).width(Length::Fixed(z(if ws.palette_query.is_empty() { 110.0 } else { 160.0 })));
+    let search = widget::container(search_field(placeholder, &ws.palette_query)).width(Length::Fixed(if ws.palette_query.is_empty() { 110.0 } else { 160.0 }));
     let items = quick_items(ws, t, table, context);
     let none = items.is_empty();
     let chips: Vec<Element<'a, Message>> = items.into_iter().map(|i| chip(i, true)).collect();
     let row_chips: Element<'a, Message> = if none {
         widget::text::caption(format!("Nothing matches “{}”", ws.palette_query.trim())).class(muted()).width(Length::Fill).into()
     } else {
-        super::gap::OneRow::new(chips, z(3.0)).into()
+        super::gap::OneRow::new(chips, 3.0).into()
     };
     let more = widget::button::icon(widget::icon::from_name(if ws.insert_open { "pan-up-symbolic" } else { "pan-down-symbolic" }))
         .tooltip(if ws.insert_open { "Fewer (just this row)" } else { "More: everything that can be inserted here" })
@@ -383,7 +383,7 @@ fn bar_band<'a>(content: Element<'a, Message>) -> Element<'a, Message> {
     {
         widget::container(content)
             .id(insert_bar_id())
-            .padding([z(4.0), z(6.0)])
+            .padding([4.0, 6.0])
             .width(Length::Fill)
             .class(theme::Container::custom(|theme| iced::widget::container::Style {
                 background: Some(super::view::chrome_color(theme).into()),
