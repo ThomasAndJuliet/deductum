@@ -3823,8 +3823,8 @@ fn state_body<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols, on: &Ben
     // The heading, then what is under it: in a panel with a greatest height, scrolling by itself
     // (with room at its right for the scrollbar)
     let done = |col: Element<'a, Message>| -> Element<'a, Message> {
-        // (the dropdown is taller than Goals | Text, and leaves room enough by itself)
-        let all = widget::column::with_capacity(2).spacing(if stacked { 0 } else { sp.space_xs }).push(controls);
+        // (the dropdown is taller than Goals | Text, and leaves most of the room by itself)
+        let all = widget::column::with_capacity(2).spacing(if stacked { sp.space_xxs } else { sp.space_xs }).push(controls);
         if scrolls {
             all.push(thin(widget::container(col).padding(Padding { right: 10.0, ..Padding::ZERO }).width(Length::Fill)).id(goal_scroll_id())).into()
         } else {
