@@ -165,6 +165,14 @@ class RuntimeAdapter:
 # Isabelle runtimes and session ROOTs
 
 
+def runtime_label(isabelle: Any) -> str:
+    """What an installation is called, everywhere it is named: what it says it is (Isabelle2025),
+    not what its folder happens to be called; a source checkout, which does not say, by its folder"""
+    path = Path(isabelle)
+    folder = path.parent.parent.name
+    return runtime_identifier(path) or ("Isabelle" if folder.lower() == "isabelle" else folder) or str(isabelle)
+
+
 def runtime_identifier(isabelle: Path) -> Optional[str]:
     home = isabelle.resolve().parent.parent
     try:
@@ -769,7 +777,7 @@ class IsabelleDriver(Driver):
             problem = None
             if not r["supported"]:
                 problem = (f"No Deductum backend for {ident}" if ident else "Not an Isabelle installation")
-            out.append({"id": r["path"], "label": Path(r["home"]).name, "version": ident, "path": r["path"],
+            out.append({"id": r["path"], "label": runtime_label(r["path"]), "version": ident, "path": r["path"],
                         "supported": r["supported"], "ok": r["supported"], "problem": problem,
                         "identifier": ident, "home": r["home"]})
         return out
@@ -872,7 +880,7 @@ class IsabelleDriver(Driver):
 
     @classmethod
     def toolchain_label(cls, toolchain: str, meta: Dict[str, Any]) -> str:
-        return Path(toolchain).parent.parent.name or toolchain
+        return runtime_label(toolchain)
 
     @classmethod
     def symbol_table(cls, toolchain: Optional[str]) -> List[Dict[str, Any]]:

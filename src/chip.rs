@@ -220,7 +220,8 @@ pub fn chip(app: &App) -> Element<'_, Message> {
     let toolchain = summary.and_then(|s| s["toolchain"]["label"].as_str()).filter(|l| !l.is_empty()).map(str::to_string);
     let machine = app.link(&ws.machine).map(|l| l.name.clone()).unwrap_or_else(|| ws.machine.clone());
     let narrow = app.window_width < 1250.0;
-    let gap = s.space_xs;
+    // (an icon and its words, as a button's are)
+    let gap = s.space_xxs;
     let row_of = || widget::row::with_capacity(5).spacing(gap).align_y(Alignment::Center);
     let log = Some(Message::Panel(Panel::Log));
 

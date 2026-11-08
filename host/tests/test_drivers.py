@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -137,6 +138,22 @@ class DriverTests(unittest.IsolatedAsyncioTestCase):
         return d
 
     # ----- records
+
+    def test_an_isabelle_is_named_by_what_it_says_it_is_whatever_its_folder(self):
+        with tempfile.TemporaryDirectory() as d:
+            home = Path(d) / "isabelle"
+            (home / "bin").mkdir(parents=True)
+            exe = home / "bin" / "isabelle"
+            exe.touch()
+            # a source checkout does not say: its folder, with the name's capital
+            self.assertEqual(IsabelleDriver.toolchain_label(str(exe), {}), "Isabelle")
+            (home / "etc").mkdir()
+            (home / "etc" / "ISABELLE_IDENTIFIER").write_text("Isabelle2025\n", encoding="utf-8")
+            self.assertEqual(IsabelleDriver.toolchain_label(str(exe), {}), "Isabelle2025")
+            # and the runtime picker calls it the same as the session does
+            runtimes = [{"path": str(exe), "home": str(home), "identifier": "Isabelle2025", "supported": True}]
+            with unittest.mock.patch("drivers.isabelle.find_runtimes", return_value=runtimes):
+                self.assertEqual([t["label"] for t in IsabelleDriver.toolchains()], ["Isabelle2025"])
 
     def test_an_old_isabelle_record_loads_as_isabelle(self):
         s = H.Session(self.host, "old1", json.loads(json.dumps(OLD_META)))
