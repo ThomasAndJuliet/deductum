@@ -120,6 +120,10 @@ fn card_border(status: Status, selected: bool, theme: &cosmic::Theme) -> (Color,
 /// so that selecting a cell (1 px of border becoming 2) moves nothing
 const CARD_RIM: f32 = 2.0;
 
+/// The card's own fill between its strip and its code: the highlights over the code reach back
+/// over it to the strip
+const CARD_PAD: f32 = 4.0;
+
 /// What a cell takes beside its code: its status strip, the space before the code (the card's
 /// own fill, where the strip's gap used to be) and the room for its right border
 const CARD_CHROME: f32 = 8.0 + CARD_RIM;
@@ -931,12 +935,12 @@ fn block_line(be: &super::editor::BlockEditor, offset: usize) -> usize {
 }
 
 /// A line of code in a block
-fn code_line_height() -> f32 {
+pub fn code_line_height() -> f32 {
     z(13.0) * CODE_LINE
 }
 
 /// Padding of code in a block, shown or edited: the same, so that opening a block moves nothing
-const CODE_PADDING: Padding = Padding { left: 10.0, right: 10.0, top: 5.0, bottom: 5.0 };
+pub const CODE_PADDING: Padding = Padding { left: 10.0, right: 10.0, top: 5.0, bottom: 5.0 };
 
 /// The text origin relative to a literate cell, including the code status strip.
 pub fn block_text_inset(be: &super::editor::BlockEditor) -> f32 {
@@ -1039,7 +1043,7 @@ fn card<'a>(content: Element<'a, Message>, status: Status, selected: bool) -> El
             ..Default::default()
         }));
     // (the card's fill, as wide as the gap the strip used to leave: nothing in it moves)
-    let inside = widget::container(content).padding(Padding { left: 4.0, ..Padding::ZERO }).class(theme::Container::custom(|theme| iced::widget::container::Style {
+    let inside = widget::container(content).padding(Padding { left: CARD_PAD, ..Padding::ZERO }).class(theme::Container::custom(|theme| iced::widget::container::Style {
         background: Some(page_color(theme).into()),
         ..Default::default()
     }));
@@ -1980,9 +1984,23 @@ fn block_editor_in<'a>(ws: Option<&'a Workspace>, t: &'a Theory, window: bool, i
         });
     let floated = after.is_some();
     let tint = construct_tint();
-    let banded = move |g: super::gap::Gap<'a, Message, cosmic::Theme, cosmic::Renderer>| match band {
-        Some((from, to)) => g.band(from, to, tint),
-        None => g,
+    // The caret's line, in COSMIC's grey wash over the band (edge to edge, as the band is: from the
+    // cell's very top on its first line, to its very bottom on its last)
+    let caret = {
+        let line = be.content.cursor().position.line.min(lines.saturating_sub(1));
+        let from = if line == 0 { 0.0 } else { CODE_PADDING.top + line as f32 * code_line_height() };
+        let to = if line + 1 >= lines { f32::INFINITY } else { CODE_PADDING.top + (line + 1) as f32 * code_line_height() };
+        (from, to, super::tones::caret_line(&theme::active()))
+    };
+    // (the bands run to the left edge of the card the editor is padded inside; the window has none)
+    let reach = if window { 0.0 } else { CARD_PAD };
+    let banded = move |g: super::gap::Gap<'a, Message, cosmic::Theme, cosmic::Renderer>| {
+        let g = g.reach(reach);
+        let g = match band {
+            Some((from, to)) => g.band(from, to, tint),
+            None => g,
+        };
+        g.band(caret.0, caret.1, caret.2)
     };
     let editor: Element<'_, Message> = if window {
         // At its full height in a scroll view that keeps the caret in sight, so that where its
@@ -2715,6 +2733,9 @@ fn source<'a>(ws: &'a Workspace, t: &'a Theory, inline: Option<&'a Workspace>, t
     if let Some((l0, l1)) = construct {
         code = code.band(row_top(l0), row_top(l1 + 1), construct_tint());
     }
+    // (the caret's line in COSMIC's grey wash, over the band)
+    let caret = t.source.cursor().position.line;
+    code = code.band(row_top(caret), row_top(caret + 1), super::tones::caret_line(&theme::active()));
     let editor = widget::container(hoverable(Some(ws), super::HoverTarget::Source, pad, code.into())).width(Length::Fixed(source_width));
     // The goal level with the construct, over its reserved column (moving only as far as it
     // must to stay in sight)

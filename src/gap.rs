@@ -17,19 +17,28 @@ pub struct Gap<'a, Message, Theme, Renderer> {
     inset: Element<'a, Message, Theme, Renderer>,
     /// Where the gap opens, below the editor's top
     at: f32,
-    /// A band of the editor's text tinted (from, to, below its top; the colour): the construct the
-    /// proof state is for
-    band: Option<(f32, f32, cosmic::iced::Color)>,
+    /// Bands of the editor's text tinted (from, to, below its top; the colour), laid one over the
+    /// other in the order given: the construct the proof state is for, then the caret's line
+    washes: Vec<(f32, f32, cosmic::iced::Color)>,
+    /// How far the bands reach past the editor's left edge, to the left edge of the card the
+    /// editor is padded inside (they run edge to edge; the text does not move)
+    reach: f32,
 }
 
 impl<'a, Message, Theme, Renderer> Gap<'a, Message, Theme, Renderer> {
     pub fn new(editor: impl Into<Element<'a, Message, Theme, Renderer>>, inset: impl Into<Element<'a, Message, Theme, Renderer>>, at: f32) -> Self {
-        Self { editor: editor.into(), inset: inset.into(), at, band: None }
+        Self { editor: editor.into(), inset: inset.into(), at, washes: Vec::new(), reach: 0.0 }
     }
 
     /// Tint the editor's text from `from` to `to` below its top
     pub fn band(mut self, from: f32, to: f32, color: cosmic::iced::Color) -> Self {
-        self.band = Some((from, to, color));
+        self.washes.push((from, to, color));
+        self
+    }
+
+    /// Let the bands reach `left` past the editor's left edge
+    pub fn reach(mut self, left: f32) -> Self {
+        self.reach = left;
         self
     }
 }
@@ -92,26 +101,30 @@ where
         // layer that takes the editor's background and text and before those the editor makes
         // for its selection (layers are drawn in the order they are made), so a selection, which
         // libcosmic draws opaque in layers of its own, lies over the band
-        let band = |r: &mut Renderer, y0: f32, y1: f32| {
-            if let Some((_, _, color)) = self.band
-                && y1 > y0
-            {
-                let bounds = Rectangle { y: y0, height: y1 - y0, ..editor };
-                r.with_layer(bounds, |r| {
-                    r.fill_quad(renderer::Quad { bounds, ..Default::default() }, cosmic::iced::Background::Color(color));
-                });
+        let reach = self.reach;
+        // (the layers reach left too, as the bands do)
+        let wide = |r: Rectangle| Rectangle { x: r.x - reach, width: r.width + reach, ..r };
+        let bands = |r: &mut Renderer, below: bool| {
+            for (from, to, color) in &self.washes {
+                // (no further than the editor's own bottom)
+                let to = to.min(editor.height);
+                let (y0, y1) = if below { (editor.y + from.max(at) + gap, editor.y + to.max(at) + gap) } else { (editor.y + from.min(at), editor.y + to.min(at)) };
+                if y1 > y0 {
+                    let bounds = wide(Rectangle { y: y0, height: y1 - y0, ..editor });
+                    r.with_layer(bounds, |r| {
+                        r.fill_quad(renderer::Quad { bounds, ..Default::default() }, cosmic::iced::Background::Color(*color));
+                    });
+                }
             }
         };
-        // (no further than the editor's own bottom)
-        let (from, to) = self.band.map_or((0.0, 0.0), |(from, to, _)| (from, to.min(editor.height)));
         // Above the gap: as it is
-        renderer.with_layer(Rectangle { height: at, ..editor }, |r| {
-            band(r, editor.y + from.min(at), editor.y + to.min(at));
+        renderer.with_layer(wide(Rectangle { height: at, ..editor }), |r| {
+            bands(r, false);
             self.editor.as_widget().draw(&tree.children[0], r, theme, style, editor_layout, moved(cursor), viewport);
         });
         // Below it: moved down by the gap
-        renderer.with_layer(Rectangle { y: editor.y + at + gap, height: (editor.height - at).max(0.0), ..editor }, |r| {
-            band(r, editor.y + from.max(at) + gap, editor.y + to.max(at) + gap);
+        renderer.with_layer(wide(Rectangle { y: editor.y + at + gap, height: (editor.height - at).max(0.0), ..editor }), |r| {
+            bands(r, true);
             r.with_translation(Vector::new(0.0, gap), |r| {
                 self.editor.as_widget().draw(&tree.children[0], r, theme, style, editor_layout, moved(cursor), viewport);
             });
