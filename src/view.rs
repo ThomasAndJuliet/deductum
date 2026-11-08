@@ -1921,17 +1921,29 @@ pub fn fill_here(ws: &Workspace) -> bool {
 }
 
 /// The goal under its cell (no room beside it): attached a little below, as wide as the cell,
-/// an accent bar where the cell's status strip is
+/// a coloured line where the cell's status strip is. The line is the panel's left edge, as the
+/// strip is the cell's: [`GOAL_EDGE`] wide, over the panel's own left outline and the padding
+/// inside it, so that the grey outline remains on the top, right and bottom only and the panel's
+/// left edge is the cell's. Opaque: the accent at 60 % over the page, as it looked on the page
 fn goal_under<'a>(goal: Element<'a, Message>) -> Element<'a, Message> {
-    let bar = widget::container(widget::Space::new()).width(Length::Fixed(4.0)).height(Length::Fill).class(theme::Container::custom(|theme| iced::widget::container::Style {
-        background: Some(Color { a: 0.6, ..Color::from(theme.cosmic().accent_color()) }.into()),
-        border: Border { radius: 2.0.into(), ..Default::default() },
-        ..Default::default()
+    let bar = widget::container(widget::Space::new()).width(Length::Fixed(GOAL_EDGE)).height(Length::Fill).class(theme::Container::custom(|theme| {
+        let (accent, page) = (Color::from(theme.cosmic().accent_color()), page_color(theme));
+        let mix = |a: f32, p: f32| a * 0.6 + p * 0.4;
+        iced::widget::container::Style {
+            background: Some(Color::from_rgb(mix(accent.r, page.r), mix(accent.g, page.g), mix(accent.b, page.b)).into()),
+            ..Default::default()
+        }
     }));
-    widget::container(widget::row::with_capacity(2).spacing(4).push(bar).push(goal).height(Length::Shrink))
+    #[cfg(test)]
+    let bar = bar.id(test_panel_id("edge"));
+    widget::container(iced::widget::stack![goal, bar].height(Length::Shrink))
         .padding(Padding { top: ATTACHED - 4.0, ..Padding::ZERO })
         .into()
 }
+
+/// The width of the coloured line that is the left edge of the goal under a cell: the panel's
+/// 2 px outline and the 2 px inside it
+pub const GOAL_EDGE: f32 = 4.0;
 
 /// Goal ownership follows the edited construct, not whether a prover reply has arrived.
 fn goal_block(t: &Theory, block: &super::theory::Block) -> bool {
