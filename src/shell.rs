@@ -19,7 +19,7 @@ use cosmic::{iced, theme};
 use serde_json::{Value, json};
 
 use super::editor::Mode;
-use super::settings::{DisplayChange, Loogle, Settings, ThemeChoice};
+use super::settings::{Change, DisplayChange, Loogle, Settings, ThemeChoice};
 use super::theory::Status;
 use super::{App, Message, Panel, Pending, Workspace, file_name, link};
 
@@ -36,6 +36,8 @@ pub struct Shell {
     pub collapsed: std::collections::HashSet<(String, String)>,
     /// Folders collapsed in a session's document list, by machine, session and folder
     pub collapsed_dirs: std::collections::HashSet<(String, String, String)>,
+    /// The Settings page's own state: search, Show changed only, the section being read
+    pub page: super::settings_page::PageState,
 }
 
 /// A project action's run (`lake build`, building a heap)
@@ -65,6 +67,10 @@ pub enum Msg {
     KeywordPause(u32),
     ShowTypes(bool),
     ShowChanges(bool),
+    /// One of the settings the Settings page added (see `settings::Change`)
+    Setting(Change),
+    /// The Settings page's own doings (search, jump to a section, reset a row, Back)
+    Page(super::settings_page::PageMsg),
     /// Where this session's keyword lines go: the route's index among those offered
     Route(usize),
     ClaudeModel(String),
@@ -142,6 +148,7 @@ impl App {
                 let closing = self.shell.settings_open && !open;
                 self.shell.settings_open = open;
                 if open {
+                    self.shell.page.sub = super::settings_page::Sub::Settings;
                     self.new_session = None;
                 } else if closing && let Some(t) = self.workspace.as_ref().and_then(|w| w.theory.as_ref()) {
                     if t.mode == Mode::Source {
@@ -204,6 +211,11 @@ impl App {
                 self.save_settings();
                 return self.schedule_state();
             }
+            Msg::Setting(change) => {
+                self.shell.settings.change(change);
+                self.save_settings();
+            }
+            Msg::Page(m) => return super::settings_page::update(self, m),
             Msg::Route(i) => {
                 let routes = self.workspace.as_ref().map(routes).unwrap_or_default();
                 if let Some((value, _)) = routes.get(i) {

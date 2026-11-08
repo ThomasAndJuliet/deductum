@@ -156,6 +156,8 @@ fn the_settings_page_in_both_themes_narrow_and_wide() {
 fn settings_change_at_once_and_vim_has_left_the_header() {
     let mut app = demo_app(Mode::Literate);
     app.shell.settings_open = true;
+    // (the settings are written and published for the whole process: no other test changes them meanwhile)
+    let turn = super::snapshot::ui_turn();
     // Its togglers send what they set
     let _ = cosmic::Application::update(&mut app, Message::Shell(Msg::Vim(true)));
     assert!(app.vim_enabled && app.shell.settings.editing.vim);
@@ -169,6 +171,7 @@ fn settings_change_at_once_and_vim_has_left_the_header() {
     assert_eq!(written.lean.loogle, super::settings::Loogle::Local);
     assert!(written.editing.vim);
     assert_eq!(super::settings::loogle(), super::settings::Loogle::Local, "and published for the Lean search");
+    drop(turn);
     // the header no longer has a Vim button; it has Settings
     app.shell.settings_open = false;
     let found: Vec<Message> = (700..1400).step_by(8).flat_map(|x| clicks(header(&app), Point::new(x as f32, 24.0), Size::new(1400.0, 48.0))).collect();
