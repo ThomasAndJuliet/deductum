@@ -107,8 +107,9 @@ pub fn load_fonts() {
     for data in FONTS {
         font_system.load_font(std::borrow::Cow::Borrowed(data));
     }
-    // The toolkit requests these families by name; Windows does not ship them.
-    #[cfg(windows)]
+    // The toolkit requests these families by name; Windows does not ship them, and neither does a
+    // bare SDK, where the tests would otherwise measure and draw in whatever fallback there is
+    #[cfg(any(windows, test))]
     for data in [
         include_bytes!("../res/windows-fonts/NotoSansMono[wght].ttf").as_slice(),
         include_bytes!("../res/windows-fonts/NotoSansMono-Bold.ttf").as_slice(),
