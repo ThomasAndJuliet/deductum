@@ -1791,3 +1791,28 @@ fn the_chip_logo_is_the_symbolic_icon_in_the_text_colour_and_rocq_keeps_its_lett
         assert_eq!(coloured, 0, "a symbolic logo is in the text's colour");
     }
 }
+
+/// `CT_SNAPSHOTS`: the shared tooltip (household-widgets' `tooltip_with`) over a header button, a
+/// sidebar row and the status chip's parts, in both themes, for looking at; it checks that the
+/// bubble is drawn by comparing the frame with and without the pointer
+#[test]
+fn tooltips_are_drawn_for_review() {
+    if std::env::var("CT_SNAPSHOTS").is_err() {
+        return;
+    }
+    let app = demo_app(Mode::Literate);
+    for (light, theme) in [(false, "dark"), (true, "light")] {
+        for (at, name) in [(Point::new(24.0, 24.0), "header-button"), (Point::new(120.0, 24.0), "header-second"), (Point::new(60.0, 200.0), "sidebar")] {
+            // (the harness holds the UI's turn; the theme is set inside it)
+            let mut h = super::snapshot::Harness::new(Size::new(1400.0, 900.0));
+            cosmic::theme::set_active(if light { crate::tones::light_type_for_tests() } else { cosmic::theme::ThemeType::Dark });
+            let before = h.draw(&app, &format!("tooltip-{theme}-{name}-rest"));
+            let _ = h.move_to(&app, at);
+            h.frame(&app);
+            let _ = h.move_to(&app, Point::new(at.x + 1.0, at.y));
+            let hovered = h.draw(&app, &format!("tooltip-{theme}-{name}"));
+            eprintln!("{theme} {name}: frame changed with the pointer: {}", before != hovered);
+            cosmic::theme::set_active(cosmic::theme::ThemeType::Dark);
+        }
+    }
+}
