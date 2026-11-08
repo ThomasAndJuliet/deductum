@@ -752,7 +752,7 @@ fn the_goal_panel_has_a_two_pixel_grey_outline_and_a_lightish_band() {
         let page = super::view::page_color(&theme);
         let (mx, my) = (panel.x + panel.width / 2.0, panel.y + panel.height / 2.0);
         for (what, n) in [
-            ("left", line_strength(&frame, w, panel.x + 1.0, my, true, grey, page)),
+            // (the left edge is the coloured line, below)
             ("right", line_strength(&frame, w, panel.x + panel.width - 1.0, my, true, grey, page)),
             ("top", line_strength(&frame, w, mx, panel.y + 1.0, false, grey, page)),
             ("bottom", line_strength(&frame, w, mx, panel.y + panel.height - 1.0, false, grey, page)),
@@ -773,6 +773,49 @@ fn the_goal_panel_has_a_two_pixel_grey_outline_and_a_lightish_band() {
         // and the body under it is not the band's colour
         let sub = part(&all, super::view::test_panel_id("subgoal-1"));
         assert!(!is(px(&frame, w, sub.x + sub.width - 10.0, sub.y + sub.height / 2.0), bg), "light={light}: the body is on the band's colour");
+    }
+}
+
+/// The goal under its cell: the coloured line is the panel's left edge, as a cell's status strip is
+/// the cell's. It is [`GOAL_EDGE`] (4 px) wide, with no gap and no grey outline on that side, and
+/// the page colour immediately to its left; the panel's left edge is the cell's. The grey outline
+/// stays on the top, right and bottom (the test above)
+#[test]
+fn the_goal_under_a_cell_has_the_coloured_line_as_its_left_edge() {
+    for light in [true, false] {
+        let (frame, all) = goal_frame(light);
+        let theme = if light { cosmic::Theme::light() } else { cosmic::Theme::dark() };
+        let w = PANEL.width as u32;
+        let panel = part(&all, super::view::test_panel_id("panel"));
+        let edge = part(&all, super::view::test_panel_id("edge"));
+        let cell = part(&all, super::view::selected_block_id());
+        let page = super::view::page_color(&theme);
+        let grey = card_border_color(&theme);
+        assert!((panel.x - cell.x).abs() < 1.0, "light={light}: the panel's left edge {} is not the cell's {}", panel.x, cell.x);
+        assert!((edge.x - panel.x).abs() < 0.5 && (edge.width - super::view::GOAL_EDGE).abs() < 0.5, "light={light}: the line is {edge:?} on the panel {panel:?}");
+        // (the line's colour: the accent at 60 % over the page)
+        let accent = Color::from(theme.cosmic().accent_color());
+        let want = |a: f32, p: f32| a * 0.6 + p * 0.4;
+        let line = Color::from_rgb(want(accent.r, page.r), want(accent.g, page.g), want(accent.b, page.b));
+        // several rows down the panel, in its band and its body
+        for y in [panel.y + 8.0, panel.y + panel.height / 2.0, panel.y + panel.height - 8.0] {
+            let x0 = panel.x as u32;
+            // the page, immediately left of the line
+            for dx in 1..=3 {
+                assert!(is(px(&frame, w, (x0 - dx) as f32, y), page), "light={light}, y={y}: {} left of the line is not the page colour: {:?}", dx, px(&frame, w, (x0 - dx) as f32, y));
+            }
+            // one line of four pixels, in its colour, with no grey in or beside it
+            for dx in 0..4 {
+                let p = px(&frame, w, (x0 + dx) as f32, y);
+                assert!(is(p, line), "light={light}, y={y}: pixel {dx} of the line is {p:?}, not {}", hex(line));
+                assert!(!is(p, grey), "light={light}: the grey outline shows on the left edge");
+            }
+            // and right after it, the panel's own contents, not a second line
+            assert!(!is(px(&frame, w, (x0 + 4) as f32, y), line) && !is(px(&frame, w, (x0 + 4) as f32, y), grey), "light={light}, y={y}: a second line after the first");
+        }
+        // the top, right and bottom keep their grey outline
+        let mx = panel.x + panel.width / 2.0;
+        assert!(line_strength(&frame, w, mx, panel.y + panel.height - 1.0, false, grey, page) > 1.6, "light={light}: the bottom outline");
     }
 }
 
