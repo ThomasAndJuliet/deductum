@@ -48,6 +48,7 @@ mod toast;
 mod tones;
 mod view;
 mod viewport;
+mod wrap;
 mod vim;
 
 #[cfg(test)]

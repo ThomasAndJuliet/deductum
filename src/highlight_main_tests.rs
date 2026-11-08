@@ -24,6 +24,9 @@
 //! those frames (made with other fonts) still show the old look and need making again the same
 //! way in the SDK build. Paper (the 80 character cells at 14 px, with the 0.75 em gap) is such a
 //! change for the block frames: the Neo set was made again for them, the others still show the old look.
+//! The responsive page (the margins and the goal's width follow the page's width, and a narrow window's
+//! cell is a full 80 characters) moves the block frames' editors: the Neo set was made again for
+//! those frames, from that commit; only their place and the narrow frame's width changed.
 
 use std::collections::HashMap;
 use std::path::Path;

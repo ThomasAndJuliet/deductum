@@ -401,7 +401,7 @@ pub fn rows(app: &App) -> Vec<Row> {
     add("code_size", Code, "Code size", "In px",
         seg_u32(&CODE_SIZES.map(u32::from), u32::from(st.code.size), |v| Msg::Setting(Change::CodeSize(v as u8))),
         st.code.size != def.code.size, Some(Msg::Setting(Change::CodeSize(def.code.size))));
-    add("cell_width", Code, "Cell width", "In characters; longer lines widen the cell",
+    add("cell_width", Code, "Cell width", "In characters; longer lines wrap",
         seg_u32(&[72, 80, 100, 0], u32::from(st.code.cell_width), |v| Msg::Setting(Change::CellWidth(v as u16))),
         st.code.cell_width != def.code.cell_width, Some(Msg::Setting(Change::CellWidth(def.code.cell_width))));
     add("indent_width", Code, "Indent width", "Spaces that Tab inserts and Shift+Tab takes away",
