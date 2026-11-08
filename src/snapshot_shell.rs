@@ -245,7 +245,7 @@ fn the_header_and_status_bar_in_their_states() {
     app.vim_enabled = true;
     app.vim.mode = super::vim::Mode::Insert;
     draw_in(false, || bar(&app), "shell-status-vim-insert", Size::new(1400.0, 28.0));
-    app.status = Some("Block deleted (Ctrl+Z brings it back)".into());
+    app.status = Some("Not sent: neo is not connected".into());
     app.links[0].sender = None;
     app.links[0].status = "disconnected: broken pipe".into();
     draw_in(false, || bar(&app), "shell-status-message-offline", Size::new(1400.0, 28.0));
@@ -923,4 +923,131 @@ fn nothing_in_the_header_moves_between_states() {
     let none = chip_scene(|a| a.workspace = None);
     assert_eq!(probe(&none).3, first.3, "the sidebar toggle is first, wherever");
     assert_eq!(chip_width(&none), CHIP_WIDTH);
+}
+
+// ----- the status bar and toasts
+
+/// The status bar on the page, as the window draws it
+fn bar_of(app: &App) -> Element<'_, Message> {
+    widget::container(shell::status_bar(app).unwrap_or_else(|| widget::Space::new().into()))
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .class(cosmic::theme::Container::custom(|t| cosmic::iced::widget::container::Style { background: Some(super::view::page_color(t).into()), ..Default::default() }))
+        .into()
+}
+
+fn bar_hits(app: &App) -> Vec<(u32, Message)> {
+    (0..1400u32).step_by(2).flat_map(|x| clicks(bar_of(app), Point::new(x as f32, 14.0), Size::new(1400.0, 28.0)).into_iter().map(move |m| (x, m))).collect()
+}
+
+#[test]
+fn the_status_bar_has_back_and_links_to_what_needs_attention() {
+    use super::attention::Problem;
+    let mut app = mixed_app();
+    // no jump yet: only the links, "1 failed" then "1 unfinished"
+    let hits = bar_hits(&app);
+    let failed = hits.iter().find(|(_, m)| matches!(m, Message::Shell(Msg::NextProblem(Problem::Failed)))).map(|h| h.0).expect("a link to the next failure");
+    let unfinished = hits.iter().find(|(_, m)| matches!(m, Message::Shell(Msg::NextProblem(Problem::Unfinished)))).map(|h| h.0).expect("a link to the next unfinished");
+    assert!(failed < unfinished);
+    assert!(!hits.iter().any(|(_, m)| matches!(m, Message::Back)), "no Back before a jump");
+    draw_in(false, || bar_of(&app), "status-links-dark", Size::new(1400.0, 28.0));
+    // after a Ctrl+click jump: Back to the cell it came from, before the links
+    let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+    let at = t.local.find("lemma add_zero").map(|b| t.local[..b].chars().count()).unwrap();
+    app.back.push((t.path.clone(), at));
+    assert_eq!(shell::back_name(&app).as_deref(), Some("add_zero"));
+    let hits = bar_hits(&app);
+    let back = hits.iter().find(|(_, m)| matches!(m, Message::Back)).map(|h| h.0).expect("Back");
+    assert!(back < failed + 40 && hits.iter().any(|(x, m)| matches!(m, Message::Shell(Msg::NextProblem(Problem::Failed))) && *x > back));
+    draw_in(false, || bar_of(&app), "status-back-dark", Size::new(1400.0, 28.0));
+    draw_in(true, || bar_of(&app), "status-back-light", Size::new(1400.0, 28.0));
+    // a jump into another file is named by the file
+    app.back = vec![("/elsewhere/Other.thy".into(), 0)];
+    assert_eq!(shell::back_name(&app).as_deref(), Some("Other.thy"));
+    // all checked: nothing at the left
+    app.back.clear();
+    let t = app.workspace.as_mut().unwrap().theory.as_mut().unwrap();
+    for b in &mut t.blocks {
+        b.status = super::theory::Status::Finished;
+        b.commands.retain(|c| c.name != "sorry");
+    }
+    assert!(bar_hits(&app).is_empty(), "nothing needs attention: nothing to click");
+    // the prover's state is not here: no block status, whatever is open
+    let lemma = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.name == "lemma").unwrap();
+    let _ = cosmic::Application::update(&mut app, Message::EditBlock(lemma));
+    assert!(bar_hits(&app).is_empty());
+}
+
+#[test]
+fn a_link_goes_to_the_next_cell_of_its_kind_round_to_the_first() {
+    use super::attention::{Problem, next};
+    let mut app = mixed_app();
+    let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+    let broken = t.local.find("lemma broken").map(|b| t.local[..b].chars().count()).unwrap();
+    let comm = t.local.find("lemma add_comm").map(|b| t.local[..b].chars().count()).unwrap();
+    assert_eq!(next(t, Problem::Failed), Some(broken));
+    assert_eq!(next(t, Problem::Unfinished), Some(comm));
+    let _ = cosmic::Application::update(&mut app, Message::Shell(Msg::NextProblem(Problem::Unfinished)));
+    let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+    assert_eq!(t.cursor, comm);
+    assert_eq!(t.selected.map(|i| t.blocks[i].start), Some(comm));
+    // from the last one it goes round to the first
+    let _ = cosmic::Application::update(&mut app, Message::Shell(Msg::NextProblem(Problem::Failed)));
+    let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+    assert_eq!(t.cursor, broken);
+    assert_eq!(next(t, Problem::Failed), Some(broken), "the only one: round to itself");
+}
+
+#[tokio::test]
+async fn a_toast_appears_and_goes_by_itself() {
+    use cosmic::iced::futures::StreamExt;
+    let mut app = demo_app(Mode::Literate);
+    assert!(app.shell.toasts.is_empty());
+    let task = app.shell.toasts.push("Copied", false, std::time::Duration::from_millis(40));
+    assert_eq!(app.shell.toasts.live.iter().map(|l| (l.text.as_str(), l.undo)).collect::<Vec<_>>(), [("Copied", false)]);
+    draw_in(false, || app.shell.toasts.over(window(&app)), "toast-dark", Size::new(1400.0, 860.0));
+    draw_in(true, || app.shell.toasts.over(window(&app)), "toast-light", Size::new(1400.0, 860.0));
+    // its time runs out: the task says so, and it is gone
+    let mut stream = cosmic::iced::runtime::task::into_stream(task).expect("a timer");
+    let mut gone = None;
+    while let Some(action) = stream.next().await {
+        if let cosmic::iced::runtime::Action::Output(cosmic::Action::App(Message::Shell(Msg::ToastGone(id)))) = action {
+            gone = Some(id);
+            break;
+        }
+    }
+    let id = gone.expect("the toast's time ran out");
+    assert_eq!(app.shell.toasts.live[0].id, id);
+    let _ = cosmic::Application::update(&mut app, Message::Shell(Msg::ToastGone(id)));
+    assert!(app.shell.toasts.is_empty());
+    // the real time is a few seconds
+    assert!((3..=8).contains(&super::toast::STAY.as_secs()));
+}
+
+#[test]
+fn deleting_a_block_says_so_in_a_toast_with_an_undo() {
+    let mut app = demo_app(Mode::Literate);
+    let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+    let before = t.local.clone();
+    let i = t.blocks.iter().position(|b| b.kind == super::theory::Kind::Formal).unwrap();
+    let _ = cosmic::Application::update(&mut app, Message::DeleteBlock(i));
+    let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+    assert_ne!(t.local, before, "the block is gone");
+    assert!(app.status.is_none(), "not in the status bar");
+    let live = app.shell.toasts.live.clone();
+    assert_eq!(live.iter().map(|l| (l.text.as_str(), l.undo)).collect::<Vec<_>>(), [("Block deleted", true)]);
+    // its Undo is Ctrl+Z's step: it asks the host to undo, and the toast goes
+    let _ = cosmic::Application::update(&mut app, Message::Shell(Msg::ToastUndo(live[0].id)));
+    assert!(app.shell.toasts.is_empty());
+    let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+    assert!(
+        t.queued.iter().any(|op| *op == "undo") || app.status.as_deref().is_some_and(|s| s.contains("not connected")) || t.inflight.is_some(),
+        "an undo went out (queued {:?}, status {:?})",
+        t.queued,
+        app.status
+    );
+    // other passing words are toasts too
+    let _ = cosmic::Application::update(&mut app, Message::CopyText("x".into()));
+    assert_eq!(app.shell.toasts.live.last().map(|l| (l.text.as_str(), l.undo)), Some(("Copied", false)));
+    assert!(app.status.is_none());
 }

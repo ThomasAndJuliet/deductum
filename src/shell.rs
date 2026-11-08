@@ -38,6 +38,8 @@ pub struct Shell {
     pub collapsed_dirs: std::collections::HashSet<(String, String, String)>,
     /// The Settings page's own state: search, Show changed only, the section being read
     pub page: super::settings_page::PageState,
+    /// What passed, said for a few seconds at the window's foot
+    pub toasts: super::toast::Toaster,
 }
 
 /// A project action's run (`lake build`, building a heap)
@@ -90,6 +92,10 @@ pub enum Msg {
     ToggleDocFolder(String),
     /// Go to the next cell that failed or is unfinished
     NextProblem(super::attention::Problem),
+    /// A toast's time ran out, or it was closed
+    ToastGone(cosmic::widget::ToastId),
+    /// A toast's Undo was pressed: the toast goes and the last step is undone
+    ToastUndo(cosmic::widget::ToastId),
 }
 
 impl App {
@@ -126,6 +132,11 @@ impl App {
         self.shell.settings = settings;
         // The desktop's theme is libcosmic's own default, but it too takes the household's tones
         cosmic::command::set_theme(theme.theme())
+    }
+
+    /// Say what passed, in a toast that goes by itself; with an Undo where an undo exists
+    pub fn toast(&mut self, text: impl Into<String>, undo: bool) -> Task<Message> {
+        self.shell.toasts.push(text, undo, super::toast::STAY)
     }
 
     /// Tell a machine's host what this app wants of keyword lines and searches (the models to
@@ -277,6 +288,11 @@ impl App {
                 }
             }
             Msg::OpenDocument(path) => return self.open_document(path),
+            Msg::ToastGone(id) => self.shell.toasts.gone(id),
+            Msg::ToastUndo(id) => {
+                self.shell.toasts.gone(id);
+                return self.update(Message::Undo);
+            }
             Msg::NextProblem(kind) => {
                 let Some(at) = self.workspace.as_ref().and_then(|w| w.theory.as_ref()).and_then(|t| super::attention::next(t, kind)) else { return Task::none() };
                 return self.update(Message::Goto(at));
@@ -643,8 +659,90 @@ impl Conn {
 /// The status bar's height: fixed, so that the page above never moves for it
 pub const STATUS_BAR_HEIGHT: f32 = 28.0;
 
+/// The name of the place Back goes to: the cell's name (`lemma add_zero` is "add_zero"), else the
+/// file's
+pub fn back_name(app: &App) -> Option<String> {
+    let (path, at) = app.back.last()?;
+    let t = app.workspace.as_ref()?.theory.as_ref()?;
+    if *path == t.path {
+        let local = App::local_offset_pub(t, *at);
+        let block = t.blocks.iter().find(|b| b.start <= local && local < b.end.max(b.start + 1))?;
+        let first: String = t.local.chars().skip(block.start).take(block.end.saturating_sub(block.start).min(200)).collect();
+        let name = first.lines().next().unwrap_or("").split_whitespace().nth(1).map(|w| w.trim_matches(|c| c == ':' || c == '"' || c == '[').to_string());
+        if let Some(n) = name.filter(|n| !n.is_empty() && block.kind == super::theory::Kind::Formal) {
+            return Some(n);
+        }
+    }
+    Some(file_name(path).to_string())
+}
+
+/// A link in the status bar: a caption pressed like a link, in a colour of its own
+fn bar_link<'a>(label: String, tip: String, red: bool, message: Message) -> Element<'a, Message> {
+    let tone: fn(&cosmic::Theme) -> iced::widget::text::Style = if red {
+        |t| iced::widget::text::Style { color: Some(super::sidebar::muted_red(t)), ..Default::default() }
+    } else {
+        |t| iced::widget::text::Style { color: Some(super::sidebar::muted_amber(t)), ..Default::default() }
+    };
+    widget::tooltip(
+        button::custom(widget::text::caption(label).wrapping(iced::widget::text::Wrapping::None).class(theme::Text::Custom(tone)))
+            .padding(0)
+            .class(theme::Button::Link)
+            .on_press(message),
+        widget::text(tip),
+        widget::tooltip::Position::Top,
+    )
+    .into()
+}
+
+/// What the status bar's left says: Back after a jump, then the cells that fail and those left
+/// unfinished, each a link to the next of its kind
+pub fn status_links(app: &App) -> Vec<Element<'_, Message>> {
+    let mut out: Vec<Element<'_, Message>> = Vec::new();
+    let Some(t) = app.workspace.as_ref().and_then(|w| w.theory.as_ref()).filter(|_| !app.shell.settings_open) else { return out };
+    if let Some(name) = back_name(app) {
+        out.push(
+            widget::tooltip(
+                button::custom(
+                    widget::row::with_capacity(2)
+                        .spacing(4)
+                        .align_y(Alignment::Center)
+                        .push(widget::icon::from_name("go-previous-symbolic").size(12).icon())
+                        .push(widget::text::caption(format!("Back to {name}")).wrapping(iced::widget::text::Wrapping::None)),
+                )
+                .padding(0)
+                .class(theme::Button::Link)
+                .on_press(Message::Back),
+                widget::text("Back to where Ctrl+click came from (Alt+Left)"),
+                widget::tooltip::Position::Top,
+            )
+            .into(),
+        );
+    }
+    let (failed, unfinished) = super::attention::counts(t);
+    let mut problems: Vec<Element<'_, Message>> = Vec::new();
+    if failed > 0 {
+        problems.push(bar_link(format!("{failed} failed"), "Go to the next failed cell (F8)".into(), true, Message::Shell(Msg::NextProblem(super::attention::Problem::Failed))));
+    }
+    if unfinished > 0 {
+        problems.push(bar_link(format!("{unfinished} unfinished"), "Go to the next unfinished cell (Shift+F8)".into(), false, Message::Shell(Msg::NextProblem(super::attention::Problem::Unfinished))));
+    }
+    let n = problems.len();
+    if n > 0 && !out.is_empty() {
+        out.push(divider(14.0));
+    }
+    for (i, p) in problems.into_iter().enumerate() {
+        if i > 0 && i < n {
+            out.push(widget::text::caption("\u{b7}").into());
+        }
+        out.push(p);
+    }
+    out
+}
+
 /// The bar at the window's foot, always there with a document open: vim's mode as a badge (with
-/// vim keys on), what editing the open block means, then the app's last word and the connection
+/// vim keys on), at the left Back and the links to what fails, at the right the app's last word
+/// (what went wrong), the connection and the key hint for what has the focus. What passed is a
+/// toast, and the prover's state is the header's chip
 pub fn status_bar(app: &App) -> Option<Element<'_, Message>> {
     let theory = app.workspace.as_ref().and_then(|w| w.theory.as_ref()).filter(|_| !app.shell.settings_open);
     // (the open session's machine, when it is not connected; connected, it goes unsaid)
@@ -653,42 +751,50 @@ pub fn status_bar(app: &App) -> Option<Element<'_, Message>> {
         return None;
     }
     let s = sp();
-    let mut fields: Vec<Element<'_, Message>> = Vec::new();
+    let mut left = widget::row::with_capacity(8).spacing(s.space_s).align_y(Alignment::Center);
     if app.vim_enabled && theory.is_some() {
-        fields.push(vim_badge(app.vim.mode));
+        left = left.push(vim_badge(app.vim.mode));
     }
+    for item in status_links(app) {
+        left = left.push(item);
+    }
+    // The key hint of what has the focus
+    let mut hints: Vec<Element<'_, Message>> = Vec::new();
     if let Some(t) = theory
         && let Some(be) = t.block_editor.as_ref().filter(|_| t.mode == Mode::Literate)
     {
-        if be.wrap.is_none()
-            && let Some(st) = t.status_in(be.start, be.end)
-        {
-            fields.push(block_status(st));
-        }
         if be.preview.is_some() {
-            fields.push(widget::text::caption("The preview follows your typing").into());
+            hints.push(widget::text::caption("The preview follows your typing").into());
         }
-        // (what the keys do for the tool at the caret, when there is one: Esc stops it, Alt+Enter
-        // takes what it found)
-        let hint = app.workspace.as_ref().and_then(super::flow::key_hint).unwrap_or_else(|| "Esc or a click outside finishes".into());
-        fields.push(widget::text::caption(hint).into());
+        let hint = app.workspace.as_ref().and_then(super::flow::key_hint).unwrap_or_else(|| "Esc or a click outside finishes editing".into());
+        hints.push(widget::text::caption(hint).into());
     } else if let Some(hint) = theory.and(app.workspace.as_ref()).and_then(super::flow::key_hint) {
-        fields.push(widget::text::caption(hint).into());
+        hints.push(widget::text::caption(hint).into());
     }
-    let mut row = fields_row(fields).push(widget::Space::new().width(Length::Fill));
+    let mut row = widget::row::with_capacity(6).spacing(s.space_s).align_y(Alignment::Center).push(left).push(widget::Space::new().width(Length::Fill));
+    let mut first = true;
     if let Some(status) = &app.status {
         row = row.push(widget::text::caption(status.clone()).wrapping(iced::widget::text::Wrapping::None));
+        first = false;
     }
     if let Some((l, conn)) = disconnected {
-        if app.status.is_some() {
+        if !first {
             row = row.push(divider(14.0));
         }
+        first = false;
         let text = format!("{} {}", l.name, conn.word());
         let mut field = widget::row::with_capacity(2).spacing(6).align_y(Alignment::Center).push(conn.dot(8.0)).push(widget::text::caption(text).wrapping(iced::widget::text::Wrapping::None));
         if let Some(why) = conn.detail() {
             field = field.push(widget::text::caption(format!("({why})")).wrapping(iced::widget::text::Wrapping::None));
         }
         row = row.push(field);
+    }
+    for h in hints {
+        if !first {
+            row = row.push(divider(14.0));
+        }
+        first = false;
+        row = row.push(h);
     }
     Some(
         widget::container(row)

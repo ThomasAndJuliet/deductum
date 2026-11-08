@@ -40,6 +40,7 @@ mod settings_page;
 mod shell;
 mod sidebar;
 mod theory;
+mod toast;
 mod tones;
 mod view;
 mod viewport;
@@ -468,6 +469,10 @@ enum Pending {
     Entity(cosmic::iced::window::Id, RefUse),
     /// A project action of this session, by name
     ProjectAction(String, String),
+    /// A save, by the document's name: said in a toast once it has happened
+    Saved(String),
+    /// An edit reverted, by what it was: said in a toast with an Undo
+    Reverted(String),
 }
 
 /// What a look-up in a reference window is for: a tooltip (this generation of the pointer's
@@ -1574,18 +1579,23 @@ impl App {
             }
             Pending::Undo => {
                 let mut task = Task::none();
+                let mut said = Task::none();
                 if let Some(ws) = &mut self.workspace
                     && let Some(t) = &mut ws.theory
                 {
                     let note = v["note"].as_str().unwrap_or("").to_string();
-                    self.status = (!note.is_empty()).then_some(note);
                     if let Some(at) = v["at"].as_u64() {
                         task = Task::done(cosmic::Action::App(Message::Goto(Self::local_offset(t, at as usize))));
                     }
+                    if !note.is_empty() {
+                        said = self.toast(note, false);
+                    }
                 }
-                return Task::batch([task, self.flush_edits()]);
+                return Task::batch([task, said, self.flush_edits()]);
             }
             Pending::ProjectAction(sid, name) => self.project_action_done(sid, name, &v),
+            Pending::Saved(name) => return self.toast(format!("Saved {name}"), false),
+            Pending::Reverted(what) => return self.toast(format!("Reverted {what}"), true),
             Pending::Plain => {
                 if let Some(files) = v.get("files")
                     && let Some(ws) = &mut self.workspace
@@ -2717,7 +2727,8 @@ impl cosmic::Application for App {
 
     fn view(&self) -> Element<'_, Self::Message> {
         view::set_vim_mode(self.vim_enabled.then_some(self.vim.mode));
-        view::view(self)
+        // (what passed, as toasts at the foot of the window)
+        self.shell.toasts.over(view::view(self))
     }
 
     fn view_window(&self, id: cosmic::iced::window::Id) -> Element<'_, Self::Message> {
@@ -3207,7 +3218,8 @@ impl cosmic::Application for App {
                 if let Some((machine, sid)) = self.workspace_ids()
                     && let Some(path) = self.workspace.as_ref().and_then(|w| w.theory.as_ref()).map(|t| t.path.clone())
                 {
-                    self.send(&machine, op, json!({"session": sid, "path": path}), Pending::Plain);
+                    let name = file_name(&path).to_string();
+                    self.send(&machine, op, json!({"session": sid, "path": path}), Pending::Saved(name));
                 }
             }
             Message::Panel(panel) => {
@@ -3407,7 +3419,10 @@ impl cosmic::Application for App {
                 if let Some((machine, sid)) = self.workspace_ids()
                     && let Some(path) = self.workspace.as_ref().and_then(|w| w.theory.as_ref()).map(|t| t.path.clone())
                 {
-                    self.send(&machine, "revert", json!({"session": sid, "path": path, "entry": entry}), Pending::Plain);
+                    let what = self.workspace.as_ref().and_then(|w| w.history.iter().find(|h| h["id"] == json!(entry)))
+                        .map(|h| format!("{}'s edit at line {}", h["author"]["label"].as_str().unwrap_or("an"), h["line"]))
+                        .unwrap_or_else(|| "the edit".into());
+                    self.send(&machine, "revert", json!({"session": sid, "path": path, "entry": entry}), Pending::Reverted(what));
                 }
             }
             Message::Follow(key) => {
@@ -3740,7 +3755,7 @@ impl cosmic::Application for App {
                 let label = tool.label.clone();
                 let (machine, sid) = (ws.machine.clone(), ws.sid.clone());
                 self.send(&machine, "prover_options", json!({"session": sid, "set": options}), Pending::Plain);
-                self.status = Some(format!("{label} settings applied: they hold for {name} typed in the text"));
+                return self.toast(format!("{label} settings applied: they hold for {name} typed in the text"), false);
             }
             Message::Modifiers(ctrl, alt) => {
                 self.ctrl = ctrl;
@@ -3839,7 +3854,7 @@ impl cosmic::Application for App {
                     if let Some(ws) = &mut self.workspace {
                         ws.fill.conversation = None;
                     }
-                    self.status = Some(format!("The next {agent} query starts a new conversation"));
+                    return self.toast(format!("The next {agent} query starts a new conversation"), false);
                 }
             }
             Message::ToggleMessage(start) => {
@@ -3850,8 +3865,7 @@ impl cosmic::Application for App {
                 }
             }
             Message::CopyText(text) => {
-                self.status = Some("Copied".into());
-                return cosmic::iced::clipboard::write(text);
+                return Task::batch([cosmic::iced::clipboard::write(text), self.toast("Copied", false)]);
             }
             Message::LineMove(target, down) => {
                 use cosmic::widget::text_editor::{Action as A, Motion as M};
@@ -3992,8 +4006,8 @@ impl cosmic::Application for App {
                 t.replace(b.start, end, "", &*table);
                 t.break_step();
                 t.selected = Some(i.min(t.blocks.len().saturating_sub(1)));
-                self.status = Some("Block deleted (Ctrl+Z brings it back)".into());
-                return Task::batch([self.flush_edits(), view::centre_selected(), Self::unfocus_all()]);
+                let said = self.toast("Block deleted", true);
+                return Task::batch([said, self.flush_edits(), view::centre_selected(), Self::unfocus_all()]);
             }
             Message::LiterateScrolled(scope, top, height) => {
                 if let Some(t) = self.workspace.as_ref().and_then(|w| w.theory.as_ref()).filter(|t| t.page_scope == scope) { t.page_viewport.set((top, height)); }
