@@ -77,7 +77,7 @@ pub fn sidebar(app: &App) -> Element<'_, Message> {
             widget::container(icon).padding([8, 12]).center_y(Length::Fixed(32.0)).height(Length::Fixed(32.0)).into()
         };
         let tip = if enabled { label.to_string() } else { format!("{label} (open a document first)") };
-        bar = bar.push(widget::tooltip(b, widget::text(tip), widget::tooltip::Position::Bottom));
+        bar = bar.push(household_widgets::tooltip_with(b, widget::text(tip), widget::tooltip::Position::Bottom));
     }
     let bar = widget::container(bar).width(Length::Shrink).class(theme::Container::custom(|theme| iced::widget::container::Style {
         background: Some(Color::from(theme.cosmic().bg_component_color()).into()),
@@ -210,7 +210,7 @@ fn sessions(app: &App) -> Element<'_, Message> {
             }
         }
         for (folder, list) in folders {
-            col = col.push(widget::tooltip(
+            col = col.push(household_widgets::tooltip_with(
                 widget::container(
                     widget::row::with_capacity(2)
                         .spacing(6)
@@ -245,7 +245,7 @@ fn connection<'a>(link: &super::Link, memory: Option<String>) -> Element<'a, Mes
     let conn = shell::connection(link);
     let word = conn.word().to_string();
     let tip = conn.detail().map_or_else(|| word.clone(), |d| format!("{word}: {d}"));
-    widget::tooltip(
+    household_widgets::tooltip_with(
         widget::row::with_capacity(2)
             .spacing(4)
             .align_y(Alignment::Center)
@@ -321,7 +321,7 @@ fn session_row<'a>(app: &'a App, machine: &str, sid: &str, v: &'a Value, indent:
         row = row.push(badge(failing.to_string(), destructive));
         tip.push(format!("{failing} document{} failing", if failing == 1 { "" } else { "s" }));
     }
-    let row = widget::tooltip(
+    let row = household_widgets::tooltip_with(
         button::custom(row).width(Length::Fill).padding([s.space_xxs, s.space_xs]).class(nav_style(current)).on_press(Message::OpenSession(machine.to_string(), sid.to_string())),
         widget::text(tip.join("\n")),
         widget::tooltip::Position::Bottom,
@@ -572,7 +572,7 @@ fn documents<'a>(app: &'a App, ws: &'a Workspace) -> Element<'a, Message> {
         .align_y(Alignment::Center)
         .push(tinted_icon(if collapsed { "go-next-symbolic" } else { "go-down-symbolic" }, 14, shell::muted))
         .push(widget::text::caption(format!("{} document{}", all.len(), if all.len() == 1 { "" } else { "s" })));
-    col = col.push(widget::tooltip(
+    col = col.push(household_widgets::tooltip_with(
         button::custom(header).width(Length::Fill).padding([2, 6]).class(nav_style(false)).on_press(Message::Shell(shell::Msg::ToggleDocuments)),
         widget::text(if collapsed { "Show all the documents" } else { "Collapse the list (the open document stays)" }),
         widget::tooltip::Position::Bottom,
@@ -591,7 +591,7 @@ fn documents<'a>(app: &'a App, ws: &'a Workspace) -> Element<'a, Message> {
         let rel = p.strip_prefix(folder).unwrap_or(p).trim_start_matches('/');
         let is_open = open == Some(p.as_str());
         let row = widget::row::with_capacity(2).spacing(6).align_y(Alignment::Start).push(file_icon(is_open)).push(name_text(rel, 13.0, is_open));
-        col = col.push(widget::tooltip(
+        col = col.push(household_widgets::tooltip_with(
             button::custom(row).width(Length::Fill).padding([2, 6]).class(nav_style(is_open)).on_press(Message::OpenTheory(p.clone())),
             widget::text(format!("{rel}\n{machine}\nA project file: opens in the source view")),
             widget::tooltip::Position::Right,
@@ -667,7 +667,7 @@ fn documents<'a>(app: &'a App, ws: &'a Workspace) -> Element<'a, Message> {
                     .center_y(Length::Fixed(18.0)),
                 )
                 .push(name_text(&format!("{name}{dirty}"), 13.0, is_open));
-            col = col.push(widget::tooltip(
+            col = col.push(household_widgets::tooltip_with(
                 button::custom(row)
                     .width(Length::Fill)
                     .padding(Padding { left: 6.0 + indent, right: 6.0, top: 2.0, bottom: 2.0 })
@@ -742,7 +742,7 @@ fn project<'a>(app: &'a App, ws: &'a Workspace) -> Element<'a, Message> {
         for p in files {
             let is_open = open == Some(p.as_str());
             let row = widget::row::with_capacity(2).spacing(6).align_y(Alignment::Start).push(file_icon(is_open)).push(name_text(file_name(&p), 13.0, is_open));
-            col = col.push(widget::tooltip(
+            col = col.push(household_widgets::tooltip_with(
                 button::custom(row).width(Length::Fill).padding([3, 6]).class(nav_style(is_open)).on_press(Message::OpenTheory(p.clone())),
                 widget::text(format!("{}\n{}", file_name(&p), machine_name(app, &ws.machine))),
                 widget::tooltip::Position::Right,

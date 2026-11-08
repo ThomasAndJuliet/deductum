@@ -589,16 +589,12 @@ fn settings_page(app: &App) -> Element<'_, Message> {
             .width(Length::Fill),
         )
         .push(widget::text::body("Show changed only"))
-        .push(muted_switch(page.changed_only, |on| page_msg(PageMsg::ChangedOnly(on))));
+        .push(household_widgets::switch(page.changed_only, |on| page_msg(PageMsg::ChangedOnly(on))));
     let body = widget::responsive(move |size| {
         page.width.store(size.width.to_bits(), Ordering::Relaxed);
         body(app, size.width)
     });
     widget::column::with_capacity(2).push(head).push(body).height(Length::Fill).into()
-}
-
-fn muted_switch<'a>(on: bool, f: impl Fn(bool) -> Message + 'static) -> Element<'a, Message> {
-    widget::toggler(on).class(theme::Toggler::accent(|t| tones::muted(t).0)).on_toggle(f).into()
 }
 
 fn body(app: &App, width: f32) -> Element<'_, Message> {
@@ -791,7 +787,7 @@ fn control<'a>(app: &'a App, c: Control) -> Element<'a, Message> {
     match c {
         Control::Seg { options, selected } => seg(options, selected),
         Control::Drop { options, selected, msgs } => widget::dropdown(options, selected, move |i| set(msgs[i].clone())).into(),
-        Control::Switch { on, set: make } => muted_switch(on, move |v| set(make(v))),
+        Control::Switch { on, set: make } => household_widgets::switch(on, move |v| set(make(v))),
         Control::Spin { text, value, step, min, max, set: make } => widget::spin_button(text, value, step, min, max, move |v| set(make(v))).into(),
         Control::Text { placeholder, value, set: make } => widget::text_input(placeholder, value).on_input(move |v| set(make(v))).width(Length::Fixed(200.0)).into(),
         Control::Open { label, msg } => widget::button::standard(label).on_press(set(msg)).into(),

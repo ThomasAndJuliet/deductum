@@ -175,7 +175,7 @@ fn part_style() -> theme::Button {
 }
 
 fn part<'a>(content: Element<'a, Message>, tip: String, press: Option<Message>) -> Element<'a, Message> {
-    widget::tooltip(
+    household_widgets::tooltip_with(
         button::custom(content).padding([3, 8]).class(part_style()).on_press_maybe(press),
         widget::text(tip),
         widget::tooltip::Position::Bottom,
@@ -208,7 +208,7 @@ pub fn chip(app: &App) -> Element<'_, Message> {
     let s = sp();
     let state = state_of(app);
     let Some(ws) = &app.workspace else {
-        return widget::tooltip(
+        return household_widgets::tooltip_with(
             pill(16.0, widget::text::body(state.label()).class(super::view::muted()).into()),
             widget::text(state.tip()),
             widget::tooltip::Position::Bottom,

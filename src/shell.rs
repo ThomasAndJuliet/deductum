@@ -372,7 +372,7 @@ pub fn sp() -> cosmic::cosmic_theme::Spacing {
 /// An icon button with a tooltip under it
 pub fn icon_button<'a>(name: &'static str, tip: impl Into<String>, message: Option<Message>) -> Element<'a, Message> {
     let b = button::icon(icon_handle(name)).on_press_maybe(message);
-    widget::tooltip(b, widget::text(tip.into()), widget::tooltip::Position::Bottom).into()
+    household_widgets::tooltip_with(b, widget::text(tip.into()), widget::tooltip::Position::Bottom).into()
 }
 
 /// The sidebars' toggles have no icon in COSMIC's theme (nor in what it inherits, as installed):
@@ -488,7 +488,7 @@ pub fn dimmed(theme: &cosmic::Theme) -> Color {
 
 /// A backend's mark: a small rounded square with its initial, in its colour
 pub fn backend_mark<'a>(backend: &str) -> Element<'a, Message> {
-    widget::tooltip(backend_glyph(backend), widget::text(backend_label(backend)), widget::tooltip::Position::Bottom).into()
+    household_widgets::tooltip_with(backend_glyph(backend), widget::text(backend_label(backend)), widget::tooltip::Position::Bottom).into()
 }
 
 /// A backend's mark without its tooltip
@@ -552,7 +552,7 @@ pub fn views_bar(app: &App) -> Element<'_, Message> {
                 .padding([space.space_xxs, space.space_xs])
                 .on_press_maybe(t.map(|_| Message::SetMode(mode)));
             let tip = if t.is_some() { tip.to_string() } else { "Open a document to choose how it is shown".to_string() };
-            widget::tooltip(b, widget::text(tip), widget::tooltip::Position::Bottom).into()
+            household_widgets::tooltip_with(b, widget::text(tip), widget::tooltip::Position::Bottom).into()
         })
         .collect();
     widget::container(widget::Row::with_children(row).align_y(Alignment::Center))
@@ -579,7 +579,7 @@ pub fn open_in(app: &App) -> Element<'static, Message> {
         }
     };
     let rows = vec![row("Open in Files", link::Opener::Files), row("Open in Zed", link::Opener::Zed), row("Open a terminal here", link::Opener::Terminal)];
-    let root = widget::tooltip(
+    let root = household_widgets::tooltip_with(
         button::custom(
             widget::row::with_capacity(2)
                 .spacing(2)
@@ -598,7 +598,7 @@ pub fn open_in(app: &App) -> Element<'static, Message> {
 /// The goal beside the text when there is room (off: under the construct, the page centred)
 pub fn goal_beside_button<'a>() -> Element<'a, Message> {
     let beside = super::view::goal_beside_on();
-    widget::tooltip(
+    household_widgets::tooltip_with(
         // (a toggle: on, filled with the muted accent, household rule 6)
         widget::button::icon(icon_handle(if beside { "view-dual-symbolic" } else { "view-paged-symbolic" }))
             .class(if beside { super::tones::muted_button(theme::Button::Icon) } else { theme::Button::Icon })
@@ -769,7 +769,7 @@ fn bar_link<'a>(label: String, tip: String, red: bool, message: Message) -> Elem
     } else {
         |t| iced::widget::text::Style { color: Some(super::sidebar::muted_amber(t)), ..Default::default() }
     };
-    widget::tooltip(
+    household_widgets::tooltip_with(
         button::custom(widget::text::caption(label).wrapping(iced::widget::text::Wrapping::None).class(theme::Text::Custom(tone)))
             .padding(0)
             .class(theme::Button::Link)
@@ -787,7 +787,7 @@ pub fn status_links(app: &App) -> Vec<Element<'_, Message>> {
     let Some(t) = app.workspace.as_ref().and_then(|w| w.theory.as_ref()).filter(|_| !app.shell.settings_open) else { return out };
     if let Some(name) = back_name(app) {
         out.push(
-            widget::tooltip(
+            household_widgets::tooltip_with(
                 button::custom(
                     widget::row::with_capacity(2)
                         .spacing(4)

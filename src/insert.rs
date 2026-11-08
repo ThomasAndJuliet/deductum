@@ -240,7 +240,7 @@ pub fn chip<'a>(item: Item, compact: bool) -> Element<'a, Message> {
     };
     // (its name, when only its character shows, in a tooltip)
     if glyph && !item.detail.is_empty() {
-        widget::tooltip(button, widget::text(item.detail).font(cosmic::font::mono()).size(13.0), widget::tooltip::Position::Bottom).into()
+        household_widgets::tooltip_with(button, widget::text(item.detail).font(cosmic::font::mono()).size(13.0), widget::tooltip::Position::Bottom).into()
     } else {
         button.into()
     }
@@ -357,9 +357,11 @@ pub fn insert_bar<'a>(ws: &'a Workspace, table: &dyn Symbols) -> Option<Element<
     } else {
         super::gap::OneRow::new(chips, 3.0).into()
     };
-    let more = widget::button::icon(widget::icon::from_name(if ws.insert_open { "pan-up-symbolic" } else { "pan-down-symbolic" }))
-        .tooltip(if ws.insert_open { "Fewer (just this row)" } else { "More: everything that can be inserted here" })
-        .on_press(Message::InsertBar(!ws.insert_open));
+    let more = household_widgets::tooltip_with(
+        widget::button::icon(widget::icon::from_name(if ws.insert_open { "pan-up-symbolic" } else { "pan-down-symbolic" })).on_press(Message::InsertBar(!ws.insert_open)),
+        widget::text(if ws.insert_open { "Fewer (just this row)" } else { "More: everything that can be inserted here" }),
+        widget::tooltip::Position::Bottom,
+    );
     let row = widget::row::with_capacity(3).spacing(sp.space_xs).align_y(Alignment::Center).push(search).push(widget::container(row_chips).width(Length::Fill).clip(true)).push(more);
     let mut col = widget::column::with_capacity(2).spacing(sp.space_xxs).push(row);
     if ws.insert_open {

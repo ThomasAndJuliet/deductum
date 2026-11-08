@@ -347,7 +347,7 @@ pub fn split(app: &App) -> Element<'_, Message> {
         .padding([space.space_xxs, space.space_xs])
         .on_press_maybe(ctx.as_ref().map(|_| Message::Shell(Msg::AgentOpen(!app.shell.agent.open))));
     let tip = if ctx.is_some() { "New agent session: choose what it may edit" } else { "Open a session to start an agent in its folder" };
-    let icon = widget::tooltip(icon, widget::text(tip), widget::tooltip::Position::Bottom);
+    let icon = household_widgets::tooltip_with(icon, widget::text(tip), widget::tooltip::Position::Bottom);
 
     let folder = ctx.is_some();
     let row = |label: &str, opener: link::Opener| {
@@ -366,7 +366,7 @@ pub fn split(app: &App) -> Element<'_, Message> {
     let arrow = button::custom(widget::icon(icon_handle("pan-down-symbolic")).size(12))
         .class(super::tones::toggled_rounded(false, [0.0, tr, br, 0.0]))
         .padding([space.space_xxs, space.space_xxs]);
-    let arrow = widget::tooltip(arrow, widget::text("Open in\u{2026}: the agent session, Files, Zed or a terminal"), widget::tooltip::Position::Bottom);
+    let arrow = household_widgets::tooltip_with(arrow, widget::text("Open in\u{2026}: the agent session, Files, Zed or a terminal"), widget::tooltip::Position::Bottom);
     let menu = super::menubar::dropdown(arrow.into(), rows);
 
     let joined = widget::container(widget::row::with_capacity(2).align_y(Alignment::Center).push(icon).push(menu))
