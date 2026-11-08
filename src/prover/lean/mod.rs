@@ -584,6 +584,10 @@ impl Profile for Lean {
         summarise(text)
     }
 
+    fn message_quote(&self) -> char {
+        '\''
+    }
+
     fn present_goal<'a>(&self, sg: &'a Subgoal) -> GoalPresentation<'a> {
         // As the VS Code infoview shows a goal: `case tag`, the hypotheses, `⊢ target`
         let heading = sg.case.as_ref().and_then(|c| c["raw"].as_str().or_else(|| c["text"].as_str())).map(|t| format!("case {}", t.trim())).filter(|h| h.len() > 5);

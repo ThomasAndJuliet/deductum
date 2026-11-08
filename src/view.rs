@@ -1469,7 +1469,8 @@ pub fn z(px: f32) -> f32 {
 /// disclosure and the summary open the prover's whole message in place, in the text colour, wrapped
 /// at the card's `width`. No plate and no bar of its own, as the card's border and strip are the
 /// cell's
-fn message_strip<'a>(t: &Theory, kind: &str, start: usize, text: &str, table: &dyn super::codec::Symbols, width: f32) -> Element<'a, Message> {
+pub(crate) fn message_strip<'a>(t: &Theory, m: &super::editor::ProverMessage, table: &dyn super::codec::Symbols, width: f32) -> Element<'a, Message> {
+    let (kind, start, text) = (m.kind.as_str(), m.start, m.text.as_str());
     let error = kind == "error";
     let line = super::ot::line_col(&t.local, start).0;
     let tone = move |theme: &cosmic::Theme| muted_status_color(if error { error_color(theme) } else { sorry_color(theme) }, theme);
@@ -1489,7 +1490,7 @@ fn message_strip<'a>(t: &Theory, kind: &str, start: usize, text: &str, table: &d
     }
     head = head
         .push(tinted(if error { "dialog-error-symbolic" } else { "dialog-warning-symbolic" }))
-        .push(widget::container(symbol_text_wrapped(&first, table, z(12.0), iced::widget::text::Wrapping::None)).width(Length::Fill).clip(true));
+        .push(widget::container(summary_text(t, m, &first, table)).width(Length::Fill).clip(true));
     let head: Element<'a, Message> = if expandable {
         // (the whole row but its copy icon and line is the disclosure)
         let button = widget::button::custom(head)
@@ -1545,6 +1546,119 @@ fn message_strip<'a>(t: &Theory, kind: &str, start: usize, text: &str, table: &d
     col.into()
 }
 
+/// The class of Isabelle's markup that marks a name or term (a variable, a fact, a type variable)
+fn term_class(sem: super::editor::Sem) -> bool {
+    use super::editor::Sem::*;
+    matches!(sem, Free | Bound | Skolem | Var | TFree | TVar | Dynamic | ClassParameter | Inner)
+}
+
+/// The character ranges of `line` (a message's first line as shown) that the message's own markup
+/// marks as names or terms. The spans count code points of the prover's encoding (`raw`); `line`
+/// is a prefix of the shown message less the characters the summary cut (`⌂`, Isabelle's
+/// position mark), which are skipped when matching
+pub(crate) fn markup_terms(m: &super::editor::ProverMessage, line: &str, table: &dyn super::codec::Symbols) -> Vec<std::ops::Range<usize>> {
+    if m.raw.is_empty() {
+        return Vec::new();
+    }
+    let d = table.decode(m.raw.trim_end());
+    let n = d.src_of.len().saturating_sub(1);
+    let mut marked = vec![false; n];
+    for &(s, e, _) in m.spans.iter().filter(|(_, _, sem)| term_class(*sem)) {
+        for c in marked.iter_mut().take(d.to_decoded(e).min(n)).skip(d.to_decoded(s)) {
+            *c = true;
+        }
+    }
+    let shown: Vec<char> = d.text.chars().collect();
+    let mut at = 0;
+    let mut out: Vec<std::ops::Range<usize>> = Vec::new();
+    for (i, c) in line.chars().enumerate() {
+        while at < shown.len() && shown[at] != c {
+            at += 1;
+        }
+        if at >= shown.len() {
+            break;
+        }
+        if marked[at] {
+            match out.last_mut() {
+                Some(r) if r.end == i => r.end = i + 1,
+                _ => out.push(i..i + 1),
+            }
+        }
+        at += 1;
+    }
+    out
+}
+
+/// The character ranges between a pair of `quote` marks (not the marks): a name or term as the
+/// prover writes it. A Lean `'` counts as a mark only at a word's edge, as in `h'` it is part of a name
+pub(crate) fn quoted_terms(line: &str, quote: char) -> Vec<std::ops::Range<usize>> {
+    let chars: Vec<char> = line.chars().collect();
+    let mut out = Vec::new();
+    let mut open: Option<usize> = None;
+    for (i, &c) in chars.iter().enumerate() {
+        if c != quote {
+            continue;
+        }
+        let word = |j: Option<&char>| j.is_some_and(|c| c.is_alphanumeric());
+        let mark = quote == '"' || match open {
+            None => !word(i.checked_sub(1).and_then(|j| chars.get(j))),
+            Some(_) => !word(chars.get(i + 1)) && chars.get(i + 1) != Some(&'\''),
+        };
+        if !mark {
+            continue;
+        }
+        match open.take() {
+            None => open = Some(i + 1),
+            Some(s) => out.push(s..i),
+        }
+    }
+    out
+}
+
+/// The runs of a one-line summary, each with whether it is a name or term: the words and the
+/// terms apart, a quote mark beside a term dropped
+pub(crate) fn summary_runs(line: &str, terms: &[std::ops::Range<usize>], quote: char) -> Vec<(String, bool)> {
+    let chars: Vec<char> = line.chars().collect();
+    let mut term = vec![false; chars.len()];
+    let mut drop = vec![false; chars.len()];
+    for r in terms {
+        for i in r.clone() {
+            term[i] = true;
+        }
+        for i in [r.start.checked_sub(1), Some(r.end)].into_iter().flatten() {
+            if chars.get(i).is_some_and(|c| *c == quote || *c == '"') {
+                drop[i] = true;
+            }
+        }
+    }
+    let mut runs: Vec<(String, bool)> = Vec::new();
+    for (i, c) in chars.iter().enumerate() {
+        if drop[i] {
+            continue;
+        }
+        match runs.last_mut() {
+            Some((t, k)) if *k == term[i] => t.push(*c),
+            _ => runs.push((c.to_string(), term[i])),
+        }
+    }
+    runs
+}
+
+/// A collapsed error's one line: its words in the interface font, its names and terms in the code
+/// font (from the message's own markup where it carries any, else from its quotes), no quote marks
+fn summary_text<'a>(t: &Theory, m: &super::editor::ProverMessage, first: &str, table: &dyn super::codec::Symbols) -> Element<'a, Message> {
+    let line = table.decode(first).text;
+    let mut terms = markup_terms(m, &line, table);
+    if terms.is_empty() {
+        terms = quoted_terms(&line, t.profile.message_quote());
+    }
+    let spans: Vec<iced::widget::text::Span<'a, (), cosmic::iced::Font>> = summary_runs(&line, &terms, t.profile.message_quote())
+        .into_iter()
+        .map(|(text, term)| iced::widget::span(text).font(if term { cosmic::font::mono() } else { cosmic::font::default() }))
+        .collect();
+    iced::widget::rich_text(spans).size(z(12.0)).wrapping(iced::widget::text::Wrapping::None).into()
+}
+
 /// A button with no box, its label and icons in `tone`, whatever its state
 fn plain_button(tone: Color) -> widget::button::Style {
     widget::button::Style { background: None, text_color: Some(tone), icon_color: Some(tone), ..Default::default() }
@@ -1584,7 +1698,7 @@ fn edit_messages<'a>(t: &Theory, be: &super::editor::BlockEditor, table: &dyn su
     }
     let mut strips = widget::column::with_capacity(msgs.len()).spacing(2);
     for m in msgs.into_iter().take(6) {
-        strips = strips.push(message_strip(t, &m.kind, m.start, &m.text, table, width));
+        strips = strips.push(message_strip(t, &m, table, width));
     }
     Some(widget::container(strips).width(Length::Fixed(width)).into())
 }
@@ -1606,7 +1720,7 @@ fn messages_view<'a>(t: &Theory, block: &Block, table: &dyn super::codec::Symbol
     }
     let mut col = widget::column::with_capacity(msgs.len()).spacing(2);
     for m in msgs.into_iter().take(6) {
-        col = col.push(message_strip(t, &m.kind, m.start, &m.text, table, width));
+        col = col.push(message_strip(t, &m, table, width));
     }
     // As wide as the code it is about, under it, inside its card
     Some(widget::container(col).width(Length::Fixed(width)).into())

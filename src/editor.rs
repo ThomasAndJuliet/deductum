@@ -25,12 +25,17 @@ use super::prover::isabelle::symbols::Table;
 use super::theory::{self, Block, Command, Status};
 use prose_render::markdown::{self, Affinity, Doc, SourceMap};
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct ProverMessage {
     pub start: usize,
     pub end: usize,
     pub kind: String,
     pub text: String,
+    /// The message in the prover's own encoding, which its markup `spans` count code points of
+    /// (empty when the prover sent none)
+    pub raw: String,
+    /// The prover's markup colours over `raw`: (start, end, class)
+    pub spans: Vec<(usize, usize, Sem)>,
 }
 
 /// What the prover last said about the theory, in confirmed-text offsets
@@ -70,6 +75,13 @@ impl Prover {
                             end: m["end"].as_u64()? as usize,
                             kind: m["kind"].as_str()?.to_string(),
                             text: m["text"].as_str().unwrap_or("").to_string(),
+                            raw: m["raw"].as_str().unwrap_or("").to_string(),
+                            spans: m["spans"]
+                                .as_array()
+                                .into_iter()
+                                .flatten()
+                                .filter_map(|c| Some((c[0].as_u64()? as usize, c[1].as_u64()? as usize, Sem::parse(c[2].as_str()?)?)))
+                                .collect(),
                         })
                     })
                     .collect()
