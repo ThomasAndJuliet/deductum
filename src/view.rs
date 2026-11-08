@@ -202,12 +202,12 @@ fn prose_size() -> f32 { z(super::settings::display().text_size) }
 
 pub fn typography(theme: &cosmic::Theme) -> Typography {
     let cosmic = theme.cosmic();
-    // Headings, bold text, code and captions in the darkest tone; the body in the household's tone
-    // for its size (darker from 18 px, on a light theme)
+    // Headings, bold text, code, captions and the body in the darkest tone (the body by Tom's
+    // exception to rule 25d, in tones::body_text)
     let strong: Color = cosmic.on_bg_color().into();
     let dark = cosmic.is_dark;
     let display = super::settings::display();
-    let text = super::tones::body_text(theme, display.text_size);
+    let text = super::tones::body_text(theme);
     let link: Color = cosmic.accent_text_color().into();
     Typography {
         display_start: false,
@@ -1744,7 +1744,7 @@ pub(crate) fn message_strip<'a>(t: &Theory, m: &super::editor::ProverMessage, ta
             widget::container(symbol_text_wrapped(&wrap_message(&full, columns), table, z(12.0), iced::widget::text::Wrapping::None))
                 .padding(Padding { left: indent, right: code_padding().right, top: 0.0, bottom: z(4.0) })
                 .width(Length::Fill)
-                .class(theme::Container::custom(|theme| iced::widget::container::Style { text_color: Some(super::tones::body_text(theme, 12.0)), ..Default::default() })),
+                .class(theme::Container::custom(|theme| iced::widget::container::Style { text_color: Some(super::tones::body_text(theme)), ..Default::default() })),
         );
     }
     col.into()

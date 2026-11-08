@@ -95,15 +95,18 @@ fn with_container_text(theme: cosmic::cosmic_theme::Theme, on: cosmic::cosmic_th
     serde_json::from_value(record).unwrap_or(theme)
 }
 
-/// Body text read in paragraphs (the Literate view's prose) at `size_px`: on a light theme darkest
-/// below 18 px and dark (#525252) from 18 px, where the larger letters carry the contrast
-/// (`household_tones::text_role`); otherwise the theme's text
-pub fn body_text(theme: &cosmic::Theme, size_px: f32) -> Color {
+/// Body text read in paragraphs (the Literate view's prose): on a light theme the darkest tone at
+/// every size, the same as the terms inline in it; otherwise the theme's text.
+///
+/// Tom chose this on 8 Nov (mockups/t37, option c) as an exception to household rule 25d, which
+/// gives body text of 18 px or more the dark tone (#525252; `household_tones::roles::text_role`):
+/// Deductum's 20 px prose would read lighter than the terms set inside it
+pub fn body_text(theme: &cosmic::Theme) -> Color {
     let c = theme.cosmic();
     if !household_light(c) {
         return c.on_bg_color().into();
     }
-    household_tones::roles::text_role(size_px, true).tone(Mode::Light).map_or_else(|| c.on_bg_color().into(), color)
+    Role::Darkest.tone(Mode::Light).map_or_else(|| c.on_bg_color().into(), color)
 }
 
 /// Secondary text and the icons that go with it (an imports line, a hint, a caption, a detail
@@ -402,16 +405,15 @@ mod tests {
         }
     }
 
-    /// Prose is darkest below 18 px and dark (#525252) from 18 px on a light theme; captions and
-    /// secondary text are darkest, not a translucent grey
+    /// Prose is darkest on a light theme, at 20 px too (Tom's exception to household rule 25d);
+    /// captions and secondary text are darkest, not a translucent grey
     #[test]
     fn body_and_secondary_text_take_the_household_tones() {
         let light = household(cosmic::Theme::light());
-        assert_eq!(hex(body_text(&light, 17.0)), "#222222");
-        assert_eq!(hex(body_text(&light, 20.0)), "#525252");
+        assert_eq!(hex(body_text(&light)), "#222222");
         assert_eq!(secondary_text(&light, 0.65), Color::from(light.cosmic().on_bg_color()));
         let dark = cosmic::Theme::dark();
-        assert_eq!(body_text(&dark, 20.0), Color::from(dark.cosmic().on_bg_color()));
+        assert_eq!(body_text(&dark), Color::from(dark.cosmic().on_bg_color()));
         assert_eq!(secondary_text(&dark, 0.65).a, 0.65);
     }
 }
