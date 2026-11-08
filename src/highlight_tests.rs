@@ -31,7 +31,7 @@
 //!   control and the chosen side-panel tab use a muted version of the accent,
 //!   so a row of them doesn't catch the eye the way a Primary button does;
 //!   enabled text on it keeps at least 4.5:1." The side-panel tabs
-//!   (`panel_tabs`), the sidebar's section tabs (`segment_style`) and the
+//!   (`panel_tabs`), the sidebar's section tabs (`sidebar::tab_style`) and the
 //!   Goals/Text switch are chosen parts of a row; today each is the solid
 //!   accent (`Suggested`, or `Color::from(c.accent_color())`).
 //!   -> `the_chosen_*`

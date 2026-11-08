@@ -279,8 +279,8 @@ fn the_sidebar_with_isabelle_and_lean_sessions() {
     }
     app.left_width = 300.0;
     draw_in(true, || super::sidebar::sidebar(&app), "shell-sidebar-sessions-light", Size::new(300.0, 760.0));
-    // The tabs: equal parts of the width, each a section
-    let tabs: Vec<Message> = [20.0, 75.0, 130.0, 185.0, 240.0, 290.0].iter().flat_map(|x| clicks(super::sidebar::sidebar(&app), Point::new(*x, 24.0), Size::new(300.0, 760.0))).collect();
+    // The tabs: parts the size of their icons, each a section (the last click is past the bar)
+    let tabs: Vec<Message> = [30.0, 70.0, 110.0, 150.0, 190.0, 290.0].iter().flat_map(|x| clicks(super::sidebar::sidebar(&app), Point::new(*x, 24.0), Size::new(300.0, 760.0))).collect();
     let modes: Vec<LeftMode> = tabs.iter().filter_map(|m| if let Message::LeftMode(l) = m { Some(*l) } else { None }).collect();
     assert_eq!(modes.first(), Some(&LeftMode::Sessions), "{tabs:?}");
     assert!(modes.contains(&LeftMode::Problems) && modes.contains(&LeftMode::Outline), "{modes:?}");
@@ -516,4 +516,205 @@ fn a_project_s_documents_collapse_all_at_once_or_by_folder() {
     draw_in(true, || super::sidebar::sidebar(&app), "shell-sidebar-documents-collapsed-light", Size::new(300.0, 760.0));
     let _ = cosmic::Application::update(&mut app, Message::Shell(Msg::ToggleDocuments));
     assert!(!app.shell.collapsed.contains(&key));
+}
+
+// ----- the household sidebar: tabs, rows, marks
+
+use cosmic::iced::Color;
+
+fn theme_of(light: bool) -> cosmic::Theme {
+    if light { cosmic::Theme::light() } else { cosmic::Theme::dark() }
+}
+
+fn px(frame: &[u8], width: u32, x: u32, y: u32) -> [u8; 3] {
+    let i = ((y * width + x) * 4) as usize;
+    [frame[i], frame[i + 1], frame[i + 2]]
+}
+
+/// How many pixels of a frame are `c`, to `tol` in each channel
+fn count_of(frame: &[u8], c: Color, tol: u8) -> usize {
+    let [r, g, b, _] = c.into_rgba8();
+    frame.chunks(4).filter(|p| [r, g, b].iter().zip(&p[..3]).all(|(a, b)| a.abs_diff(*b) <= tol)).count()
+}
+
+/// The rows of a frame that differ from its top-left pixel, and the bands of rows that have ink
+fn ink(frame: &[u8], width: u32) -> (Vec<Vec<bool>>, Vec<(u32, u32)>) {
+    let bg = px(frame, width, 0, 0);
+    let height = frame.len() as u32 / 4 / width;
+    let rows: Vec<Vec<bool>> = (0..height).map(|y| (0..width).map(|x| px(frame, width, x, y).iter().zip(bg).any(|(a, b)| a.abs_diff(b) > 40)).collect()).collect();
+    let mut bands = Vec::new();
+    let mut start = None;
+    for (y, row) in rows.iter().enumerate() {
+        match (row.iter().any(|b| *b), start) {
+            (true, None) => start = Some(y as u32),
+            (false, Some(s)) => {
+                bands.push((s, y as u32));
+                start = None;
+            }
+            _ => {}
+        }
+    }
+    // (an underscore sits apart from the letters above it: one line, not two)
+    let mut lines: Vec<(u32, u32)> = Vec::new();
+    for (from, to) in bands {
+        match lines.last_mut() {
+            Some(last) if from - last.1 <= 3 => last.1 = to,
+            _ => lines.push((from, to)),
+        }
+    }
+    (rows, lines)
+}
+
+/// The ink of the rows `from..to`, cropped to its own bounding box
+fn cropped(rows: &[Vec<bool>], from: u32, to: u32) -> Vec<Vec<bool>> {
+    let part: Vec<&Vec<bool>> = rows[from as usize..to as usize].iter().collect();
+    let (x0, x1) = (0..part[0].len()).fold((usize::MAX, 0), |(a, b), x| if part.iter().any(|r| r[x]) { (a.min(x), b.max(x)) } else { (a, b) });
+    part.iter().map(|r| r[x0..=x1].to_vec()).collect()
+}
+
+/// Whether two bitmaps of ink are the same text: the same size, and all but a few edge pixels the
+/// same (a line is placed at a fraction of a pixel, so its edges are not always drawn alike)
+fn same_ink(a: &[Vec<bool>], b: &[Vec<bool>]) -> bool {
+    a.len() == b.len()
+        && a[0].len() == b[0].len()
+        && a.iter().flatten().zip(b.iter().flatten()).filter(|(x, y)| x != y).count() * 25 <= a.len() * a[0].len()
+}
+
+/// A name drawn as a row's name is, in a box of the given width
+fn name_frame(light: bool, name: &str, width: u32, height: u32) -> Vec<u8> {
+    let tag = if width < 900 { "sidebar-name-wrapped" } else { "sidebar-name-single" };
+    let name = name.to_string();
+    draw_in(light, move || widget::container(super::sidebar::name_text(&name, 14.0, false)).width(Length::Fixed(width as f32)).into(), tag, Size::new(width as f32, height as f32))
+}
+
+/// The current session and the current file are rows with COSMIC's wash and their text in the
+/// accent, bold; nothing else is washed, and the tint the old rows used is gone
+#[test]
+fn the_current_row_has_the_wash_and_accent_bold_text() {
+    assert_eq!(super::sidebar::row_font(true), cosmic::font::bold());
+    assert_eq!(super::sidebar::row_font(false), cosmic::font::default());
+    for light in [true, false] {
+        let mut app = mixed_app();
+        app.left_width = 300.0;
+        let (w, h) = (300u32, 760u32);
+        let frame = draw_in(light, || super::sidebar::sidebar(&app), &format!("sidebar-current-{}", if light { "light" } else { "dark" }), Size::new(w as f32, h as f32));
+        let t = theme_of(light);
+        let p = px(&frame, w, 20, h - 10);
+        let page = Color::from_rgb8(p[0], p[1], p[2]);
+        let wash = super::tones::over(t.cosmic().icon_button.hover.into(), page);
+        let washed = count_of(&frame, wash, 1);
+        assert!(washed > 6_000, "{washed} washed pixels");
+        // The text in the accent, and none of the old accent tint
+        let accent: Color = t.cosmic().accent_color().into();
+        assert!(count_of(&frame, accent, 24) > 40, "accent text");
+        let old_tint = super::tones::over(Color { a: 0.16, ..accent }, page);
+        assert_eq!(count_of(&frame, old_tint, 1), 0, "the old accent tint");
+    }
+}
+
+/// A long name wraps after an underscore, on lines that are whole words, and nothing is clipped
+#[test]
+fn a_long_name_wraps_after_an_underscore_without_clipping() {
+    assert_eq!(super::sidebar::wrappable("A_b__c_"), "A_\u{200b}b__\u{200b}c_");
+    let name = "Timed_Circus_Contract_Automation_Refinement";
+    let pieces: Vec<&str> = name.split_inclusive('_').collect();
+    let width = 150u32;
+    for light in [true, false] {
+        let frame = name_frame(light, name, width, 100);
+        let (rows, bands) = ink(&frame, width);
+        assert!(bands.len() == 3, "{bands:?}: the name wraps");
+        // No ink in the last column: no glyph is cut off at the edge
+        assert!(rows.iter().all(|r| !r[width as usize - 1]), "a clipped glyph");
+        // Each line is what a single line of whole pieces looks like
+        let mut at = 0;
+        for (from, to) in &bands {
+            let line = cropped(&rows, *from, *to);
+            let found = (at + 1..=pieces.len()).find(|k| {
+                let single = name_frame(light, &pieces[at..*k].concat(), 900, 40);
+                let (single_rows, single_bands) = ink(&single, 900);
+                single_bands.len() == 1 && same_ink(&cropped(&single_rows, single_bands[0].0, single_bands[0].1), &line)
+            });
+            at = found.unwrap_or_else(|| panic!("a line that is not whole pieces, after piece {at}: {bands:?} {}x{}", line.len(), line[0].len()));
+        }
+        assert_eq!(at, pieces.len(), "every piece is on a line");
+    }
+}
+
+/// Status is a mark and words, never ▶ ⏸ ■: a filled green dot, a hollow amber ring, nothing for
+/// a stopped session, the error icon for a failed one, a spinner while it checks
+#[test]
+fn a_running_session_shows_a_dot_and_the_word_running() {
+    use super::sidebar::{Mark, caption_line, mark_of};
+    assert_eq!(mark_of("Running", false), Mark::Dot);
+    assert_eq!(mark_of("Running", true), Mark::Spinner);
+    assert_eq!(mark_of("Paused", false), Mark::Ring);
+    assert_eq!(mark_of("Stopped", false), Mark::Blank);
+    assert_eq!(mark_of("Failed", false), Mark::Error);
+    assert_eq!(caption_line("neo", "Running"), "neo \u{b7} running");
+    assert_eq!(caption_line("this computer", "Paused"), "this computer \u{b7} paused");
+    assert!(!include_str!("sidebar.rs").contains("media-playback"), "no play, pause or stop icon is a status");
+    for light in [true, false] {
+        let app = mixed_app();
+        let frame = draw_in(light, || super::sidebar::sidebar(&app), "sidebar-marks", Size::new(300.0, 760.0));
+        let t = theme_of(light);
+        let green = super::tones::muted_status(t.cosmic().success_color().into(), !light);
+        let amber = super::tones::muted_status(super::view::sorry_color(&t), !light);
+        let red = super::tones::muted_status(super::view::error_color(&t), !light);
+        // (the DSRV session is running and idle; UTP is paused; tock-Circus has failed)
+        assert!(count_of(&frame, green, 2) >= 30, "the running dot");
+        assert!(count_of(&frame, amber, 30) >= 8, "the paused ring");
+        assert!(count_of(&frame, red, 40) >= 8, "the failed icon");
+    }
+}
+
+/// The tabs are the size of their icons, at the bar's left, the chosen one in the muted accent
+#[test]
+fn the_tabs_are_no_wider_than_their_content() {
+    for light in [true, false] {
+        let app = mixed_app();
+        let w = 300u32;
+        let frame = draw_in(light, || super::sidebar::sidebar(&app), "sidebar-tabs", Size::new(w as f32, 200.0));
+        let right_bg = px(&frame, w, w - 1, 24);
+        let edge = (0..w).rev().find(|x| px(&frame, w, *x, 24) != right_bg).expect("a bar");
+        // Five tabs of a 16 px icon and 12 px either side, inside the card's padding
+        assert!(edge < 12 + 5 * 40 + 8, "the bar ends at {edge}");
+        assert!(edge > 100, "the bar ends at {edge}");
+        let fill = super::tones::muted(&theme_of(light)).0;
+        assert!(count_of(&frame, fill, 1) > 500, "the chosen tab is the muted accent");
+    }
+}
+
+/// The sidebar as the review's mock-up draws it (mockups/t25-sidebar.png), light and dark, at 300 px
+/// (frames only, with `CT_SNAPSHOTS`)
+#[test]
+fn sidebar_frames_for_the_review() {
+    if std::env::var("CT_SNAPSHOTS").is_err() {
+        return;
+    }
+    let mut app = mixed_app();
+    app.links = vec![connected("this computer", "local", Some(hello())), connected("neo", "neo", None)];
+    app.sessions.clear();
+    let mut put = |machine: &str, v: Value| {
+        app.sessions.insert((machine.to_string(), v["id"].as_str().unwrap().to_string()), v);
+    };
+    put("neo", json!({"id": "t1", "name": "Timed_Circus", "folder": "/home/twright/Isabelle/Timed_Circus", "backend": "isabelle", "lifecycle": "Running",
+        "toolchain": {"label": "Isabelle2025"}, "activity": {"running": 0, "failed": 0}, "clients": []}));
+    put("local", json!({"id": "d1", "name": "DSRVLean", "folder": "/home/me/DSRVLean", "backend": "lean", "lifecycle": "Paused",
+        "toolchain": {"label": "Lean v4.19.0"}, "activity": {}, "clients": []}));
+    put("neo", json!({"id": "t2", "name": "Sequential_Counter_Refinement", "folder": "/home/twright/Isabelle/Timed_Circus", "backend": "isabelle", "lifecycle": "Stopped",
+        "toolchain": {"label": "Isabelle2025"}, "activity": {}, "clients": []}));
+    let folder = "/home/twright/Isabelle/Timed_Circus";
+    let ws = app.workspace.as_mut().unwrap();
+    ws.machine = "neo".into();
+    ws.sid = "t1".into();
+    ws.info.as_mut().unwrap()["folder"] = json!(folder);
+    ws.info.as_mut().unwrap()["theories"] = json!([
+        {"path": format!("{folder}/Stop.thy"), "status": {"consolidated": true}},
+        {"path": format!("{folder}/Skip.thy"), "status": {"consolidated": true}},
+        {"path": format!("{folder}/Timed_Circus_Contract_Automation.thy"), "status": {"consolidated": true}}]);
+    ws.theory.as_mut().unwrap().path = format!("{folder}/Stop.thy");
+    app.left_width = 300.0;
+    for (light, name) in [(true, "light"), (false, "dark")] {
+        draw_in(light, || super::sidebar::sidebar(&app), &format!("sidebar-review-{name}"), Size::new(300.0, 640.0));
+    }
 }
