@@ -1,10 +1,15 @@
 # Deductum
 
-Deductum is a household application for shared Isabelle and Lean proof work on
-Linux and Windows, built with the COSMIC toolkit (libcosmic, iced and
-cosmic-text). Read and edit proofs as literate documents, inspect goals as you work,
-and share a live prover session with coding agents. Projects can run on your
-computer or a Linux machine reached over SSH.
+Deductum is a desktop app for interactive theorem development and proof
+assistance. Theorem provers such as [Isabelle](https://isabelle.in.tum.de/) and
+[Lean](https://lean-lang.org/) verify mathematics and software one logical step
+at a time. Their files are written to be read, yet they are usually edited like
+code. Deductum shows a file as a document, with formatted prose, typeset
+mathematics and proofs, and checks it continuously as you type. Click anything
+to edit its source; the file on disk stays the source of truth. You can share the
+same live prover session with AI agents, deciding what each one may change and
+seeing who changed what. Deductum runs on Linux and Windows, with projects on your
+own computer or on a remote Linux machine.
 
 ## Features
 
@@ -29,24 +34,16 @@ computer or a Linux machine reached over SSH.
 
 ## Install
 
-Download prebuilt Linux and Windows packages from GitHub Releases, or install
-the Linux app through the household's `home-apps` Flatpak repository. While
-this repository is private, GitHub downloads need repository access; `home-apps`
-needs household tailnet access. Both packages are built by GitHub Actions; you
-do not need Rust or a source checkout to install them.
+Download prebuilt Linux and Windows packages from GitHub Releases. Both are built
+by GitHub Actions; you do not need Rust or a source checkout to install them.
 
 ### Release downloads
 
 1. Open [Deductum's releases](https://github.com/ThomasAndJuliet/deductum/releases).
 2. Choose a version (`vMAJOR.MINOR.PATCH`). Download the Linux `.flatpak` or
-   Windows `…-windows-x86_64.zip` file from its **Assets**, plus `SHA256SUMS`
-   if you want to verify the download. Each package also has a JSON receipt
-   recording its source revision and digest.
-3. Follow the installation steps for your platform below. The release notes
-   link to the successful CI run that tested both packages.
+   Windows `…-windows-x86_64.zip` file from its **Assets**.
+3. Follow the installation steps for your platform below.
 
-Releases are versioned automatically from Conventional Commits after CI passes.
-The downloads remain available after temporary Actions artifacts expire.
 GitHub's **Source code** archives contain source, rather than an installable app.
 
 ### Linux: downloaded Flatpak
@@ -62,10 +59,8 @@ flatpak install --user --bundle ./deductum-VERSION-linux-x86_64.flatpak
 flatpak run dev.twright.Deductum
 ```
 
-Flatpak downloads the required Freedesktop 25.08 runtime from Flathub if it is
-missing. The app bundle does not include the runtime, so the first installation
-needs internet access. This installation needs no `home-apps` remote or tailnet
-access. You can also launch **Deductum** from your application menu afterwards.
+The first installation needs internet access, to download the runtime from
+Flathub. You can also launch **Deductum** from your application menu afterwards.
 
 For an update, download the newer `.flatpak` asset and install it over the
 existing app:
@@ -76,41 +71,9 @@ flatpak install --user --or-update --bundle ./deductum-VERSION-linux-x86_64.flat
 
 Install each new app version this way; `flatpak update` alone does not fetch
 new Deductum bundles. Settings, proof files and session state are retained.
-The downloadable bundles have no repository signature. With the package and
-`SHA256SUMS` in the same folder, check the download using:
 
-```sh
-sha256sum --check --ignore-missing SHA256SUMS
-```
-
-A public release also carries a [GitHub artifact attestation](#checking-where-a-download-came-from).
-
-The Flatpak includes the app and its session-host code. Local provers run on
-your Linux system, so install Python 3 and the prover you need there, outside
-the Flatpak. The separate Terminal Agents app is optional.
-
-### Linux: household Flatpak repository
-
-For signed packages and repository updates on the household tailnet, add
-Flathub for the runtime and `home-apps` for Deductum instead:
-
-```sh
-flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
-flatpak remote-add --user --if-not-exists home-apps http://neo:8099/home-apps.flatpakrepo
-flatpak install --user home-apps dev.twright.Deductum//stable
-```
-
-Open **Deductum** from your application launcher, or run:
-
-```sh
-flatpak run dev.twright.Deductum
-```
-
-To update:
-
-```sh
-flatpak update --user dev.twright.Deductum
-```
+Local provers run on your Linux system, so install Python 3 and the prover you
+need there, outside the Flatpak.
 
 ### Windows: portable app
 
@@ -142,9 +105,8 @@ to connect to remote sessions does not need a local prover.
   project's `lean-toolchain`; elan downloads that toolchain if needed. Prepare
   the project's dependencies as you would for any other Lean editor.
 - **Isabelle:** install [Isabelle2025](https://isabelle.in.tum.de/website-Isabelle2025/).
-  On Windows, use the official Windows distribution with its bundled Cygwin.
-  Deductum supplies its Isabelle backend and registers it when needed. Other
-  Isabelle versions need a matching Deductum backend.
+  On Windows, use the official Windows distribution. Other Isabelle versions
+  are not supported yet.
 
 If Deductum cannot find Isabelle, add its `bin/isabelle` path to `host.json`
 in the [configuration directory](#settings-and-data) on the prover machine:
@@ -153,19 +115,8 @@ in the [configuration directory](#settings-and-data) on the prover machine:
 {"isabelle": [{"path": "/opt/Isabelle2025/bin/isabelle"}]}
 ```
 
-On Windows, an equivalent path is
-`C:/Isabelle2025/bin/isabelle`. Windows Isabelle needs ASCII logic names and
-command-line option values. Some Unicode folder paths also need existing NTFS
-short names; if these are unavailable, use an ASCII folder path as directed
-by the error message.
-
-Deductum builds its Isabelle backend in a protected cache under its state
-directory, so the portable package itself can live in a path containing emoji.
-The bundled JDK cannot load jars from paths containing emoji or other
-supplementary Unicode characters, so keep Isabelle's own installation and the
-state/cache location out of such paths; Greek letters such as β and Ω work. An
-unsupported cache location tells you to set `DEDUCTUM_STATE_DIR`. Cached
-components are keyed by their source contents and kept across updates.
+On Windows, an equivalent path is `C:/Isabelle2025/bin/isabelle`. If a folder
+path causes a problem, the error message says what to do.
 
 ## Open your first project
 
@@ -208,8 +159,7 @@ Add machines to `machines.json` in Deductum's
 ```
 
 Choose that machine when creating a session. Folder paths refer to the
-**remote** filesystem. Machines already configured in the separate Terminal Agents app
-are also recognised.
+**remote** filesystem.
 
 ```sh
 flatpak run dev.twright.Deductum --machine proof-server /srv/proofs/Example
@@ -232,11 +182,6 @@ configuration. Linux paths follow the corresponding XDG directory settings.
 Remote sessions keep their state on the remote machine. Your proof files stay
 in their project folders; back those up along with session state.
 
-Deductum has separate settings and sessions from its predecessor Isabellum.
-Installing it does not migrate or delete Isabellum data. See the
-[development guide](docs/development.md#existing-isabellum-sessions) for explicit
-migration; avoid running both hosts against the same project folder.
-
 ## Checking where a download came from
 
 Every file of a public release is attested by this repository's release
@@ -252,7 +197,7 @@ gh attestation verify ./deductum-VERSION-linux-x86_64.flatpak \
 This shows that the release workflow published those exact bytes after checking
 them against the successful CI run named in the release. To see which source
 revision that run tested, verify the JSON receipt beside the package in the same
-way and read its `source_sha` and `archive_sha256`.
+way and read its `source_sha`.
 
 ## Development
 
@@ -277,39 +222,3 @@ python3 scripts/prepare-ci-manifest.py
 CI also validates the finished Flatpak with
 `python3 scripts/check-flatpak-catalog build-flatpak`, `desktop-file-validate`
 and `appstreamcli validate --no-net`; the guide gives the complete commands.
-
-### CI and contributions from forks
-
-A pull request from a fork runs on GitHub-hosted runners with a read-only token
-and no secrets: `source-checks` and the real prover integrations run, and jobs
-that fetch the private crates are skipped, with a notice saying why. Jobs in this
-repository also use those deploy keys, and household runners only while the
-repository is private. `scripts/ci-trust.py` makes these choices.
-
-A fork can rewrite the workflow in its own pull request, so these choices keep
-honest runs correct but do not stop hostile code. These repository and
-organisation settings do:
-
-- the organisation's runner group leaves **Allow public repositories** off, so a
-  public repository's jobs cannot reach the household runners;
-- workflows from outside contributors wait for an administrator's approval.
-
-### Publication
-
-`.github/workflows/release-binaries.yml` runs on a GitHub-hosted runner after a
-successful `main` push run of CI. To retry a run whose artifacts are retained:
-
-```sh
-gh workflow run release-binaries.yml --ref main -f run_id=CI_RUN_ID
-```
-
-In a public repository it publishes only if `release-config.json` records a signing
-identity; `"public_signing": "github-attestation"` is the one implemented.
-`release-config.json` is also the only place the scripts and workflows name this
-repository.
-
-`.github/workflows/release.yml` separately submits every successful `main` build to
-the private `home-apps` Flatpak repository, using `scripts/submit-home-apps.py` on a
-GitHub-hosted runner. It joins the tailnet with a short-lived identity limited to
-Neo's CI ingress, and uses no stored secret. Neo checks the build and signs it; the
-signing key never leaves Neo.

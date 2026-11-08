@@ -2,12 +2,12 @@
 """Decide what a CI run may use, from GitHub's own description of the event.
 
 Only a run in the configured repository, from that repository's own code, is
-trusted with deploy keys. Household runners additionally require the repository
-to be private: their shared caches treat every job as household code.
+trusted, and only a trusted run uses the household runners: their shared caches
+treat every job as household code.
 
 This keeps honest workflows honest. A fork's pull request can rewrite this file
 and the workflow, so the boundary against hostile code is the runner group and
-the absence of secrets in fork runs, never this script. See the README.
+the absence of secrets in fork runs, never this script.
 """
 import json
 import os
@@ -29,7 +29,7 @@ def classify(event_name, event, repository, expected, ci_runner=""):
         own_code = head.get("full_name") == repository
     trusted = (event_name in CI_EVENTS and repository == expected
                and base.get("fork") is False and own_code)
-    household = trusted and base.get("private") is True and ci_runner != "hosted"
+    household = trusted and ci_runner != "hosted"
     return {
         "trusted": "true" if trusted else "false",
         "runner": HOUSEHOLD if household else HOSTED,
@@ -45,8 +45,7 @@ def main():
         output.writelines(f"{key}={value}\n" for key, value in decision.items())
     print(json.dumps(decision, sort_keys=True))
     if decision["trusted"] != "true":
-        print("::notice::This run gets no deploy keys or household runners: only the source "
-              "checks and prover integrations run. Jobs that fetch private crates are skipped.")
+        print("::notice::This run uses GitHub-hosted runners only.")
 
 
 if __name__ == "__main__":

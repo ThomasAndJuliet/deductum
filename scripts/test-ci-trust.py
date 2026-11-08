@@ -48,12 +48,11 @@ class ClassifyTests(unittest.TestCase):
         self.assertEqual(classify("push", event(head="none"), runner="hosted"),
                          {"trusted": "true", "runner": "ubuntu-24.04", "flatpak": "hosted"})
 
-    def test_public_repository_never_selects_household_runners(self):
+    def test_own_public_runs_use_household_runners_too(self):
         for name, payload in [("push", event(private=False, head="none")),
                               ("pull_request", event(private=False))]:
-            with self.subTest(name=name):
-                self.assertEqual(classify(name, payload),
-                                 {"trusted": "true", "runner": "ubuntu-24.04", "flatpak": "hosted"})
+            self.assertEqual(trust.classify(name, payload, REPOSITORY, REPOSITORY),
+                             {"trusted": "true", "runner": "neo-ubuntu", "flatpak": "neo"})
 
     def test_untrusted_runs_get_hosted_runners_and_no_deploy_keys(self):
         cases = {
@@ -135,12 +134,17 @@ class WorkflowShapeTests(unittest.TestCase):
         self.assertEqual(self.ci["trust"]["runs-on"], "ubuntu-24.04")
         self.assertNotIn("secrets.", json.dumps(self.ci["trust"]))
 
-    def test_secrets_and_household_runners_need_a_trusted_run(self):
+    def test_ci_uses_no_secret(self):
+        self.assertNotIn("secrets.", (WORKFLOWS / "ci.yml").read_text())
+
+    def test_crates_are_fetched_without_credentials(self):
+        for path in (ROOT / "Cargo.toml", ROOT / "Cargo.lock", ROOT / "packaging/flatpak/cargo-sources.json"):
+            with self.subTest(path=path.name):
+                self.assertNotIn("ssh://", path.read_text())
+
+    def test_household_runners_need_a_trusted_run(self):
         for name, job in self.ci.items():
-            text = json.dumps(job)
-            uses_secrets = "secrets." in text
-            household = re.search(r"\bneo\b|self-hosted|neo-ubuntu", json.dumps(job.get("runs-on")))
-            if uses_secrets or household:
+            if re.search(r"\bneo\b|self-hosted|neo-ubuntu", json.dumps(job.get("runs-on"))):
                 with self.subTest(job=name):
                     self.assertIn("trust", job["needs"])
                     self.assertIn("needs.trust.outputs.trusted == 'true'", job["if"])
@@ -216,7 +220,7 @@ class IdentityTests(unittest.TestCase):
         # Install links and app metadata are documentation, updated with this file.
         name = release_config.repository()
         paths = [*(ROOT / ".github/workflows").glob("*.yml"), *(ROOT / "scripts").glob("*.py"),
-                 *(ROOT / "scripts").glob("*.ps1"), ROOT / "scripts/ci-private-crates.sh"]
+                 *(ROOT / "scripts").glob("*.ps1")]
         for path in paths:
             if path.exists():
                 with self.subTest(path=path.name):

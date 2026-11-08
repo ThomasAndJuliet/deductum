@@ -15,10 +15,8 @@ scripts/build-flatpak.sh
 scripts/build-flatpak.sh --user --install
 ```
 
-The dependency manifest includes pinned downloads. Fetching the household
-libcosmic fork and household-kit requires read access to their private GitHub
-repositories over SSH. CI uses read-only deploy keys through
-`scripts/ci-private-crates.sh`; it does not use an administrator's login.
+The dependency manifest includes pinned downloads, including the household
+libcosmic fork and household-kit over HTTPS. No credentials are needed.
 A source build uses `cargo build --locked --release --bin deductum` with the
 native dependencies required by libcosmic.
 
@@ -234,8 +232,8 @@ After the SDK tests, CI builds `deductum` in Freedesktop SDK 25.08 and packages
 that exact tested checkout. It validates desktop/AppStream/catalog/icons and
 records its Git SHA, run ID and archive digest. Chartgen and a patched cosmic-text
 (`vendor/cosmic-text/README.md`) are vendored in this repository;
-libcosmic and household-tones are fetched from private household repositories
-using read-only deploy keys. No sibling checkout is needed.
+libcosmic and household-tones are fetched from their public household
+repositories. No sibling checkout is needed.
 The successful default-branch push preserves its artifact for seven days.
 The release workflow waits for the entire CI workflow, including both prover
 integrations, to succeed before submitting to Neo with
@@ -258,12 +256,9 @@ are retried twice daily; signed source provenance is the acceptance criterion.
 Local Flatpak builds use `scripts/build-flatpak.sh`. To reproduce the SDK tests,
 run `python3 scripts/prepare-ci-manifest.py` and build the generated
 `packaging/flatpak/dev.twright.Deductum.ci.yml` manifest. Frozen Cargo downloads
-are regenerated from Cargo.lock with `flatpak-cargo-generator.py`, followed by
-`scripts/fix-cargo-sources-ssh.py` for the libcosmic fork and household-kit (its
-household-tones crate), which are fetched over ssh:
+are regenerated from Cargo.lock with `flatpak-cargo-generator.py`:
 
     flatpak-cargo-generator.py Cargo.lock -o packaging/flatpak/cargo-sources.json
-    python3 scripts/fix-cargo-sources-ssh.py packaging/flatpak/cargo-sources.json
 
 Validate the finished build with the same package checks CI uses:
 
