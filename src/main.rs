@@ -62,6 +62,8 @@ mod highlight_tests;
 #[cfg(test)]
 mod highlight_main_tests;
 #[cfg(test)]
+mod snapshot_cells;
+#[cfg(test)]
 mod live;
 #[cfg(test)]
 mod live_lean;
