@@ -471,7 +471,7 @@ pub fn theorems<'a>(app: &'a App, t: &'a Theory) -> Element<'a, Message> {
         let button = widget::button::custom(row).width(Length::Fill).padding([4.0, 8.0]).class(super::sidebar::nav_style(current)).on_press(Message::Goto(block.start));
         #[cfg(test)]
         let button = widget::container(button).id(test_nav_id(&statement_name(&tip)));
-        col = col.push(widget::tooltip(button, widget::text(tip).font(cosmic::font::mono()).size(12.0), widget::tooltip::Position::Right));
+        col = col.push(household_widgets::tooltip_with(button, widget::text(tip).font(cosmic::font::mono()).size(12.0), widget::tooltip::Position::Right));
     }
     col.into()
 }
@@ -1290,7 +1290,7 @@ fn pop_out_button<'a>() -> Element<'a, Message> {
         .height(Length::Fixed(pop_out_size()))
         .class(theme::Button::Icon)
         .on_press(Message::PopOut);
-    widget::container(widget::tooltip(button, widget::text("Pop out (the proof in a window of its own)"), widget::tooltip::Position::Bottom)).id(pop_out_button_id()).into()
+    widget::container(household_widgets::tooltip_with(button, widget::text("Pop out (the proof in a window of its own)"), widget::tooltip::Position::Bottom)).id(pop_out_button_id()).into()
 }
 
 /// A cell's card on the page: square, its fill the page's, a 1 px border on its top, right and
@@ -1779,7 +1779,7 @@ pub(crate) fn message_strip<'a>(t: &Theory, m: &super::editor::ProverMessage, ta
     } else {
         widget::container(head).width(Length::Fill).into()
     };
-    let copy = widget::tooltip(
+    let copy = household_widgets::tooltip_with(
         widget::button::custom(widget::icon::from_name("edit-copy-symbolic").size(16).icon())
             .padding(2)
             .class(theme::Button::Link)
@@ -2826,10 +2826,14 @@ pub fn reference_window(app: &App, id: iced::window::Id) -> Element<'_, Message>
     let Some((_, r)) = app.references.iter().find(|(w, _)| *w == id) else { return widget::text("").into() };
     let mut actions: Vec<Element<'_, Message>> = Vec::new();
     if !r.back.is_empty() {
-        actions.push(widget::button::icon(widget::icon::from_name("go-previous-symbolic")).tooltip("Back to the definition before").on_press(Message::RefBack(id)).into());
+        actions.push(household_widgets::tooltip_with(
+            widget::button::icon(widget::icon::from_name("go-previous-symbolic")).on_press(Message::RefBack(id)),
+            widget::text("Back to the definition before"),
+            widget::tooltip::Position::Bottom,
+        ));
     }
     actions.push(
-        widget::tooltip(
+        household_widgets::tooltip_with(
             widget::button::standard("Open in the main window").on_press(Message::RefOpenHere(id)),
             widget::text("Open this theory in the main window, at the definition"),
             widget::tooltip::Position::Bottom,
@@ -3006,7 +3010,7 @@ pub fn proof_window(app: &App) -> Element<'_, Message> {
     let header = window_header(
         format!("{title} — {}", file_name(&t.path)),
         vec![
-            widget::tooltip(
+            household_widgets::tooltip_with(
                 widget::button::standard("Bring back").on_press(Message::PopIn),
                 widget::text("Edit the proof in the main window again"),
                 widget::tooltip::Position::Bottom,
@@ -3506,7 +3510,7 @@ fn panel_tabs<'a>(open: Panel, tabs: Vec<(Panel, String)>, width: f32) -> Elemen
     }
     if let Some((first, _)) = hidden.first() {
         let names: Vec<&str> = hidden.iter().map(|(_, l)| l.as_str()).collect();
-        row = row.push(widget::tooltip(
+        row = row.push(household_widgets::tooltip_with(
             segment("More".into(), false, Message::Panel(*first)),
             widget::text(format!("Also: {}", names.join(", "))),
             widget::tooltip::Position::Bottom,
@@ -3933,7 +3937,7 @@ fn tool_section<'a>(ws: &'a Workspace, tool: &'a Tool, r: super::flow::Report, t
         .push(widget::text::caption(status).class(muted()).width(Length::Fill));
     // (a tool that cannot be stopped on its own goes when its line is changed)
     if r.running && r.stoppable && !ws.tools_stopping {
-        head = head.push(widget::tooltip(widget::button::text("Stop").on_press(Message::StopTools), widget::text::caption("Stop it (Esc)"), widget::tooltip::Position::Bottom));
+        head = head.push(household_widgets::tooltip_with(widget::button::text("Stop").on_press(Message::StopTools), widget::text::caption("Stop it (Esc)"), widget::tooltip::Position::Bottom));
     }
     let mut col = widget::column::with_capacity(8).spacing(sp.space_xs).push(head);
     if r.running {
@@ -4191,7 +4195,7 @@ fn fill_section<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Ele
         None => format!("{}{}", if f.agent == 1 { "codex" } else { "claude" }, f.model.as_ref().map_or(String::new(), |m| format!(" · {m}"))),
     };
     let stop: Element<'a, Message> = if busy {
-        widget::tooltip(widget::button::text("Stop").on_press(Message::FillDismiss), widget::text::caption("Stop it (Esc)"), widget::tooltip::Position::Bottom).into()
+        household_widgets::tooltip_with(widget::button::text("Stop").on_press(Message::FillDismiss), widget::text::caption("Stop it (Esc)"), widget::tooltip::Position::Bottom).into()
     } else {
         widget::button::text("Dismiss").on_press(Message::FillDismiss).into()
     };
@@ -4260,12 +4264,11 @@ pub(super) fn query_route_row<'a>(ws: &'a Workspace) -> Element<'a, Message> {
         if let Some(conv) = &ws.fill.conversation {
             let resume = conv["resume"].as_str().unwrap_or("").to_string();
             let machine = conv["machine"].as_str().unwrap_or("").to_string();
-            items.push(
-                widget::button::text("Copy resume command")
-                    .tooltip(format!("Talk to the helper: run this on {machine}"))
-                    .on_press(Message::CopyText(resume))
-                    .into(),
-            );
+            items.push(household_widgets::tooltip_with(
+                widget::button::text("Copy resume command").on_press(Message::CopyText(resume)),
+                widget::text(format!("Talk to the helper: run this on {machine}")),
+                widget::tooltip::Position::Bottom,
+            ));
         }
         items.push(widget::button::text("New conversation").on_press(Message::HelperReset).into());
     }
@@ -4650,7 +4653,7 @@ fn symbols_panel<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> El
             ways.insert(0, how);
         }
         let tip = if ways.is_empty() { sym } else { format!("{sym}   type {}", ways.join(" or ")) };
-        widget::tooltip(
+        household_widgets::tooltip_with(
             widget::button::custom(widget::text(c.to_string()).size(19.0).font(cosmic::font::mono()).width(Length::Fill).height(Length::Fill).align_x(Alignment::Center).align_y(Alignment::Center))
                 .width(Length::Fixed(36.0))
                 .height(Length::Fixed(36.0))

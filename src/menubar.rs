@@ -312,7 +312,7 @@ pub fn tree(rows: Vec<Row>) -> Vec<menu::Tree<Message>> {
         .filter_map(|(i, row)| match row {
             Row::Item { label, keys, message, bold } => Some(menu::Tree::from(Element::from(entry(&label, keys, ticks.then_some(false), bold, Some(message))))),
             Row::Check { label, keys, on, message } => Some(menu::Tree::from(Element::from(entry(&label, keys, Some(on), false, Some(message))))),
-            Row::Off { label, keys, why } => Some(menu::Tree::from(Element::from(widget::tooltip(
+            Row::Off { label, keys, why } => Some(menu::Tree::from(Element::from(household_widgets::tooltip_with(
                 entry(&label, keys, ticks.then_some(false), false, None),
                 widget::text(why),
                 widget::tooltip::Position::Right,
@@ -356,7 +356,7 @@ pub fn bar(app: &App) -> Element<'static, Message> {
     if app.window_width < FOLD_WIDTH {
         let rows = menus.into_iter().map(|(title, rows)| Row::Sub { label: title.to_string(), rows }).collect();
         let button = widget::button::icon(widget::icon::from_name("open-menu-symbolic")).padding([4, 12]).class(theme::Button::MenuRoot);
-        let root = widget::tooltip(button, widget::text("Menu: File, Edit, View, Prover, Help"), widget::tooltip::Position::Bottom);
+        let root = household_widgets::tooltip_with(button, widget::text("Menu: File, Edit, View, Prover, Help"), widget::tooltip::Position::Bottom);
         return dropdown(root.into(), rows);
     }
     let roots = menus
