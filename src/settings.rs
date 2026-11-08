@@ -26,7 +26,15 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 /// The version this app writes
-pub const VERSION: u32 = 1;
+pub const VERSION: u32 = 2;
+
+/// The Paper defaults of the Literate view (Q5): Libertinus Serif 20 px, line spacing 1.5, a prose
+/// column at most 48 em wide, justified and centred. Version 1 files kept the older look
+/// ([`legacy_display`]) unless the user had never changed it
+pub const PAPER_TEXT_SIZE: f32 = 20.0;
+pub const PAPER_MEASURE: f32 = 48.0;
+/// Paper's maths against the text (household-kit#3; see [`Display::default`])
+pub const PAPER_MATH_SCALE: f32 = 1.05;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -179,10 +187,19 @@ impl TextFont {
 
 impl Default for Display {
     fn default() -> Self {
-        Self { font: TextFont::default(), text_size: 17.0, line_height: 1.5,
-            measure: 0.0, paragraph_spacing: 0.7, math_scale: 1.1,
-            justify: false, centred: true }
+        // (the maths at x1.05: Juliet approved it for the household, household-kit#3, a draft
+        // not yet merged; Deductum pins household-kit at bef3a9e, so the value is kept here
+        // until the pin moves)
+        Self { font: TextFont::Libertinus, text_size: PAPER_TEXT_SIZE, line_height: 1.5,
+            measure: PAPER_MEASURE, paragraph_spacing: 0.7, math_scale: PAPER_MATH_SCALE,
+            justify: true, centred: true }
     }
+}
+
+/// The reading controls' defaults before Paper (settings versions 0 and 1)
+pub fn legacy_display() -> Display {
+    Display { font: TextFont::NewComputerModern, text_size: 17.0, line_height: 1.5,
+        measure: 0.0, paragraph_spacing: 0.7, math_scale: 1.1, justify: false, centred: true }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -216,11 +233,11 @@ impl Display {
         fn finite(value: f32, fallback: f32, min: f32, max: f32) -> f32 {
             if value.is_finite() { value.clamp(min, max) } else { fallback }
         }
-        self.text_size = finite(self.text_size, 17.0, 10.0, 36.0);
+        self.text_size = finite(self.text_size, PAPER_TEXT_SIZE, 10.0, 36.0);
         self.line_height = finite(self.line_height, 1.5, 1.0, 2.5);
         self.measure = if self.measure == 0.0 { 0.0 } else { finite(self.measure, 0.0, 24.0, 200.0) };
         self.paragraph_spacing = finite(self.paragraph_spacing, 0.7, 0.2, 2.0);
-        self.math_scale = finite(self.math_scale, 1.1, 0.75, 2.0);
+        self.math_scale = finite(self.math_scale, PAPER_MATH_SCALE, 0.75, 2.0);
     }
 }
 
@@ -442,6 +459,9 @@ impl Settings {
         if v.get("version").is_none() && v.is_object() {
             v = migrate_v0(&v);
         }
+        if v.get("version").and_then(Value::as_u64).is_some_and(|n| n < 2) {
+            migrate_display_v1(&mut v);
+        }
         match serde_json::from_value::<Settings>(v.clone()) {
             Ok(mut s) => {
                 s.version = VERSION;
@@ -524,6 +544,30 @@ impl Settings {
             "models": {"claude": model(&self.llm.claude_model), "codex": model(&self.llm.codex_model)},
             "loogle": self.lean.loogle.as_str(),
         })
+    }
+}
+
+/// Version 1 files wrote the whole `display` section whatever the user had chosen, so a stored
+/// value alone does not say it was chosen. A section equal to the old defaults (or absent) is the
+/// look of a user who never changed it: it is dropped, and the Paper defaults apply. A section
+/// with any other value is the user's: it is kept, its missing fields filled from the old
+/// defaults so that the look the user has does not change under them
+fn migrate_display_v1(v: &mut Value) {
+    let Some(obj) = v.as_object_mut() else { return };
+    let Some(section) = obj.get("display").cloned() else { return };
+    if section.is_null() {
+        obj.remove("display");
+        return;
+    }
+    let (Some(stored), Ok(mut merged)) = (section.as_object(), serde_json::to_value(legacy_display())) else { return };
+    for (key, value) in stored {
+        merged[key] = value.clone();
+    }
+    let Ok(read) = serde_json::from_value::<Display>(merged.clone()) else { return };
+    if read == legacy_display() {
+        obj.remove("display");
+    } else {
+        obj.insert("display".into(), merged);
     }
 }
 
@@ -765,10 +809,49 @@ mod tests {
     }
 
     #[test]
-    fn the_prose_column_default_stays_fill_until_the_layout_takes_48_em() {
-        // (Q5 decides 48 em; the layout tests and the document view assume Fill today)
-        assert_eq!(Display::default().measure, 0.0);
-        assert_eq!(Settings::from_json(&json!({"version": 1, "display": {"measure": 48.0}})).display.measure, 48.0);
-        assert_eq!(Settings::from_json(&json!({"version": 1, "display": {"text_size": 18.0}})).display.measure, 0.0);
+    fn paper_defaults_apply_to_files_that_never_chose_the_look_and_users_changes_are_kept() {
+        let d = Display::default();
+        assert_eq!((d.font, d.text_size, d.line_height, d.measure, d.justify, d.centred), (TextFont::Libertinus, 20.0, 1.5, 48.0, true, true));
+        assert_eq!(d.math_scale, 1.05, "Juliet approved x1.05 (household-kit#3)");
+        assert_eq!(legacy_display().math_scale, 1.1);
+        // the first previews' flat file, and a version 1 file with no display section
+        assert_eq!(Settings::from_json(&json!({"vim": true})).display, d);
+        assert_eq!(Settings::from_json(&json!({"version": 1, "appearance": {"zoom": 1.2}})).display, d);
+        // a version 1 file as the app wrote it, the display section at the old defaults throughout
+        let written = |display: Value| json!({"version": 1, "appearance": {"zoom": 1.3}, "display": display});
+        let untouched = serde_json::to_value(legacy_display()).unwrap();
+        let s = Settings::from_json(&written(untouched.clone()));
+        assert_eq!(s.display, d, "never chosen: the Paper defaults, maths x1.05 with them");
+        assert_eq!(s.appearance.zoom, 1.3, "the rest of the file is kept");
+        assert_eq!(s.version, VERSION);
+        // any changed value is a choice: all the stored values stay, and the Paper defaults do not
+        for (key, value) in [("font", json!("Sans")), ("text_size", json!(18.0)), ("line_height", json!(1.8)),
+            ("measure", json!(60.0)), ("paragraph_spacing", json!(1.0)), ("math_scale", json!(1.2)),
+            ("justify", json!(true)), ("centred", json!(false))] {
+            let mut display = untouched.clone();
+            display[key] = value;
+            let kept = Settings::from_json(&written(display.clone()));
+            let mut expected: Display = serde_json::from_value(display).unwrap();
+            expected.clamp();
+            assert_eq!(kept.display, expected, "{key} changed: the user's look is kept whole");
+            assert_ne!(kept.display, d);
+        }
+        // a partial section (a hand-edited file) fills what it lacks from the old defaults
+        let partial = Settings::from_json(&written(json!({"text_size": 18.0})));
+        assert_eq!((partial.display.text_size, partial.display.font, partial.display.measure), (18.0, TextFont::NewComputerModern, 0.0));
+        assert_eq!(partial.display.math_scale, 1.1, "a user who changed something else cannot be told from one who chose x1.1: kept");
+        // a file the app writes now (version 2) is read as it is, the old values included
+        let current = serde_json::to_value(Settings { display: legacy_display(), ..Settings::default() }).unwrap();
+        assert_eq!(Settings::from_json(&current).display, legacy_display());
+        // and a migrated file, saved and read again, keeps what was chosen
+        let round = Settings::from_json(&serde_json::to_value(Settings::from_json(&written(json!({"font": "Sans"})))).unwrap());
+        assert_eq!((round.display.font, round.display.text_size), (TextFont::Sans, 17.0));
+    }
+
+    #[test]
+    fn the_prose_column_default_is_48_em_and_fill_stays_a_choice() {
+        assert_eq!(Display::default().measure, 48.0);
+        assert_eq!(Settings::from_json(&json!({"version": 2, "display": {"measure": 0.0}})).display.measure, 0.0);
+        assert_eq!(Settings::from_json(&json!({"version": 2, "display": {"text_size": 18.0}})).display.measure, 48.0);
     }
 }

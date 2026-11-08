@@ -370,8 +370,8 @@ fn clicking_insert_gives_the_editor_its_focus_back() {
     h.focus(&app, super::view::block_editor_id());
     h.draw(&app, "click-0");
     let mut clicked = None;
-    'scan: for y in (150..600).step_by(6) {
-        for x in (1000..1220).step_by(10) {
+    'scan: for y in (150..880).step_by(6) {
+        for x in (990..1380).step_by(10) {
             let msgs = h.click(&app, cosmic::iced::Point::new(x as f32, y as f32));
             if let Some(m) = msgs.iter().find(|m| matches!(m, Message::InsertOutput(p) if p == "by presburger")) {
                 clicked = Some(m.clone());

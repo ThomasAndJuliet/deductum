@@ -619,8 +619,11 @@ fn workspace<'a>(app: &'a App, ws: &'a Workspace, right: bool, main_width: f32) 
                     // caret's line when there is room for both
                     let columns = t.decoded.text.lines().map(|l| l.chars().count()).max().unwrap_or(0);
                     let source_width = source_width(columns);
-                    // (the goal column narrows to the room there is, down to a readable width)
-                    let room = (main_width - source_width - z(70.0)).min(goal_width);
+                    // (the goal column narrows to the room there is, down to a readable width;
+                    // it is placed against the source's own column, not the prose's measure)
+                    let source_room = main_width - SCROLLBAR_ROOM - source_column(t.code_columns) - GOAL_GAP;
+                    let source_goal = preferred_goal.min(source_room - 2.0 * z(PAGE_MARGIN)).max(z(320.0));
+                    let room = (main_width - source_width - z(70.0)).min(source_goal);
                     // (whether or not there is a goal at the moment: a click elsewhere clears the
                     // goal until the prover's state there comes, and the layout must not change
                     // with it)
@@ -641,6 +644,13 @@ fn workspace<'a>(app: &'a App, ws: &'a Workspace, right: bool, main_width: f32) 
         outer = outer.push(body);
     }
     widget::container(outer).width(Length::Fill).height(Length::Fill).into()
+}
+
+/// The column the Source view's goal is placed against: as wide as the theory's longest lines
+/// need, between 440 and 680 px. (The Source view is laid out as it was before the Paper defaults
+/// gave the Literate view its 48 em column: the goal's width does not depend on that measure)
+fn source_column(columns: usize) -> f32 {
+    ((columns.max(30) as f32 + 4.0) * z(13.0) * 0.6 + CODE_PADDING.left + CODE_PADDING.right + CARD_CHROME).clamp(z(440.0), z(680.0))
 }
 
 /// The workspace's width, as the view last laid it out

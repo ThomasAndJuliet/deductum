@@ -756,7 +756,9 @@ fn the_goal_panel_has_a_two_pixel_grey_outline_and_a_lightish_band() {
             ("top", line_strength(&frame, w, mx, panel.y + 1.0, false, grey, page)),
             ("bottom", line_strength(&frame, w, mx, panel.y + panel.height - 1.0, false, grey, page)),
         ] {
-            assert!((1.6..=2.5).contains(&n), "light={light}: the {what} outline is {n:.2} px of grey (2 wanted)");
+            // (the top edge is at a fraction of a pixel under Paper's larger headings: a little more)
+            let most = if what == "top" { 2.7 } else { 2.5 };
+            assert!((1.6..=most).contains(&n), "light={light}: the {what} outline is {n:.2} px of grey (2 wanted)");
         }
         // the band: COSMIC's background colour, inside the outline, at the panel's top
         let band = part(&all, super::insert::insert_bar_id());
