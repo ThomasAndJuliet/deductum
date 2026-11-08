@@ -1,4 +1,4 @@
-# cosmic-text, with a hanging indent
+# cosmic-text, with a hanging indent and justified buffers
 
 Deductum's copy of [cosmic-text](https://github.com/pop-os/cosmic-text) **0.19.0** from crates.io,
 used through `[patch.crates-io]` in Deductum's `Cargo.toml`. It is excluded from Deductum's
@@ -23,6 +23,12 @@ has no hanging indent.
   clicks, selection and drawing go by glyph positions, so they follow. A word too long for a wrapped
   row breaks to fit that row. The indent is at most half the width. Right-to-left and aligned lines
   are not indented.
+- Justified buffers, for prose being edited (a paragraph opened for editing stays justified as it was
+  shown). `Buffer::set_justified`: lines with no alignment of their own are laid out as
+  `Align::Justified`, set when a line is laid out, so lines added by editing, splitting or pasting
+  are included, and the last row of each line stays ragged. `src/hanging.rs` has
+  `with_justified`, as `with_hanging_indent` is for the indent, for the same reason. Caret, clicks
+  and selection follow the justified glyph positions with no change of their own.
 - `tests/hanging_indent.rs` (new) tests the patch.
 - `Cargo.toml`: the registry's manifest without its benchmarks, tests, dev-dependencies and test
   profile, which are left out of this copy with the demo scripts, samples and most test fonts, and

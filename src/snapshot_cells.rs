@@ -2495,3 +2495,135 @@ fn thicken_text_leaves_inline_code_as_it_was() {
     assert_eq!(frame(&Settings::default()), frame(&thick), "the code is drawn as before");
 }
 
+
+// ----- Justified prose, opened
+
+/// A text cell of one long paragraph, then a proof
+fn justify_app() -> (App, usize) {
+    let para = "We prove that the reactive design is healthy, and that its refinement follows from the refinement of its pre and postconditions, which is the main theorem of this section and is used throughout the rest of the development without further comment, as the reader will see in the chapters that follow.";
+    let text = format!("theory J imports Main begin\n\ntext \\<open>{para}\\<close>\n\nlemma after: \"True\"\n  by simp\n\nend\n");
+    let mut app = demo_app(Mode::Literate);
+    let doc = serde_json::json!({"text": text, "revision": 1, "prover": super::snapshot::prover_json(&text)});
+    app.workspace.as_mut().unwrap().theory = Some(super::editor::Theory::new("/tmp/J.thy".into(), &doc, &super::prover::isabelle::symbols::Table::fallback(), std::sync::Arc::new(std::collections::HashMap::new()), Mode::Literate, super::prover::profile(None)));
+    app.show_right = false;
+    app.show_sidebar = false;
+    app.workspace.as_mut().unwrap().output = None;
+    let i = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.kind == Kind::Text).unwrap();
+    (app, i)
+}
+
+/// The rows of the paragraph as cosmic-text lays them out for the prose editor at this width: each
+/// row's glyphs (where each starts in the line, and where on the row)
+fn justify_rows(text: &str, width: f32, justified: bool) -> Vec<Vec<(usize, f32)>> {
+    use cosmic::iced::advanced::graphics::text as graphics;
+    let mut font_system = graphics::font_system().write().unwrap();
+    let size = super::view::z(super::settings::display().text_size);
+    let mut buffer = cosmic_text::Buffer::new_empty(cosmic_text::Metrics::new(size, size * super::settings::display().line_height));
+    buffer.set_size(Some(width), None);
+    buffer.set_wrap(graphics::to_wrap(super::wrap::WRAPPING));
+    buffer.set_justified(justified);
+    buffer.set_text(text, &graphics::to_attributes(super::settings::display().font.editor_font()), cosmic_text::Shaping::Advanced, None);
+    buffer.line_layout(font_system.raw(), 0).unwrap().iter().map(|row| row.glyphs.iter().map(|g| (g.start, g.x)).collect()).collect()
+}
+
+/// The rightmost pixel of each row of an editor's text that is not its background
+fn right_edges(frame: &[u8], width: u32, area: Rectangle, line: f32) -> Vec<f32> {
+    let background = px(frame, width, area.x + area.width + 3.0, area.y + 2.0);
+    let mut out = Vec::new();
+    let mut y = area.y;
+    while y + line <= area.y + area.height {
+        let ink = (area.x as u32..(area.x + area.width) as u32 + 3).rev().find(|&x| (2..line as u32 - 2).any(|dy| px(frame, width, x as f32, y + dy as f32) != background));
+        if let Some(ink) = ink {
+            out.push(ink as f32);
+        }
+        y += line;
+    }
+    out
+}
+
+/// A paragraph opened for editing stays justified as it was shown, with Justify paragraphs on: its
+/// rows run to both edges, its last row is ragged, and a click on a justified row puts the caret on
+/// the character drawn there. With the setting off the rows are ragged, as the shown ones are.
+/// `CT_SNAPSHOTS` keeps the frames of the paragraph shown and opened, light and dark.
+#[test]
+fn an_opened_paragraph_stays_justified_and_clicks_land_on_its_characters() {
+    let size = Size::new(900.0, 700.0);
+    for justify in [true, false] {
+        let mut settings = Settings::default();
+        settings.display.justify = justify;
+        let mut h = Harness::new(size);
+        let _published = Published::new(&settings);
+        let (mut app, i) = justify_app();
+        let display = super::settings::display();
+        let line = super::view::z(display.text_size) * display.line_height;
+        let name = if justify { "justify" } else { "ragged" };
+        let mut shown_frames = Vec::new();
+        let mut open_frames = Vec::new();
+        for light in [true, false] {
+            cosmic::theme::set_active(if light { crate::tones::light_type_for_tests() } else { cosmic::theme::ThemeType::Dark });
+            let mode = if light { "light" } else { "dark" };
+            // (the paragraph as it reads, in an app of its own: then opened)
+            let (shown, _) = justify_app();
+            let _ = h.draw(&shown, &format!("{name}-shown-{mode}-warm"));
+            shown_frames.push(h.draw(&shown, &format!("{name}-shown-{mode}")));
+            let (opened, _) = justify_app();
+            app = opened;
+            let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(i));
+            let _ = h.draw(&app, &format!("{name}-open-{mode}-warm"));
+            open_frames.push(h.draw(&app, &format!("{name}-open-{mode}")));
+        }
+        cosmic::theme::set_active(cosmic::theme::ThemeType::Dark);
+        let mut all = Focusable(None);
+        h.operate(&app, &mut all);
+        let editor = all.0.expect("the prose editor");
+        let edge = editor.x + editor.width;
+        let rows = right_edges(&open_frames[0], size.width as u32, editor, line);
+        assert!(rows.len() >= 3, "the paragraph wraps: {rows:?}");
+        let (full, last) = (&rows[..rows.len() - 1], rows[rows.len() - 1]);
+        if justify {
+            assert!(full.iter().all(|r| edge - r < 3.0), "every row but the last runs to the right edge ({edge}): {rows:?}");
+            assert!(edge - last > 12.0, "the last row is ragged: {rows:?}");
+        } else {
+            assert!(full.iter().any(|r| edge - r > 4.0), "with Justify paragraphs off the rows are ragged: {rows:?}");
+        }
+
+        // a click on a justified row
+        if justify {
+            cosmic::theme::set_active(crate::tones::light_type_for_tests());
+            h.focus(&app, super::view::block_editor_id());
+            let text = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().block_editor.as_ref().unwrap().content.text();
+            let text = text.trim_end_matches('\n').to_string();
+            let laid = justify_rows(&text, editor.width, true);
+            let ragged = justify_rows(&text, editor.width, false);
+            assert_eq!(laid.len(), ragged.len(), "justifying does not change where the rows break");
+            let mut click = |app: &mut App, x: f32, row: usize| {
+                for m in h.click(app, cosmic::iced::Point::new(x, editor.y + (row as f32 + 0.5) * line)) {
+                    let _ = cosmic::Application::update(app, m);
+                }
+                let _ = h.draw(app, "justify-click");
+                let p = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().block_editor.as_ref().unwrap().content.cursor().position;
+                (p.line, p.column)
+            };
+            for row in [0usize, 1] {
+                let glyphs = &laid[row];
+                // the glyph a third of the way along the row, which justifying has moved
+                let k = glyphs.len() * 2 / 3;
+                let moved = glyphs[k].1 - ragged[row][k].1;
+                assert!(moved > 2.0, "justifying moves the glyph ({moved} px)");
+                let width = glyphs[k + 1].1 - glyphs[k].1;
+                // (clicks far enough apart not to be double clicks)
+                let on = click(&mut app, editor.x + glyphs[k].1 + width * 0.25, row);
+                assert_eq!(on, (0, glyphs[k].0), "row {row}: on the left half of the glyph drawn there");
+                let _ = click(&mut app, editor.x + 5.0, 2);
+                let after = click(&mut app, editor.x + glyphs[k].1 + width * 0.75, row);
+                assert_eq!(after, (0, glyphs[k + 1].0), "row {row}: on its right half, after it");
+                let _ = click(&mut app, editor.x + 5.0, 2);
+            }
+            cosmic::theme::set_active(cosmic::theme::ThemeType::Dark);
+        }
+        // the frames shown and opened, as the paragraph reads
+        for (shown, open) in shown_frames.iter().zip(&open_frames) {
+            assert_ne!(shown, open, "the opened paragraph is drawn");
+        }
+    }
+}

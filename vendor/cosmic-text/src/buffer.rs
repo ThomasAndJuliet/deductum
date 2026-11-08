@@ -347,6 +347,8 @@ pub struct Buffer {
     hinting: Hinting,
     /// Where wrapped rows continue, if not at the left edge
     hanging_indent: Option<crate::HangingIndent>,
+    /// Whether lines without an alignment of their own are justified
+    justified: bool,
     /// Dirty flags tracking which properties changed since last layout
     dirty: DirtyFlags,
 }
@@ -366,6 +368,7 @@ impl Clone for Buffer {
             tab_width: self.tab_width,
             hinting: self.hinting,
             hanging_indent: self.hanging_indent,
+            justified: self.justified,
             dirty: self.dirty,
         }
     }
@@ -398,6 +401,7 @@ impl Buffer {
             tab_width: 8,
             hinting: Hinting::default(),
             hanging_indent: crate::hanging::for_new_buffer(),
+            justified: crate::hanging::justified_for_new_buffer(),
             dirty: DirtyFlags::empty(),
         }
     }
@@ -708,6 +712,10 @@ impl Buffer {
         line_i: usize,
     ) -> Option<&[LayoutLine]> {
         let line = self.lines.get_mut(line_i)?;
+        // (a line of a justified buffer, whenever it came to be, is justified when laid out)
+        if self.justified && line.align().is_none() {
+            line.set_align(Some(crate::Align::Justified));
+        }
         Some(line.layout_with_hanging_indent(
             font_system,
             self.metrics.font_size,
@@ -731,6 +739,31 @@ impl Buffer {
     pub fn set_hanging_indent(&mut self, hanging_indent: Option<crate::HangingIndent>) {
         if hanging_indent != self.hanging_indent {
             self.hanging_indent = hanging_indent;
+            for line in &mut self.lines {
+                line.reset_layout();
+            }
+            self.redraw = true;
+        }
+    }
+
+    /// Whether lines without an alignment of their own are justified
+    pub const fn justified(&self) -> bool {
+        self.justified
+    }
+
+    /// Justify every line that has no alignment of its own, including lines added later (one that
+    /// is edited, split or pasted); the last row of each stays ragged. Turning it off clears the
+    /// alignment of the lines it justified
+    pub fn set_justified(&mut self, justified: bool) {
+        if justified != self.justified {
+            self.justified = justified;
+            if !justified {
+                for line in &mut self.lines {
+                    if line.align() == Some(crate::Align::Justified) {
+                        line.set_align(None);
+                    }
+                }
+            }
             for line in &mut self.lines {
                 line.reset_layout();
             }

@@ -44,3 +44,35 @@ pub(crate) fn for_new_buffer() -> Option<HangingIndent> {
         None
     }
 }
+
+#[cfg(feature = "std")]
+std::thread_local! {
+    static JUSTIFY_NEW_BUFFERS: core::cell::Cell<bool> = const { core::cell::Cell::new(false) };
+}
+
+/// Run `make` with every [`Buffer`](crate::Buffer) it creates on this thread starting justified
+/// (see [`Buffer::set_justified`](crate::Buffer::set_justified)), as
+/// [`with_hanging_indent`] does for the hanging indent
+#[cfg(feature = "std")]
+pub fn with_justified<T>(justified: bool, make: impl FnOnce() -> T) -> T {
+    struct Restore(bool);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            JUSTIFY_NEW_BUFFERS.with(|cell| cell.set(self.0));
+        }
+    }
+    let _restore = Restore(JUSTIFY_NEW_BUFFERS.with(|cell| cell.replace(justified)));
+    make()
+}
+
+/// Whether a new buffer starts justified
+pub(crate) fn justified_for_new_buffer() -> bool {
+    #[cfg(feature = "std")]
+    {
+        JUSTIFY_NEW_BUFFERS.with(core::cell::Cell::get)
+    }
+    #[cfg(not(feature = "std"))]
+    {
+        false
+    }
+}

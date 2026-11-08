@@ -24,7 +24,12 @@ pub const HANGING: cosmic_text::HangingIndent = cosmic_text::HangingIndent { col
 /// `Content` and gives no way to reach it after: vendor/cosmic-text/README.md). Nothing else in the
 /// window is affected, and the document's text is not touched
 pub fn editor_content(text: &str, prose: bool) -> cosmic::widget::text_editor::Content {
-    cosmic_text::with_hanging_indent((!prose).then_some(HANGING), || cosmic::widget::text_editor::Content::with_text(text))
+    // Prose is justified as the rendered prose is, when Justify paragraphs is on; the last row of
+    // each source line stays ragged, as the last row of a paragraph does
+    let justified = prose && super::settings::display().justify;
+    cosmic_text::with_justified(justified, || {
+        cosmic_text::with_hanging_indent((!prose).then_some(HANGING), || cosmic::widget::text_editor::Content::with_text(text))
+    })
 }
 
 /// What a line costs to measure is its shaping, so results are kept (a window being resized asks

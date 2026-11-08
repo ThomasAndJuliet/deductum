@@ -164,3 +164,27 @@ fn a_new_buffer_takes_the_setting_of_its_scope() {
     assert_eq!(inside.clone().hanging_indent(), TWO);
     assert_eq!(Buffer::new_empty(metrics).hanging_indent(), None);
 }
+
+/// A justified buffer's rows but the last of each line end at the width, whatever the line's
+/// origin (set with the buffer's text or pushed after); turned off, the alignment is cleared
+#[test]
+fn justified_buffer_justifies_all_its_lines_but_their_last_rows() {
+    let mut fs = font_system();
+    let width = 24.5 * advance(&mut fs);
+    let text = "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu";
+    let mut b = buffer(&mut fs, text, width, None);
+    b.set_justified(true);
+    b.lines.push(cosmic_text::BufferLine::new(text, cosmic_text::LineEnding::None, cosmic_text::AttrsList::new(&attrs()), Shaping::Advanced));
+    b.shape_until_scroll(&mut fs, false);
+    let ends: Vec<(usize, f32)> = b.layout_runs().map(|run| (run.line_i, run.glyphs.last().map_or(0.0, |g| g.x + g.w))).collect();
+    for line in 0..2 {
+        let rows: Vec<f32> = ends.iter().filter(|(i, _)| *i == line).map(|(_, e)| *e).collect();
+        assert!(rows.len() >= 2, "{rows:?}");
+        assert!(rows[..rows.len() - 1].iter().all(|e| (width - e).abs() < 0.5), "line {line}: {rows:?} against {width}");
+        assert!(width - rows[rows.len() - 1] > 1.0, "line {line}'s last row is ragged: {rows:?}");
+    }
+    b.set_justified(false);
+    b.shape_until_scroll(&mut fs, false);
+    assert!(b.layout_runs().all(|run| (width - run.glyphs.last().map_or(0.0, |g| g.x + g.w)).abs() > 0.5 || run.glyphs.len() > 100));
+    assert!(b.lines.iter().all(|l| l.align().is_none()));
+}
