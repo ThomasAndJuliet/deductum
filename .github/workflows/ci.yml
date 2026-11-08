@@ -8,32 +8,78 @@ permissions:
 # Every release-branch push keeps its own slot, including pending runs.
 # PRs and feature branches replace only superseded work for the same ref.
 # libcosmic comes from the household's private fork (ThomasAndJuliet/libcosmic)
-# and household-tones from ThomasAndJuliet/household-kit, fetched over ssh. The
-# Flatpak job runs scripts/ci-private-crates.sh with their read-only deploy-key
-# secrets first. Fork PRs and other untrusted actors receive no secrets: the
-# step then fails at once with a message naming the missing secret, instead of
-# a later git authentication error.
+# and household-tones from ThomasAndJuliet/household-kit, fetched over ssh with
+# read-only deploy keys. The trust job decides what each run may use
+# (scripts/ci-trust.py): fork pull requests run only hosted jobs without secrets.
+# A fork can rewrite this file, so that is not what stops hostile code reaching
+# the household runners: their runner group does, as the README explains.
 concurrency:
   group: >-
     ${{ github.workflow }}-${{ github.event_name }}-${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.run_id || github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name != 'push' || github.ref != 'refs/heads/main' }}
 jobs:
+  trust:
+    name: Classify this run
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      trusted: ${{ steps.classify.outputs.trusted }}
+      runner: ${{ steps.classify.outputs.runner }}
+      flatpak: ${{ steps.classify.outputs.flatpak }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: classify
+        env:
+          CI_RUNNER: ${{ vars.CI_RUNNER }}
+        run: python3 scripts/ci-trust.py
+  source-checks:
+    name: Source checks without private crates
+    # Everything that needs neither the private crates nor a secret, so that
+    # every pull request, including a fork's, gets a meaningful result.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check the workflow trust rules
+        run: |
+          python3 -c 'import yaml' || { sudo apt-get update && sudo apt-get install -y python3-yaml; }
+          python3 scripts/test-ci-trust.py
+      - name: Check release publication and packaging rules
+        run: |
+          python3 scripts/test-publish-release.py
+          python3 scripts/test-release-policy.py
+          python3 scripts/test-package-windows.py
+      - name: Check the Flatpak test manifest can be prepared
+        run: python3 scripts/prepare-ci-manifest.py
+      - name: Test the session host
+        run: python3 -m unittest discover -s host/tests -p "test_*.py"
   already-validated:
     name: Already validated?
     # A fast-forward merge brings a commit this workflow already passed on its
     # branch: the other jobs then skip their work.
-    runs-on: ${{ vars.CI_RUNNER == 'hosted' && 'ubuntu-24.04' || 'neo-ubuntu' }}
+    needs: [trust]
+    if: needs.trust.outputs.trusted == 'true'
+    runs-on: ${{ needs.trust.outputs.runner }}
     permissions:
       actions: read
       contents: read
     outputs:
       run: ${{ steps.check.outputs.run }}
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - id: check
-        uses: ThomasAndJuliet/neo-infrastructure/.github/actions/already-validated@2e9a991f7224fb1a00ab591e83fffbff2dd90667
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 scripts/ci-already-validated.py
   flatpak:
-    needs: [already-validated]
-    if: ${{ !cancelled() && (needs.already-validated.outputs.run == '' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && (vars.CI_RUNNER == 'hosted') }}
+    needs: [trust, already-validated]
+    if: ${{ !cancelled() && needs.trust.outputs.trusted == 'true' && needs.trust.outputs.flatpak == 'hosted' && (needs.already-validated.outputs.run == '' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) }}
     name: Deductum workspace tests and Flatpak
     runs-on: ubuntu-24.04
     timeout-minutes: 120
@@ -97,8 +143,9 @@ jobs:
           if-no-files-found: error
           retention-days: 7
           compression-level: 0
+      # Only the private publisher consumes this; a public run has none.
       - name: Preserve this successful release-branch build
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.event.repository.private
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: home-apps-x86_64
@@ -109,22 +156,23 @@ jobs:
           retention-days: 7
           compression-level: 0
   # The same steps on the household runners (neo-infrastructure
-  # services/ci-runners), the default. Set the CI_RUNNER variable to
-  # hosted to use GitHub-hosted runners instead.
+  # services/ci-runners), the default for a private repository. Setting the
+  # CI_RUNNER variable to hosted, or a public repository, uses GitHub-hosted
+  # runners instead.
   flatpak-neo:
-    needs: [already-validated]
-    if: ${{ !cancelled() && (needs.already-validated.outputs.run == '' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && (vars.CI_RUNNER != 'hosted') }}
+    needs: [trust, already-validated]
+    if: ${{ !cancelled() && needs.trust.outputs.trusted == 'true' && needs.trust.outputs.flatpak == 'neo' && (needs.already-validated.outputs.run == '' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) }}
     name: Deductum workspace tests and Flatpak on neo
     runs-on: [self-hosted, neo]
     timeout-minutes: 120
     steps: *flatpak-steps
 
   provers:
-    needs: [already-validated]
-    if: ${{ !cancelled() && needs.already-validated.outputs.run == '' }}
+    needs: [trust, already-validated]
+    if: ${{ !cancelled() && needs.trust.result == 'success' && needs.already-validated.outputs.run == '' }}
     name: Real Isabelle and Lean backend integrations
-    # Neo's Ubuntu runner by default; CI_RUNNER=hosted uses GitHub's image.
-    runs-on: ${{ vars.CI_RUNNER == 'hosted' && 'ubuntu-24.04' || 'neo-ubuntu' }}
+    # Fetches no private crate and uses no secret, so a fork's run keeps it.
+    runs-on: ${{ needs.trust.outputs.runner }}
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -151,7 +199,9 @@ jobs:
 
   windows-build:
     name: Native Windows portable package
-    runs-on: ${{ vars.CI_RUNNER == 'hosted' && 'ubuntu-24.04' || 'neo-ubuntu' }}
+    needs: [trust]
+    if: needs.trust.outputs.trusted == 'true'
+    runs-on: ${{ needs.trust.outputs.runner }}
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

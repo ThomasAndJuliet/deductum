@@ -11,8 +11,11 @@ import subprocess
 import tarfile
 import tempfile
 
+import release_config
+import release_scan
+
 APP_ID = "dev.twright.Deductum"
-REPOSITORY = "ThomasAndJuliet/deductum"
+REPOSITORY = release_config.repository()
 RUNTIME = "org.freedesktop.Platform/x86_64/25.08"
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -54,6 +57,9 @@ def package(directory, sha, run_id):
         if (app["name"], app["runtime"], app["command"]) != (APP_ID, RUNTIME, "deductum"):
             raise ValueError("Unexpected application, architecture, runtime or desktop command")
         runpy.run_path(str(ROOT / "scripts/check-flatpak-catalog"))["check"](build)
+        # Recorded, not enforced: CI and the private publication must not depend
+        # on it. Only the public release path refuses a payload with findings.
+        public_scan = release_scan.scan_tree(build)
         subprocess.run(["desktop-file-validate", str(build / f"files/share/applications/{APP_ID}.desktop")], check=True)
         subprocess.run(["appstreamcli", "validate", "--no-net", str(build / f"files/share/metainfo/{APP_ID}.metainfo.xml")], check=True)
         subprocess.run(["flatpak", "build-export", str(root / "repo"), str(build), "stable"], check=True)
@@ -67,6 +73,7 @@ def package(directory, sha, run_id):
         "architecture": "x86_64", "app_id": APP_ID, "runtime": RUNTIME,
         "archive_sha256": digest(bundle), "archive_bytes": bundle.stat().st_size,
         "build_sha256": source["build_sha256"], "signed": False,
+        "public_scan": public_scan,
     }, sort_keys=True, indent=2) + "\n")
     return bundle, receipt
 
@@ -76,5 +83,5 @@ if __name__ == "__main__":
     parser.add_argument("directory", type=Path)
     args = parser.parse_args()
     if os.environ.get("GITHUB_REPOSITORY") != REPOSITORY:
-        parser.error("This packager is scoped to the private Deductum repository")
+        parser.error("This packager is scoped to the repository named in release-config.json")
     print(package(args.directory, os.environ["GITHUB_SHA"], int(os.environ["GITHUB_RUN_ID"]))[0])
