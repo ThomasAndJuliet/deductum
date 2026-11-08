@@ -940,3 +940,102 @@ fn the_next_subgoals_name_is_bold() {
     let (one, two) = (ink(part(&all, super::view::test_panel_id("subgoal-1"))), ink(part(&all, super::view::test_panel_id("subgoal-2"))));
     assert!(one > two * 1.12, "the next subgoal's name has {one:.1} of ink, the other {two:.1}: not bolder");
 }
+
+// ----- a collapsed error's one line: words in the interface font, terms in the code font
+
+use super::editor::{ProverMessage, Sem};
+
+fn words(runs: &[(String, bool)]) -> Vec<(&str, bool)> {
+    runs.iter().map(|(t, term)| (t.as_str(), *term)).collect()
+}
+
+/// Isabelle quotes terms with "…", Lean with '…': the quotes go and the terms are the code font's
+#[test]
+fn an_error_summary_sets_quoted_names_and_terms_in_the_code_font_without_the_quotes() {
+    let isabelle = |line: &str| {
+        let terms = super::view::quoted_terms(line, '"');
+        words(&super::view::summary_runs(line, &terms, '"')).into_iter().map(|(t, k)| (t.to_string(), k)).collect::<Vec<_>>()
+    };
+    assert_eq!(isabelle("Undefined fact: \"map_def\""), vec![("Undefined fact: ".to_string(), false), ("map_def".to_string(), true)]);
+    assert_eq!(
+        isabelle("Type unification failed: Clash of types \"nat\" and \"bool\""),
+        vec![("Type unification failed: Clash of types ".into(), false), ("nat".into(), true), (" and ".into(), false), ("bool".into(), true)]
+    );
+    assert_eq!(isabelle("Inner syntax error at \"x <\""), vec![("Inner syntax error at ".to_string(), false), ("x <".to_string(), true)]);
+    assert_eq!(isabelle("Failed to finish proof"), vec![("Failed to finish proof".to_string(), false)]);
+    let lean = |line: &str| {
+        let terms = super::view::quoted_terms(line, '\'');
+        super::view::summary_runs(line, &terms, '\'')
+    };
+    assert_eq!(lean("unknown identifier 'candidate'"), vec![("unknown identifier ".to_string(), false), ("candidate".to_string(), true)]);
+    // (an apostrophe inside a name is not a quote)
+    assert_eq!(lean("the hypothesis h' is unused"), vec![("the hypothesis h' is unused".to_string(), false)]);
+    assert_eq!(lean("unknown constant 'h''"), vec![("unknown constant ".to_string(), false), ("h'".to_string(), true)]);
+}
+
+/// Where the message carries Isabelle's markup (its colour classes for names, variables and
+/// facts), those parts are the terms, whatever the quotes; the position mark the summary cuts
+/// does not shift them
+#[test]
+fn an_error_summary_takes_its_terms_from_the_messages_markup_where_it_has_it() {
+    let table = super::prover::isabelle::symbols::Table::fallback();
+    let line = "Undefined fact: \"map_def\"";
+    let message = ProverMessage { raw: line.into(), text: line.into(), kind: "error".into(), spans: vec![(17, 24, Sem::Dynamic), (0, 9, Sem::Keyword1)], ..Default::default() };
+    let terms = super::view::markup_terms(&message, line, &table);
+    assert_eq!(terms, vec![17..24], "only the term classes count, not a keyword's");
+    let runs = super::view::summary_runs(line, &terms, '"');
+    assert_eq!(words(&runs), vec![("Undefined fact: ", false), ("map_def", true)]);
+    // markup on something with no quotes
+    let line = "Variable x is not fixed";
+    let message = ProverMessage { raw: line.into(), text: line.into(), kind: "error".into(), spans: vec![(9, 10, Sem::Free)], ..Default::default() };
+    let terms = super::view::markup_terms(&message, line, &table);
+    assert_eq!(words(&super::view::summary_runs(line, &terms, '"')), vec![("Variable ", false), ("x", true), (" is not fixed", false)]);
+    // the position mark ⌂ (\<^here>), cut from the summary, is not in its line: the spans still land
+    let raw = "Undefined fact\u{2302}: \"map_def\"";
+    let line = "Undefined fact: \"map_def\"";
+    let message = ProverMessage { raw: raw.into(), text: raw.into(), kind: "error".into(), spans: vec![(18, 25, Sem::Dynamic)], ..Default::default() };
+    assert_eq!(super::view::markup_terms(&message, line, &table), vec![17..24]);
+    // no markup: nothing, and the quotes decide
+    let bare = ProverMessage { raw: String::new(), text: line.into(), ..Default::default() };
+    assert!(super::view::markup_terms(&bare, line, &table).is_empty());
+}
+
+/// The collapsed row as drawn: its words are not in the code font's even advance, its terms are
+/// (the same line drawn all in the code font is wider than the words and terms mixed)
+#[test]
+fn a_collapsed_error_row_draws_sans_words_and_code_terms() {
+    let app = cells_app(None);
+    let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+    let table = super::prover::isabelle::symbols::Table::fallback();
+    let width = 700.0;
+    let draw = |light: bool, text: &str, name: &str| {
+        let m = ProverMessage { kind: "error".into(), start: 3, end: 6, text: text.into(), raw: text.into(), ..Default::default() };
+        let _turn = super::snapshot::ui_turn();
+        cosmic::theme::set_active(if light { cosmic::theme::ThemeType::Light } else { cosmic::theme::ThemeType::Dark });
+        let frame = super::snapshot::render(cosmic::widget::container(super::view::message_strip(t, &m, &table, width)).width(cosmic::iced::Length::Fixed(width)).into(), name, Size::new(width, 40.0));
+        cosmic::theme::set_active(cosmic::theme::ThemeType::Dark);
+        frame
+    };
+    // The words are the same in both rows (so they are drawn alike: the interface font), and the
+    // term differs (the code font in one, the interface font in the other)
+    let differing = |a: &[u8], b: &[u8], from: u32, to: u32| {
+        let mut n = 0;
+        for y in 4..36 {
+            for x in from..to {
+                if px(a, width as u32, x as f32, y as f32).iter().zip(px(b, width as u32, x as f32, y as f32)).any(|(p, q)| p.abs_diff(q) > 40) {
+                    n += 1;
+                }
+            }
+        }
+        n
+    };
+    for light in [true, false] {
+        let name = if light { "error-summary-light" } else { "error-summary-dark" };
+        let mixed = draw(light, "Undefined fact: \"map_def\"", name);
+        // (no quotes in the text, so no term is found: all the interface font)
+        let sans = draw(light, "Undefined fact: map_def", &format!("{name}-sans"));
+        assert_eq!(differing(&mixed, &sans, 30, 112), 0, "light={light}: the words are drawn differently");
+        let term = differing(&mixed, &sans, 118, 190);
+        assert!(term > 60, "light={light}: the term is drawn as the words are ({term} pixels differ): not in the code font");
+    }
+}

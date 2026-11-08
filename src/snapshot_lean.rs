@@ -399,6 +399,7 @@ fn unsolved_goals_are_summarised_under_the_proof() {
             end: at + 11,
             kind: "error".into(),
             text: "unsolved goals\ncase left\np q : Prop\nhp : p\nhq : q\n⊢ q\n\ncase right\np q : Prop\nhp : p\nhq : q\n⊢ p".into(),
+            ..Default::default()
         });
         t.refresh(&*symbols);
     }
