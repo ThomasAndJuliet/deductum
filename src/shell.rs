@@ -388,6 +388,9 @@ pub fn icon_handle(name: &'static str) -> widget::icon::Handle {
         // Cerea's views icons (res/icons, from its origin/main) and the terminal's agent session
         "paper-mode-symbolic" => widget::icon::from_svg_bytes(include_bytes!("../res/icons/paper-mode-symbolic.svg").as_slice()).symbolic(true),
         "source-view-symbolic" => widget::icon::from_svg_bytes(include_bytes!("../res/icons/source-view-symbolic.svg").as_slice()).symbolic(true),
+        // The prover logos (Tom approved them 8 Nov; drafts until Juliet approves them for household-ui)
+        "isabelle-symbolic" => widget::icon::from_svg_bytes(include_bytes!("../res/icons/isabelle-symbolic.svg").as_slice()).symbolic(true),
+        "lean-symbolic" => widget::icon::from_svg_bytes(include_bytes!("../res/icons/lean-symbolic.svg").as_slice()).symbolic(true),
         "ai-session-symbolic" => widget::icon::from_svg_bytes(include_bytes!("../res/icons/ai-session-symbolic.svg").as_slice()).symbolic(true),
         #[cfg(windows)]
         "view-dual-symbolic" => widget::icon::from_svg_bytes(include_bytes!("../res/icons/view-dual-symbolic.svg").as_slice()).symbolic(true),

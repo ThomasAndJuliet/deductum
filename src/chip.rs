@@ -146,10 +146,15 @@ pub fn chip_width(app: &App) -> f32 {
     if app.window_width < 1250.0 { CHIP_WIDTH_NARROW } else { CHIP_WIDTH }
 }
 
-/// The prover's logo (the backend's mark for now: the symbolic logos are not chosen yet, and
-/// replacing this one function's body changes the chip, the sidebar and the new-session cards)
+/// The prover's logo: Isabelle's and Lean's symbolic icons (res/icons; one flat colour, so they
+/// take the text's), and Rocq, which has no mark yet, its letter mark. Replacing this one
+/// function's body changes the chip's logo
 pub fn logo<'a>(backend: &str) -> Element<'a, Message> {
-    super::shell::backend_glyph(backend)
+    match backend {
+        "rocq" | "coq" => super::shell::backend_glyph(backend),
+        "lean" => widget::icon(super::shell::icon_handle("lean-symbolic")).size(18).into(),
+        _ => widget::icon(super::shell::icon_handle("isabelle-symbolic")).size(18).into(),
+    }
 }
 
 fn memory_text(ws: &Workspace) -> Option<String> {
