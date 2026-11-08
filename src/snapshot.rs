@@ -453,7 +453,7 @@ fn draws_navigation_and_inline_goals() {
 #[test]
 fn sidebars_resize_and_the_header_shows_the_prover() {
     let app = demo_app(Mode::Literate);
-    let pressed = click(&app, cosmic::iced::Point::new(292.0, 500.0), Size::new(1400.0, 900.0));
+    let pressed = click(&app, cosmic::iced::Point::new(303.0, 500.0), Size::new(1400.0, 900.0));
     assert!(pressed.iter().any(|m| matches!(m, super::Message::DragStart(true))), "{pressed:?}");
     let header: cosmic::Element<'_, super::Message> =
         cosmic::widget::row::with_children(super::view::header_center(&app)).padding(8).into();
@@ -1567,7 +1567,7 @@ fn the_views_in_light_mode() {
     let i = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.name == "lemma").unwrap();
     let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(i));
     let mut h = Harness::new(Size::new(1500.0, 900.0));
-    cosmic::theme::set_active(cosmic::theme::ThemeType::Light);
+    cosmic::theme::set_active(crate::tones::light_type_for_tests());
     h.focus(&app, super::view::block_editor_id());
     h.draw(&app, "light-literate-open");
     let _ = cosmic::Application::update(&mut app, super::Message::CloseBlock);
@@ -2779,7 +2779,7 @@ fn frame_matrix() {
             let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(i));
         }
         let mut h = Harness::new(Size::new(c.width, 860.0));
-        cosmic::theme::set_active(if c.dark { cosmic::theme::ThemeType::Dark } else { cosmic::theme::ThemeType::Light });
+        cosmic::theme::set_active(if c.dark { cosmic::theme::ThemeType::Dark } else { crate::tones::light_type_for_tests() });
         super::view::set_goal_beside(c.beside);
         if c.mode == Mode::Literate {
             h.focus(&app, super::view::block_editor_id());
@@ -2978,7 +2978,7 @@ fn the_insert_bar_sits_above_the_isabelle_goal() {
     for dark in [true, false] {
         for (w, h, beside) in [(1400.0, 900.0, true), (1400.0, 900.0, false), (800.0, 760.0, true), (800.0, 760.0, false)] {
             let mut harness = Harness::new(Size::new(w, h));
-            cosmic::theme::set_active(if dark { cosmic::theme::ThemeType::Dark } else { cosmic::theme::ThemeType::Light });
+            cosmic::theme::set_active(if dark { cosmic::theme::ThemeType::Dark } else { crate::tones::light_type_for_tests() });
             super::view::set_goal_beside(beside);
             let mut app = demo_app(Mode::Literate);
             app.show_right = false;

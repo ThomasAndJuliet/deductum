@@ -3596,9 +3596,9 @@ impl cosmic::Application for App {
                 self.window_height = h;
             }
             Message::DragMove(p) => match self.dragging {
-                Some(true) => self.left_width = p.x.clamp(180.0, (self.window_width - 360.0).max(180.0)),
+                Some(true) => self.left_width = (p.x - sidebar::card_margin()).clamp(180.0, (self.window_width - 360.0).max(180.0)),
                 Some(false) => {
-                    self.right_width = (self.window_width - p.x).clamp(260.0, (self.window_width - 360.0).max(260.0));
+                    self.right_width = (self.window_width - p.x - sidebar::card_margin()).clamp(260.0, (self.window_width - 360.0).max(260.0));
                 }
                 None => {}
             },

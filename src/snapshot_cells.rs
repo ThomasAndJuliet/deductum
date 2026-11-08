@@ -21,7 +21,7 @@ const BAND_SIZE: Size = Size::new(900.0, 560.0);
 /// the light theme set, for `f`; the dark theme, the tests' default, is set again after
 fn in_light<T>(size: Size, f: impl FnOnce(&mut Harness) -> T) -> T {
     let mut h = Harness::new(size);
-    cosmic::theme::set_active(cosmic::theme::ThemeType::Light);
+    cosmic::theme::set_active(crate::tones::light_type_for_tests());
     let out = f(&mut h);
     cosmic::theme::set_active(cosmic::theme::ThemeType::Dark);
     out
@@ -176,7 +176,7 @@ fn cell(n: usize, select: Option<usize>) -> (Rectangle, Vec<u8>) {
 /// The strip's tone at rest, checked, unfinished and failed, as the design records them
 #[test]
 fn strips_at_rest_are_halfway_between_faded_and_muted() {
-    let t = cosmic::Theme::light();
+    let t = crate::tones::light_for_tests();
     for (status, want) in [(Status::Finished, 0x609677), (Status::Warned, 0xaa904c), (Status::Failed, 0xb97676)] {
         let got = strip_color(status, false, &t);
         assert!(is([(want >> 16) as u8, (want >> 8) as u8, want as u8], got), "{status:?}: {} is not #{want:06x}", hex(got));
@@ -185,7 +185,7 @@ fn strips_at_rest_are_halfway_between_faded_and_muted() {
 
 #[test]
 fn the_bright_status_colours_are_the_designs() {
-    let t = cosmic::Theme::light();
+    let t = crate::tones::light_for_tests();
     assert_eq!(hex(strip_color(Status::Finished, true, &t)), "#00572c");
     assert_eq!(hex(strip_color(Status::Warned, true, &t)), "#ab7d01");
     assert_eq!(hex(strip_color(Status::Failed, true, &t)), "#c01c28");
@@ -213,7 +213,7 @@ fn the_dark_status_colours_are_one_lightness_and_chroma_in_each_hue() {
 /// at-rest tone, as its left edge with no border beside it
 #[test]
 fn a_cell_at_rest_has_a_grey_border_and_its_strip_at_the_left_edge() {
-    let t = cosmic::Theme::light();
+    let t = crate::tones::light_for_tests();
     let (b, frame) = cell(0, None);
     let w = SIZE.width as u32;
     let mid = (b.y + b.height / 2.0).floor();
@@ -243,7 +243,7 @@ fn a_cell_at_rest_has_a_grey_border_and_its_strip_at_the_left_edge() {
 /// colour, no accent
 #[test]
 fn a_selected_cell_has_its_strip_and_border_in_its_bright_status_colour() {
-    let t = cosmic::Theme::light();
+    let t = crate::tones::light_for_tests();
     for (n, status) in [(0, Status::Finished), (1, Status::Warned)] {
         let (b, frame) = cell(n, Some(n));
         let w = SIZE.width as u32;
@@ -275,7 +275,7 @@ fn luminance(c: Color) -> f32 {
 /// the user's, over the band, is the 32 % tint computed over the band, a step darker
 #[test]
 fn the_construct_band_is_the_ten_percent_tint_and_a_selection_is_darker_over_it() {
-    let t = cosmic::Theme::light();
+    let t = crate::tones::light_for_tests();
     let page = super::view::page_color(&t);
     let band = super::tones::over(super::tones::band(&t), page);
     assert_eq!(super::tones::band(&t).a, 0.10);
@@ -291,7 +291,7 @@ fn the_construct_band_is_the_ten_percent_tint_and_a_selection_is_darker_over_it(
 /// by the same border, its strip running down beside it, and with no plate of its own
 #[test]
 fn a_failed_cells_message_is_inside_its_border_with_no_plate() {
-    let t = cosmic::Theme::light();
+    let t = crate::tones::light_for_tests();
     let page = super::view::page_color(&t);
     let muted = muted_status_color(super::view::error_color(&t), &t);
     assert_eq!(hex(muted), "#964844", "the muted failed colour");
@@ -365,7 +365,7 @@ fn on_line(frame: &[u8], editor: Rectangle, line: usize, dx: f32) -> [u8; 3] {
 /// lies between the strip and the text, and the band covers it
 #[test]
 fn the_band_runs_edge_to_edge_inside_the_card() {
-    let t = cosmic::Theme::light();
+    let t = crate::tones::light_for_tests();
     let page = super::view::page_color(&t);
     let band = super::tones::over(super::tones::band(&t), page);
     let (frame, editor) = caret_frame(0);
@@ -388,7 +388,7 @@ fn the_band_runs_edge_to_edge_inside_the_card() {
 /// darker than the band, and over the page outside it; edge to edge as the band is
 #[test]
 fn the_caret_line_is_the_grey_wash_over_the_band_or_the_page() {
-    let t = cosmic::Theme::light();
+    let t = crate::tones::light_for_tests();
     let page = super::view::page_color(&t);
     let band = super::tones::over(super::tones::band(&t), page);
     let wash = super::tones::caret_line(&t);
@@ -490,7 +490,7 @@ fn centre(r: Rectangle) -> cosmic::iced::Point {
 /// message on the clipboard
 #[test]
 fn a_long_error_is_one_line_opens_inside_the_card_and_copies_whole() {
-    let t = cosmic::Theme::light();
+    let t = crate::tones::light_for_tests();
     let mut app = cells_app(None);
     let (i, start, text) = failed_cell(&app);
     let w = TALL.width as u32;
@@ -574,7 +574,7 @@ fn on_ink_line(p: [u8; 3], page: Color, ink: Color) -> bool {
 /// the cell's right edge, a space_m or more from the last of them
 #[test]
 fn the_add_links_are_accent_with_no_fill_and_delete_is_red_at_the_right() {
-    let t = cosmic::Theme::light();
+    let t = crate::tones::light_for_tests();
     let app = cells_app(Some(2));
     let w = TALL.width as u32;
     in_light(TALL, |h| {
@@ -646,7 +646,7 @@ fn the_add_links_are_accent_with_no_fill_and_delete_is_red_at_the_right() {
 /// no tinted plate and no violet bar; its heading is the agent's violet and Resolve an accent link
 #[test]
 fn a_note_is_inside_its_cells_border_with_no_plate_and_a_violet_heading() {
-    let t = cosmic::Theme::light();
+    let t = crate::tones::light_for_tests();
     let page = super::view::page_color(&t);
     let violet = super::view::note_color(&t);
     assert_eq!(hex(violet), "#6348b8");
@@ -721,7 +721,7 @@ const PANEL: Size = Size::new(1000.0, 900.0);
 fn goal_frame(light: bool) -> (Vec<u8>, Vec<(cosmic::widget::Id, Rectangle)>) {
     let app = goal_app();
     let mut h = Harness::new(PANEL);
-    cosmic::theme::set_active(if light { cosmic::theme::ThemeType::Light } else { cosmic::theme::ThemeType::Dark });
+    cosmic::theme::set_active(if light { crate::tones::light_type_for_tests() } else { cosmic::theme::ThemeType::Dark });
     super::view::set_goal_beside(false);
     let _ = h.draw(&app, "panel-warm");
     let frame = h.draw(&app, if light { "panel-light" } else { "panel-dark" });
@@ -741,7 +741,7 @@ fn part(all: &[(cosmic::widget::Id, Rectangle)], id: cosmic::widget::Id) -> Rect
 fn the_goal_panel_has_a_two_pixel_grey_outline_and_a_lightish_band() {
     for light in [true, false] {
         let (frame, all) = goal_frame(light);
-        let theme = if light { cosmic::Theme::light() } else { cosmic::Theme::dark() };
+        let theme = if light { crate::tones::light_for_tests() } else { cosmic::Theme::dark() };
         let w = PANEL.width as u32;
         let panel = part(&all, super::view::test_panel_id("panel"));
         let grey = card_border_color(&theme);
@@ -784,7 +784,7 @@ fn the_goal_panel_has_a_two_pixel_grey_outline_and_a_lightish_band() {
 fn the_goal_under_a_cell_has_the_coloured_line_as_its_left_edge() {
     for light in [true, false] {
         let (frame, all) = goal_frame(light);
-        let theme = if light { cosmic::Theme::light() } else { cosmic::Theme::dark() };
+        let theme = if light { crate::tones::light_for_tests() } else { cosmic::Theme::dark() };
         let w = PANEL.width as u32;
         let panel = part(&all, super::view::test_panel_id("panel"));
         let edge = part(&all, super::view::test_panel_id("edge"));
@@ -927,7 +927,7 @@ fn overlaps(a: Rectangle, b: Rectangle) -> bool {
 
 /// Nothing but the page's colour on any row of the panel, in the gap before it
 fn gap_is_clear(b: &Beside) {
-    let page = super::view::page_color(&cosmic::Theme::light());
+    let page = super::view::page_color(&crate::tones::light_for_tests());
     let w = b.size.width as u32;
     let (from, to) = (b.panel.x as u32 - super::view::GOAL_GAP_PUB as u32 + 2, b.panel.x as u32 - 1);
     for y in b.panel.y as u32..(b.panel.y + b.panel.height) as u32 {
@@ -1204,12 +1204,12 @@ fn the_page_on_screen_with_the_sidebar_open_and_closed() {
     let table: &[(f32, bool, Option<f32>, f32)] = &[
         (1700.0, true, Some(360.0), 80.0),
         (1500.0, true, Some(360.0), 80.0),
-        (1400.0, true, Some(342.8), 80.0),
-        (1344.0, true, Some(300.0), 78.0),
-        (1280.0, true, Some(300.0), 70.0),
-        (1200.0, true, Some(300.0), 61.0),
-        (1190.0, true, Some(300.0), 60.0),
-        (1180.0, true, None, 80.0),
+        (1400.0, true, Some(332.8), 80.0),
+        (1344.0, true, Some(300.0), 77.0),
+        (1280.0, true, Some(300.0), 69.0),
+        (1210.0, true, Some(300.0), 61.0),
+        (1200.0, true, Some(300.0), 60.0),
+        (1190.0, true, None, 80.0),
         (1100.0, true, None, 80.0),
         (1700.0, false, Some(360.0), 80.0),
         (1100.0, false, Some(338.8), 80.0),
@@ -1252,7 +1252,7 @@ fn the_goal_heading_stays_inside_a_narrow_panel() {
     assert!((b.panel.width - 300.0).abs() < 0.5, "{:?}", b.panel);
     let heading = b.heading.expect("the goal's heading");
     assert!(heading.height < 40.0, "one row at 300 px: {heading:?}");
-    let page = super::view::page_color(&cosmic::Theme::light());
+    let page = super::view::page_color(&crate::tones::light_for_tests());
     // the panel's own padding, inside its outline, is clear down the heading's whole height
     let x = b.panel.x + b.panel.width - 8.0;
     for y in heading.y as u32..(heading.y + heading.height) as u32 {
@@ -1317,7 +1317,7 @@ fn the_goal_beside_never_covers_prose_level_with_it() {
 fn the_tools_are_accent_links_with_no_chip_fill() {
     for light in [true, false] {
         let (frame, all) = goal_frame(light);
-        let theme = if light { cosmic::Theme::light() } else { cosmic::Theme::dark() };
+        let theme = if light { crate::tones::light_for_tests() } else { cosmic::Theme::dark() };
         let w = PANEL.width as u32;
         let band = part(&all, super::insert::insert_bar_id());
         let bg = super::view::chrome_color(&theme);
@@ -1373,7 +1373,7 @@ fn click_x(h: &mut Harness, app: &App, heading: Rectangle, wanted: impl Fn(&supe
 fn goals_text_and_types_are_on_the_headings_line() {
     let app = goal_app();
     let mut h = Harness::new(PANEL);
-    cosmic::theme::set_active(cosmic::theme::ThemeType::Light);
+    cosmic::theme::set_active(crate::tones::light_type_for_tests());
     super::view::set_goal_beside(false);
     let _ = h.draw(&app, "heading-warm");
     let frame = h.draw(&app, "heading-line");
@@ -1398,7 +1398,7 @@ fn goals_text_and_types_are_on_the_headings_line() {
     assert!(first.y >= heading.y + heading.height, "the first subgoal is above the heading line");
     // the heading itself is bold ink at the line's left
     let w = PANEL.width as u32;
-    let page = super::view::page_color(&cosmic::Theme::light());
+    let page = super::view::page_color(&crate::tones::light_for_tests());
     let mut dark = 0;
     for x in (heading.x as u32 + 4)..(heading.x as u32 + 120) {
         for y in (heading.y as u32)..((heading.y + heading.height) as u32) {
@@ -1417,7 +1417,7 @@ fn goals_text_and_types_are_on_the_headings_line() {
 fn subgoals_are_flat_with_a_hairline_and_accent_labels() {
     for light in [true, false] {
         let (frame, all) = goal_frame(light);
-        let theme = if light { cosmic::Theme::light() } else { cosmic::Theme::dark() };
+        let theme = if light { crate::tones::light_for_tests() } else { cosmic::Theme::dark() };
         let w = PANEL.width as u32;
         let (one, two) = (part(&all, super::view::test_panel_id("subgoal-1")), part(&all, super::view::test_panel_id("subgoal-2")));
         // no plate: well inside each card at the right, away from its text, the colour is the same
@@ -1464,7 +1464,7 @@ fn subgoals_are_flat_with_a_hairline_and_accent_labels() {
 fn the_next_subgoals_name_is_bold() {
     let (frame, all) = goal_frame(true);
     let w = PANEL.width as u32;
-    let page = super::view::page_color(&cosmic::Theme::light());
+    let page = super::view::page_color(&crate::tones::light_for_tests());
     let ink = |c: Rectangle| {
         let mut n = 0.0;
         for y in (c.y as u32)..(c.y as u32 + 18) {
@@ -1549,7 +1549,7 @@ fn a_collapsed_error_row_draws_sans_words_and_code_terms() {
     let draw = |light: bool, text: &str, name: &str| {
         let m = ProverMessage { kind: "error".into(), start: 3, end: 6, text: text.into(), raw: text.into(), ..Default::default() };
         let _turn = super::snapshot::ui_turn();
-        cosmic::theme::set_active(if light { cosmic::theme::ThemeType::Light } else { cosmic::theme::ThemeType::Dark });
+        cosmic::theme::set_active(if light { crate::tones::light_type_for_tests() } else { cosmic::theme::ThemeType::Dark });
         let frame = super::snapshot::render(cosmic::widget::container(super::view::message_strip(t, &m, &table, width)).width(cosmic::iced::Length::Fixed(width)).into(), name, Size::new(width, 40.0));
         cosmic::theme::set_active(cosmic::theme::ThemeType::Dark);
         frame
@@ -1659,7 +1659,7 @@ fn the_code_font_reaches_cells_the_source_view_and_inline_terms() {
     let sentence = |settings: &Settings, md: &str| {
         let _turn = super::snapshot::ui_turn();
         let _published = Published::new(settings);
-        cosmic::theme::set_active(cosmic::theme::ThemeType::Light);
+        cosmic::theme::set_active(crate::tones::light_type_for_tests());
         let typo = super::view::typography(&cosmic::theme::active());
         assert_eq!(typo.mono, settings.code.font, "the prose's terms are set in the code font");
         let doc = std::sync::Arc::new(prose_render::markdown::parse(md));
@@ -1696,7 +1696,7 @@ fn thicken_text_draws_semibold_where_the_family_has_one_and_regular_otherwise() 
             let mut s = settings.clone();
             s.display.font = font;
             settings::publish(&s);
-            super::view::typography(&cosmic::Theme::light()).body_weight
+            super::view::typography(&crate::tones::light_for_tests()).body_weight
         };
         (
             TextFont::Libertinus.editor_font().weight,
@@ -1729,7 +1729,7 @@ fn thicken_text_draws_semibold_where_the_family_has_one_and_regular_otherwise() 
         let mut s = settings.clone();
         s.display.font = font;
         let _published = Published::new(&s);
-        cosmic::theme::set_active(cosmic::theme::ThemeType::Light);
+        cosmic::theme::set_active(crate::tones::light_type_for_tests());
         let mut typo = super::view::typography(&cosmic::theme::active());
         typo.size = 20.0;
         let doc = std::sync::Arc::new(prose_render::markdown::parse("Stop deadlocks but lets time pass, and its trace grows only by time steps."));
@@ -1859,7 +1859,7 @@ fn the_gap_after_the_strip_is_three_quarters_of_an_em_of_the_code_at_any_zoom() 
             let card = all.0.iter().find(|(x, _)| *x == super::view::test_block_id(first)).unwrap().1;
             // the first character of the first line: the first pixel right of the strip that is
             // not the card's page colour, on the middle of that line
-            let page = super::view::page_color(&cosmic::Theme::light());
+            let page = super::view::page_color(&crate::tones::light_for_tests());
             let y = card.y + 1.0 + super::view::code_padding().top + super::view::code_line_height() / 2.0;
             let width = SIZE.width as u32;
             let ink = (card.x as u32 + 5..card.x as u32 + 80).find(|&x| (-8..=8).any(|dy| !is(px(&frame, width, x as f32, y + dy as f32), page))).expect("code on the line");
