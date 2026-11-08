@@ -1444,3 +1444,72 @@ fn agent_items_are_not_in_the_windows_build() {
     }
 }
 
+
+/// The frames for the review of the header (stages/8-header), named as the "before" frames are
+#[test]
+fn frames_for_the_header_review() {
+    let mut app = mixed_app();
+    app.show_right = true;
+    for (light, theme) in [(true, "light"), (false, "dark")] {
+        set_lifecycle(&mut app, "Running");
+        app.workspace.as_mut().unwrap().activity = Some(json!({"prover": {"cpu": 385, "rss_mb": 3120}, "running": [{"name": "by", "seconds": 41}], "theories": []}));
+        app.workspace.as_mut().unwrap().theory.as_mut().unwrap().prover.status = json!({"finished": 9, "unprocessed": 6, "running": 1, "failed": 0, "consolidated": false});
+        draw_in(light, || header(&app), &format!("header-checking-{theme}"), Size::new(1400.0, 48.0));
+        {
+            let ws = app.workspace.as_mut().unwrap();
+            ws.activity = Some(json!({"prover": {"cpu": 2, "rss_mb": 3120}, "running": [], "theories": []}));
+            let t = ws.theory.as_mut().unwrap();
+            t.prover.status = json!({"finished": 15, "unprocessed": 0, "running": 0, "failed": 0, "consolidated": true});
+            for b in &mut t.blocks {
+                b.status = super::theory::Status::Finished;
+            }
+            t.blocks.iter_mut().for_each(|b| b.commands.retain(|c| c.name != "sorry"));
+        }
+        draw_in(light, || header(&app), &format!("header-checked-{theme}"), Size::new(1400.0, 48.0));
+        set_lifecycle(&mut app, "Paused");
+        draw_in(light, || header(&app), &format!("header-paused-{theme}"), Size::new(1400.0, 48.0));
+        set_lifecycle(&mut app, "Stopped");
+        draw_in(light, || header(&app), &format!("header-stopped-{theme}"), Size::new(1400.0, 48.0));
+        set_lifecycle(&mut app, "Running");
+        // a toast, with its Undo, over the window
+        let task = app.shell.toasts.push("Block deleted", true, std::time::Duration::from_secs(5));
+        drop(task);
+        draw_in(light, || app.shell.toasts.over(window(&app)), &format!("window-toast-{theme}"), Size::new(1400.0, 860.0));
+        let ids: Vec<_> = app.shell.toasts.live.iter().map(|l| l.id).collect();
+        ids.into_iter().for_each(|id| app.shell.toasts.gone(id));
+        app.workspace.as_mut().unwrap().activity = None;
+        draw_in(light, || super::sidebar::sidebar(&app), &format!("sidebar-marks-{theme}"), Size::new(300.0, 760.0));
+    }
+}
+
+#[test]
+fn the_chip_logo_is_the_symbolic_icon_in_the_text_colour_and_rocq_keeps_its_letter() {
+    let mut frames = Vec::new();
+    for backend in ["isabelle", "lean", "rocq"] {
+        let mut app = chip_scene(|_| {});
+        app.sessions.get_mut(&("local".to_string(), "s1".to_string())).unwrap()["backend"] = json!(backend);
+        for (light, theme) in [(true, "light"), (false, "dark")] {
+            let frame = draw_in(light, || header(&app), &format!("chip-logo-{backend}-{theme}"), Size::new(1400.0, 48.0));
+            if light {
+                frames.push(frame);
+            }
+        }
+    }
+    assert!(frames[0] != frames[1] && frames[1] != frames[2] && frames[0] != frames[2], "each backend has its own logo");
+    // Isabelle's and Lean's are not coloured: in the light theme every pixel of the logo is grey
+    let width = 1400usize;
+    for frame in &frames[..2] {
+        // (the chip is centred: its logo is the first mark after the pill's left edge, 10 to 40 px in)
+        let mut coloured = 0;
+        for y in 14..34 {
+            for x in 520..560 {
+                let p = &frame[(y * width + x) * 4..(y * width + x) * 4 + 3];
+                let spread = p.iter().max().unwrap() - p.iter().min().unwrap();
+                if spread > 24 {
+                    coloured += 1;
+                }
+            }
+        }
+        assert_eq!(coloured, 0, "a symbolic logo is in the text's colour");
+    }
+}
