@@ -662,32 +662,54 @@ fn request_banner<'a>(r: &Value) -> Element<'a, Message> {
 }
 
 /// An agent's note: violet, apart from the statuses' green, amber and red and from the accent
-fn note_color(theme: &cosmic::Theme) -> Color {
+pub fn note_color(theme: &cosmic::Theme) -> Color {
     if theme.cosmic().is_dark { Color::from_rgb8(0xb3, 0x9d, 0xf5) } else { Color::from_rgb8(0x63, 0x48, 0xb8) }
 }
 
-/// Between a cell and what is attached under it (its errors, its notes, its goal under it)
+/// Between a cell and what is attached under it (its goal under it)
 const ATTACHED: f32 = 6.0;
 
-/// An agent's note on the text: who, what, the replies so far, and a reply or Resolve. Attached
-/// under its cell: as wide as the cell (`width`; else the text column), its bar where the cell's
-/// status strip is and its text where the code is, a little below the cell
-fn note_card<'a>(ws: &'a Workspace, n: &Value, width: Option<f32>) -> Element<'a, Message> {
+/// The agent's notes whose first character is in `start..end` of the open theory
+fn notes_on<'a>(ws: &'a Workspace, t: &Theory, start: usize, end: usize) -> Vec<&'a Value> {
+    ws.notes
+        .iter()
+        .filter(|n| {
+            n["start"].as_u64().is_some_and(|s| {
+                let s = super::App::local_offset_pub(t, s as usize);
+                start <= s && s < end.max(start + 1)
+            })
+        })
+        .collect()
+}
+
+/// Whether a block's notes are in its card: a cell with its code shown or open as an editor. The
+/// notes of any other block have a card of their own
+fn notes_in_card(t: &Theory, i: usize, block: &Block) -> bool {
+    block.kind == Kind::Formal && t.block_views.get(i).is_some_and(Option::is_some)
+}
+
+/// An agent's note on the text: who and where, the text, the replies so far, and a reply or
+/// Resolve. The heading is in the agent's violet with Resolve (a Tertiary link) at its right; the
+/// reply field sits plain on the page, with Reply (Secondary) beside it. Nothing of its own behind
+/// it: no plate and no bar
+fn note_body<'a>(ws: &'a Workspace, n: &Value) -> Element<'a, Message> {
     let sp = spacing();
     let id = n["id"].as_str().unwrap_or("").to_string();
-    let mut col = widget::column::with_capacity(6).spacing(sp.space_xxxs);
+    let mut col = widget::column::with_capacity(5).spacing(sp.space_xxxs);
     // (Resolve, which closes the note, in its heading: the reply row keeps the room for typing)
     col = col.push(
         widget::row::with_capacity(2)
             .align_y(Alignment::Center)
-            .push(widget::text::caption_heading(format!("{} · note on line {}", n["label"].as_str().unwrap_or("Agent"), n["line"])).width(Length::Fill))
             .push(
-                widget::button::text("Resolve")
-                    .leading_icon(widget::icon::from_name("object-select-symbolic").size(16))
-                    .font_size(z(12.0) as u16)
-                    .padding([0, 6])
-                    .on_press(Message::NoteReply(id.clone(), true)),
-            ),
+                widget::text::caption_heading(format!("{} · note on line {}", n["label"].as_str().unwrap_or("Agent"), n["line"]))
+                    .class(theme::Text::Custom(|theme| iced::widget::text::Style {
+                        color: Some(note_color(theme)),
+                        selected_fill: Color { a: 0.32, ..Color::from(theme.cosmic().accent.base) },
+                        selected_text_color: None,
+                    }))
+                    .width(Length::Fill),
+            )
+            .push(tertiary("Resolve", Message::NoteReply(id.clone(), true))),
     );
     col = col.push(widget::text::body(n["text"].as_str().unwrap_or("").to_string()));
     for r in n["replies"].as_array().into_iter().flatten() {
@@ -709,27 +731,88 @@ fn note_card<'a>(ws: &'a Workspace, n: &Value, width: Option<f32>) -> Element<'a
                             let id = id.clone();
                             move |_| Message::NoteReply(id.clone(), false)
                         })
+                        .style(plain_input())
                         .width(Length::Fill),
                 )
-                .push(widget::button::standard("Reply").on_press_maybe(can_reply.then(|| Message::NoteReply(id.clone(), false)))),
+                .push(secondary("Reply", can_reply.then(|| Message::NoteReply(id.clone(), false)))),
         )
         .padding(Padding { top: sp.space_xxxs as f32, ..Padding::ZERO }),
     );
-    let body = widget::container(col).padding([sp.space_xxs, CODE_PADDING.left as u16]).width(Length::Fill).class(theme::Container::custom(|theme| iced::widget::container::Style {
-        background: Some(blend(cell_color(theme), note_color(theme), 0.08).into()),
-        border: Border { radius: 4.0.into(), ..Default::default() },
+    col.into()
+}
+
+/// A note in its cell's card: under the code and its messages, after a hairline (COSMIC's divider)
+/// as wide as the card, its text where the code's is
+fn note_in_card<'a>(ws: &'a Workspace, n: &Value, width: f32) -> Element<'a, Message> {
+    let sp = spacing();
+    let hairline = widget::container(widget::Space::new()).width(Length::Fill).height(Length::Fixed(1.0)).class(theme::Container::custom(|theme| iced::widget::container::Style {
+        background: Some(card_border_color(theme).into()),
         ..Default::default()
     }));
-    let bar = widget::container(widget::Space::new()).width(Length::Fixed(4.0)).height(Length::Fill).class(theme::Container::custom(|theme| iced::widget::container::Style {
-        background: Some(note_color(theme).into()),
-        border: Border { radius: 2.0.into(), ..Default::default() },
-        ..Default::default()
-    }));
-    let card = widget::row::with_capacity(2).spacing(4).push(bar).push(body).height(Length::Shrink);
-    widget::container(card)
-        .padding(Padding { top: ATTACHED, ..Padding::ZERO })
-        .width(width.map_or(Length::Fill, Length::Fixed))
+    widget::column::with_capacity(2)
+        .push(hairline)
+        .push(widget::container(note_body(ws, n)).padding([sp.space_xxs as f32, CODE_PADDING.left]).width(Length::Fill))
+        .width(Length::Fixed(width))
         .into()
+}
+
+/// A note on a block that is not a cell with code (a text, a heading): a card of its own in the
+/// same style, `width` wide (the cell's; else the text column), a little below the block
+fn note_card<'a>(ws: &'a Workspace, n: &Value, width: Option<f32>) -> Element<'a, Message> {
+    let sp = spacing();
+    let body = widget::container(note_body(ws, n)).padding([sp.space_xxs as f32, CODE_PADDING.left]).width(Length::Fill);
+    widget::container(card(body.into(), Status::Unprocessed, false)).padding(Padding { top: ATTACHED, ..Padding::ZERO }).width(width.map_or(Length::Fill, Length::Fixed)).into()
+}
+
+/// A text input plain on the page: the page's own fill and a hairline border (the accent ring when
+/// it has the focus)
+fn plain_input() -> theme::TextInput {
+    use cosmic::widget::text_input::{Appearance, StyleSheet as _};
+    fn plain(mut a: Appearance, theme: &cosmic::Theme, focused: bool) -> Appearance {
+        a.background = Color::from(page_color(theme)).into();
+        if !focused {
+            a.border_width = 1.0;
+            a.border_color = card_border_color(theme);
+        }
+        a
+    }
+    theme::TextInput::Custom {
+        active: Box::new(|theme| plain(theme.active(&theme::TextInput::Default), theme, false)),
+        error: Box::new(|theme| plain(theme.error(&theme::TextInput::Default), theme, false)),
+        hovered: Box::new(|theme| plain(theme.hovered(&theme::TextInput::Default), theme, false)),
+        focused: Box::new(|theme| plain(theme.focused(&theme::TextInput::Default), theme, true)),
+        disabled: Box::new(|theme| plain(theme.disabled(&theme::TextInput::Default), theme, false)),
+    }
+}
+
+/// A Secondary button (household rule 7): no fill, a 2 px accent border, an accent semibold label,
+/// a 32 px pill; COSMIC's text-button washes when hovered and pressed, faded when it cannot act
+fn secondary<'a>(label: &'static str, on_press: Option<Message>) -> widget::Button<'a, Message> {
+    use widget::button::Catalog as _;
+    fn outlined(mut style: widget::button::Style, theme: &cosmic::Theme, wash: Option<Color>, faded: bool) -> widget::button::Style {
+        let c = theme.cosmic();
+        let accent: Color = c.accent_text_color().into();
+        let accent = if faded { Color { a: 0.5, ..accent } } else { accent };
+        style.background = wash.map(Into::into);
+        style.border_radius = c.corner_radii.radius_xl.into();
+        style.border_width = 2.0;
+        style.border_color = accent;
+        style.text_color = Some(accent);
+        style.icon_color = Some(accent);
+        style
+    }
+    let text = || theme::Button::Text;
+    let font = cosmic::iced::Font { weight: cosmic::iced::font::Weight::Semibold, ..cosmic::font::default() };
+    widget::button::custom(widget::container(widget::text(label).size(z(14.0)).font(font)).center_y(Length::Fill))
+        .padding([z(6.0) as u16, spacing().space_s])
+        .height(Length::Fixed(z(32.0)))
+        .class(theme::Button::Custom {
+            active: Box::new(move |focused, theme| outlined(theme.active(focused, false, &text()), theme, None, false)),
+            disabled: Box::new(move |theme| outlined(theme.disabled(&text()), theme, None, true)),
+            hovered: Box::new(move |focused, theme| outlined(theme.hovered(focused, false, &text()), theme, Some(theme.cosmic().text_button.hover.into()), false)),
+            pressed: Box::new(move |focused, theme| outlined(theme.pressed(focused, false, &text()), theme, Some(theme.cosmic().text_button.pressed.into()), false)),
+        })
+        .on_press_maybe(on_press)
 }
 
 fn banner<'a>(text: String, action: Option<(&'static str, Message)>) -> Element<'a, Message> {
@@ -1288,6 +1371,13 @@ fn block_code<'a>(ws: Option<&'a Workspace>, t: &'a Theory, i: usize, block: &Bl
     if let Some(m) = messages_view(t, block, table, current, block_code_width(t.code_columns.max(v.columns))) {
         inside = inside.push(m);
     }
+    // and the agents' notes on it, after a hairline
+    if let Some(ws) = ws {
+        let width = block_code_width(t.code_columns.max(v.columns));
+        for n in notes_on(ws, t, block.start, block.end) {
+            inside = inside.push(note_in_card(ws, n, width));
+        }
+    }
     let cell = framed(inside.into(), t.shown_status(block.start, block.end, block.status), marked);
     #[cfg(test)]
     { widget::container(cell).id(test_block_id(i)).into() }
@@ -1729,19 +1819,11 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
                     item = item.push(side_at(widget::container(block_editor_in(app.workspace.as_ref(), t, false, inline, &*table)).id(selected_block_id()).into(), formal, top));
                 }
             }
-            // (its notes stay under it while it is open: nothing after it moves)
-            if opens_here && let Some(ws) = app.workspace.as_ref() {
-                for n in ws.notes.iter().filter(|n| {
-                    n["start"].as_u64().is_some_and(|s| {
-                        let s = super::App::local_offset_pub(t, s as usize);
-                        block.start <= s && s < block.end.max(block.start + 1)
-                    })
-                }) {
-                    let width = t.block_editor.as_ref().filter(|be| be.kind == Kind::Formal).map(|be| {
-                        let columns = be.content.text().lines().map(|l| l.chars().count()).max().unwrap_or(0);
-                        block_code_width(t.code_columns.max(columns)) + CARD_CHROME
-                    });
-                    item = item.push(side(note_card(ws, n, width), false));
+            // (its notes stay with it while it is open: inside its card if it is a cell, else
+            // under it; nothing after it moves)
+            if opens_here && let Some(ws) = app.workspace.as_ref() && !t.block_editor.as_ref().is_some_and(|be| be.kind == Kind::Formal && be.wrap.is_none()) {
+                for n in notes_on(ws, t, block.start, block.end) {
+                    item = item.push(side(note_card(ws, n, None), false));
                 }
             }
             // (and the space after it that a shown block has: what follows stays where it was)
@@ -1811,14 +1893,9 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
             item = item.push(side(area.into(), marked && editing.is_none() && block.kind == Kind::Formal));
         }
         let selected_here = t.selected == Some(i) && editing.is_none() && block.kind != Kind::Header;
-        // Agents' notes on this block, under it
-        if let Some(ws) = app.workspace.as_ref() {
-            for n in ws.notes.iter().filter(|n| {
-                n["start"].as_u64().is_some_and(|s| {
-                    let s = super::App::local_offset_pub(t, s as usize);
-                    block.start <= s && s < block.end.max(block.start + 1)
-                })
-            }) {
+        // Agents' notes on this block: in its card if it is a cell, else a card of their own under it
+        if let Some(ws) = app.workspace.as_ref().filter(|_| !notes_in_card(t, i, block)) {
+            for n in notes_on(ws, t, block.start, block.end) {
                 let width = (block.kind == Kind::Formal).then(|| {
                     let columns = t.block_views.get(i).and_then(Option::as_ref).map_or(0, |v| v.columns);
                     block_code_width(t.code_columns.max(columns)) + CARD_CHROME
@@ -2176,6 +2253,11 @@ fn block_editor_in<'a>(ws: Option<&'a Workspace>, t: &'a Theory, window: bool, i
         let mut inside = widget::column::with_capacity(2).push(code);
         if let Some(strips) = edit_messages(t, be, table, width) {
             inside = inside.push(strips);
+        }
+        if be.kind == Kind::Formal && let Some(ws) = ws {
+            for n in notes_on(ws, t, be.start, be.end) {
+                inside = inside.push(note_in_card(ws, n, width));
+            }
         }
         framed(inside.into(), t.shown_status(be.start, be.end, t.status_in(be.start, be.end).unwrap_or(Status::Finished)), true)
     };

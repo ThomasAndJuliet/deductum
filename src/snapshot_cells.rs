@@ -637,3 +637,63 @@ fn the_add_links_are_accent_with_no_fill_and_delete_is_red_at_the_right() {
         assert!(rmin - lmax >= super::view::spacing().space_m as f32, "Delete is {} px from the add links", rmin - lmax);
     });
 }
+
+// ----- an agent's note, in its cell's card
+
+/// The agent's note on a cell is inside the cell's card: under its code after a hairline, enclosed
+/// by the same border (the 2 px selected one too), the cell's strip running down beside it, with
+/// no tinted plate and no violet bar; its heading is the agent's violet and Resolve an accent link
+#[test]
+fn a_note_is_inside_its_cells_border_with_no_plate_and_a_violet_heading() {
+    let t = cosmic::Theme::light();
+    let page = super::view::page_color(&t);
+    let violet = super::view::note_color(&t);
+    assert_eq!(hex(violet), "#6348b8");
+    let w = SIZE.width as u32;
+    let grey = card_border_color(&t);
+    // (the demo's note is on its first cell, the checked one)
+    let (b, frame) = cell(0, None);
+    let code_only = 3.0 * super::view::code_line_height() + super::view::CODE_PADDING.top + super::view::CODE_PADDING.bottom;
+    assert!(b.height > code_only + 80.0, "the card is {} tall, as tall as its code alone ({code_only}): the note is not in it", b.height);
+    // the heading: pixels of the violet, in the card under the code
+    let mut rows = Vec::new();
+    for y in ((b.y + code_only) as u32)..((b.y + b.height) as u32) {
+        for x in (b.x as u32 + 6)..((b.x + b.width) as u32) {
+            if is(px(&frame, w, x as f32, y as f32), violet) {
+                rows.push((x, y));
+            }
+        }
+    }
+    assert!(rows.len() > 25, "only {} pixels of the agent's violet {} in the card", rows.len(), hex(violet));
+    let (top, bottom) = (rows.iter().map(|p| p.1).min().unwrap(), rows.iter().map(|p| p.1).max().unwrap());
+    assert!(bottom - top < 16, "the violet is in one heading line, not a plate or bar: rows {top} to {bottom}");
+    // no plate, no bar: down the note's rows the card is the page, and its left edge the status strip
+    let strip = strip_color(Status::Finished, false, &t);
+    for y in ((b.y + code_only + 4.0) as u32)..((b.y + b.height - 6.0) as u32) {
+        assert!(is(px(&frame, w, b.x + b.width - 8.0, y as f32), page), "the note has a plate at {y}: {:?}", px(&frame, w, b.x + b.width - 8.0, y as f32));
+        assert!(is(px(&frame, w, b.x + 1.0, y as f32), strip), "the strip at {y}: {:?}", px(&frame, w, b.x + 1.0, y as f32));
+        // (the card's own 4 px after the strip, where a bar would be, is the page's)
+        assert!(is(px(&frame, w, b.x + 6.0, y as f32), page), "a bar beside the note at {y}: {:?}", px(&frame, w, b.x + 6.0, y as f32));
+    }
+    // the border encloses it: grey on the right beside the note and along the bottom below it
+    let note_y = (top + bottom) as f32 / 2.0;
+    let right = line_strength(&frame, w, b.x + b.width - 2.0, note_y, true, grey, page);
+    assert!((0.75..=1.05).contains(&right), "the card's right border beside the note: {right:.2}");
+    let under = line_strength(&frame, w, b.x + b.width * 0.7, b.y + b.height - 2.0, false, grey, page);
+    assert!((0.75..=1.05).contains(&under), "the card's bottom border under the note: {under:.2}");
+    // the hairline between the code and the note: one grey line across the card
+    let hair = (((b.y + code_only) as u32)..top).find(|&y| line_strength(&frame, w, b.x + b.width * 0.5, y as f32, false, grey, page) > 0.75);
+    assert!(hair.is_some(), "no hairline between the code and the note");
+    // Resolve is an accent link at the heading's right
+    let accent: Color = t.cosmic().accent_text_color().into();
+    let resolve = (((b.x + b.width * 0.6) as u32)..((b.x + b.width) as u32)).filter(|&x| (top - 3..=bottom + 6).any(|y| { let p = px(&frame, w, x as f32, y as f32); !is(p, page) && on_ink_line(p, page, accent) && p[2] >= p[0] && (p[0] as i32 - accent.into_rgba8()[0] as i32).abs() < 40 })).count();
+    assert!(resolve > 10, "Resolve is not drawn in the accent at the heading's right ({resolve} columns)");
+
+    // selected: the 2 px border in the bright status colour encloses the note as well
+    let (b, frame) = cell(0, Some(0));
+    let bright = strip_color(Status::Finished, true, &t);
+    let y = b.y + b.height - 30.0;
+    assert!(near(&frame, w, b.x + b.width - 1.0, y, bright), "the selected border beside the note: {:?}", px(&frame, w, b.x + b.width - 1.0, y));
+    assert!(near(&frame, w, b.x + b.width * 0.7, b.y + b.height - 1.0, bright), "the selected border under the note");
+    assert!(is(px(&frame, w, b.x + 1.0, y), bright), "the strip beside the note is the status colour");
+}
