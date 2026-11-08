@@ -4114,6 +4114,12 @@ def main(argv: List[str]) -> int:
             c.request("hello", client="cli")
             c.request("shutdown")
         return 0
+    if cmd == "register-mcp":
+        # After Deductum installs this host on a machine: the deductum MCP server for Claude and
+        # Codex, at user level, where it is missing (nothing existing is changed)
+        import register_mcp
+        print(json.dumps(register_mcp.register()))
+        return 0
     if cmd == "runtimes":
         print(json.dumps(find_runtimes(), indent=2))
         return 0
@@ -4123,7 +4129,7 @@ def main(argv: List[str]) -> int:
     if cmd == "migrate-from-isabellum":
         return migrate_from_isabellum()
     print("usage: deductum_host.py daemon|connect|mcp|status|runtimes|toolchains|find|stop-host|"
-          "migrate-from-isabellum")
+          "register-mcp|migrate-from-isabellum")
     return 2
 
 
