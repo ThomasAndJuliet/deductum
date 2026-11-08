@@ -512,6 +512,9 @@ pub fn problems<'a>(app: &'a App, t: &'a Theory) -> Element<'a, Message> {
 fn workspace<'a>(app: &'a App, ws: &'a Workspace, right: bool, main_width: f32) -> Element<'a, Message> {
     let sp = spacing();
     let summary = app.sessions.get(&(ws.machine.clone(), ws.sid.clone()));
+    // (what is said above the page: nothing, and no room for it, when there is nothing to say, so
+    // that the page's scroll view runs up to the header)
+    let mut said = false;
     let mut center = widget::column::with_capacity(6).spacing(sp.space_xs).padding([sp.space_xs, sp.space_s]);
     // (the theory's page outside the padded column: its scroll view, and so its scroll bar, at the
     // window's edges)
@@ -519,11 +522,14 @@ fn workspace<'a>(app: &'a App, ws: &'a Workspace, right: bool, main_width: f32) 
     if let Some(s) = summary {
         let lc = s["lifecycle"].as_str().unwrap_or("");
         if let Some(msg) = s["message"].as_str() {
+            said = true;
             center = center.push(banner(msg.to_string(), None));
         } else if lc == "Paused" {
+            said = true;
             center = center.push(banner("Paused: the prover stays loaded, checking is suspended. Earlier output is historical.".into(), Some(("Resume", Message::Lifecycle("resume")))));
         }
         for r in s["requests"].as_array().into_iter().flatten() {
+            said = true;
             center = center.push(request_banner(r));
         }
         if let Some(offer) = &ws.show_offer {
@@ -541,9 +547,11 @@ fn workspace<'a>(app: &'a App, ws: &'a Workspace, right: bool, main_width: f32) 
                 .push(widget::text::body(text).width(Length::Fill))
                 .push(widget::button::standard("Dismiss").on_press(Message::ShowOffer(false)))
                 .push(widget::button::suggested("Go there").on_press(Message::ShowOffer(true)));
+            said = true;
             center = center.push(widget::container(row).padding(sp.space_xs).class(theme::Container::Card).width(Length::Fill));
         }
         if s["parent"].is_object() && s["owner"].is_object() {
+            said = true;
             center = center.push(banner(
                 format!("Independent session of {} on branch {}", s["owner"]["label"].as_str().unwrap_or("an agent"), s["parent"]["branch"].as_str().unwrap_or("")),
                 Some(("Review and merge…", Message::Merge("preview".into()))),
@@ -557,17 +565,21 @@ fn workspace<'a>(app: &'a App, ws: &'a Workspace, right: bool, main_width: f32) 
             col = col.push(widget::text(f["diff"].as_str().unwrap_or("").to_string()).font(code_font()).size(12));
         }
         col = col.push(widget::row::with_capacity(2).spacing(sp.space_s).push(widget::button::suggested("Merge into the shared session").on_press(Message::Merge("apply".into()))));
+        said = true;
         center = center.push(widget::container(widget::scrollable(col)).max_height(360.0).padding(sp.space_s).class(theme::Container::Card));
     }
     match &ws.theory {
         Some(t) => {
             if t.conflict.is_some() {
+                said = true;
                 center = center.push(conflict_banner());
             }
             if let Some(err) = &t.save_error {
+                said = true;
                 center = center.push(banner(format!("Saving failed: {err}"), Some(("Retry", Message::Save))));
             }
             for alt in t.alternatives.iter().take(3) {
+                said = true;
                 center = center.push(alternative_banner(alt));
             }
 
@@ -581,6 +593,7 @@ fn workspace<'a>(app: &'a App, ws: &'a Workspace, right: bool, main_width: f32) 
                     .filter_map(|th| th["path"].as_str().map(|p| file_name(p).to_string()))
                     .collect();
                 if !broken.is_empty() {
+                    said = true;
                     center = center.push(banner(
                         format!("{} cannot load (a bad import or header); theories importing it wait. See Problems.", broken.join(", ")),
                         Some(("Problems", Message::LeftMode(LeftMode::Problems))),
@@ -640,10 +653,11 @@ fn workspace<'a>(app: &'a App, ws: &'a Workspace, right: bool, main_width: f32) 
             page_body = Some(body);
         }
         None => {
+            said = true;
             center = center.push(widget::container(widget::text::body(if ws.opening.is_some() { "Opening…" } else { "Choose a theory on the left." })).center(Length::Fill));
         }
     }
-    let mut outer = widget::column::with_capacity(2).push(center);
+    let mut outer = widget::column::with_capacity(2).push_maybe(said.then_some(center));
     if let Some(body) = page_body {
         outer = outer.push(body);
     }
@@ -2345,7 +2359,7 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
         _ => widget::Space::new().width(Length::Fixed(0.0)).height(Length::Fixed(0.0)).into(),
     };
     let laid = super::gap::GoalLayer::new(col, goal, anchor, GOAL_GAP).indices(indices);
-    let page = widget::container(widget::container(laid).max_width(page_width).width(Length::Fill));
+    let page = widget::container(widget::container(laid).padding(Padding { top: PAGE_TOP_ROOM, ..Padding::ZERO }).max_width(page_width).width(Length::Fill));
     let page = if super::settings::display().centred { page.center_x(Length::Fill) } else { page.width(Length::Fill) };
     widget::mouse_area(thin(page).id(literate_scroll_id()).height(Length::Fill).on_scroll(move |v| Message::LiterateScrolled(scope, v.absolute_offset().y, v.bounds().height))).on_press(Message::CloseBlock).into()
 }
@@ -3241,6 +3255,8 @@ const BLOCK_GAP: f32 = 20.0;
 
 /// The page's side margins, at least, while the goal beside it can keep them
 const PAGE_MARGIN: f32 = 24.0;
+/// The room above the page's first content, inside its scroll view: text scrolls up to the header
+const PAGE_TOP_ROOM: f32 = 24.0;
 
 /// Room kept for the page's scroll bar
 const SCROLLBAR_ROOM: f32 = 16.0;
@@ -3341,7 +3357,7 @@ fn source<'a>(ws: &'a Workspace, t: &'a Theory, inline: Option<&'a Workspace>, t
         ),
         None => (widget::Space::new().width(Length::Fixed(0.0)).height(Length::Fixed(0.0)).into(), iced::Vector::ZERO),
     };
-    let page = widget::container(super::gap::Beside::new(super::gap::Beside::new(row, goal, at), pop, pop_at).fixed()).center_x(Length::Fill);
+    let page = widget::container(super::gap::Beside::new(super::gap::Beside::new(row, goal, at), pop, pop_at).fixed()).padding(Padding { top: PAGE_TOP_ROOM, ..Padding::ZERO }).center_x(Length::Fill);
     col = col.push(thin(page).id(source_scroll_id()).height(Length::Fill));
     if let Some(m) = vim_mode_now() {
         col = col.push(widget::text::caption(format!("-- {} --", m.label())));

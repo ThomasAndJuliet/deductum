@@ -2456,3 +2456,17 @@ fn the_first_subgoal_follows_close_under_the_goal_heading() {
     let gap = first.y - (heading.y + heading.height);
     assert!(gap <= cosmic::theme::spacing().space_xs as f32 + 0.5, "{gap} px between the heading and the first subgoal");
 }
+
+/// With nothing said above the page, its scroll view starts at the top of what the header leaves:
+/// text scrolled up runs to the header, with no strip of page where it is cut off in mid-air
+#[test]
+fn the_page_scrolls_right_up_to_the_header() {
+    let app = goal_app();
+    in_light(Size::new(1000.0, 900.0), |h| {
+        super::view::set_goal_beside(true);
+        let _ = h.draw(&app, "page-top");
+        let _ = h.draw(&app, "page-top");
+        let view = *super::gap::GOAL_VIEWPORT.lock().unwrap();
+        assert_eq!(view.y, 0.0, "the scroll view starts at the top: {view:?}");
+    });
+}
