@@ -286,6 +286,43 @@ fn the_construct_band_is_the_ten_percent_tint_and_a_selection_is_darker_over_it(
     assert!(luminance(tint_over_band) < luminance(band), "{} is not darker than the band {}", hex(tint_over_band), hex(band));
 }
 
+/// A failed cell's message is inside its card: under the code, in the muted status colour, enclosed
+/// by the same border, its strip running down beside it, and with no plate of its own
+#[test]
+fn a_failed_cells_message_is_inside_its_border_with_no_plate() {
+    let t = cosmic::Theme::light();
+    let page = super::view::page_color(&t);
+    let muted = muted_status_color(super::view::error_color(&t), &t);
+    assert_eq!(hex(muted), "#964844", "the muted failed colour");
+    assert_eq!(hex(muted_status_color(sorry_color(&t), &t)), "#805c00", "the muted unfinished colour");
+    let (b, frame) = cell(2, None);
+    let w = SIZE.width as u32;
+    // (the card is taller than its two lines of code: the message is in it)
+    let code_only = 2.0 * super::view::code_line_height() + super::view::CODE_PADDING.top + super::view::CODE_PADDING.bottom;
+    assert!(b.height > code_only + 14.0, "the card is {} tall, as tall as its code alone ({code_only})", b.height);
+    // the message's text, in the muted colour, within the card's bounds
+    let [r, g, bl, _] = muted.into_rgba8();
+    let mut text_pixels = 0;
+    for y in (b.y as u32)..((b.y + b.height) as u32) {
+        for x in (b.x as u32)..((b.x + b.width) as u32) {
+            let p = px(&frame, w, x as f32, y as f32);
+            if p.iter().zip([r, g, bl]).all(|(a, b)| a.abs_diff(b) <= 24) && y as f32 > b.y + code_only - 4.0 {
+                text_pixels += 1;
+            }
+        }
+    }
+    assert!(text_pixels > 30, "only {text_pixels} pixels of the message's colour {} inside the card", hex(muted));
+    // no plate: beside the message's text, in its row, the card's fill is the page
+    let row = b.y + b.height - 12.0;
+    assert!(is(px(&frame, w, b.x + b.width * 0.7, row), page), "the message's row is not the page: {:?}", px(&frame, w, b.x + b.width * 0.7, row));
+    // the strip runs down beside the message, and the bottom border is below it
+    let strip = strip_color(Status::Failed, false, &t);
+    assert!(is(px(&frame, w, b.x + 1.0, row), strip), "the strip beside the message: {:?}", px(&frame, w, b.x + 1.0, row));
+    let grey = card_border_color(&t);
+    let ink = line_strength(&frame, w, b.x + b.width * 0.7, b.y + b.height - 2.0, false, grey, page);
+    assert!((0.75..=1.05).contains(&ink), "the border under the message: {ink:.2} of a grey line");
+}
+
 /// The proof being edited with the caret on line `line` of it (its construct, `show` to `qed`,
 /// is lines 4 to 7): the frame, and the open editor's bounds
 fn caret_frame(line: usize) -> (Vec<u8>, Rectangle) {
