@@ -2342,7 +2342,9 @@ fn the_goal_is_beside_the_selected_block_with_none_open() {
     let has_goal_beside = |png: Vec<u8>| {
         let img = image::RgbaImage::from_raw(1320, 800, png).unwrap();
         let bg = *img.get_pixel(12, 400);
-        (1150..1290).any(|x| (60..780).step_by(4).any(|y| img.get_pixel(x, y) != &bg))
+        // (right of the cells, which end well before it, and under the prose above them: the panel is
+        // just past the cell, no longer at the prose column's edge)
+        (1000..1290).any(|x| (250..780).step_by(4).any(|y| img.get_pixel(x, y) != &bg))
     };
     assert!(has_goal_beside(h.draw(&app, "selected-beside")), "the goal beside the selected proof");
     let _ = cosmic::Application::update(&mut app, super::Message::ToggleGoalBeside);

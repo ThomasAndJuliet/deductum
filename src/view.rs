@@ -589,7 +589,19 @@ fn workspace<'a>(app: &'a App, ws: &'a Workspace, right: bool, main_width: f32) 
             // the goal sits just past the blocks, a little apart
             let display = super::settings::display();
             let reading_width = (display.measure > 0.0).then(|| z(display.measure * display.text_size).min((main_width - SCROLLBAR_ROOM - 2.0 * z(PAGE_MARGIN)).max(z(240.0))));
-            let beside_width = reading_width.unwrap_or_else(|| (code_width(t.code_columns) + CARD_CHROME).clamp(z(440.0), z(680.0)));
+            // The goal sits just past its cell, not past the column, so the room it needs is
+            // measured from the widest cell's right edge: the column gives way (not below its
+            // cells) to leave the goal its minimum width, and the goal stays beside in windows
+            // narrower than the whole column and the goal would need. A wider window leaves the
+            // column its measure
+            let beside_width = match reading_width {
+                Some(column) => {
+                    let longest = t.block_editor.as_ref().map_or(0, |be| be.content.text().lines().map(|l| l.chars().count()).max().unwrap_or(0)).max(t.code_columns);
+                    let cells = if super::settings::cell_width() == 0 { column } else { (code_width(longest) + CARD_CHROME).min(column) };
+                    column.min(main_width - SCROLLBAR_ROOM - GOAL_GAP - z(320.0)).max(cells)
+                }
+                None => (code_width(t.code_columns) + CARD_CHROME).clamp(z(440.0), z(680.0)),
+            };
             // Beside when the text column, the gap and a goal of at least its minimum width fit
             // (room for the scroll bar kept); the side margins go first, before the goal goes under
             let room = main_width - SCROLLBAR_ROOM - beside_width - GOAL_GAP;
@@ -2219,12 +2231,15 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
         if !selected_here && block.kind != Kind::End {
             let hovered = app.workspace.as_ref().is_some_and(|w| w.gap_hover == Some(i));
             let inner: Element<'a, Message> = if hovered { block_actions(t, Some(i), false, None) } else { widget::Space::new().into() };
-            let gap = widget::mouse_area(widget::container(inner).height(Length::Fixed(z(BLOCK_GAP))).width(Length::Fill).center_y(Length::Fixed(z(BLOCK_GAP))))
+            // (not in `side`'s row: the area spans the text column, but the goal beside is placed
+            // by what the items show, and an empty area shows nothing that it must keep clear of)
+            let area_width = beside.map_or(Length::Fill, |(_, _, text_width)| Length::Fixed(text_width));
+            let gap = widget::mouse_area(widget::container(inner).height(Length::Fixed(z(BLOCK_GAP))).width(area_width).center_y(Length::Fixed(z(BLOCK_GAP))))
                 .on_enter(Message::GapHover(Some(i)))
                 .on_exit(Message::GapLeave(i))
                 // (it holds the pointer, so the page's own click-outside never sees a click here)
                 .on_press(Message::CloseBlock);
-            item = item.push(side(gap.into(), false));
+            item = item.push(gap);
         } else {
             item = item.push(widget::Space::new().height(Length::Fixed(z(BLOCK_GAP) - z(8.0))));
         }
