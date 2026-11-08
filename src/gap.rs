@@ -467,13 +467,96 @@ where
         let (gw, gh) = (goal.bounds().width, goal.bounds().height);
         let wanted = Rectangle { x: goal.bounds().x, y: anchor.bounds().y + top, width: gw, height: gh };
         let y = wanted.y + nudge(anchor.bounds(), wanted, viewport);
-        // past whatever is level with it
-        let right = items
-            .iter()
-            .filter(|it| it.bounds().y < y + gh && y < it.bounds().y + it.bounds().height)
-            .map(|it| item_right(*it))
-            .fold(anchor.bounds().x, f32::max);
+        let extents: Vec<Extent> = items.iter().map(|it| Extent { top: it.bounds().y, bottom: it.bounds().y + it.bounds().height, right: item_right(*it) }).collect();
+        let (y, right) = settle(&extents, slot, y, gh, anchor.bounds().x);
         Some(Vector::new(right + self.gap - goal.bounds().x, y - goal.bounds().y))
+    }
+}
+
+/// Where an item is on the page and how far right its content reaches
+#[derive(Clone, Copy, Debug)]
+struct Extent {
+    top: f32,
+    bottom: f32,
+    right: f32,
+}
+
+/// Where a goal `height` tall, wanted at `y` beside the item `slot`, goes: its top, and the right
+/// edge of what it goes past. Close to its own item, just past the items level with it. Where
+/// that would put it over a wider item below (a paragraph reaching further right than the item),
+/// it slides up, as far as the gap the item is in goes: the space beside it and any neighbouring
+/// items that are no wider, between the wider items above and below. Only a goal taller than
+/// the whole gap goes where it was wanted, past the wider items level with it. `from` is where
+/// the page's items begin on the left
+fn settle(items: &[Extent], slot: usize, wanted: f32, height: f32, from: f32) -> (f32, f32) {
+    let base = items[slot].right;
+    let wider = |it: &Extent| it.right != f32::MIN && it.right > base + 0.5;
+    let above = items[..slot].iter().rev().find(|it| wider(it)).map_or(f32::NEG_INFINITY, |it| it.bottom);
+    let below = items[slot + 1..].iter().find(|it| wider(it)).map_or(f32::INFINITY, |it| it.top);
+    let slid = wanted.min(below - height).max(above);
+    // (a gap that holds the goal: it stays in it, and its items are all no wider than the item's)
+    let y = if slid + height <= below + 0.01 { slid } else { wanted };
+    // past whatever is level with it
+    let right = items.iter().filter(|it| it.top < y + height && y < it.bottom).map(|it| it.right).fold(from, f32::max);
+    (y, right)
+}
+
+#[cfg(test)]
+mod settle_tests {
+    use super::{Extent, settle};
+
+    fn cells_and_prose() -> Vec<Extent> {
+        // prose (wide), a cell above (narrow), the anchor cell (narrow), then prose (wide)
+        vec![
+            Extent { top: 0.0, bottom: 100.0, right: 900.0 },
+            Extent { top: 110.0, bottom: 200.0, right: 700.0 },
+            Extent { top: 210.0, bottom: 300.0, right: 700.0 },
+            Extent { top: 310.0, bottom: 400.0, right: 900.0 },
+        ]
+    }
+
+    /// A goal that fits where it is wanted is not moved, and goes just past its cell
+    #[test]
+    fn a_goal_that_fits_without_sliding_is_unchanged() {
+        let (y, right) = settle(&cells_and_prose(), 2, 215.0, 80.0, 24.0);
+        assert_eq!((y, right), (215.0, 700.0));
+    }
+
+    /// A goal that would reach the paragraph below slides up, beside the cells, to its bottom
+    #[test]
+    fn a_goal_that_would_reach_the_prose_below_slides_up_and_stays_beside_the_cell() {
+        let (y, right) = settle(&cells_and_prose(), 2, 280.0, 150.0, 24.0);
+        assert_eq!(y, 160.0, "its bottom at the paragraph's top");
+        assert_eq!(right, 700.0, "still just past the cells, not past the paragraph");
+        // and it never goes above the gap's top (the paragraph above ends at 100)
+        let (y, right) = settle(&cells_and_prose(), 2, 280.0, 205.0, 24.0);
+        assert_eq!((y, right), (105.0, 700.0));
+    }
+
+    /// Sliding is continuous as the page scrolls (the wanted top moves with the nudge): no jump
+    #[test]
+    fn sliding_does_not_jump_as_the_wanted_top_moves() {
+        let mut last = settle(&cells_and_prose(), 2, 100.0, 150.0, 24.0).0;
+        for w in 101..400 {
+            let y = settle(&cells_and_prose(), 2, w as f32, 150.0, 24.0).0;
+            assert!((y - last).abs() <= 1.0 + 1e-3, "{last} then {y} at {w}");
+            last = y;
+        }
+    }
+
+    /// A goal taller than the whole gap goes past the paragraphs level with it, as it was wanted
+    #[test]
+    fn a_goal_taller_than_the_gap_goes_past_the_prose() {
+        let (y, right) = settle(&cells_and_prose(), 2, 215.0, 260.0, 24.0);
+        assert_eq!(y, 215.0);
+        assert_eq!(right, 900.0, "past the paragraph it overlaps");
+    }
+
+    /// With no wider item at all, the goal is where it was wanted
+    #[test]
+    fn with_no_wider_item_the_goal_is_where_it_was_wanted() {
+        let items = vec![Extent { top: 0.0, bottom: 90.0, right: 700.0 }, Extent { top: 100.0, bottom: 190.0, right: 700.0 }];
+        assert_eq!(settle(&items, 1, 120.0, 500.0, 24.0), (120.0, 700.0));
     }
 }
 
@@ -726,6 +809,152 @@ where
     Renderer: renderer::Renderer + 'a,
 {
     fn from(h: Halo<'a, Message, Theme, Renderer>) -> Self {
+        Element::new(h)
+    }
+}
+
+/// A line with a heading at its left and controls at its right, in whichever of two forms fits:
+/// the heading as long as it is and the controls whole, if the two fit the width together; else
+/// the heading wrapping in the room left of the compact controls. What fits is the heading's actual
+/// width, so a long heading gives the controls their compact form before they would be cut off
+pub struct HeadingLine<'a, Message, Theme, Renderer> {
+    /// The heading unwrapped, the whole controls, the heading that wraps, the compact controls
+    children: [Element<'a, Message, Theme, Renderer>; 4],
+    spacing: f32,
+    /// Whether the whole form is shown, as last laid out
+    whole: bool,
+}
+
+impl<'a, Message, Theme, Renderer> HeadingLine<'a, Message, Theme, Renderer> {
+    pub fn new(
+        heading: Element<'a, Message, Theme, Renderer>,
+        controls: Element<'a, Message, Theme, Renderer>,
+        wrapping: Element<'a, Message, Theme, Renderer>,
+        compact: Element<'a, Message, Theme, Renderer>,
+        spacing: f32,
+    ) -> Self {
+        Self { children: [heading, controls, wrapping, compact], spacing, whole: true }
+    }
+
+    fn shown(&self) -> [bool; 4] {
+        [self.whole, self.whole, !self.whole, !self.whole]
+    }
+}
+
+impl<Message, Theme, Renderer> Widget<Message, Theme, Renderer> for HeadingLine<'_, Message, Theme, Renderer>
+where
+    Renderer: renderer::Renderer,
+{
+    fn children(&self) -> Vec<Tree> {
+        self.children.iter().map(Tree::new).collect()
+    }
+
+    fn diff(&mut self, tree: &mut Tree) {
+        tree.diff_children(&mut self.children);
+    }
+
+    fn size(&self) -> Size<Length> {
+        Size::new(Length::Fill, Length::Shrink)
+    }
+
+    fn layout(&mut self, tree: &mut Tree, renderer: &Renderer, limits: &layout::Limits) -> layout::Node {
+        let width = limits.max().width;
+        let free = layout::Limits::new(Size::ZERO, Size::new(f32::INFINITY, limits.max().height));
+        let [heading, controls, wrapping, compact] = &mut self.children;
+        let [t0, t1, t2, t3] = &mut tree.children[..] else { return layout::Node::new(Size::ZERO) };
+        let heading = heading.as_widget_mut().layout(t0, renderer, &free);
+        let controls = controls.as_widget_mut().layout(t1, renderer, &free);
+        let compact = compact.as_widget_mut().layout(t3, renderer, &free);
+        self.whole = heading.size().width + self.spacing + controls.size().width <= width;
+        let room = layout::Limits::new(Size::ZERO, Size::new((width - compact.size().width - self.spacing).max(0.0), limits.max().height));
+        let wrapping = wrapping.as_widget_mut().layout(t2, renderer, &room);
+        let (left, right, others) = if self.whole { (heading, controls, [wrapping, compact]) } else { (wrapping, compact, [heading, controls]) };
+        let height = left.size().height.max(right.size().height);
+        let (lh, rw, rh) = (left.size().height, right.size().width, right.size().height);
+        let left = left.move_to((0.0, (height - lh) / 2.0));
+        let right = right.move_to((width - rw, (height - rh) / 2.0));
+        let [a, b] = others;
+        let nodes = if self.whole { vec![left, right, a, b] } else { vec![a, b, left, right] };
+        layout::Node::with_children(Size::new(width, height), nodes)
+    }
+
+    fn draw(&self, tree: &Tree, renderer: &mut Renderer, theme: &Theme, style: &renderer::Style, layout: Layout<'_>, cursor: mouse::Cursor, viewport: &Rectangle) {
+        for ((((child, tree), layout), _), _) in self.children.iter().zip(&tree.children).zip(layout.children()).zip(self.shown()).zip(0..).filter(|((_, shown), _)| *shown) {
+            child.as_widget().draw(tree, renderer, theme, style, layout, cursor, viewport);
+        }
+    }
+
+    fn update(
+        &mut self,
+        tree: &mut Tree,
+        event: &Event,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        renderer: &Renderer,
+        clipboard: &mut dyn Clipboard,
+        shell: &mut Shell<'_, Message>,
+        viewport: &Rectangle,
+    ) {
+        let shown = self.shown();
+        for (((child, tree), layout), shown) in self.children.iter_mut().zip(&mut tree.children).zip(layout.children()).zip(shown) {
+            if shown {
+                child.as_widget_mut().update(tree, event, layout, cursor, renderer, clipboard, shell, viewport);
+            }
+        }
+    }
+
+    fn mouse_interaction(&self, tree: &Tree, layout: Layout<'_>, cursor: mouse::Cursor, viewport: &Rectangle, renderer: &Renderer) -> mouse::Interaction {
+        self.children
+            .iter()
+            .zip(&tree.children)
+            .zip(layout.children())
+            .zip(self.shown())
+            .filter(|(_, shown)| *shown)
+            .map(|(((child, tree), layout), _)| child.as_widget().mouse_interaction(tree, layout, cursor, viewport, renderer))
+            .max()
+            .unwrap_or_default()
+    }
+
+    fn operate(&mut self, tree: &mut Tree, layout: Layout<'_>, renderer: &Renderer, operation: &mut dyn Operation) {
+        let shown = self.shown();
+        operation.traverse(&mut |operation| {
+            for (((child, tree), layout), shown) in self.children.iter_mut().zip(&mut tree.children).zip(layout.children()).zip(shown) {
+                if shown {
+                    child.as_widget_mut().operate(tree, layout, renderer, operation);
+                }
+            }
+        });
+    }
+
+    fn overlay<'b>(
+        &'b mut self,
+        tree: &'b mut Tree,
+        layout: Layout<'b>,
+        renderer: &Renderer,
+        viewport: &Rectangle,
+        translation: Vector,
+    ) -> Option<overlay::Element<'b, Message, Theme, Renderer>> {
+        let shown = self.shown();
+        let overlays: Vec<_> = self
+            .children
+            .iter_mut()
+            .zip(&mut tree.children)
+            .zip(layout.children())
+            .zip(shown)
+            .filter(|(_, shown)| *shown)
+            .filter_map(|(((child, tree), layout), _)| child.as_widget_mut().overlay(tree, layout, renderer, viewport, translation))
+            .collect();
+        (!overlays.is_empty()).then(|| overlay::Group::with_children(overlays).into())
+    }
+}
+
+impl<'a, Message, Theme, Renderer> From<HeadingLine<'a, Message, Theme, Renderer>> for Element<'a, Message, Theme, Renderer>
+where
+    Message: 'a,
+    Theme: 'a,
+    Renderer: renderer::Renderer + 'a,
+{
+    fn from(h: HeadingLine<'a, Message, Theme, Renderer>) -> Self {
         Element::new(h)
     }
 }

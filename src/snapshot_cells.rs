@@ -880,6 +880,8 @@ fn the_goal_in_the_open_editor_has_the_coloured_line_as_its_left_edge() {
 struct Beside {
     /// The goal's heading (its count and controls), where it is drawn, if it has come
     heading: Option<Rectangle>,
+    /// The heading's parts (the controls, the text, the notes line), where they are drawn
+    parts: Vec<(cosmic::widget::Id, Rectangle)>,
     cell: Rectangle,
     panel: Rectangle,
     others: Vec<Rectangle>,
@@ -908,8 +910,13 @@ fn beside(app: &App, width: f32) -> Beside {
         let others = t.blocks.iter().enumerate().filter(|(_, b)| b.kind == Kind::Formal)
             .filter_map(|(i, _)| all.0.iter().find(|(x, _)| *x == super::view::test_block_id(i)).map(|(_, r)| *r)).collect();
         let heading = all.0.iter().find(|(x, _)| *x == super::view::test_panel_id("heading")).map(|(_, r)| Rectangle { x: r.x + moved.x, y: r.y + moved.y, ..*r });
+        let parts = ["switches", "heading-text", "heading-notes"].iter().filter_map(|n| {
+            let id = super::view::test_panel_id(n);
+            all.0.iter().find(|(x, _)| *x == id).map(|(_, r)| (id, Rectangle { x: r.x + moved.x, y: r.y + moved.y, ..*r }))
+        }).collect();
         Beside {
             heading,
+            parts,
             cell: part(&all.0, super::view::selected_block_id()),
             panel: Rectangle { x: panel.x + moved.x, y: panel.y + moved.y, ..panel },
             others,
@@ -939,13 +946,14 @@ fn gap_is_clear(b: &Beside) {
     }
 }
 
-/// The goal panel's left edge is the right edge of its cell and the gap, 1,400 px wide, not the
-/// edge of the prose column; and nothing on the page, cells or prose, is under it
+/// The goal panel's left edge is the right edge of its cell and the gap, in a window 2,100 px wide
+/// (where the column is at its 48 em, wider than the cell), not the edge of the prose column; and
+/// nothing on the page, cells or prose, is under it
 #[test]
 fn the_goal_beside_sits_just_past_its_cell() {
-    let b = beside(&goal_app(), 1400.0);
-    assert!(b.wide, "1,400 px has room for the goal beside");
-    assert!(b.column > b.cell.x + b.cell.width + 100.0, "the column ({}) is wider than the cell, ending at {}", b.column, b.cell.x + b.cell.width);
+    let b = beside(&goal_app(), 2100.0);
+    assert!(b.wide, "2,100 px has room for the goal beside");
+    assert!(b.column > b.cell.width + 100.0, "the column ({}) is wider than the cell ({})", b.column, b.cell.width);
     let gap = super::view::GOAL_GAP_PUB;
     assert!((b.panel.x - (b.cell.x + b.cell.width + gap)).abs() < 1.0, "the panel is at {}, the cell's right edge is {} and the gap {gap}", b.panel.x, b.cell.x + b.cell.width);
     assert!(b.panel.x + b.panel.width <= b.size.width, "the panel is in the window");
@@ -1092,12 +1100,13 @@ fn characters(card: f32) -> f32 {
     super::view::cell_characters(card)
 }
 
-/// As the page narrows: the goal from 360 to 300 px with the cell at 80 characters, then the cell
+/// As the page narrows: the goal from 720 to 300 px with the cell at 80 characters, then the cell
 /// to 60 characters with the goal at 300 px, then the goal under the cell, the cell back at its full
-/// width. The prose column keeps 48 em (960 px) while it, the gap and the goal fit, and then gives
-/// way, not below the cell; under the cell it keeps 48 em while it fits the page. The thresholds
-/// come from an 80 character card of 703.2 px, a 60 character one of 535.2 px, margins of 24 px and
-/// the gap of 10 px
+/// width. The goal takes what is left after the cell (and so the prose column gives way to it, down
+/// to the cell's width, before the goal stops growing); the column has its 48 em (960 px) only
+/// where it, the gap and a goal at its widest fit; under the cell it keeps 48 em while it fits the
+/// page. The thresholds come from an 80 character card of 703.2 px, a 60 character one of 535.2 px,
+/// margins of 24 px and the gap of 10 px
 #[test]
 fn the_page_at_a_table_of_widths() {
     let _turn = super::snapshot::ui_turn();
@@ -1105,12 +1114,14 @@ fn the_page_at_a_table_of_widths() {
     let near = |a: f32, b: f32| (a - b).abs() < 0.11;
     // page, the goal (none: under), the cell in characters, the column
     let table: &[(f32, Option<f32>, f32, f32)] = &[
-        (1700.0, Some(360.0), 80.0, 960.0),
-        (1378.0, Some(360.0), 80.0, 960.0),  // the column, the gap and the widest goal just fit
-        (1377.0, Some(360.0), 80.0, 959.0),  // and the column begins to give way
-        (1200.0, Some(360.0), 80.0, 782.0),
-        (1121.3, Some(360.0), 80.0, 703.3),  // the goal still at its widest
-        (1121.0, Some(359.8), 80.0, 703.2),  // and it begins to narrow
+        (2600.0, Some(720.0), 80.0, 960.0),
+        (1738.0, Some(720.0), 80.0, 960.0),  // the column, the gap and the widest goal just fit
+        (1737.0, Some(720.0), 80.0, 959.0),  // and the column begins to give way
+        (1600.0, Some(720.0), 80.0, 822.0),
+        (1481.2, Some(720.0), 80.0, 703.2),  // the goal still at its widest, the column down to the cell
+        (1481.0, Some(719.8), 80.0, 703.2),  // and it begins to narrow
+        (1400.0, Some(638.8), 80.0, 703.2),
+        (1200.0, Some(438.8), 80.0, 703.2),
         (1100.0, Some(338.8), 80.0, 703.2),
         (1061.3, Some(300.1), 80.0, 703.2),
         (1061.2, Some(300.0), 80.0, 703.2),  // the goal at its narrowest, the cell still 80
@@ -1134,8 +1145,8 @@ fn the_page_at_a_table_of_widths() {
         assert!(l.gutter >= 24.0 && taken + 2.0 * 24.0 <= page + 0.01, "{page}: {taken} and the margins {} do not fit", l.gutter);
     }
     // the page's width alone: going back over the widths gives the same layouts
-    let down: Vec<_> = (880..1720).rev().map(|w| layout(w as f32)).collect();
-    let up: Vec<_> = (880..1720).map(|w| layout(w as f32)).collect();
+    let down: Vec<_> = (880..2200).rev().map(|w| layout(w as f32)).collect();
+    let up: Vec<_> = (880..2200).map(|w| layout(w as f32)).collect();
     assert!(down.iter().rev().eq(up.iter()), "the same at each width, narrowing or widening");
     // and each thing only narrows as the page does, each in its turn
     for pair in up.windows(2) {
@@ -1155,7 +1166,7 @@ fn the_page_layout_under_the_settings_and_the_zoom() {
     let near = |a: f32, b: f32| (a - b).abs() < 0.11;
     // 100: full width while it fits
     let l = super::view::page_layout(1700.0, 100, Some(960.0), true);
-    assert_eq!((characters(l.cell), l.goal), (100.0, Some(360.0)));
+    assert_eq!((characters(l.cell), l.goal), (100.0, Some(720.0)));
     // and narrowing to 60 like 80 does
     let l = super::view::page_layout(900.0, 100, Some(960.0), true);
     assert_eq!((characters(l.cell), l.goal), (60.0, Some(300.0)));
@@ -1190,7 +1201,10 @@ fn the_page_layout_under_the_settings_and_the_zoom() {
     let l = super::view::page_layout(1700.0, 80, Some(1440.0), true);
     assert!(near(l.cell, card(80.0)), "{l:?}");
     assert_eq!(characters(l.cell), 80.0);
-    assert!(near(l.goal.unwrap(), 540.0), "{l:?}");
+    assert!(near(l.goal.unwrap(), 1700.0 - 72.0 - 10.0 - card(80.0)), "the goal takes what is left after the cell: {l:?}");
+    // and at its widest, 720 px at zoom 1, is 1,080
+    let l = super::view::page_layout(3000.0, 80, Some(1440.0), true);
+    assert!(near(l.goal.unwrap(), 1080.0), "{l:?}");
     let l = super::view::page_layout(36.0 * 2.0 + 10.0 + 450.0 + card(60.0), 80, Some(1440.0), true);
     assert_eq!((characters(l.cell), l.goal), (60.0, Some(450.0)));
     let l = super::view::page_layout(36.0 * 2.0 + 10.0 + 450.0 + card(60.0) - 1.0, 80, Some(1440.0), true);
@@ -1204,8 +1218,10 @@ fn the_page_layout_under_the_settings_and_the_zoom() {
 fn the_page_on_screen_with_the_sidebar_open_and_closed() {
     // window, sidebar, the goal, characters
     let table: &[(f32, bool, Option<f32>, f32)] = &[
-        (1700.0, true, Some(360.0), 80.0),
-        (1500.0, true, Some(360.0), 80.0),
+        (2600.0, true, Some(720.0), 80.0),
+        (1800.0, true, Some(720.0), 80.0),  // the goal at its widest, from a page 1,481 px wide
+        (1700.0, true, Some(632.8), 80.0),
+        (1500.0, true, Some(432.8), 80.0),
         (1400.0, true, Some(332.8), 80.0),
         (1344.0, true, Some(300.0), 77.0),
         (1280.0, true, Some(300.0), 69.0),
@@ -1213,7 +1229,10 @@ fn the_page_on_screen_with_the_sidebar_open_and_closed() {
         (1200.0, true, Some(300.0), 60.0),
         (1190.0, true, None, 80.0),
         (1100.0, true, None, 80.0),
-        (1700.0, false, Some(360.0), 80.0),
+        (2600.0, false, Some(720.0), 80.0),
+        (1700.0, false, Some(720.0), 80.0),
+        (1500.0, false, Some(720.0), 80.0),
+        (1400.0, false, Some(638.8), 80.0),
         (1100.0, false, Some(338.8), 80.0),
         (1000.0, false, Some(300.0), 72.0),
         (900.0, false, Some(300.0), 60.0),
@@ -1808,8 +1827,10 @@ fn cells_share_the_cell_width_whatever_their_lines_and_fill_means_the_column() {
     // 80 characters of 14 px code: 8.4 px each, and the half character kept after them, between the
     // gap (0.75 em, 10.5 px) either side, and the strip and border
     let eighty = (80.5 * 8.4) + 2.0 * 10.5 + CHROME;
-    let (widths, column) = cell_widths(&widths_app(30), &settings, 1700.0);
+    let (widths, _) = cell_widths(&widths_app(30), &settings, 1700.0);
     assert!(widths.iter().all(|w| near(*w, eighty)), "every cell is 80 characters wide whatever its lines: {widths:?} (wanted {eighty})");
+    // (with the goal at its widest, 720 px, the column keeps its 48 em from a window 2,100 px wide)
+    let (_, column) = cell_widths(&widths_app(30), &settings, 2100.0);
     assert!(near(column, 960.0), "the column ({column}) keeps its 48 em, wider than the cells, with room for the goal");
 
     // a line of 100 characters, and one of 300: every cell still the same
@@ -2495,3 +2516,210 @@ fn thicken_text_leaves_inline_code_as_it_was() {
     assert_eq!(frame(&Settings::default()), frame(&thick), "the code is drawn as before");
 }
 
+
+// ----- the goal panel's heading, and the page at wide windows
+
+/// The goal app as the step has just changed it: updating, and 2 solved and 2 new against the
+/// subgoals before it
+fn with_notes(mut app: App) -> App {
+    let ws = app.workspace.as_mut().unwrap();
+    ws.goals.status = "running".into();
+    let raw = ["#deductum:count 2", "#deductum:param 1\nys :: 'a list", "#deductum:concl 1\nQ n", "#deductum:param 2\nys :: 'a list", "#deductum:concl 2\nR n"];
+    ws.goals_prev = super::QueryState {
+        operation: "deductum_goals",
+        status: "finished".into(),
+        messages: raw.iter().map(|r| serde_json::json!({"kind": "writeln", "raw": r, "text": r, "spans": []})).collect(),
+        ..Default::default()
+    };
+    app
+}
+
+/// The goal app with no goal in parts, the output of a finished `by`
+fn without_parts(mut app: App) -> App {
+    let ws = app.workspace.as_mut().unwrap();
+    ws.goals.messages.clear();
+    ws.output = Some(serde_json::json!({"command": {"name": "by", "status": "finished"}, "messages": [
+        {"kind": "writeln", "raw": "theorem\n  cond_srea_apply:\n  (?P \\<triangleleft> ?c \\<triangleright>\\<^sub>R ?Q) (?a, ?b) = (if ?c (st\\<^sub>v ?a) then ?P (?a, ?b) else ?Q (?a, ?b))", "text": "theorem\n  cond_srea_apply:\n  (?P \\<triangleleft> ?c \\<triangleright>\\<^sub>R ?Q) (?a, ?b) = (if ?c (st\\<^sub>v ?a) then ?P (?a, ?b) else ?Q (?a, ?b))", "spans": []}]}));
+    app
+}
+
+/// The goal app with every subgoal solved: the long heading
+fn with_none_left(mut app: App) -> App {
+    let ws = app.workspace.as_mut().unwrap();
+    ws.goals.messages = vec![serde_json::json!({"kind": "writeln", "raw": "#deductum:count 0", "text": "#deductum:count 0", "spans": []})];
+    app
+}
+
+/// The window that gives the goal beside its cell `panel` px (the page: the cell, the gap, the
+/// margins, with no sidebar)
+fn window_for_panel(panel: f32) -> f32 {
+    let card = super::view::page_layout(5000.0, 80, Some(960.0), true).cell;
+    card + panel + 10.0 + 2.0 * 24.0
+}
+
+/// Nothing in the heading is cut off at the panel's edge: the controls are whole inside it, the
+/// heading keeps some room, and what the step did is on a line of its own under them
+fn nothing_clipped(b: &Beside, name: &str, notes: bool) {
+    let find = |n: &str| b.parts.iter().find(|(id, _)| *id == super::view::test_panel_id(n)).map(|(_, r)| *r);
+    let switches = find("switches").unwrap_or_else(|| panic!("{name}: the controls are drawn"));
+    let text = find("heading-text").unwrap_or_else(|| panic!("{name}: the heading is drawn"));
+    let right = b.panel.x + b.panel.width;
+    assert!(switches.x + switches.width <= right - 4.0, "{name}: the controls {switches:?} run past the panel's edge {right}");
+    assert!(text.width >= 40.0, "{name}: the heading is squeezed to {} px", text.width);
+    assert!(text.x + text.width <= right - 4.0 && switches.x >= b.panel.x, "{name}: {text:?} {switches:?} in {:?}", b.panel);
+    match (find("heading-notes"), notes) {
+        (Some(n), true) => {
+            assert!(n.y >= switches.y + switches.height - 1.0 && n.y >= text.y + text.height - 1.0, "{name}: the notes {n:?} are on a line of their own under the controls {switches:?} and the heading {text:?}");
+            assert!(n.x + n.width <= right - 4.0, "{name}: the notes run past the panel");
+        }
+        (None, false) => {}
+        (n, _) => panic!("{name}: the notes are {n:?}, wanted them {notes}"),
+    }
+}
+
+/// At the panel's narrowest (300 px), either side of the 340 px where the controls stop being one
+/// dropdown, and at a roomy 400: with the step's notes, with no goal in parts, and with the long
+/// heading, no part of the heading is clipped and the notes never take room from the controls
+#[test]
+fn the_goal_heading_is_never_clipped_with_notes_with_no_parts_or_a_long_count() {
+    for panel in [300.0, 339.0, 341.0, 400.0] {
+        let width = window_for_panel(panel);
+        for (name, app, notes) in [
+            ("notes", with_notes(goal_app()), true),
+            ("no parts", without_parts(goal_app()), false),
+            ("no subgoals left", with_none_left(goal_app()), false),
+            ("no subgoals left, notes", with_notes(with_none_left(goal_app())), true),
+        ] {
+            let b = beside(&app, width);
+            assert!(b.wide && (b.panel.width - panel).abs() < 0.5, "{name} {panel}: the panel is {:?}", b.panel);
+            nothing_clipped(&b, &format!("{name} at {panel} px"), notes);
+            if name == "no parts" {
+                // the caption is the heading, said once: the text under it does not begin with it
+                let heading = b.parts.iter().find(|(id, _)| *id == super::view::test_panel_id("heading-text")).unwrap().1;
+                assert!(heading.width > 80.0, "the caption \"After by (finished)\" has room: {heading:?}");
+            }
+        }
+    }
+}
+
+/// The heading's row has what the panel holds at its left even with no goal in parts, and the text
+/// under it begins right after, at the panel's full width
+#[test]
+fn with_no_parts_the_caption_is_the_heading_and_is_not_said_twice() {
+    let app = without_parts(goal_app());
+    let ws = app.workspace.as_ref().unwrap();
+    assert_eq!(super::view::state_caption_for_tests(ws).as_deref(), Some("After by (finished)"));
+    let b = beside(&app, window_for_panel(360.0));
+    let text = b.parts.iter().find(|(id, _)| *id == super::view::test_panel_id("heading-text")).expect("the heading").1;
+    assert!(text.x < b.panel.x + 30.0, "the heading is at the row's left: {text:?}");
+}
+
+/// Frames for review, with `CT_SNAPSHOTS`: the page at wide windows in both views, light and dark,
+/// with a long goal broken as the prover breaks it at the panel's width; and the heading cases
+#[test]
+fn goal_layout_frames() {
+    let long = |app: &App| {
+        let columns = super::view::goal_columns(app, true);
+        let term = "timed_assign_sequence (st\\<^sub>v := f (st\\<^sub>v a)) (a :: ('s, 'e) timed_vars) (b :: ('s, 'e) timed_vars) (cond_srea_apply (?P \\<triangleleft> ?c \\<triangleright>\\<^sub>R ?Q) (?a, ?b)) = (if ?c (st\\<^sub>v ?a) then ?P (?a, ?b) else ?Q (?a, ?b))";
+        let mut lines: Vec<String> = Vec::new();
+        for word in term.split(' ') {
+            match lines.last_mut() {
+                Some(l) if l.chars().count() + 1 + word.chars().count() <= columns => {
+                    l.push(' ');
+                    l.push_str(word);
+                }
+                Some(_) => lines.push(format!("  {word}")),
+                None => lines.push(word.to_string()),
+            }
+        }
+        lines.join("\n")
+    };
+    let state = |mut app: App, width: f32| {
+        app.window_width = width;
+        let text = long(&app);
+        let ws = app.workspace.as_mut().unwrap();
+        let raw = ["#deductum:count 1".to_string(), "#deductum:param 1\nst :: 's".to_string(), format!("#deductum:concl 1\n{text}")];
+        ws.goals.messages = raw.iter().map(|r| serde_json::json!({"kind": "writeln", "raw": r, "text": r, "spans": []})).collect();
+        with_notes(app)
+    };
+    for light in [true, false] {
+        let tone = if light { "light" } else { "dark" };
+        let mut draw = |name: String, app: &App, size: Size| {
+            let mut h = Harness::new(size);
+            cosmic::theme::set_active(if light { crate::tones::light_type_for_tests() } else { cosmic::theme::ThemeType::Dark });
+            super::view::set_goal_beside(true);
+            let _ = h.draw(app, &format!("{name}-warm"));
+            let _ = h.draw(app, &format!("{name}-{tone}"));
+            cosmic::theme::set_active(cosmic::theme::ThemeType::Dark);
+        };
+        for width in [1100.0, 1344.0, 1700.0, 2100.0, 2600.0] {
+            for mode in [Mode::Literate, Mode::Source] {
+                let mut app = if mode == Mode::Literate { goal_app() } else {
+                    let mut a = demo_app(Mode::Source);
+                    a.show_right = false;
+                    a.show_sidebar = false;
+                    a
+                };
+                app.window_width = width;
+                let app = state(app, width);
+                draw(format!("goal-layout-{}-{width}", if mode == Mode::Literate { "literate" } else { "source" }), &app, Size::new(width, 900.0));
+            }
+        }
+        for panel in [300.0, 340.0, 400.0] {
+            let width = window_for_panel(panel);
+            for (name, app) in [("notes", with_notes(goal_app())), ("noparts", without_parts(goal_app())), ("none-left", with_notes(with_none_left(goal_app())))] {
+                draw(format!("goal-heading-{name}-{panel}"), &app, Size::new(width, 700.0));
+            }
+        }
+    }
+}
+
+/// With no subgoals (the output of a finished `by`) the controls are at the right of the caption's
+/// own line, "After by (finished)", whole at 300, either side of 340, 400 and a wide panel, in the
+/// Goals and Text views and with Types on; they are whole when the caption and they fit the line
+/// together, else one dropdown
+#[test]
+fn with_no_subgoals_the_controls_share_the_captions_line_whole_at_every_width() {
+    for panel in [300.0, 339.0, 341.0, 400.0, 720.0] {
+        for (text, types) in [(false, false), (false, true), (true, false), (true, true)] {
+            let mut app = without_parts(goal_app());
+            let ws = app.workspace.as_mut().unwrap();
+            ws.state_text = text;
+            ws.show_types = types;
+            let name = format!("no subgoals, panel {panel}, text {text}, types {types}");
+            let b = beside(&app, window_for_panel(panel));
+            assert!((b.panel.width - panel).abs() < 0.5, "{name}: {:?}", b.panel);
+            nothing_clipped(&b, &name, false);
+            let find = |n: &str| b.parts.iter().find(|(id, _)| *id == super::view::test_panel_id(n)).unwrap().1;
+            let (switches, caption) = (find("switches"), find("heading-text"));
+            // one line: the controls and the caption share their top and the caption is one row
+            assert!((switches.y + switches.height / 2.0 - (caption.y + caption.height / 2.0)).abs() < 6.0, "{name}: the controls {switches:?} are not on the caption's line {caption:?}");
+            // the actual heading decides: whole controls when the caption and they fit the line
+            // together, else one dropdown; at the narrowest the dropdown, at a wide panel whole
+            let dropdown = switches.width < 160.0;
+            if panel <= 300.0 {
+                assert!(dropdown, "{name}: the controls are {} px wide, not the dropdown", switches.width);
+            }
+            if panel >= 720.0 {
+                assert!(!dropdown, "{name}: the controls are the dropdown in a wide panel");
+            }
+            // and whole, the caption and the controls were not squeezed
+            if !dropdown {
+                assert!(caption.x + caption.width + 4.0 <= switches.x, "{name}: the caption {caption:?} and the controls {switches:?} overlap");
+            }
+        }
+    }
+}
+
+/// The long heading with the step's note, beside the cell and under it (a wide panel): the note is
+/// on a line of its own, the heading never pushes the controls out and they are whole or the one
+/// dropdown, by what fits
+#[test]
+fn a_long_heading_with_a_note_leaves_the_controls_whole_beside_and_under() {
+    for width in [window_for_panel(300.0), window_for_panel(400.0), window_for_panel(720.0), 880.0, 700.0] {
+        let mut app = with_notes(with_none_left(goal_app()));
+        app.workspace.as_mut().unwrap().goals.status = "finished".into();
+        let b = beside(&app, width);
+        nothing_clipped(&b, &format!("none left, window {width} ({})", if b.wide { "beside" } else { "under" }), true);
+    }
+}

@@ -55,6 +55,7 @@ pub(super) fn app(target: link::Target) -> App {
         show_sidebar: true,
         status: None,
         state_gen: 0,
+        goal_columns_asked: (0, 0),
         nav_serial: 0,
         nav_latest: HashMap::new(),
         request: None,

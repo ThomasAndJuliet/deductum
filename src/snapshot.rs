@@ -199,6 +199,7 @@ pub fn demo_app(mode: Mode) -> App {
         show_sidebar: true,
         status: None,
         state_gen: 0,
+        goal_columns_asked: (0, 0),
         request: None,
         kinds: Arc::new(HashMap::new()),
         popout: None,
