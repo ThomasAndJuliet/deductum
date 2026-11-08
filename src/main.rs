@@ -20,6 +20,8 @@
 #[global_allocator]
 static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
+mod attention;
+mod chip;
 mod cli;
 mod codec;
 mod editor;

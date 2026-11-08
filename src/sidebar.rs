@@ -400,7 +400,13 @@ pub(crate) enum Mark {
     Error,
     /// A spinner: running, and checking
     Spinner,
-    /// Nothing: stopped
+    /// A grey dot: stopped (Tom, 8 Nov, option 1 of t33)
+    Grey,
+    /// A check: checked (the status chip's)
+    Check,
+    /// A red dot: checked, with failures or unfinished proofs (the status chip's)
+    RedDot,
+    /// Nothing at all
     Blank,
     /// Any other state: its word alone
     Word,
@@ -411,7 +417,7 @@ pub(crate) fn mark_of(lifecycle: &str, checking: bool) -> Mark {
         "Running" if checking => Mark::Spinner,
         "Running" => Mark::Dot,
         "Paused" => Mark::Ring,
-        "Stopped" => Mark::Blank,
+        "Stopped" => Mark::Grey,
         "Failed" => Mark::Error,
         _ => Mark::Word,
     }
@@ -423,18 +429,23 @@ pub(crate) fn caption_line(machine: &str, lifecycle: &str) -> String {
 }
 
 // The cell palette's muted tones (`tones::muted_status`) of the success, unfinished and error colours
-fn muted_green(theme: &cosmic::Theme) -> Color {
+pub(crate) fn muted_green(theme: &cosmic::Theme) -> Color {
     super::tones::muted_status(theme.cosmic().success_color().into(), theme.cosmic().is_dark)
 }
-fn muted_amber(theme: &cosmic::Theme) -> Color {
+pub(crate) fn muted_amber(theme: &cosmic::Theme) -> Color {
     super::tones::muted_status(super::view::sorry_color(theme), theme.cosmic().is_dark)
 }
-fn muted_red(theme: &cosmic::Theme) -> Color {
+pub(crate) fn muted_red(theme: &cosmic::Theme) -> Color {
     super::tones::muted_status(super::view::error_color(theme), theme.cosmic().is_dark)
 }
 
+/// The grey of a stopped session's dot: the text's own colour, muted as the status colours are
+pub(crate) fn muted_grey(theme: &cosmic::Theme) -> Color {
+    super::tones::muted_status(theme.cosmic().on_bg_color().into(), theme.cosmic().is_dark)
+}
+
 /// A mark's widget, in a 16 px column so that names line up
-fn mark_widget<'a>(mark: Mark) -> Element<'a, Message> {
+pub(crate) fn mark_widget<'a>(mark: Mark) -> Element<'a, Message> {
     const D: f32 = 8.0;
     let dot = |filled: bool| -> Element<'a, Message> {
         widget::container(widget::Space::new())
@@ -455,6 +466,29 @@ fn mark_widget<'a>(mark: Mark) -> Element<'a, Message> {
             .size(14)
             .icon()
             .class(theme::Svg::custom(|theme| iced::widget::svg::Style { color: Some(muted_red(theme)) }))
+            .into(),
+        Mark::Grey => widget::container(widget::Space::new())
+            .width(Length::Fixed(D))
+            .height(Length::Fixed(D))
+            .class(theme::Container::custom(|theme| iced::widget::container::Style {
+                background: Some(muted_grey(theme).into()),
+                border: Border { radius: (D / 2.0).into(), ..Default::default() },
+                ..Default::default()
+            }))
+            .into(),
+        Mark::RedDot => widget::container(widget::Space::new())
+            .width(Length::Fixed(D))
+            .height(Length::Fixed(D))
+            .class(theme::Container::custom(|theme| iced::widget::container::Style {
+                background: Some(muted_red(theme).into()),
+                border: Border { radius: (D / 2.0).into(), ..Default::default() },
+                ..Default::default()
+            }))
+            .into(),
+        Mark::Check => widget::icon::from_name("emblem-ok-symbolic")
+            .size(14)
+            .icon()
+            .class(theme::Svg::custom(|theme| iced::widget::svg::Style { color: Some(muted_green(theme)) }))
             .into(),
         Mark::Blank | Mark::Word => widget::Space::new().into(),
     };

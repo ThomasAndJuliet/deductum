@@ -1001,7 +1001,7 @@ fn hovering_a_shown_block_follows_the_pointer() {
 }
 
 #[test]
-fn the_header_stop_button_stops_a_running_sledgehammer() {
+fn a_running_sledgehammer_is_stopped_from_its_panel_not_the_header() {
     let _turn = ui_turn();
     super::load_fonts();
     let mut app = demo_app(Mode::Literate);
@@ -1021,13 +1021,13 @@ fn the_header_stop_button_stops_a_running_sledgehammer() {
         for e in [Event::Mouse(mouse::Event::CursorMoved { position: at }), Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)), Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left))] {
             let _ = ui.update(&[e], mouse::Cursor::Available(at), &mut renderer, &mut clipboard::Null, &mut msgs);
         }
-        if msgs.iter().any(|m| matches!(m, super::Message::StopTools)) {
+        // (the header's Stop is the prover's, and the chip is one width however busy it is)
+        if msgs.iter().any(|m| matches!(m, super::Message::StopTools | super::Message::Lifecycle("cancel"))) {
             found = Some(x);
             break;
         }
-        assert!(!msgs.iter().any(|m| matches!(m, super::Message::Lifecycle("cancel"))), "only sledgehammer running: no general Interrupt");
     }
-    assert!(found.is_some(), "a stop button for the running sledgehammer in the header");
+    assert!(found.is_none(), "the header has no stop for a tool or Interrupt: the panel has them ({found:?})");
     // pressing it: stopping, asked again until it has stopped
     let _ = cosmic::Application::update(&mut app, super::Message::StopTools);
     assert!(app.workspace.as_ref().unwrap().tools_stopping);
