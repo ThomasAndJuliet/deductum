@@ -819,6 +819,158 @@ fn the_goal_under_a_cell_has_the_coloured_line_as_its_left_edge() {
     }
 }
 
+// ----- the goal beside the proof sits just past its cell
+
+/// Where things are with the goal beside the proof at `width`: the open cell, the goal panel as
+/// drawn (the layout's place and how far the page moved it), the other cells on the page, whether
+/// the page had room for the goal beside, the frame
+struct Beside {
+    cell: Rectangle,
+    panel: Rectangle,
+    others: Vec<Rectangle>,
+    wide: bool,
+    column: f32,
+    frame: Vec<u8>,
+    size: Size,
+}
+
+fn beside(app: &App, width: f32) -> Beside {
+    let size = Size::new(width, 900.0);
+    in_light(size, |h| {
+        super::view::set_goal_beside(true);
+        let _ = h.draw(app, "beside-warm");
+        let frame = h.draw(app, &format!("beside-{width}"));
+        let moved = super::gap::goal_moved();
+        let mut all = Bounds(Vec::new());
+        h.operate(app, &mut all);
+        let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+        let panel = part(&all.0, super::view::test_panel_id("panel"));
+        let others = t.blocks.iter().enumerate().filter(|(_, b)| b.kind == Kind::Formal)
+            .filter_map(|(i, _)| all.0.iter().find(|(x, _)| *x == super::view::test_block_id(i)).map(|(_, r)| *r)).collect();
+        Beside {
+            cell: part(&all.0, super::view::selected_block_id()),
+            panel: Rectangle { x: panel.x + moved.x, y: panel.y + moved.y, ..panel },
+            others,
+            wide: super::view::last_wide(),
+            column: super::view::last_column(),
+            frame,
+            size,
+        }
+    })
+}
+
+fn overlaps(a: Rectangle, b: Rectangle) -> bool {
+    a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
+}
+
+/// Nothing but the page's colour on any row of the panel, in the gap before it
+fn gap_is_clear(b: &Beside) {
+    let page = super::view::page_color(&cosmic::Theme::light());
+    let w = b.size.width as u32;
+    let (from, to) = (b.panel.x as u32 - super::view::GOAL_GAP_PUB as u32 + 2, b.panel.x as u32 - 1);
+    for y in b.panel.y as u32..(b.panel.y + b.panel.height) as u32 {
+        for x in from..to {
+            assert!(is(px(&b.frame, w, x as f32, y as f32), page), "something on the page reaches into the goal's gap at ({x}, {y}): {:?}", px(&b.frame, w, x as f32, y as f32));
+        }
+    }
+}
+
+/// The goal panel's left edge is the right edge of its cell and the gap, 1,400 px wide, not the
+/// edge of the prose column; and nothing on the page, cells or prose, is under it
+#[test]
+fn the_goal_beside_sits_just_past_its_cell() {
+    let b = beside(&goal_app(), 1400.0);
+    assert!(b.wide, "1,400 px has room for the goal beside");
+    assert!(b.column > b.cell.x + b.cell.width + 100.0, "the column ({}) is wider than the cell, ending at {}", b.column, b.cell.x + b.cell.width);
+    let gap = super::view::GOAL_GAP_PUB;
+    assert!((b.panel.x - (b.cell.x + b.cell.width + gap)).abs() < 1.0, "the panel is at {}, the cell's right edge is {} and the gap {gap}", b.panel.x, b.cell.x + b.cell.width);
+    assert!(b.panel.x + b.panel.width <= b.size.width, "the panel is in the window");
+    for other in &b.others {
+        assert!(!overlaps(b.panel, *other), "the panel {:?} covers a cell {other:?}", b.panel);
+    }
+    gap_is_clear(&b);
+}
+
+/// A cell widened for a long line moves the panel with it: the panel is past that cell's right edge,
+/// further than past an ordinary one
+#[test]
+fn a_widened_cell_moves_the_goal_beside_it() {
+    let open = |app: &mut App, name: char| {
+        let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+        let i = t.blocks.iter().position(|b| b.kind == Kind::Formal && t.source_text(b.start, b.end).starts_with(&format!("lemma {name}:"))).unwrap();
+        let _ = cosmic::Application::update(app, super::Message::EditBlock(i));
+    };
+    let gap = super::view::GOAL_GAP_PUB;
+    let mut xs = Vec::new();
+    for name in ['a', 'b'] {
+        let mut app = widths_app(100);
+        open(&mut app, name);
+        let b = beside(&app, 1400.0);
+        assert!(b.wide);
+        let right = b.cell.x + b.cell.width;
+        // (the open cell's own right edge, or a wider cell level with the panel)
+        let widest = b.others.iter().filter(|o| o.y < b.panel.y + b.panel.height && b.panel.y < o.y + o.height).map(|o| o.x + o.width).fold(right, f32::max);
+        assert!((b.panel.x - (widest + gap)).abs() < 1.0, "lemma {name}: the panel is at {}, past a cell ending at {widest} and the gap {gap}", b.panel.x);
+        for other in &b.others {
+            assert!(!overlaps(b.panel, *other), "lemma {name}: the panel {:?} covers a cell {other:?}", b.panel);
+        }
+        gap_is_clear(&b);
+        xs.push((right, b.panel.x));
+    }
+    // the 100-character cell ends 20 characters (168 px) past the 80-character one, and the panel with it
+    assert!(xs[1].0 - xs[0].0 > 150.0, "the widened cell ends at {} and the ordinary one at {}", xs[1].0, xs[0].0);
+    assert!((xs[1].1 - xs[0].1) > 150.0 || xs[0].1 >= xs[1].0, "the panel is at {} beside the ordinary cell and {} beside the widened one", xs[0].1, xs[1].1);
+}
+
+/// With the panel next to the cell, the goal stays beside in windows narrower than the prose column
+/// and the goal side by side would need (1,310 px): from the cell's right edge, the gap and the
+/// goal's minimum width. The prose column gives way to the goal, not below its cells, and nothing is
+/// covered at any width
+#[test]
+fn the_goal_stays_beside_in_windows_narrower_than_the_column_needs() {
+    // 1,310 px was the least with the 960 px column: 16 (scroll bar) + 960 + 10 + 320
+    for width in [1400.0, 1250.0, 1150.0, 1100.0] {
+        let b = beside(&goal_app(), width);
+        assert!(b.wide, "{width} px: the goal is beside");
+        assert!(b.panel.x + b.panel.width <= width - 6.0, "{width} px: the panel ({:?}) is within the window", b.panel);
+        assert!((b.panel.x - (b.cell.x + b.cell.width + super::view::GOAL_GAP_PUB)).abs() < 1.0, "{width} px: the panel at {} is not just past the cell ending at {}", b.panel.x, b.cell.x + b.cell.width);
+        assert!(b.column >= b.cell.width - 1.0, "{width} px: the column ({}) is not narrower than its cells ({})", b.column, b.cell.width);
+        for other in &b.others {
+            assert!(!overlaps(b.panel, *other), "{width} px: the panel covers a cell");
+        }
+        gap_is_clear(&b);
+    }
+    // too narrow for the cell, the gap and the goal: under the proof
+    let b = beside(&goal_app(), 1000.0);
+    assert!(!b.wide, "1,000 px has no room for the goal beside the 80-character cell");
+}
+
+/// Prose level with the panel is never covered: the panel goes past it (the page's mechanism for a
+/// goal beside, which moves past whatever is level with it), and the column keeps the panel in the window
+#[test]
+fn the_goal_beside_never_covers_prose_level_with_it() {
+    let para = "We prove that the reactive design is healthy, and that its refinement follows from the refinement of its pre and postconditions, which is the main theorem of this section and is used throughout the rest of the development without further comment.";
+    let text = format!("theory Fit imports Main begin\n\nlemma first: \"x + 0 = x\"\n  apply simp\n  done\n\ntext \\<open>{para} {para} {para}\\<close>\n\nlemma second: \"True\"\n  by simp\n\nend\n");
+    for width in [1400.0, 1150.0] {
+        let mut app = demo_app(Mode::Literate);
+        let doc = serde_json::json!({"text": text, "revision": 1, "prover": super::snapshot::prover_json(&text)});
+        app.workspace.as_mut().unwrap().theory = Some(super::editor::Theory::new("/tmp/Fit.thy".into(), &doc, &super::prover::isabelle::symbols::Table::fallback(), std::sync::Arc::new(std::collections::HashMap::new()), Mode::Literate, super::prover::profile(None)));
+        app.show_right = false;
+        app.show_sidebar = false;
+        let i = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.kind == Kind::Formal).unwrap();
+        let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(i));
+        super::snapshot::caret_in_block(&mut app, "apply", 0);
+        let b = beside(&app, width);
+        assert!(b.wide);
+        assert!(b.panel.x + b.panel.width <= width - 6.0, "{width} px: the panel is in the window: {:?}", b.panel);
+        // (the paragraph is the page's width, so level with it the panel is past the column)
+        gap_is_clear(&b);
+        for other in &b.others {
+            assert!(!overlaps(b.panel, *other));
+        }
+    }
+}
+
 /// The tools and the symbol keys are accent links: bold, underlined, with no chip fill (only the
 /// search field, a field, is filled)
 #[test]
