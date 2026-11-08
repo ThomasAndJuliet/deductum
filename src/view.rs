@@ -120,13 +120,19 @@ fn card_border(status: Status, selected: bool, theme: &cosmic::Theme) -> (Color,
 /// so that selecting a cell (1 px of border becoming 2) moves nothing
 const CARD_RIM: f32 = 2.0;
 
-/// The card's own fill between its strip and its code: the highlights over the code reach back
-/// over it to the strip
-const CARD_PAD: f32 = 4.0;
+/// The status strip, the card's left edge
+const STRIP: f32 = 4.0;
 
-/// What a cell takes beside its code: its status strip, the space before the code (the card's
-/// own fill, where the strip's gap used to be) and the room for its right border
-const CARD_CHROME: f32 = 8.0 + CARD_RIM;
+/// The space between the status strip and the code, and between the code and the card's right
+/// edge, in em of the code's size (so it scales with the code size and the zoom): 0.75 em, 10.5 px
+/// at 14 px. Tom chose it on 8 Nov (mockups/t5e-gap-em.png: 0.78, corrected to 0.75). It is the
+/// code editor's own padding, so the highlights over the code (the construct's band, the caret's
+/// line) reach the card's edges: the strip on the left, the border on the right
+pub const CODE_GAP_EM: f32 = 0.75;
+
+/// What a cell takes beside its code: its status strip and the room for its right border (the gap
+/// either side of the code is the code's own padding)
+const CARD_CHROME: f32 = STRIP + CARD_RIM;
 
 /// A failure: red, as against [`sorry_color`]'s yellow
 pub fn error_color(theme: &cosmic::Theme) -> Color {
@@ -652,7 +658,7 @@ fn workspace<'a>(app: &'a App, ws: &'a Workspace, right: bool, main_width: f32) 
 /// need, between 440 and 680 px. (The Source view is laid out as it was before the Paper defaults
 /// gave the Literate view its 48 em column: the goal's width does not depend on that measure)
 fn source_column(columns: usize) -> f32 {
-    ((columns.max(30) as f32 + 4.0) * z(13.0) * 0.6 + CODE_PADDING.left + CODE_PADDING.right + CARD_CHROME).clamp(z(440.0), z(680.0))
+    ((columns.max(30) as f32 + 4.0) * z(13.0) * 0.6 + code_padding().left + code_padding().right + CARD_CHROME).clamp(z(440.0), z(680.0))
 }
 
 /// The workspace's width, as the view last laid it out
@@ -784,7 +790,7 @@ fn note_in_card<'a>(ws: &'a Workspace, n: &Value, width: f32) -> Element<'a, Mes
     }));
     widget::column::with_capacity(2)
         .push(hairline)
-        .push(widget::container(note_body(ws, n)).padding([sp.space_xxs as f32, CODE_PADDING.left]).width(Length::Fill))
+        .push(widget::container(note_body(ws, n)).padding([sp.space_xxs as f32, code_padding().left]).width(Length::Fill))
         .width(Length::Fixed(width))
         .into()
 }
@@ -793,7 +799,7 @@ fn note_in_card<'a>(ws: &'a Workspace, n: &Value, width: f32) -> Element<'a, Mes
 /// same style, `width` wide (the cell's; else the text column), a little below the block
 fn note_card<'a>(ws: &'a Workspace, n: &Value, width: Option<f32>) -> Element<'a, Message> {
     let sp = spacing();
-    let body = widget::container(note_body(ws, n)).padding([sp.space_xxs as f32, CODE_PADDING.left]).width(Length::Fill);
+    let body = widget::container(note_body(ws, n)).padding([sp.space_xxs as f32, code_padding().left]).width(Length::Fill);
     widget::container(card(body.into(), Status::Unprocessed, false)).padding(Padding { top: ATTACHED, ..Padding::ZERO }).width(width.map_or(Length::Fill, Length::Fixed)).into()
 }
 
@@ -1088,26 +1094,47 @@ pub fn code_line_height() -> f32 {
     code_size() * CODE_LINE
 }
 
-/// Padding of code in a block, shown or edited: the same, so that opening a block moves nothing
-pub const CODE_PADDING: Padding = Padding { left: 10.0, right: 10.0, top: 5.0, bottom: 5.0 };
+/// The gap between the status strip and the code (and the code and the card's right edge): `CODE_GAP_EM`
+/// of the code's size at the current zoom
+pub fn code_gap() -> f32 {
+    CODE_GAP_EM * code_size()
+}
+
+/// Padding of code in a block, shown or edited: the same, so that opening a block moves nothing.
+/// The gap at the sides is [`code_gap`]
+pub fn code_padding() -> Padding {
+    Padding { left: code_gap(), right: code_gap(), top: 5.0, bottom: 5.0 }
+}
 
 /// The text origin relative to a literate cell, including the code status strip.
 pub fn block_text_inset(be: &super::editor::BlockEditor) -> f32 {
-    if be.wrap.is_some() { 0.0 } else { 8.0 + CODE_PADDING.left }
+    if be.wrap.is_some() { 0.0 } else { STRIP + code_padding().left }
 }
 
-/// The width of a block of code with this many columns: its text and a little room, not the page
-/// (the page column caps it, and long lines wrap)
-pub fn code_width(columns: usize) -> f32 {
-    (columns.max(30) as f32 + 4.0) * code_size() * CODE_ADVANCE + CODE_PADDING.left + CODE_PADDING.right
+/// Room kept after the last character of a cell's width, in characters: the editor wraps a line
+/// that only just fits, and a monospace font's advance is not exactly [`CODE_ADVANCE`]
+const CODE_SLACK: f32 = 0.5;
+
+/// The width of a cell's code, in characters: the Settings ▸ Code ▸ Cell width, or the cell's
+/// longest line if that is more. Zero (Fill) is the page's whole column, not a count
+pub fn cell_columns(longest_line: usize) -> usize {
+    usize::from(super::settings::cell_width()).max(longest_line)
 }
 
-/// The width of a block of code on the page: as [`code_width`], but never wider than the text
+/// The width of a cell with this longest line: the same for every cell (the Cell width setting,
+/// 80 characters of code by default), widening for a longer line; with its gap either side. The
+/// page column caps it ([`block_code_width`]), and lines longer than that wrap
+pub fn code_width(longest_line: usize) -> f32 {
+    (cell_columns(longest_line) as f32 + CODE_SLACK) * code_size() * CODE_ADVANCE + code_padding().left + code_padding().right
+}
+
+/// The width of a cell's code on the page: as [`code_width`], but never wider than the text
 /// column can be (its status strip beside it), so nothing on the page runs into the goal drawn
-/// past the column; longer lines wrap
-pub fn block_code_width(columns: usize) -> f32 {
+/// past the column; longer lines wrap. With Cell width at Fill, the column's whole width
+pub fn block_code_width(longest_line: usize) -> f32 {
     let cap = f32::from_bits(COLUMN_CAP.load(std::sync::atomic::Ordering::Relaxed));
-    code_width(columns).min(if cap > 0.0 { cap } else { z(680.0) } - CARD_CHROME)
+    let column = if cap > 0.0 { cap } else { z(680.0) } - CARD_CHROME;
+    if super::settings::cell_width() == 0 { column } else { code_width(longest_line).min(column) }
 }
 
 /// The text column's width as the layout last chose it (blocks are never wider)
@@ -1161,7 +1188,7 @@ pub fn pop_out_size() -> f32 {
 /// How far the pop-out button is inside the top right corner of the code it floats over: as far
 /// from the right as from the top, the top such that it is centred on the first line
 pub fn pop_out_inset() -> f32 {
-    (CODE_PADDING.top + code_line_height() / 2.0 - pop_out_size() / 2.0).max(1.0)
+    (code_padding().top + code_line_height() / 2.0 - pop_out_size() / 2.0).max(1.0)
 }
 
 /// Pop out: the proof in a window of its own, a small icon button floating over the code (in
@@ -1191,8 +1218,8 @@ fn card<'a>(content: Element<'a, Message>, status: Status, selected: bool) -> El
             background: Some(strip_color(status, selected, theme).into()),
             ..Default::default()
         }));
-    // (the card's fill, as wide as the gap the strip used to leave: nothing in it moves)
-    let inside = widget::container(content).padding(Padding { left: CARD_PAD, ..Padding::ZERO }).class(theme::Container::custom(|theme| iced::widget::container::Style {
+    // (the card's fill: the code's own padding is the gap after the strip)
+    let inside = widget::container(content).class(theme::Container::custom(|theme| iced::widget::container::Style {
         background: Some(page_color(theme).into()),
         ..Default::default()
     }));
@@ -1392,21 +1419,21 @@ fn block_code<'a>(ws: Option<&'a Workspace>, t: &'a Theory, i: usize, block: &Bl
         .font(code_font())
         .size(code_size())
         .line_height(iced::widget::text::LineHeight::Relative(CODE_LINE))
-        .padding(CODE_PADDING)
-        .width(block_code_width(t.code_columns.max(v.columns)))
+        .padding(code_padding())
+        .width(block_code_width(v.columns))
         .on_action(move |a| Message::BlockViewAction(i, a))
         .key_binding(|_| None)
         .style(code_style())
         .highlight_with::<super::editor::Highlighter>(v.highlight.themed(), highlight_format);
     let editor = code_selection(editor, on_code(false));
     // The code, and under it inside the same card the prover's messages about it
-    let mut inside = widget::column::with_capacity(2).push(hoverable_press(ws, super::HoverTarget::View(i), CODE_PADDING, editor.into(), Some(Message::ViewPress(i))));
-    if let Some(m) = messages_view(t, block, table, current, block_code_width(t.code_columns.max(v.columns))) {
+    let mut inside = widget::column::with_capacity(2).push(hoverable_press(ws, super::HoverTarget::View(i), code_padding(), editor.into(), Some(Message::ViewPress(i))));
+    if let Some(m) = messages_view(t, block, table, current, block_code_width(v.columns)) {
         inside = inside.push(m);
     }
     // and the agents' notes on it, after a hairline
     if let Some(ws) = ws {
-        let width = block_code_width(t.code_columns.max(v.columns));
+        let width = block_code_width(v.columns);
         for n in notes_on(ws, t, block.start, block.end) {
             inside = inside.push(note_in_card(ws, n, width));
         }
@@ -1643,18 +1670,18 @@ pub(crate) fn message_strip<'a>(t: &Theory, m: &super::editor::ProverMessage, ta
         .push(copy)
         .push(widget::text::caption(format!("line {line}")).class(muted()));
     let mut col = widget::column::with_capacity(2).push(
-        widget::container(row).padding([z(4.0), CODE_PADDING.left]).width(Length::Fill).class(theme::Container::custom(move |theme| iced::widget::container::Style {
+        widget::container(row).padding([z(4.0), code_padding().left]).width(Length::Fill).class(theme::Container::custom(move |theme| iced::widget::container::Style {
             text_color: Some(tone(theme)),
             ..Default::default()
         })),
     );
     if open {
         // (under the summary's text; its continuation lines further in)
-        let indent = CODE_PADDING.left + 2.0 * (z(14.0) + gap);
-        let columns = ((width - indent - CODE_PADDING.right) / (z(12.0) * 0.6)).floor().max(20.0) as usize;
+        let indent = code_padding().left + 2.0 * (z(14.0) + gap);
+        let columns = ((width - indent - code_padding().right) / (z(12.0) * 0.6)).floor().max(20.0) as usize;
         col = col.push(
             widget::container(symbol_text_wrapped(&wrap_message(&full, columns), table, z(12.0), iced::widget::text::Wrapping::None))
-                .padding(Padding { left: indent, right: CODE_PADDING.right, top: 0.0, bottom: z(4.0) })
+                .padding(Padding { left: indent, right: code_padding().right, top: 0.0, bottom: z(4.0) })
                 .width(Length::Fill)
                 .class(theme::Container::custom(|theme| iced::widget::container::Style { text_color: Some(super::tones::body_text(theme, 12.0)), ..Default::default() })),
         );
@@ -1832,7 +1859,7 @@ fn messages_view<'a>(t: &Theory, block: &Block, table: &dyn super::codec::Symbol
         // (a lemma after a proof that ends with a tool waits for that proof, not for a tool of its own)
         let after = t.messages_in(block.start, block.end).iter().any(|m| t.waits_on_previous(m));
         let note = if after { "Checked once the proof before it is finished" } else { "Unfinished: pick a proof the tool finds (beside the proof state)" };
-        return waiting.then(|| widget::container(widget::text::caption(note)).padding([z(4.0), CODE_PADDING.left]).width(Length::Fixed(width)).into());
+        return waiting.then(|| widget::container(widget::text::caption(note)).padding([z(4.0), code_padding().left]).width(Length::Fixed(width)).into());
     }
     let mut col = widget::column::with_capacity(msgs.len()).spacing(2);
     for m in msgs.into_iter().take(6) {
@@ -1981,7 +2008,7 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
     let opened = editing.and_then(|start| t.blocks.iter().position(|b| b.start <= start && start <= b.end));
     let open_item = opened.filter(|_| app.popout.is_none());
     let open_top = t.block_editor.as_ref().map_or(0.0, |be| match goal_placement(true, be.content.line_count()) {
-        GoalPlacement::Construct => t.construct_at(be.start, be.end).map_or(0.0, |(cs, _)| match block_line(be, cs) { 0 => 0.0, line => CODE_PADDING.top + line as f32 * code_line_height() }),
+        GoalPlacement::Construct => t.construct_at(be.start, be.end).map_or(0.0, |(cs, _)| match block_line(be, cs) { 0 => 0.0, line => code_padding().top + line as f32 * code_line_height() }),
         _ => 0.0,
     });
     let mut anchor = if beside.is_some() {
@@ -2033,7 +2060,7 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
                             // top, not with the text inside its padding)
                             .map_or(0.0, |(be, (cs, _))| match block_line(be, cs) {
                                 0 => 0.0,
-                                line => CODE_PADDING.top + line as f32 * code_line_height(),
+                                line => code_padding().top + line as f32 * code_line_height(),
                             }),
                         _ => 0.0,
                     };
@@ -2081,7 +2108,7 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
             Kind::Formal => {
                 // (as wide as the cell: what is attached under it is too)
                 let columns = t.block_views.get(i).and_then(Option::as_ref).map_or(0, |v| v.columns);
-                let mut c = widget::column::with_capacity(3).spacing(4).width(Length::Fixed(block_code_width(t.code_columns.max(columns)) + CARD_CHROME)).push(block_code(app.workspace.as_ref(), t, i, block, marked, &*table, current));
+                let mut c = widget::column::with_capacity(3).spacing(4).width(Length::Fixed(block_code_width(columns) + CARD_CHROME)).push(block_code(app.workspace.as_ref(), t, i, block, marked, &*table, current));
                 if current && goal_block(t, block) && let Some(g) = inline_goal(inline, &*table) {
                     c = c.push(goal_under(g));
                 }
@@ -2119,7 +2146,7 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
             for n in notes_on(ws, t, block.start, block.end) {
                 let width = (block.kind == Kind::Formal).then(|| {
                     let columns = t.block_views.get(i).and_then(Option::as_ref).map_or(0, |v| v.columns);
-                    block_code_width(t.code_columns.max(columns)) + CARD_CHROME
+                    block_code_width(columns) + CARD_CHROME
                 });
                 item = item.push(side(note_card(ws, n, width), false));
             }
@@ -2128,7 +2155,7 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
         if selected_here {
             let width = (block.kind == Kind::Formal).then(|| {
                 let columns = t.block_views.get(i).and_then(Option::as_ref).map_or(0, |v| v.columns);
-                block_code_width(t.code_columns.max(columns)) + CARD_CHROME
+                block_code_width(columns) + CARD_CHROME
             });
             item = item.push(side(widget::container(block_actions(t, Some(i), true, width)).padding(Padding { top: z(8.0), ..Padding::ZERO }).into(), false));
         }
@@ -2152,7 +2179,7 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
         let Some(row) = t.page_rows.get(i) else { return if i == t.blocks.len() { z(42.0) } else if beside.is_some() { view_height() * 0.5 } else { 0.0 }; };
         match row.kind {
             Kind::End => 0.0,
-            Kind::Formal | Kind::Comment => row.lines as f32 * code_line_height() + CODE_PADDING.top + CODE_PADDING.bottom + z(BLOCK_GAP),
+            Kind::Formal | Kind::Comment => row.lines as f32 * code_line_height() + code_padding().top + code_padding().bottom + z(BLOCK_GAP),
             Kind::Header => z(70.0),
             Kind::Heading(_) => z(55.0),
             Kind::Text => ((row.characters as f32 / (width.min(text_width) / (prose_size() * 0.5)).max(1.0)).ceil().max(row.lines as f32) * prose_size() * super::settings::display().line_height) + z(BLOCK_GAP),
@@ -2367,7 +2394,7 @@ fn block_editor_in<'a>(ws: Option<&'a Workspace>, t: &'a Theory, window: bool, i
         .font(code_font())
         .size(code_size())
         .line_height(iced::widget::text::LineHeight::Relative(CODE_LINE))
-        .padding(CODE_PADDING)
+        .padding(code_padding())
         .on_action(Message::BlockAction)
         .key_binding(key_bindings(!t.completions.is_empty(), vim_mode, super::EditorTarget::Block))
         .style(code_style())
@@ -2382,8 +2409,8 @@ fn block_editor_in<'a>(ws: Option<&'a Workspace>, t: &'a Theory, window: bool, i
         .map(|(cs, ce)| (block_line(be, cs), block_line(be, ce.saturating_sub(1).max(cs))))
         .filter(|(l0, _)| *l0 < lines);
     let band = band_lines.map(|(l0, l1)| {
-        let from = if l0 == 0 { 0.0 } else { CODE_PADDING.top + l0 as f32 * code_line_height() };
-        let to = if l1 + 1 >= lines { f32::INFINITY } else { CODE_PADDING.top + (l1 + 1) as f32 * code_line_height() };
+        let from = if l0 == 0 { 0.0 } else { code_padding().top + l0 as f32 * code_line_height() };
+        let to = if l1 + 1 >= lines { f32::INFINITY } else { code_padding().top + (l1 + 1) as f32 * code_line_height() };
         (from, to)
     });
     // (the selection's fill is one colour: the tint over the band if most of the selected lines
@@ -2415,12 +2442,12 @@ fn block_editor_in<'a>(ws: Option<&'a Workspace>, t: &'a Theory, window: bool, i
     // cell's very top on its first line, to its very bottom on its last)
     let caret = {
         let line = be.content.cursor().position.line.min(lines.saturating_sub(1));
-        let from = if line == 0 { 0.0 } else { CODE_PADDING.top + line as f32 * code_line_height() };
-        let to = if line + 1 >= lines { f32::INFINITY } else { CODE_PADDING.top + (line + 1) as f32 * code_line_height() };
+        let from = if line == 0 { 0.0 } else { code_padding().top + line as f32 * code_line_height() };
+        let to = if line + 1 >= lines { f32::INFINITY } else { code_padding().top + (line + 1) as f32 * code_line_height() };
         (from, to, super::tones::caret_line(&theme::active()))
     };
-    // (the bands run to the left edge of the card the editor is padded inside; the window has none)
-    let reach = if window { 0.0 } else { CARD_PAD };
+    // (the bands run over the editor's padding, to the strip: the card has no fill before it)
+    let reach = 0.0;
     let banded = move |g: super::gap::Gap<'a, Message, cosmic::Theme, cosmic::Renderer>| {
         let g = g.reach(reach);
         let g = match band {
@@ -2435,8 +2462,8 @@ fn block_editor_in<'a>(ws: Option<&'a Workspace>, t: &'a Theory, window: bool, i
         let code = banded(super::gap::Gap::new(editor.height(Length::Shrink), widget::Space::new().height(Length::Fixed(0.0)), 0.0));
         thin(code).id(popout_scroll_id()).height(Length::Fill).into()
     } else {
-        let width = block_code_width(t.code_columns.max(columns));
-        let code = hoverable(ws, super::HoverTarget::Block, CODE_PADDING, editor.width(width).into());
+        let width = block_code_width(columns);
+        let code = hoverable(ws, super::HoverTarget::Block, code_padding(), editor.width(width).into());
         // (always in a gap, empty when there is nothing to put there: the editor keeps its state)
         let code: Element<'_, Message> = match after {
             Some((line, indent, goal)) => {
@@ -2456,11 +2483,11 @@ fn block_editor_in<'a>(ws: Option<&'a Workspace>, t: &'a Theory, window: bool, i
                     ..Default::default()
                 }));
                 let inset = widget::row::with_capacity(2).spacing(6).push(rule).push(card).height(Length::Shrink);
-                let left = CODE_PADDING.left + indent as f32 * code_size() * CODE_ADVANCE;
+                let left = code_padding().left + indent as f32 * code_size() * CODE_ADVANCE;
                 banded(super::gap::Gap::new(
                     code,
                     widget::container(inset).padding(Padding { top: 6.0, bottom: 8.0, left, right: 6.0 }).width(Length::Fixed(width)),
-                    CODE_PADDING.top + (line + 1) as f32 * code_line_height(),
+                    code_padding().top + (line + 1) as f32 * code_line_height(),
                 ))
                 .into()
             }
@@ -2494,7 +2521,7 @@ fn block_editor_in<'a>(ws: Option<&'a Workspace>, t: &'a Theory, window: bool, i
         col = col.push(widget::text::caption("Unfinished while the tool runs: pick a proof it finds"));
     }
     // (in the pop-out window there is no card: its messages are under the code)
-    if window && let Some(strips) = edit_messages(t, be, table, block_code_width(t.code_columns.max(columns))) {
+    if window && let Some(strips) = edit_messages(t, be, table, block_code_width(columns)) {
         col = col.push(strips);
     }
     // Prose has no proof state
@@ -2514,7 +2541,7 @@ fn block_editor_in<'a>(ws: Option<&'a Workspace>, t: &'a Theory, window: bool, i
     if window {
         return col.into();
     }
-    col.width(Length::Fixed(block_code_width(t.code_columns.max(columns)) + CARD_CHROME)).into()
+    col.width(Length::Fixed(block_code_width(columns) + CARD_CHROME)).into()
 }
 
 /// The size scale and relative line height the prose editor sets a heading of `level` in
@@ -3131,7 +3158,7 @@ pub fn popout_scroll_id() -> widget::Id {
 
 /// Keep the proof window's caret in sight
 pub fn keep_popout_caret(line: usize) -> cosmic::app::Task<Message> {
-    keep_caret_in(popout_scroll_id(), line, code_line_height(), CODE_PADDING.top)
+    keep_caret_in(popout_scroll_id(), line, code_line_height(), code_padding().top)
 }
 
 pub fn source_scroll_id() -> widget::Id {

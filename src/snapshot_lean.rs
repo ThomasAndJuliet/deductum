@@ -726,7 +726,7 @@ fn the_pop_out_button_sits_in_the_corner_of_its_proof() {
                         let drawn = cosmic::iced::Rectangle { y: pop.y - place.scrolled.y, x: pop.x - place.scrolled.x, ..pop };
                         // Where the proof's first line is: the cell's first line, or the source
                         // view's line of the proof's start
-                        let lh = if mode == Mode::Literate { super::view::z(13.0) * 1.4 } else { super::view::source_line_height() };
+                        let lh = if mode == Mode::Literate { super::view::code_line_height() } else { super::view::source_line_height() };
                         let img = image::RgbaImage::from_raw(w, h, png.clone()).unwrap();
                         let (first_top, right) = if mode == Mode::Literate {
                             (cell.y + 5.0, cell.x + cell.width)
@@ -748,8 +748,10 @@ fn the_pop_out_button_sits_in_the_corner_of_its_proof() {
                         let bg = *img.get_pixel(drawn.x as u32 - 2, (drawn.y + drawn.height / 2.0) as u32);
                         let far = |p: &image::Rgba<u8>| (0..3).map(|k| (p[k] as i32 - bg[k] as i32).abs()).sum::<i32>() > 120;
                         let (mut xs, mut ys) = (Vec::new(), Vec::new());
-                        for y in (drawn.y as i32 - 6).max(0)..((drawn.y + drawn.height) as i32 + 6).min(h as i32) {
-                            for x in (drawn.x as i32 - 6)..((drawn.x + drawn.width) as i32 + 6).min(w as i32) {
+                        // (inside the cell: its own border above is not the icon, and sits within 6 px of the
+                        // button where the code's 14 px lines make the button's inset 4.8 px)
+                        for y in (drawn.y as i32 - 6).max((cell.y - place.scrolled.y).ceil() as i32 + 1)..((drawn.y + drawn.height) as i32 + 6).min(h as i32) {
+                            for x in (drawn.x as i32 - 6)..((drawn.x + drawn.width) as i32 + 6).min(w as i32).min(if mode == Mode::Literate { (cell.x + cell.width - place.scrolled.x) as i32 - 1 } else { i32::MAX }) {
                                 if far(img.get_pixel(x as u32, y as u32)) {
                                     xs.push(x as f32);
                                     ys.push(y as f32);
