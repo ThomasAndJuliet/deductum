@@ -3145,6 +3145,24 @@
         "dest-filename": ".cargo-checksum.json"
     },
     {
+        "type": "shell",
+        "commands": [
+            "cp -r --reflink=auto \"flatpak-cargo/git/household-kit-bef3a9e/crates/household-highlight\" \"cargo/vendor/household-highlight\""
+        ]
+    },
+    {
+        "type": "inline",
+        "contents": "[package]\nname = \"household-highlight\"\ndescription = \"Code colours by token class (household rule 25b): the class of a syntax scope and the colour role of a class, without a highlighter or a theme\"\nversion = \"0.1.0\"\nedition = \"2024\"\nrust-version = \"1.89\"\npublish = false\nrepository = \"https://github.com/ThomasAndJuliet/household-kit\"\n\n[dependencies]\n",
+        "dest": "cargo/vendor/household-highlight",
+        "dest-filename": "Cargo.toml"
+    },
+    {
+        "type": "inline",
+        "contents": "{\"package\": null, \"files\": {}}",
+        "dest": "cargo/vendor/household-highlight",
+        "dest-filename": ".cargo-checksum.json"
+    },
+    {
         "type": "archive",
         "archive-type": "tar-gzip",
         "url": "https://static.crates.io/crates/htmlize/htmlize-1.1.0.crate",
