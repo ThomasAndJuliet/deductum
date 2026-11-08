@@ -182,23 +182,6 @@ configuration. Linux paths follow the corresponding XDG directory settings.
 Remote sessions keep their state on the remote machine. Your proof files stay
 in their project folders; back those up along with session state.
 
-## Checking where a download came from
-
-Every file of a public release is attested by this repository's release
-workflow. With the [GitHub CLI](https://cli.github.com/), check a download
-using:
-
-```sh
-gh attestation verify ./deductum-VERSION-linux-x86_64.flatpak \
-  --repo ThomasAndJuliet/deductum \
-  --signer-workflow ThomasAndJuliet/deductum/.github/workflows/release-binaries.yml
-```
-
-This shows that the release workflow published those exact bytes after checking
-them against the successful CI run named in the release. To see which source
-revision that run tested, verify the JSON receipt beside the package in the same
-way and read its `source_sha`.
-
 ## Development
 
 For source builds, backend integrations and packaging, see
