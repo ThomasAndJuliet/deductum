@@ -29,7 +29,7 @@ use serde_json::Value;
 pub const VERSION: u32 = 2;
 
 /// The Paper defaults of the Literate view (Q5): Libertinus Serif 20 px, line spacing 1.5, a prose
-/// column at most 48 em wide, justified and centred. Version 1 files kept the older look
+/// column at most 48 em wide, ragged right and centred. Version 1 files kept the older look
 /// ([`legacy_display`]) unless the user had never changed it
 pub const PAPER_TEXT_SIZE: f32 = 20.0;
 pub const PAPER_MEASURE: f32 = 48.0;
@@ -192,7 +192,7 @@ impl Default for Display {
         // until the pin moves)
         Self { font: TextFont::Libertinus, text_size: PAPER_TEXT_SIZE, line_height: 1.5,
             measure: PAPER_MEASURE, paragraph_spacing: 0.7, math_scale: PAPER_MATH_SCALE,
-            justify: true, centred: true }
+            justify: false, centred: true }
     }
 }
 
@@ -844,7 +844,7 @@ mod tests {
     #[test]
     fn paper_defaults_apply_to_files_that_never_chose_the_look_and_users_changes_are_kept() {
         let d = Display::default();
-        assert_eq!((d.font, d.text_size, d.line_height, d.measure, d.justify, d.centred), (TextFont::Libertinus, 20.0, 1.5, 48.0, true, true));
+        assert_eq!((d.font, d.text_size, d.line_height, d.measure, d.justify, d.centred), (TextFont::Libertinus, 20.0, 1.5, 48.0, false, true));
         assert_eq!(d.math_scale, 1.05, "Juliet approved x1.05 (household-kit#3)");
         assert_eq!(legacy_display().math_scale, 1.1);
         // the first previews' flat file, and a version 1 file with no display section
