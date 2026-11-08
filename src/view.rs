@@ -1944,11 +1944,18 @@ pub fn fill_here(ws: &Workspace) -> bool {
 }
 
 /// The goal under its cell (no room beside it): attached a little below, as wide as the cell,
-/// a coloured line where the cell's status strip is. The line is the panel's left edge, as the
-/// strip is the cell's: [`GOAL_EDGE`] wide, over the panel's own left outline and the padding
-/// inside it, so that the grey outline remains on the top, right and bottom only and the panel's
-/// left edge is the cell's. Opaque: the accent at 60 % over the page, as it looked on the page
+/// with the coloured line as its left edge ([`goal_with_edge`])
 fn goal_under<'a>(goal: Element<'a, Message>) -> Element<'a, Message> {
+    widget::container(goal_with_edge(goal))
+        .padding(Padding { top: ATTACHED - 4.0, ..Padding::ZERO })
+        .into()
+}
+
+/// The goal panel with a coloured line where a cell has its status strip. The line is the panel's
+/// left edge, as the strip is the cell's: [`GOAL_EDGE`] wide, over the panel's own left outline and
+/// the padding inside it, so that the grey outline remains on the top, right and bottom only, with
+/// no gap and no second line. Opaque: the accent at 60 % over the page, as it looked on the page
+fn goal_with_edge<'a>(goal: Element<'a, Message>) -> Element<'a, Message> {
     let bar = widget::container(widget::Space::new()).width(Length::Fixed(GOAL_EDGE)).height(Length::Fill).class(theme::Container::custom(|theme| {
         let (accent, page) = (Color::from(theme.cosmic().accent_color()), page_color(theme));
         let mix = |a: f32, p: f32| a * 0.6 + p * 0.4;
@@ -1959,9 +1966,7 @@ fn goal_under<'a>(goal: Element<'a, Message>) -> Element<'a, Message> {
     }));
     #[cfg(test)]
     let bar = bar.id(test_panel_id("edge"));
-    widget::container(iced::widget::stack![goal, bar].height(Length::Shrink))
-        .padding(Padding { top: ATTACHED - 4.0, ..Padding::ZERO })
-        .into()
+    iced::widget::stack![goal, bar].height(Length::Shrink).into()
 }
 
 /// The width of the coloured line that is the left edge of the goal under a cell: the panel's
@@ -2549,23 +2554,14 @@ fn block_editor_in<'a>(ws: Option<&'a Workspace>, t: &'a Theory, window: bool, i
         // (always in a gap, empty when there is nothing to put there: the editor keeps its state)
         let code: Element<'_, Message> = match after {
             Some((line, indent, goal)) => {
-                // Set off from the code: indented as its construct, an accent rule on its left,
-                // its own background
-                let rule = widget::container(widget::Space::new())
-                    .width(Length::Fixed(3.0))
-                    .height(Length::Fill)
-                    .class(theme::Container::custom(|theme| iced::widget::container::Style {
-                        background: Some(Color::from(theme.cosmic().accent_color()).into()),
-                        border: Border { radius: 2.0.into(), ..Default::default() },
-                        ..Default::default()
-                    }));
-                let card = widget::container(goal).width(Length::Fill).class(theme::Container::custom(|theme| iced::widget::container::Style {
+                // Set off from the code: indented as its construct, on its own background, the
+                // coloured line its left edge, as under a cell
+                let inset = widget::container(goal_with_edge(goal)).width(Length::Fill).class(theme::Container::custom(|theme| iced::widget::container::Style {
                     background: Some(page_color(theme).into()),
-                    border: Border { radius: 6.0.into(), ..Default::default() },
                     ..Default::default()
                 }));
-                let inset = widget::row::with_capacity(2).spacing(6).push(rule).push(card).height(Length::Shrink);
-                let left = code_padding().left + indent as f32 * code_size() * CODE_ADVANCE;
+                // (on a whole pixel, so that the line is crisp)
+                let left = (code_padding().left + indent as f32 * code_size() * CODE_ADVANCE).round();
                 banded(super::gap::Gap::new(
                     code,
                     widget::container(inset).padding(Padding { top: 6.0, bottom: 8.0, left, right: 6.0 }).width(Length::Fixed(width)),

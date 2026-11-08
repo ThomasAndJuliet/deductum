@@ -819,6 +819,57 @@ fn the_goal_under_a_cell_has_the_coloured_line_as_its_left_edge() {
     }
 }
 
+/// A long proof in a narrow window opens the goal as a gap inside the editor: there too the coloured
+/// line is the panel's left border, with no gap between them and no grey on that side (the separate
+/// accent rule, the 6 px gap and the panel's full outline were a double line). The panel keeps its
+/// grey outline on the other three sides
+#[test]
+fn the_goal_in_the_open_editor_has_the_coloured_line_as_its_left_edge() {
+    let mut app = goal_app();
+    app.goal_placement_override = Some(super::view::GoalPlacement::AfterConstruct);
+    for light in [true, false] {
+        let mut h = Harness::new(PANEL);
+        cosmic::theme::set_active(if light { cosmic::theme::ThemeType::Light } else { cosmic::theme::ThemeType::Dark });
+        super::view::set_goal_beside(false);
+        let _ = h.draw(&app, "gap-panel-warm");
+        let frame = h.draw(&app, if light { "gap-panel-light" } else { "gap-panel-dark" });
+        let mut all = Bounds(Vec::new());
+        h.operate(&app, &mut all);
+        cosmic::theme::set_active(cosmic::theme::ThemeType::Dark);
+        let theme = if light { cosmic::Theme::light() } else { cosmic::Theme::dark() };
+        let all = all.0;
+        let w = PANEL.width as u32;
+        let panel = part(&all, super::view::test_panel_id("panel"));
+        let edge = part(&all, super::view::test_panel_id("edge"));
+        let page = super::view::page_color(&theme);
+        let grey = card_border_color(&theme);
+        assert!((edge.x - panel.x).abs() < 0.5 && (edge.width - super::view::GOAL_EDGE).abs() < 0.5, "light={light}: the line is {edge:?} on the panel {panel:?}");
+        assert!((edge.y - panel.y).abs() < 0.5 && (edge.height - panel.height).abs() < 0.5, "light={light}: the line runs the panel's whole height: {edge:?} on {panel:?}");
+        let accent = Color::from(theme.cosmic().accent_color());
+        let want = |a: f32, p: f32| a * 0.6 + p * 0.4;
+        let line = Color::from_rgb(want(accent.r, page.r), want(accent.g, page.g), want(accent.b, page.b));
+        let x0 = panel.x as u32;
+        for y in [panel.y + 8.0, panel.y + panel.height / 2.0, panel.y + panel.height - 8.0] {
+            for dx in 0..4 {
+                let p = px(&frame, w, (x0 + dx) as f32, y);
+                assert!(is(p, line), "light={light}, y={y}: pixel {dx} of the line is {p:?}, not {}", hex(line));
+                assert!(!is(p, grey), "light={light}: the grey outline shows on the left edge");
+            }
+            // right after it the panel's own contents, not a second line
+            let after = px(&frame, w, (x0 + 4) as f32, y);
+            assert!(!is(after, line) && !is(after, grey), "light={light}, y={y}: a second line after the first: {after:?}");
+            // and no accent rule, or the old 6 px gap, before it
+            for dx in 1..=6 {
+                assert!(!is(px(&frame, w, (x0 - dx) as f32, y), line), "light={light}, y={y}: the line stands apart from the panel {dx} px before it");
+            }
+        }
+        // the top, right and bottom keep their grey outline
+        let (mx, my) = (panel.x + panel.width / 2.0, panel.y + panel.height / 2.0);
+        assert!(line_strength(&frame, w, mx, panel.y + panel.height - 1.0, false, grey, page) > 1.6, "light={light}: the bottom outline");
+        assert!(line_strength(&frame, w, panel.x + panel.width - 1.0, my, true, grey, page) > 1.6, "light={light}: the right outline");
+    }
+}
+
 // ----- the goal beside the proof sits just past its cell
 
 /// Where things are with the goal beside the proof at `width`: the open cell, the goal panel as
