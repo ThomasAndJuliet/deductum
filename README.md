@@ -1,10 +1,15 @@
 # Deductum
 
-Deductum is a desktop application for shared Isabelle and Lean proof work on
-Linux and Windows, built with the COSMIC toolkit (libcosmic, iced and
-cosmic-text). Read and edit proofs as literate documents, inspect goals as you work,
-and share a live prover session with coding agents. Projects can run on your
-computer or a Linux machine reached over SSH.
+Deductum is a desktop app for writing proofs that a computer checks. Theorem
+provers such as [Isabelle](https://isabelle.in.tum.de/) and
+[Lean](https://lean-lang.org/) verify mathematics and software one logical step
+at a time. Their files are written to be read, yet they are usually edited like
+code. Deductum shows a file as a document, with formatted prose, typeset
+mathematics and proofs, and checks it continuously as you type. Click anything
+to edit its source; the file on disk stays the source of truth. You can share the
+same live prover session with AI agents, deciding what each one may change and
+seeing who changed what. Deductum runs on Linux and Windows, with projects on your
+own computer or on a remote Linux machine.
 
 ## Features
 
