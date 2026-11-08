@@ -1383,3 +1383,60 @@ fn zoom_scales_the_content_and_not_the_interface() {
     let (a, b) = (by_name(&at_100, "the open cell").y, by_name(&at_150, "the open cell").y);
     assert!(b > a * 1.3, "the prose above the cell did not zoom: the cell is at {a} and {b}");
 }
+
+
+// ----- Paper: the theory's title and imports
+
+/// "Theory" is in the interface's bold sans and the theory's name in the code font, bold; the
+/// imports are a 13 px sans caption and then each name in the code font; and a code font with no
+/// bold sets the name in its regular weight, never in another family
+#[test]
+fn the_title_sets_theory_in_sans_and_the_name_and_imports_in_the_code_font() {
+    use cosmic::iced::font::{Family, Weight};
+    let _turn = super::snapshot::ui_turn();
+    super::load_fonts();
+    let sans = cosmic::font::default();
+    let under = |code_font: &str| {
+        let mut s = Settings::default();
+        s.change(settings::Change::CodeFont(code_font.into()));
+        Published::new(&s)
+    };
+
+    // a code font with a bold (New Computer Modern, bundled)
+    let _published = under("NewComputerModern");
+    let title = super::view::title_runs("Timed_Circus_Stop");
+    assert_eq!(title.iter().map(|(t, _)| t.as_str()).collect::<Vec<_>>(), ["Theory ", "Timed_Circus_Stop"]);
+    assert_eq!((title[0].1.family, title[0].1.weight), (sans.family, Weight::Bold), "Theory: the interface's sans, bold");
+    assert_eq!((title[1].1.family, title[1].1.weight), (Family::Name("NewComputerModern"), Weight::Bold), "the name: the code font, bold");
+
+    let imports = super::view::imports_runs(&["imports", "Timed_Circus_Observations", "Timed_Circus_Time_Step"]);
+    let words: Vec<&(String, cosmic::iced::Font)> = imports.iter().filter(|(t, _)| !t.trim().is_empty()).collect();
+    assert_eq!(words.iter().map(|(t, _)| t.as_str()).collect::<Vec<_>>(), ["imports", "Timed_Circus_Observations", "Timed_Circus_Time_Step"]);
+    assert_eq!((words[0].1.family, words[0].1.weight), (sans.family, Weight::Normal), "the caption: the interface's sans");
+    for (name, font) in &words[1..] {
+        assert_eq!((font.family, font.weight), (Family::Name("NewComputerModern"), Weight::Normal), "{name}: the code font");
+    }
+    assert_eq!((super::view::TITLE_SIZE, super::view::IMPORTS_SIZE), (26.0, 13.0), "the caption is 13 px");
+
+    // a code font with no bold: the name's regular weight, in that family. (An installed family
+    // with no bold face, taken from the font database: none is bundled, so a machine whose fonts
+    // all have a bold has nothing to try here)
+    drop(_published);
+    let unbolded = {
+        let mut font_system = cosmic::iced::advanced::graphics::text::font_system().write().unwrap();
+        let mut names: Vec<String> = font_system.raw().db().faces().filter_map(|f| f.families.first().map(|(n, _)| n.clone())).collect();
+        drop(font_system);
+        names.sort();
+        names.dedup();
+        names.into_iter().find(|n| !super::text_weight::has_weight(cosmic_text::Family::Name(Box::leak(n.clone().into_boxed_str())), super::text_weight::BOLD))
+    };
+    let Some(unbolded) = unbolded else {
+        eprintln!("every installed family has a bold: no family to try the fallback on");
+        return;
+    };
+    let family = Family::Name(Box::leak(unbolded.clone().into_boxed_str()));
+    let _published = under(&unbolded);
+    let title = super::view::title_runs("Timed_Circus_Stop");
+    assert_eq!((title[1].1.family, title[1].1.weight), (family, Weight::Normal), "{unbolded} has no bold: the same family, regular");
+    assert_eq!(title[0].1.weight, Weight::Bold, "Theory stays bold");
+}

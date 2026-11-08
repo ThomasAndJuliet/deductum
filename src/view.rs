@@ -1412,6 +1412,44 @@ fn hover_card<'a>(ws: &'a Workspace, h: &super::Hover) -> Option<Element<'a, Mes
     )
 }
 
+/// The theory's title and its imports' sizes, in px at 100 %
+pub const TITLE_SIZE: f32 = 26.0;
+pub const IMPORTS_SIZE: f32 = 13.0;
+
+/// The theory's title as runs of text and their fonts: "Theory" in the interface's bold sans, then
+/// the theory's name in the code font, bold. A code font with no bold sets the name in its regular
+/// weight (never in another family)
+pub(crate) fn title_runs(name: &str) -> Vec<(String, cosmic::iced::Font)> {
+    vec![
+        ("Theory ".to_string(), cosmic::iced::Font { weight: cosmic::iced::font::Weight::Bold, ..cosmic::font::default() }),
+        (name.to_string(), code_font_bold()),
+    ]
+}
+
+/// What a theory imports, as runs: the caption "imports" in the interface's sans, then each imported
+/// name in the code font. Words after `keywords` or `abbrevs` (the rest of the header) are caption
+pub(crate) fn imports_runs(words: &[&str]) -> Vec<(String, cosmic::iced::Font)> {
+    let caption = cosmic::font::default();
+    let mut runs = Vec::new();
+    let mut names = true;
+    for (n, word) in words.iter().enumerate() {
+        let is_caption = n == 0 && *word == "imports" || matches!(*word, "keywords" | "abbrevs");
+        names = names && !matches!(*word, "keywords" | "abbrevs");
+        let font = if is_caption || !names { caption } else { code_font() };
+        if n > 0 {
+            runs.push((if font == code_font() { "  ".to_string() } else { " ".to_string() }, caption));
+        }
+        runs.push((word.to_string(), font));
+    }
+    runs
+}
+
+/// Runs of text in their fonts, as one line of text at `size`
+fn runs_text<'a>(runs: Vec<(String, cosmic::iced::Font)>, size: f32) -> Element<'a, Message> {
+    let spans: Vec<iced::widget::text::Span<'a, (), cosmic::iced::Font>> = runs.into_iter().map(|(text, font)| iced::widget::span(text).font(font)).collect();
+    iced::widget::rich_text(spans).size(size).into()
+}
+
 /// A formal block, shown: read-only text that a click opens for editing at the click
 fn block_code<'a>(ws: Option<&'a Workspace>, t: &'a Theory, i: usize, block: &Block, marked: bool, table: &dyn super::codec::Symbols, current: bool) -> Element<'a, Message> {
     let Some(Some(v)) = t.block_views.get(i) else { return highlighted_block(t, block) };
@@ -2089,13 +2127,19 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
                 // The title and, under it, what it imports, however the header's lines break
                 // ("theory A imports B begin" on one line reads as the same title block)
                 let words: Vec<&str> = src.split_whitespace().collect();
-                let (title, rest) = match words.as_slice() {
-                    ["theory", name, rest @ ..] => (format!("Theory {name}"), rest.strip_suffix(&["begin"]).unwrap_or(rest).join(" ")),
-                    _ => (src.lines().next().unwrap_or("").to_string(), src.lines().skip(1).map(str::trim).collect::<Vec<_>>().join(" ")),
+                // ("Theory" in the interface's bold sans, the theory's name in the code font, bold; the
+                // imports as a small sans caption then each name in the code font, as a term in the
+                // text is: Tom, 8 Nov, mockups/t21b)
+                let (title, imports) = match words.as_slice() {
+                    ["theory", name, rest @ ..] => (title_runs(name), imports_runs(rest.strip_suffix(&["begin"]).unwrap_or(rest))),
+                    _ => (
+                        vec![(src.lines().next().unwrap_or("").to_string(), cosmic::iced::Font { weight: cosmic::iced::font::Weight::Bold, ..cosmic::font::default() })],
+                        vec![(src.lines().skip(1).map(str::trim).collect::<Vec<_>>().join(" "), cosmic::font::default())],
+                    ),
                 };
                 widget::column::with_capacity(2)
-                    .push(symbol_text_with_font(&title, &*table, z(26.0), cosmic::iced::Font { weight: cosmic::iced::font::Weight::Bold, ..cosmic::font::default() }))
-                    .push(widget::container(symbol_text_with_font(&rest, &*table, z(13.0), cosmic::font::default())).class(theme::Container::custom(|theme| iced::widget::container::Style {
+                    .push(runs_text(title, z(TITLE_SIZE)))
+                    .push(widget::container(runs_text(imports, z(IMPORTS_SIZE))).class(theme::Container::custom(|theme| iced::widget::container::Style {
                         text_color: Some(super::tones::secondary_text(theme, 0.65)),
                         ..Default::default()
                     })))
