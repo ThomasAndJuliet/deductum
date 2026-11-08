@@ -727,7 +727,7 @@ pub struct Theory {
     pub selected: Option<usize>,
     /// The formal blocks' views, by block index (None for other kinds)
     pub block_views: Vec<Option<BlockView>>,
-    /// The widest formal block's columns: every block is drawn this wide, so they line up
+    /// The widest formal block's columns, which the Source view's column is reckoned from
     pub code_columns: usize,
 }
 

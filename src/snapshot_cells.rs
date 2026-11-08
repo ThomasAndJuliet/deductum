@@ -876,6 +876,8 @@ fn the_goal_in_the_open_editor_has_the_coloured_line_as_its_left_edge() {
 /// drawn (the layout's place and how far the page moved it), the other cells on the page, whether
 /// the page had room for the goal beside, the frame
 struct Beside {
+    /// The goal's heading (its count and controls), where it is drawn, if it has come
+    heading: Option<Rectangle>,
     cell: Rectangle,
     panel: Rectangle,
     others: Vec<Rectangle>,
@@ -891,14 +893,17 @@ fn beside(app: &App, width: f32) -> Beside {
         super::view::set_goal_beside(true);
         let _ = h.draw(app, "beside-warm");
         let frame = h.draw(app, &format!("beside-{width}"));
-        let moved = super::gap::goal_moved();
+        // (only a goal beside is moved: under the cell, what a goal was last moved by is another's)
+        let moved = if super::view::last_wide() { super::gap::goal_moved() } else { cosmic::iced::Vector::ZERO };
         let mut all = Bounds(Vec::new());
         h.operate(app, &mut all);
         let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
         let panel = part(&all.0, super::view::test_panel_id("panel"));
         let others = t.blocks.iter().enumerate().filter(|(_, b)| b.kind == Kind::Formal)
             .filter_map(|(i, _)| all.0.iter().find(|(x, _)| *x == super::view::test_block_id(i)).map(|(_, r)| *r)).collect();
+        let heading = all.0.iter().find(|(x, _)| *x == super::view::test_panel_id("heading")).map(|(_, r)| Rectangle { x: r.x + moved.x, y: r.y + moved.y, ..*r });
         Beside {
+            heading,
             cell: part(&all.0, super::view::selected_block_id()),
             panel: Rectangle { x: panel.x + moved.x, y: panel.y + moved.y, ..panel },
             others,
@@ -942,45 +947,125 @@ fn the_goal_beside_sits_just_past_its_cell() {
     gap_is_clear(&b);
 }
 
-/// A cell widened for a long line moves the panel with it: the panel is past that cell's right edge,
-/// further than past an ordinary one
+/// A long line wraps at the cell's width instead of widening the cell: the panel is where it is
+/// beside a short one, and the cell is a row taller for each row the line takes
 #[test]
-fn a_widened_cell_moves_the_goal_beside_it() {
+fn a_long_line_wraps_instead_of_widening_the_cell() {
     let open = |app: &mut App, name: char| {
         let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
         let i = t.blocks.iter().position(|b| b.kind == Kind::Formal && t.source_text(b.start, b.end).starts_with(&format!("lemma {name}:"))).unwrap();
         let _ = cosmic::Application::update(app, super::Message::EditBlock(i));
     };
     let gap = super::view::GOAL_GAP_PUB;
-    let mut xs = Vec::new();
-    for name in ['a', 'b'] {
-        let mut app = widths_app(100);
+    let mut seen = Vec::new();
+    // (one token, too long for a row: it still wraps, within the word; 300 characters in 80 a row)
+    for (name, long) in [('a', 100), ('b', 100), ('b', 300)] {
+        let mut app = widths_app(long);
         open(&mut app, name);
         let b = beside(&app, 1400.0);
         assert!(b.wide);
-        let right = b.cell.x + b.cell.width;
-        // (the open cell's own right edge, or a wider cell level with the panel)
-        let widest = b.others.iter().filter(|o| o.y < b.panel.y + b.panel.height && b.panel.y < o.y + o.height).map(|o| o.x + o.width).fold(right, f32::max);
-        assert!((b.panel.x - (widest + gap)).abs() < 1.0, "lemma {name}: the panel is at {}, past a cell ending at {widest} and the gap {gap}", b.panel.x);
+        assert!((b.panel.x - (b.cell.x + b.cell.width + gap)).abs() < 1.0, "lemma {name}: the panel is at {}, past a cell ending at {} and the gap {gap}", b.panel.x, b.cell.x + b.cell.width);
         for other in &b.others {
             assert!(!overlaps(b.panel, *other), "lemma {name}: the panel {:?} covers a cell {other:?}", b.panel);
         }
         gap_is_clear(&b);
-        xs.push((right, b.panel.x));
+        let rows = super::view::open_rows(app.workspace.as_ref().unwrap().theory.as_ref().unwrap().block_editor.as_ref().unwrap());
+        eprintln!("lemma {name}, {long}: {:?} rows {rows:?}", b.cell);
+        seen.push((b.cell.width, b.panel.x, b.cell.height, rows[0]));
     }
-    // the 100-character cell ends 20 characters (168 px) past the 80-character one, and the panel with it
-    assert!(xs[1].0 - xs[0].0 > 150.0, "the widened cell ends at {} and the ordinary one at {}", xs[1].0, xs[0].0);
-    assert!((xs[1].1 - xs[0].1) > 150.0 || xs[0].1 >= xs[1].0, "the panel is at {} beside the ordinary cell and {} beside the widened one", xs[0].1, xs[1].1);
+    let near = |a: f32, b: f32| (a - b).abs() < 1.0;
+    assert!(near(seen[0].0, seen[1].0) && near(seen[0].0, seen[2].0), "the long line's cell is as wide as the short one's: {seen:?}");
+    assert!(near(seen[0].1, seen[1].1) && near(seen[0].1, seen[2].1), "the panel does not move: {seen:?}");
+    let lh = super::view::code_line_height();
+    // (`lemma b: ` then the token, too long for a row, from a row of its own)
+    assert_eq!((seen[0].3, seen[1].3, seen[2].3), (1, 3, 5), "{seen:?}");
+    assert!(near(seen[1].2 - seen[0].2, 2.0 * lh), "the cell is taller by the rows the line takes: {seen:?}");
 }
 
-/// With the panel next to the cell, the goal stays beside in windows narrower than the prose column
-/// and the goal side by side would need (1,310 px): from the cell's right edge, the gap and the
-/// goal's minimum width. The prose column gives way to the goal, not below its cells, and nothing is
-/// covered at any width
+/// What the view reckons a wrapped line takes is what the editor takes: the cell's height, at the
+/// widths the page gives it, for a line of words, a line of one token and a line with symbols
 #[test]
-fn the_goal_stays_beside_in_windows_narrower_than_the_column_needs() {
-    // 1,310 px was the least with the 960 px column: 16 (scroll bar) + 960 + 10 + 320
-    for width in [1400.0, 1250.0, 1150.0, 1100.0] {
+fn the_rows_reckoned_for_a_line_are_the_rows_the_editor_draws() {
+    let words = "lemma w: \"".to_string() + &"alpha beta gamma delta epsilon ".repeat(12) + "\"";
+    let symbols = "lemma w: \"".to_string() + &"\\<forall>x y. \\<lbrakk>x \\<in> A; y \\<in> B\\<rbrakk> \\<Longrightarrow> f x \\<le> g y \\<and> ".repeat(8) + "True\"";
+    let token = format!("lemma w: \"{}\"", "x".repeat(400));
+    for line in [words, symbols, token] {
+        let text = format!("theory W imports Main begin\n\n{line}\n  by simp\n\nend\n");
+        for width in [1400.0, 1000.0, 900.0, 800.0] {
+            let mut app = demo_app(Mode::Literate);
+            let doc = serde_json::json!({"text": text, "revision": 1, "prover": super::snapshot::prover_json(&text)});
+            app.workspace.as_mut().unwrap().theory = Some(super::editor::Theory::new("/tmp/W.thy".into(), &doc, &super::prover::isabelle::symbols::Table::fallback(), std::sync::Arc::new(std::collections::HashMap::new()), Mode::Literate, super::prover::profile(None)));
+            app.show_right = false;
+            app.show_sidebar = false;
+            app.workspace.as_mut().unwrap().output = None;
+            let i = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.kind == Kind::Formal).unwrap();
+            let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(i));
+            let (editor, reckoned) = in_light(Size::new(width, 900.0), |h| {
+                let _ = h.draw(&app, "rows-warm");
+                let _ = h.draw(&app, "rows");
+                let mut all = Focusable(None);
+                h.operate(&app, &mut all);
+                let be = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().block_editor.as_ref().unwrap();
+                (all.0.expect("the open editor"), super::view::open_rows(be))
+            });
+            let drawn = (editor.height - super::view::code_padding().top - super::view::code_padding().bottom) / super::view::code_line_height();
+            assert!(reckoned[0] > 1, "{width} px: the line wraps");
+            assert!((drawn - reckoned.iter().sum::<usize>() as f32).abs() < 0.1, "{width} px: the editor draws {drawn} rows, the view reckons {reckoned:?}: {}", &line[..40.min(line.len())]);
+        }
+    }
+}
+
+/// The open editor's bounds
+struct Focusable(Option<Rectangle>);
+
+impl cosmic::iced::advanced::widget::Operation<()> for Focusable {
+    fn traverse(&mut self, f: &mut dyn FnMut(&mut dyn cosmic::iced::advanced::widget::Operation<()>)) {
+        f(self);
+    }
+    fn focusable(&mut self, id: Option<&cosmic::widget::Id>, bounds: Rectangle, _: &mut dyn cosmic::iced::advanced::widget::operation::Focusable) {
+        if id == Some(&super::view::block_editor_id()) {
+            self.0 = Some(bounds);
+        }
+    }
+}
+
+/// What is level with a line follows the rows above it: with a long first line wrapped, the wash of
+/// the caret's line on the line after it is that many rows down, not one
+#[test]
+fn the_caret_line_wash_follows_the_rows_above_it() {
+    let mut app = widths_app(200);
+    let i = {
+        let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+        t.blocks.iter().position(|b| b.kind == Kind::Formal && t.source_text(b.start, b.end).starts_with("lemma b:")).unwrap()
+    };
+    let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(i));
+    let be = app.workspace.as_mut().unwrap().theory.as_mut().unwrap().block_editor.as_mut().unwrap();
+    super::editor::place(&mut be.content, cosmic::widget::text_editor::Position { line: 1, column: 2 });
+    let size = Size::new(1400.0, 700.0);
+    let (frame, editor, rows) = in_light(size, |h| {
+        let _ = h.draw(&app, "wash-warm");
+        let frame = h.draw(&app, "wash");
+        let mut all = Focusable(None);
+        h.operate(&app, &mut all);
+        let be = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().block_editor.as_ref().unwrap();
+        (frame, all.0.expect("the open editor"), super::view::open_rows(be))
+    });
+    assert!(rows[0] >= 3, "{rows:?}");
+    let lh = super::view::code_line_height();
+    // past the text, in the editor's padding, where only the tints can be
+    let x = editor.x + editor.width - 4.0;
+    let at = |row: f32| px(&frame, size.width as u32, x, editor.y + super::view::code_padding().top + (row + 0.5) * lh);
+    let (washed, above) = (at(rows[0] as f32), at(rows[0] as f32 - 1.0));
+    assert!(washed != above, "the caret's line, {} rows down, has its wash and the wrapped line's last row does not: {washed:?} and {above:?}", rows[0]);
+    assert!(at(1.0) == above, "the wrapped line's rows have no wash: {:?} and {above:?}", at(1.0));
+}
+
+/// The goal stays beside down to where a 60 character cell, the gap and a 300 px goal no longer fit
+/// between the margins (893 px). The prose column gives way to the goal, not below its cells, and
+/// nothing is covered at any width
+#[test]
+fn the_goal_stays_beside_down_to_the_narrowest_cell_and_goal() {
+    for width in [1400.0, 1250.0, 1150.0, 1100.0, 1000.0, 900.0] {
         let b = beside(&goal_app(), width);
         assert!(b.wide, "{width} px: the goal is beside");
         assert!(b.panel.x + b.panel.width <= width - 6.0, "{width} px: the panel ({:?}) is within the window", b.panel);
@@ -991,9 +1076,209 @@ fn the_goal_stays_beside_in_windows_narrower_than_the_column_needs() {
         }
         gap_is_clear(&b);
     }
-    // too narrow for the cell, the gap and the goal: under the proof
-    let b = beside(&goal_app(), 1000.0);
-    assert!(!b.wide, "1,000 px has no room for the goal beside the 80-character cell");
+    // too narrow for those: under the cell
+    let b = beside(&goal_app(), 880.0);
+    assert!(!b.wide, "880 px has no room for a 60 character cell, the gap and a 300 px goal");
+}
+
+/// Cells have whole characters' widths, the page's width alone decides them
+fn characters(card: f32) -> f32 {
+    super::view::cell_characters(card)
+}
+
+/// As the page narrows: the goal from 360 to 300 px with the cell at 80 characters, then the cell
+/// to 60 characters with the goal at 300 px, then the goal under the cell, the cell back at its full
+/// width. The prose column keeps 48 em (960 px) while it, the gap and the goal fit, and then gives
+/// way, not below the cell; under the cell it keeps 48 em while it fits the page. The thresholds
+/// come from an 80 character card of 703.2 px, a 60 character one of 535.2 px, margins of 24 px and
+/// the gap of 10 px
+#[test]
+fn the_page_at_a_table_of_widths() {
+    let _turn = super::snapshot::ui_turn();
+    let layout = |page: f32| super::view::page_layout(page, 80, Some(960.0), true);
+    let near = |a: f32, b: f32| (a - b).abs() < 0.11;
+    // page, the goal (none: under), the cell in characters, the column
+    let table: &[(f32, Option<f32>, f32, f32)] = &[
+        (1700.0, Some(360.0), 80.0, 960.0),
+        (1378.0, Some(360.0), 80.0, 960.0),  // the column, the gap and the widest goal just fit
+        (1377.0, Some(360.0), 80.0, 959.0),  // and the column begins to give way
+        (1200.0, Some(360.0), 80.0, 782.0),
+        (1121.3, Some(360.0), 80.0, 703.3),  // the goal still at its widest
+        (1121.0, Some(359.8), 80.0, 703.2),  // and it begins to narrow
+        (1100.0, Some(338.8), 80.0, 703.2),
+        (1061.3, Some(300.1), 80.0, 703.2),
+        (1061.2, Some(300.0), 80.0, 703.2),  // the goal at its narrowest, the cell still 80
+        (1061.0, Some(300.0), 79.0, 703.0),  // and the cell begins to narrow, by whole characters
+        (1000.0, Some(300.0), 72.0, 642.0),
+        (950.0, Some(300.0), 66.0, 592.0),
+        (893.3, Some(300.0), 60.0, 535.3),   // the narrowest beside
+        (893.0, None, 80.0, 845.0),          // under, the cell back at 80, the column filling the page
+        (800.0, None, 80.0, 752.0),
+        (760.0, None, 80.0, 712.0),
+        (700.0, None, 73.0, 652.0),          // under, the cell narrows with the column
+    ];
+    for &(page, goal, chars, column) in table {
+        let l = layout(page);
+        assert!(match (l.goal, goal) { (Some(a), Some(b)) => near(a, b), (None, None) => true, _ => false }, "{page}: the goal is {:?}, wanted {goal:?}", l.goal);
+        assert_eq!(characters(l.cell), chars, "{page}: the cell is {} wide", l.cell);
+        assert!(near(l.column, column), "{page}: the column is {}, wanted {column}", l.column);
+        assert!(l.column >= l.cell - 0.01, "{page}: no cell leaves the column");
+        // everything fits between margins of at least 24 px
+        let taken = l.column + l.goal.map_or(0.0, |g| g + super::view::GOAL_GAP_PUB);
+        assert!(l.gutter >= 24.0 && taken + 2.0 * 24.0 <= page + 0.01, "{page}: {taken} and the margins {} do not fit", l.gutter);
+    }
+    // the page's width alone: going back over the widths gives the same layouts
+    let down: Vec<_> = (880..1720).rev().map(|w| layout(w as f32)).collect();
+    let up: Vec<_> = (880..1720).map(|w| layout(w as f32)).collect();
+    assert!(down.iter().rev().eq(up.iter()), "the same at each width, narrowing or widening");
+    // and each thing only narrows as the page does, each in its turn
+    for pair in up.windows(2) {
+        let (a, b) = (pair[0], pair[1]);
+        if let (Some(ga), Some(gb)) = (a.goal, b.goal) {
+            assert!(gb >= ga && b.cell >= a.cell && b.column >= a.column, "{a:?} then {b:?}");
+            assert!(a.cell >= b.cell - 0.01 || ga <= 300.0 + 0.01, "the cell narrows only once the goal is at its narrowest: {a:?} then {b:?}");
+        }
+    }
+}
+
+/// The settings against the table: a Cell width over 60 narrows to 60, one below 60 is honoured and
+/// does not narrow, Fill is the column's width at every width, and the zoom scales it all
+#[test]
+fn the_page_layout_under_the_settings_and_the_zoom() {
+    let _turn = super::snapshot::ui_turn();
+    let near = |a: f32, b: f32| (a - b).abs() < 0.11;
+    // 100: full width while it fits
+    let l = super::view::page_layout(1700.0, 100, Some(960.0), true);
+    assert_eq!((characters(l.cell), l.goal), (100.0, Some(360.0)));
+    // and narrowing to 60 like 80 does
+    let l = super::view::page_layout(900.0, 100, Some(960.0), true);
+    assert_eq!((characters(l.cell), l.goal), (60.0, Some(300.0)));
+    // 70 goes to 60 at the same width
+    let l = super::view::page_layout(900.0, 70, Some(960.0), true);
+    assert_eq!((characters(l.cell), l.goal), (60.0, Some(300.0)));
+    // 40: as set at every width, the goal beside for longer
+    for page in [1700.0, 1000.0, 800.0, 726.0] {
+        let l = super::view::page_layout(page, 40, Some(960.0), true);
+        assert_eq!(characters(l.cell), 40.0, "{page}");
+        assert!(l.goal.is_some(), "{page}: a 40 character cell leaves room for the goal");
+    }
+    // and under when even that does not fit
+    let l = super::view::page_layout(725.0, 40, Some(960.0), true);
+    assert_eq!((characters(l.cell), l.goal), (40.0, None));
+    // Fill is the column, beside or under
+    for page in [1700.0, 1400.0, 1200.0, 900.0, 880.0, 700.0] {
+        let l = super::view::page_layout(page, 0, Some(960.0), true);
+        assert!(near(l.cell, l.column), "{page}: Fill is the column: {l:?}");
+    }
+    assert!(super::view::page_layout(1700.0, 0, Some(960.0), true).column == 960.0);
+    // with the goal not allowed beside, it is under at every width
+    assert_eq!(super::view::page_layout(1700.0, 80, Some(960.0), false).goal, None);
+    // the prose measure caps the cell, and no measure leaves the column as wide as the cell
+    assert!(near(super::view::page_layout(1700.0, 80, Some(600.0), true).cell, 600.0));
+    let l = super::view::page_layout(1700.0, 80, None, true);
+    assert!(near(l.column, l.cell) && characters(l.cell) == 80.0, "{l:?}");
+    // at 150 %, everything is half as large again: the same layout at a page half as large again
+    let _zoomed = Zoomed::new(1.5);
+    let code = (14.0f32 * 1.5).round();
+    let card = |n: f32| (n + 0.5) * code * 0.6 + 2.0 * 0.75 * code + 6.0;
+    let l = super::view::page_layout(1700.0, 80, Some(1440.0), true);
+    assert!(near(l.cell, card(80.0)), "{l:?}");
+    assert_eq!(characters(l.cell), 80.0);
+    assert!(near(l.goal.unwrap(), 540.0), "{l:?}");
+    let l = super::view::page_layout(36.0 * 2.0 + 10.0 + 450.0 + card(60.0), 80, Some(1440.0), true);
+    assert_eq!((characters(l.cell), l.goal), (60.0, Some(450.0)));
+    let l = super::view::page_layout(36.0 * 2.0 + 10.0 + 450.0 + card(60.0) - 1.0, 80, Some(1440.0), true);
+    assert_eq!((characters(l.cell), l.goal), (80.0, None));
+}
+
+/// On the page, at the windows of the review, with the sidebar open and closed: the cell and the goal
+/// as the layout has them, the panel just past the cell, nothing covered. The 290 px sidebar and its
+/// 6 px splitter come off the window's width
+#[test]
+fn the_page_on_screen_with_the_sidebar_open_and_closed() {
+    // window, sidebar, the goal, characters
+    let table: &[(f32, bool, Option<f32>, f32)] = &[
+        (1700.0, true, Some(360.0), 80.0),
+        (1500.0, true, Some(360.0), 80.0),
+        (1400.0, true, Some(342.8), 80.0),
+        (1344.0, true, Some(300.0), 78.0),
+        (1280.0, true, Some(300.0), 70.0),
+        (1200.0, true, Some(300.0), 61.0),
+        (1190.0, true, Some(300.0), 60.0),
+        (1180.0, true, None, 80.0),
+        (1100.0, true, None, 80.0),
+        (1700.0, false, Some(360.0), 80.0),
+        (1100.0, false, Some(338.8), 80.0),
+        (1000.0, false, Some(300.0), 72.0),
+        (900.0, false, Some(300.0), 60.0),
+        (880.0, false, None, 80.0),
+    ];
+    for &(window, sidebar, goal, chars) in table {
+        let mut app = goal_app();
+        app.show_sidebar = sidebar;
+        let b = beside(&app, window);
+        let name = format!("{window} px, sidebar {sidebar}");
+        assert_eq!(b.wide, goal.is_some(), "{name}");
+        assert_eq!(characters(b.cell.width), chars, "{name}: the cell is {} wide", b.cell.width);
+        match goal {
+            Some(goal) => {
+                assert!((b.panel.width - goal).abs() < 0.2, "{name}: the panel is {} wide, wanted {goal}", b.panel.width);
+                assert!((b.panel.x - (b.cell.x + b.cell.width + super::view::GOAL_GAP_PUB)).abs() < 1.0, "{name}: the panel at {} is past the cell ending at {}", b.panel.x, b.cell.x + b.cell.width);
+                assert!(b.panel.x + b.panel.width <= window - 6.0, "{name}: the panel is in the window");
+                gap_is_clear(&b);
+            }
+            None => {
+                assert!((b.panel.x - b.cell.x).abs() < 1.0 && (b.panel.width - b.cell.width).abs() < 1.0, "{name}: under the cell, as wide as it: {:?} {:?}", b.panel, b.cell);
+                // (the open cell's element holds the goal under its code)
+                assert!(b.panel.y > b.cell.y + 2.0 * super::view::code_line_height(), "{name}: under the cell's code: {:?} {:?}", b.panel, b.cell);
+            }
+        }
+        for other in &b.others {
+            assert!(!overlaps(b.panel, *other), "{name}: the panel {:?} covers a cell {other:?}", b.panel);
+        }
+    }
+}
+
+/// At its narrowest the panel still shows all of its heading: on two rows, Types not cut off at its
+/// edge; with room for them, on one
+#[test]
+fn the_goal_heading_stays_inside_a_narrow_panel() {
+    let app = goal_app();
+    let b = beside(&app, 1000.0);
+    assert!((b.panel.width - 300.0).abs() < 0.5, "{:?}", b.panel);
+    let heading = b.heading.expect("the goal's heading");
+    assert!(heading.height > 45.0, "two rows at 300 px: {heading:?}");
+    let page = super::view::page_color(&cosmic::Theme::light());
+    // the panel's own padding, inside its outline, is clear down the heading's whole height
+    let x = b.panel.x + b.panel.width - 8.0;
+    for y in heading.y as u32..(heading.y + heading.height) as u32 {
+        assert!(is(px(&b.frame, b.size.width as u32, x, y as f32), page), "something runs into the panel's edge at ({x}, {y})");
+    }
+    // and Types is drawn: there is ink in the last part of the second row
+    let row = heading.y + heading.height - 15.0;
+    assert!((0..60).any(|d| !is(px(&b.frame, b.size.width as u32, x - 2.0 - d as f32, row), page)), "Types is on the second row, at the right");
+    let b = beside(&app, 1400.0);
+    let heading = b.heading.expect("the goal's heading");
+    assert!(b.panel.width > 340.0 && heading.height < 40.0, "one row with room: {:?} {heading:?}", b.panel);
+}
+
+/// Widening the window undoes narrowing it, to the pixel: nothing about the page remembers the
+/// widths it has been through (rule 45)
+#[test]
+fn widening_the_window_undoes_narrowing_it() {
+    let app = goal_app();
+    let frame = |width: f32| {
+        let b = beside(&app, width);
+        (b.frame, b.cell, b.panel)
+    };
+    let first = frame(1400.0);
+    let narrow = frame(1000.0);
+    let under = frame(880.0);
+    assert!(narrow.1.width < first.1.width && narrow.2.width < first.2.width, "narrower at 1,000 px");
+    assert!(under.2.y > under.1.y, "the goal under the cell at 880 px");
+    let again = frame(1400.0);
+    assert_eq!((first.1, first.2), (again.1, again.2), "the same places");
+    assert!(first.0 == again.0, "the same pixels");
 }
 
 /// Prose level with the panel is never covered: the panel goes past it (the page's mechanism for a
@@ -1002,7 +1287,7 @@ fn the_goal_stays_beside_in_windows_narrower_than_the_column_needs() {
 fn the_goal_beside_never_covers_prose_level_with_it() {
     let para = "We prove that the reactive design is healthy, and that its refinement follows from the refinement of its pre and postconditions, which is the main theorem of this section and is used throughout the rest of the development without further comment.";
     let text = format!("theory Fit imports Main begin\n\nlemma first: \"x + 0 = x\"\n  apply simp\n  done\n\ntext \\<open>{para} {para} {para}\\<close>\n\nlemma second: \"True\"\n  by simp\n\nend\n");
-    for width in [1400.0, 1150.0] {
+    for width in [1500.0, 1400.0, 1150.0, 1000.0, 900.0] {
         let mut app = demo_app(Mode::Literate);
         let doc = serde_json::json!({"text": text, "revision": 1, "prover": super::snapshot::prover_json(&text)});
         app.workspace.as_mut().unwrap().theory = Some(super::editor::Theory::new("/tmp/Fit.thy".into(), &doc, &super::prover::isabelle::symbols::Table::fallback(), std::sync::Arc::new(std::collections::HashMap::new()), Mode::Literate, super::prover::profile(None)));
@@ -1491,9 +1776,10 @@ fn widths_app(long: usize) -> App {
     app
 }
 
-/// The cells' widths (the card with its strip and border) and the page's column, as laid out
-fn cell_widths(app: &App, settings: &Settings) -> (Vec<f32>, f32) {
-    in_light(Size::new(1200.0, 700.0), |h| {
+/// The cells' widths (the card with its strip and border) and the page's column, as laid out in a
+/// window this wide
+fn cell_widths(app: &App, settings: &Settings, window: f32) -> (Vec<f32>, f32) {
+    in_light(Size::new(window, 700.0), |h| {
         let _published = Published::new(settings);
         let _ = h.draw(app, "paper-widths-warm");
         let _ = h.draw(app, "paper-widths");
@@ -1506,42 +1792,49 @@ fn cell_widths(app: &App, settings: &Settings) -> (Vec<f32>, f32) {
     })
 }
 
-/// Cells have one shared width, Settings ▸ Code ▸ Cell width in characters (80 by default); a cell
-/// with a longer line widens to fit, up to the column; Fill is the column's whole width
+/// Cells have one shared width, Settings ▸ Code ▸ Cell width in characters (80 by default), however
+/// long their lines; Fill is the column's whole width
 #[test]
-fn cells_share_the_cell_width_widen_for_long_lines_and_fill_means_the_column() {
+fn cells_share_the_cell_width_whatever_their_lines_and_fill_means_the_column() {
     let near = |a: f32, b: f32| (a - b).abs() < 1.0;
     let settings = Settings::default();
     assert_eq!((settings.code.cell_width, settings.code.size), (80, 14));
     // 80 characters of 14 px code: 8.4 px each, and the half character kept after them, between the
     // gap (0.75 em, 10.5 px) either side, and the strip and border
     let eighty = (80.5 * 8.4) + 2.0 * 10.5 + CHROME;
-    let (widths, column) = cell_widths(&widths_app(30), &settings);
+    let (widths, column) = cell_widths(&widths_app(30), &settings, 1700.0);
     assert!(widths.iter().all(|w| near(*w, eighty)), "every cell is 80 characters wide whatever its lines: {widths:?} (wanted {eighty})");
-    assert!(column > eighty + 100.0, "the column ({column}) is wider than the cells, not the cells' width");
+    assert!(near(column, 960.0), "the column ({column}) keeps its 48 em, wider than the cells, with room for the goal");
 
-    // a line of 100 characters: that cell widens, the others stay
-    let (widths, _) = cell_widths(&widths_app(100), &settings);
-    let hundred = (100.0 + 0.5) * 8.4 + 2.0 * 10.5 + CHROME;
-    assert!(near(widths[0], eighty) && near(widths[2], eighty), "the other cells keep the shared width: {widths:?}");
-    assert!(near(widths[1], hundred), "the long cell is as wide as its line needs: {} (wanted {hundred})", widths[1]);
-
-    // a line longer than the column: as wide as the column, and no more
-    let (widths, column) = cell_widths(&widths_app(300), &settings);
-    assert!(near(widths[1], column) && widths[1] < 300.0 * 8.4, "capped at the column: {} of {column}", widths[1]);
+    // a line of 100 characters, and one of 300: every cell still the same
+    for long in [100, 300] {
+        let (widths, _) = cell_widths(&widths_app(long), &settings, 1700.0);
+        assert!(widths.iter().all(|w| near(*w, eighty)), "a line of {long} wraps: {widths:?}");
+    }
 
     // another width in characters, the same for every cell
+    let hundred = (100.0 + 0.5) * 8.4 + 2.0 * 10.5 + CHROME;
     let mut wide = Settings::default();
     wide.change(settings::Change::CellWidth(100));
-    let (widths, _) = cell_widths(&widths_app(30), &wide);
+    let (widths, _) = cell_widths(&widths_app(30), &wide, 1700.0);
     assert!(widths.iter().all(|w| near(*w, hundred)), "{widths:?}");
 
-    // Fill: every cell the column's whole width
+    // below the narrowest a window asks for: as set, at any width
+    let forty = (40.0 + 0.5) * 8.4 + 2.0 * 10.5 + CHROME;
+    let mut narrow = Settings::default();
+    narrow.change(settings::Change::CellWidth(40));
+    for window in [1700.0, 900.0] {
+        let (widths, _) = cell_widths(&widths_app(30), &narrow, window);
+        assert!(widths.iter().all(|w| near(*w, forty)), "{window} px: {widths:?}");
+    }
+
+    // Fill: every cell the column's whole width, as the column narrows too
     let mut fill = Settings::default();
     fill.change(settings::Change::CellWidth(0));
-    let (widths, column) = cell_widths(&widths_app(30), &fill);
-    assert!(widths.iter().all(|w| near(*w, column)), "Fill is the column: {widths:?} against {column}");
-    assert!(column > eighty + 100.0);
+    for window in [1700.0, 1200.0, 900.0] {
+        let (widths, column) = cell_widths(&widths_app(30), &fill, window);
+        assert!(widths.iter().all(|w| near(*w, column)), "{window} px: Fill is the column: {widths:?} against {column}");
+    }
 }
 
 /// The gap between the status strip and the code (and the code and the card's right edge) is

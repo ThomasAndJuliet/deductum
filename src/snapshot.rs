@@ -1368,9 +1368,10 @@ fn the_goal_beside_stays_level_with_its_construct() {
     // page's background
     let img = image::RgbaImage::from_raw(1460, 966, png).expect("the frame's pixels");
     let bg = *img.get_pixel(1440, 5);
-    // (right of the cells, which are 80 characters of 14 px code wide; the goal sits past what is level with it,
-    // which is the cell, or the whole column where the page has a wide item there)
-    let top = (0..img.height()).find(|&y| (760..1440).step_by(10).any(|x| img.get_pixel(x, y) != &bg));
+    // (right of the cells, which are 80 characters of 14 px code wide and here end at 768; the goal
+    // sits past what is level with it, which is the cell, or the whole column where the page has a
+    // wide item there)
+    let top = (0..img.height()).find(|&y| (800..1440).step_by(10).any(|x| img.get_pixel(x, y) != &bg));
     eprintln!("goal card top at {top:?}");
     let top = top.expect("a goal beside") as f32;
     assert!(top > 300.0, "not jumped to the top of the window (top = {top})");
@@ -1659,15 +1660,14 @@ fn margins_pictures() {
     }
 }
 
-/// The user's window (about 1344 px wide, code about 85 columns): the margins give way so that
-/// the goal goes beside the code, and they give way before the goal does in narrower windows
+/// The user's window (about 1344 px wide, code about 85 columns): the margins give way, then the
+/// goal, then the cells, so that the goal goes beside the code, whatever the length of its lines,
+/// down to where a 60 character cell and a 300 px goal no longer fit (893 px, without the sidebar)
 #[test]
 fn the_margins_collapse_before_the_goal_goes_under() {
     let wide_line = "lemma wide: \"timed_contract_wf true\\<^sub>r skip_unstable (timed_assign_final f) \\<and> timed_reactive P\"\n  by simp\n\n";
     let text = format!("theory W imports Main begin\n\n{wide_line}lemma low: \"(a::nat) + b = b + a\"\nproof -\n  show ?thesis\n    by simp\nqed\n\nend\n");
-    // (Paper's 48 em column is 960 px: the goal, at least 320 px, goes beside it from about 1310 px,
-    // and under it in narrower windows)
-    for (w, beside) in [(1500.0f32, true), (1320.0, true), (1100.0, false), (1000.0, false)] {
+    for (w, beside) in [(1500.0f32, true), (1320.0, true), (1100.0, true), (1000.0, true), (900.0, true), (890.0, false), (760.0, false)] {
         let mut app = demo_app(Mode::Literate);
         let doc = json!({"text": text, "revision": 1, "prover": prover_json(&text)});
         app.workspace.as_mut().unwrap().theory = Some(Theory::new("/tmp/W.thy".into(), &doc, &Table::fallback(), Arc::new(HashMap::new()), Mode::Literate, crate::prover::profile(None)));
@@ -2494,6 +2494,7 @@ fn up_and_down_leave_a_block_from_its_edge_rows() {
             let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
             t.block_editor.as_ref().and_then(|be| t.blocks.iter().position(|b| b.start <= be.start && be.start <= b.end))
         };
+        let rows = super::view::open_rows(app.workspace.as_ref().unwrap().theory.as_ref().unwrap().block_editor.as_ref().unwrap())[0];
         let mut presses = 0;
         for _ in 0..8 {
             presses += 1;
@@ -2506,9 +2507,10 @@ fn up_and_down_leave_a_block_from_its_edge_rows() {
                 break;
             }
         }
-        eprintln!("up {up}: left the block after {presses} presses");
-        // up: by simp -> row 2 -> row 1 -> out; down: row 1 -> row 2 -> by simp -> out
-        assert!(presses <= 3 + usize::from(!up), "up {up}: out of the block within a press per row ({presses} presses)");
+        eprintln!("up {up}: left the block after {presses} presses, its first line {rows} rows");
+        assert!(rows >= 2, "the first line wraps at this width");
+        // up: by simp -> its rows, last first -> out; down: its other rows -> by simp -> out
+        assert!(presses <= rows + 1, "up {up}: out of the block within a press per row ({presses} presses, {rows} rows)");
         assert!(open(&app) != Some(wi), "up {up}: left the block");
     }
 }

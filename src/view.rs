@@ -520,7 +520,6 @@ fn workspace<'a>(app: &'a App, ws: &'a Workspace, right: bool, main_width: f32) 
     // (the theory's page outside the padded column: its scroll view, and so its scroll bar, at the
     // window's edges)
     let mut page_body: Option<Element<'a, Message>> = None;
-    VIEW_WIDTH.store(main_width.to_bits(), std::sync::atomic::Ordering::Relaxed);
     if let Some(s) = summary {
         let lc = s["lifecycle"].as_str().unwrap_or("");
         if let Some(msg) = s["message"].as_str() {
@@ -593,42 +592,19 @@ fn workspace<'a>(app: &'a App, ws: &'a Workspace, right: bool, main_width: f32) 
                 }
             }
             // The proof state (and what the tools typed in the text say) goes beside the block it
-            // belongs to when there is room for both columns, else under it
+            // belongs to when there is room for both, else under it; what room there is follows
+            // from the page's width alone ([`page_layout`])
             let preferred_goal = (main_width * 0.38).clamp(z(320.0), z(560.0));
-            // The text column as wide as the code blocks (their code and status strip), within a
-            // readable measure: long code lines wrap rather than push the goal underneath, and
-            // the goal sits just past the blocks, a little apart
             let display = super::settings::display();
-            let reading_width = (display.measure > 0.0).then(|| z(display.measure * display.text_size).min((main_width - SCROLLBAR_ROOM - 2.0 * z(PAGE_MARGIN)).max(z(240.0))));
-            // The goal sits just past its cell, not past the column, so the room it needs is
-            // measured from the widest cell's right edge: the column gives way (not below its
-            // cells) to leave the goal its minimum width, and the goal stays beside in windows
-            // narrower than the whole column and the goal would need. A wider window leaves the
-            // column its measure
-            let beside_width = match reading_width {
-                Some(column) => {
-                    let longest = t.block_editor.as_ref().map_or(0, |be| be.content.text().lines().map(|l| l.chars().count()).max().unwrap_or(0)).max(t.code_columns);
-                    let cells = if super::settings::cell_width() == 0 { column } else { (code_width(longest) + CARD_CHROME).min(column) };
-                    column.min(main_width - SCROLLBAR_ROOM - GOAL_GAP - z(320.0)).max(cells)
-                }
-                None => (code_width(t.code_columns) + CARD_CHROME).clamp(z(440.0), z(680.0)),
-            };
-            // Beside when the text column, the gap and a goal of at least its minimum width fit
-            // (room for the scroll bar kept); the side margins go first, before the goal goes under
-            let room = main_width - SCROLLBAR_ROOM - beside_width - GOAL_GAP;
-            // (the goal narrows to keep side margins of at least PAGE_MARGIN; below its minimum
-            // width the margins give way first, and only then does the goal go under)
-            let goal_width = preferred_goal.min(room - 2.0 * z(PAGE_MARGIN)).max(z(320.0));
-            let fits = room >= z(320.0) && goal_beside_on();
-            let gutter = ((room - goal_width) / 2.0).clamp(0.0, sp.space_l as f32);
-            PAGE_GUTTER.store(gutter.to_bits(), std::sync::atomic::Ordering::Relaxed);
-            // The goal's column is kept whenever it fits, whether or not there is a goal now:
-            // moving between blocks never changes the layout. Without it, the page is a wider
-            // column, centred, the code blocks as wide as their lines allow
-            let beside = fits;
-            let text_width = if fits { beside_width } else { reading_width.unwrap_or_else(|| (code_width(t.code_columns) + CARD_CHROME).clamp(z(560.0), z(880.0))) };
-            COLUMN_CAP.store(text_width.to_bits(), std::sync::atomic::Ordering::Relaxed);
-            WIDE.store(fits, std::sync::atomic::Ordering::Relaxed);
+            let page = page_layout(main_width, super::settings::cell_width(), (display.measure > 0.0).then(|| z(display.measure * display.text_size)), goal_beside_on());
+            let beside = page.goal.is_some();
+            let goal_width = page.goal.unwrap_or(0.0);
+            let text_width = page.column;
+            PAGE_GUTTER.store(page.gutter.to_bits(), std::sync::atomic::Ordering::Relaxed);
+            COLUMN_CAP.store(page.column.to_bits(), std::sync::atomic::Ordering::Relaxed);
+            CELL_CAP.store(page.cell.to_bits(), std::sync::atomic::Ordering::Relaxed);
+            WIDE.store(beside, std::sync::atomic::Ordering::Relaxed);
+            GOAL_HEADING_STACKED.store(t.mode == Mode::Literate && beside && goal_width < z(GOAL_HEADING_ROOM), std::sync::atomic::Ordering::Relaxed);
             let inline = if beside { None } else { Some(ws) };
             let _ = right;
             let mut body: Element<'_, Message> = match t.mode {
@@ -682,13 +658,6 @@ fn workspace<'a>(app: &'a App, ws: &'a Workspace, right: bool, main_width: f32) 
 /// gave the Literate view its 48 em column: the goal's width does not depend on that measure)
 fn source_column(columns: usize) -> f32 {
     ((columns.max(30) as f32 + 4.0) * z(13.0) * 0.6 + code_padding().left + code_padding().right + CARD_CHROME).clamp(z(440.0), z(680.0))
-}
-
-/// The workspace's width, as the view last laid it out
-static VIEW_WIDTH: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
-
-fn view_width() -> f32 {
-    f32::from_bits(VIEW_WIDTH.load(std::sync::atomic::Ordering::Relaxed))
 }
 
 /// What an agent's request (or grant) covers, in words
@@ -1138,34 +1107,118 @@ pub fn block_text_inset(be: &super::editor::BlockEditor) -> f32 {
 /// that only just fits, and a monospace font's advance is not exactly [`CODE_ADVANCE`]
 const CODE_SLACK: f32 = 0.5;
 
-/// The width of a cell's code, in characters: the Settings ▸ Code ▸ Cell width, or the cell's
-/// longest line if that is more. Zero (Fill) is the page's whole column, not a count
-pub fn cell_columns(longest_line: usize) -> usize {
-    usize::from(super::settings::cell_width()).max(longest_line)
+/// The width of a cell's card with this many characters of code: the characters, the room kept
+/// after them and the gap either side, in the code's size at the current zoom, and the status
+/// strip and border
+fn cell_card_width(characters: f32) -> f32 {
+    (characters + CODE_SLACK) * code_size() * CODE_ADVANCE + code_padding().left + code_padding().right + CARD_CHROME
 }
 
-/// The width of a cell with this longest line: the same for every cell (the Cell width setting,
-/// 80 characters of code by default), widening for a longer line; with its gap either side. The
-/// page column caps it ([`block_code_width`]), and lines longer than that wrap
-pub fn code_width(longest_line: usize) -> f32 {
-    (cell_columns(longest_line) as f32 + CODE_SLACK) * code_size() * CODE_ADVANCE + code_padding().left + code_padding().right
+/// The characters of code a cell's card of this width holds, whole ones
+pub fn cell_characters(card: f32) -> f32 {
+    (((card - CARD_CHROME - code_padding().left - code_padding().right) / (code_size() * CODE_ADVANCE)) - CODE_SLACK + 1e-3).floor()
 }
 
-/// The width of a cell's code on the page: as [`code_width`], but never wider than the text
-/// column can be (its status strip beside it), so nothing on the page runs into the goal drawn
-/// past the column; longer lines wrap. With Cell width at Fill, the column's whole width
-pub fn block_code_width(longest_line: usize) -> f32 {
-    let cap = f32::from_bits(COLUMN_CAP.load(std::sync::atomic::Ordering::Relaxed));
-    let column = if cap > 0.0 { cap } else { z(680.0) } - CARD_CHROME;
-    if super::settings::cell_width() == 0 { column } else { code_width(longest_line).min(column) }
+/// How the page's room is shared at a width. It depends on nothing else on the page: not on the
+/// lines of any cell (they wrap at the cell's width rather than widening it), and not on the
+/// widths before this one, so that widening the window undoes narrowing it
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PageLayout {
+    /// The goal's width when it is beside its cell; none when it is under it
+    pub goal: Option<f32>,
+    /// Every cell's card, with its status strip and border
+    pub cell: f32,
+    /// The prose column, which every cell is inside
+    pub column: f32,
+    /// The side margins
+    pub gutter: f32,
 }
 
-/// The text column's width as the layout last chose it (blocks are never wider)
+/// The goal beside its cell at its widest and its narrowest
+pub const GOAL_WIDEST: f32 = 360.0;
+pub const GOAL_NARROWEST: f32 = 300.0;
+
+/// The narrowest a cell becomes to keep the goal beside it, in characters of code; a Cell width set
+/// below this is honoured and does not narrow further
+pub const CELL_NARROWEST: u16 = 60;
+
+/// With Cell width at Fill and no prose measure, the column as wide as a long measure would be
+const UNMEASURED_COLUMN: f32 = 880.0;
+
+/// The layout of a page `page` wide, Cell width being `cell_setting` characters (zero is Fill, the
+/// column's whole width), the prose measure `measure` px (none: as wide as the cells), with
+/// the goal allowed beside its cell or not. Sizes scale with the zoom.
+///
+/// As the page narrows, the margins come in to [`PAGE_MARGIN`]; then, with the cell at its full
+/// width, the goal narrows from [`GOAL_WIDEST`] to [`GOAL_NARROWEST`]; then the cell narrows, a
+/// character at a time, to [`CELL_NARROWEST`]; then the goal goes under the cell, where the cell has
+/// its full width again if the column has room.
+///
+/// The prose column keeps its measure while the column, the gap and the goal all fit, and then
+/// gives way, not below the cell: the goal goes past prose level with it, and it must stay in the
+/// window there too. Under the cell, the column keeps its measure while it fits the page
+pub fn page_layout(page: f32, cell_setting: u16, measure: Option<f32>, goal_allowed: bool) -> PageLayout {
+    let margin = z(PAGE_MARGIN);
+    let fill = cell_setting == 0;
+    let setting = cell_card_width(f32::from(cell_setting));
+    // (at its widest a cell never leaves the column; Fill is the column)
+    let whole = if fill { measure.unwrap_or(z(UNMEASURED_COLUMN)) } else { measure.map_or(setting, |m| setting.min(m)) };
+    let narrowest = whole.min(cell_card_width(f32::from(CELL_NARROWEST)));
+    let (goal_widest, goal_narrowest) = (z(GOAL_WIDEST), z(GOAL_NARROWEST));
+    let room = page - 2.0 * margin - GOAL_GAP;
+    // (the margin is in zoomed px and the theme's spacing is not, so the least can pass the most)
+    let gutter_for = |taken: f32| ((page - taken) / 2.0).clamp(margin, margin.max(spacing().space_l as f32));
+    if goal_allowed && room >= narrowest + goal_narrowest {
+        let (goal, cell) = if room >= whole + goal_narrowest {
+            (goal_widest.min(room - whole), whole)
+        } else {
+            let left = room - goal_narrowest;
+            (goal_narrowest, if fill { left } else { cell_card_width(cell_characters(left)).max(narrowest) })
+        };
+        let column = measure.map_or(cell, |m| m.min(room - goal)).max(cell);
+        PageLayout { goal: Some(goal), cell, column, gutter: gutter_for(column + GOAL_GAP + goal) }
+    } else {
+        let fits = (page - 2.0 * margin).max(z(240.0));
+        let column = measure.unwrap_or(if fill { z(UNMEASURED_COLUMN) } else { setting }).min(fits);
+        let cell = if fill { column } else { setting.min(column) };
+        PageLayout { goal: None, cell, column, gutter: gutter_for(column) }
+    }
+}
+
+/// The width of a cell's code on the page, as the layout last chose it: the same for every cell,
+/// however long its lines, which wrap at it. With Cell width at Fill, the column's whole width
+pub fn block_code_width() -> f32 {
+    let cell = f32::from_bits(CELL_CAP.load(std::sync::atomic::Ordering::Relaxed));
+    (if cell > 0.0 { cell } else { z(680.0) }) - CARD_CHROME
+}
+
+/// The text column's width as the layout last chose it
 static COLUMN_CAP: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+/// Every cell's width, its card with its strip and border, as the layout last chose it
+static CELL_CAP: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+/// A goal beside its cell narrower than this has its heading on two rows: the count, then Goals |
+/// Text and Types. They need about 321 px on one row, and more for a longer count
+const GOAL_HEADING_ROOM: f32 = 340.0;
+
+/// Whether the goal beside, as last laid out, has its heading on two rows
+static GOAL_HEADING_STACKED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// The text column's width in the last layout
 pub fn last_column() -> f32 {
     f32::from_bits(COLUMN_CAP.load(std::sync::atomic::Ordering::Relaxed))
+}
+
+/// How many rows each line of an open cell takes, wrapped at the cell's width
+pub(crate) fn open_rows(be: &super::editor::BlockEditor) -> Vec<usize> {
+    let width = block_code_width() - code_padding().left - code_padding().right;
+    super::wrap::rows(&be.content.text(), width, code_font(), code_size(), code_size() * CODE_ADVANCE)
+}
+
+/// How far below an open cell's text's top this line is drawn
+fn open_line_top(rows: &[usize], line: usize) -> f32 {
+    super::wrap::rows_above(rows, line) as f32 * code_line_height()
 }
 
 /// How a block of code looks, shown or being edited: on the page, which is the card's fill
@@ -1481,7 +1534,8 @@ fn block_code<'a>(ws: Option<&'a Workspace>, t: &'a Theory, i: usize, block: &Bl
         .size(code_size())
         .line_height(iced::widget::text::LineHeight::Relative(CODE_LINE))
         .padding(code_padding())
-        .width(block_code_width(v.columns))
+        .wrapping(super::wrap::WRAPPING)
+        .width(block_code_width())
         .on_action(move |a| Message::BlockViewAction(i, a))
         .key_binding(|_| None)
         .style(code_style())
@@ -1489,12 +1543,12 @@ fn block_code<'a>(ws: Option<&'a Workspace>, t: &'a Theory, i: usize, block: &Bl
     let editor = code_selection(editor, on_code(false));
     // The code, and under it inside the same card the prover's messages about it
     let mut inside = widget::column::with_capacity(2).push(hoverable_press(ws, super::HoverTarget::View(i), code_padding(), editor.into(), Some(Message::ViewPress(i))));
-    if let Some(m) = messages_view(t, block, table, current, block_code_width(v.columns)) {
+    if let Some(m) = messages_view(t, block, table, current, block_code_width()) {
         inside = inside.push(m);
     }
     // and the agents' notes on it, after a hairline
     if let Some(ws) = ws {
-        let width = block_code_width(v.columns);
+        let width = block_code_width();
         for n in notes_on(ws, t, block.start, block.end) {
             inside = inside.push(note_in_card(ws, n, width));
         }
@@ -1576,7 +1630,7 @@ pub fn z(px: f32) -> f32 {
 }
 
 /// The advance of a character of code, in em: Noto Sans Mono's and the usual monospace's. What
-/// the layout widens and wraps by; the editors draw at the font's own advance
+/// a cell's width is reckoned in; the editors draw at the font's own advance
 pub const CODE_ADVANCE: f32 = 0.6;
 
 /// Code's size at the current zoom (Settings ▸ Code ▸ Code size): in cells, the Source view and
@@ -2086,7 +2140,7 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
     let opened = editing.and_then(|start| t.blocks.iter().position(|b| b.start <= start && start <= b.end));
     let open_item = opened.filter(|_| app.popout.is_none());
     let open_top = t.block_editor.as_ref().map_or(0.0, |be| match goal_placement(true, be.content.line_count()) {
-        GoalPlacement::Construct => t.construct_at(be.start, be.end).map_or(0.0, |(cs, _)| match block_line(be, cs) { 0 => 0.0, line => code_padding().top + line as f32 * code_line_height() }),
+        GoalPlacement::Construct => t.construct_at(be.start, be.end).map_or(0.0, |(cs, _)| match block_line(be, cs) { 0 => 0.0, line => code_padding().top + open_line_top(&open_rows(be), line) }),
         _ => 0.0,
     });
     let mut anchor = if beside.is_some() {
@@ -2099,13 +2153,7 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
     let typo = Arc::new(typo);
     // (no spacing: the gaps between blocks are hover areas of their own)
     // (side margins as the room allows: small in a narrow window, where the text needs the width)
-    let gutter = if beside.is_some() {
-        f32::from_bits(PAGE_GUTTER.load(std::sync::atomic::Ordering::Relaxed)) as u16
-    } else if view_width() > 0.0 && view_width() < z(900.0) {
-        z(PAGE_MARGIN) as u16
-    } else {
-        sp.space_l
-    };
+    let gutter = f32::from_bits(PAGE_GUTTER.load(std::sync::atomic::Ordering::Relaxed)) as u16;
     let last = t.blocks.iter().rposition(|b| b.kind != Kind::End);
     let last_selected = editing.is_none() && last.is_some() && t.selected == last && last.is_some_and(|i| t.blocks[i].kind != Kind::Header);
     let indices = super::viewport::Indices::default();
@@ -2128,20 +2176,7 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
                 } else {
                     let formal = t.block_editor.as_ref().is_some_and(|b| b.kind == Kind::Formal);
                     // (level with the proof's top, or with the construct at the caret in a long one)
-                    let lines = t.block_editor.as_ref().map_or(0, |be| be.content.line_count());
-                    let top = match goal_placement(true, lines) {
-                        GoalPlacement::Construct => t
-                            .block_editor
-                            .as_ref()
-                            .zip(t.block_editor.as_ref().and_then(|be| t.construct_at(be.start, be.end)))
-                            // (a construct from the block's first line: level with the cell's
-                            // top, not with the text inside its padding)
-                            .map_or(0.0, |(be, (cs, _))| match block_line(be, cs) {
-                                0 => 0.0,
-                                line => code_padding().top + line as f32 * code_line_height(),
-                            }),
-                        _ => 0.0,
-                    };
+                    let top = open_top;
                     item = item.push(side_at(widget::container(block_editor_in(app.workspace.as_ref(), t, false, inline, &*table)).id(selected_block_id()).into(), formal, top));
                 }
             }
@@ -2191,8 +2226,7 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
             },
             Kind::Formal => {
                 // (as wide as the cell: what is attached under it is too)
-                let columns = t.block_views.get(i).and_then(Option::as_ref).map_or(0, |v| v.columns);
-                let mut c = widget::column::with_capacity(3).spacing(4).width(Length::Fixed(block_code_width(columns) + CARD_CHROME)).push(block_code(app.workspace.as_ref(), t, i, block, marked, &*table, current));
+                let mut c = widget::column::with_capacity(3).spacing(4).width(Length::Fixed(block_code_width() + CARD_CHROME)).push(block_code(app.workspace.as_ref(), t, i, block, marked, &*table, current));
                 if current && goal_block(t, block) && let Some(g) = inline_goal(inline, &*table) {
                     c = c.push(goal_under(g));
                 }
@@ -2228,19 +2262,13 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
         // Agents' notes on this block: in its card if it is a cell, else a card of their own under it
         if let Some(ws) = app.workspace.as_ref().filter(|_| !notes_in_card(t, i, block)) {
             for n in notes_on(ws, t, block.start, block.end) {
-                let width = (block.kind == Kind::Formal).then(|| {
-                    let columns = t.block_views.get(i).and_then(Option::as_ref).map_or(0, |v| v.columns);
-                    block_code_width(columns) + CARD_CHROME
-                });
+                let width = (block.kind == Kind::Formal).then(|| block_code_width() + CARD_CHROME);
                 item = item.push(side(note_card(ws, n, width), false));
             }
         }
         // The selected block: what can be added after it, and Delete, set a little below it
         if selected_here {
-            let width = (block.kind == Kind::Formal).then(|| {
-                let columns = t.block_views.get(i).and_then(Option::as_ref).map_or(0, |v| v.columns);
-                block_code_width(columns) + CARD_CHROME
-            });
+            let width = (block.kind == Kind::Formal).then(|| block_code_width() + CARD_CHROME);
             item = item.push(side(widget::container(block_actions(t, Some(i), true, width)).padding(Padding { top: z(8.0), ..Padding::ZERO }).into(), false));
         }
         // The gap after it: hovered, it offers what can be added there
@@ -2266,7 +2294,11 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
         let Some(row) = t.page_rows.get(i) else { return if i == t.blocks.len() { z(42.0) } else if beside.is_some() { view_height() * 0.5 } else { 0.0 }; };
         match row.kind {
             Kind::End => 0.0,
-            Kind::Formal | Kind::Comment => row.lines as f32 * code_line_height() + code_padding().top + code_padding().bottom + z(BLOCK_GAP),
+            // (its lines wrap at the cell's width: at least this many rows, more when they are long)
+            Kind::Formal | Kind::Comment => {
+                let per_row = ((block_code_width() - code_padding().left - code_padding().right) / (code_size() * CODE_ADVANCE)).max(1.0);
+                (row.characters as f32 / per_row).ceil().max(row.lines as f32) * code_line_height() + code_padding().top + code_padding().bottom + z(BLOCK_GAP)
+            }
             Kind::Header => z(70.0),
             Kind::Heading(_) => z(55.0),
             Kind::Text => ((row.characters as f32 / (width.min(text_width) / (prose_size() * 0.5)).max(1.0)).ceil().max(row.lines as f32) * prose_size() * super::settings::display().line_height) + z(BLOCK_GAP),
@@ -2280,6 +2312,7 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
         display.justify.hash(&mut hasher);
         for metric in [display.text_size, display.line_height, display.paragraph_spacing, display.math_scale] { metric.to_bits().hash(&mut hasher); }
         text_width.to_bits().hash(&mut hasher);
+        block_code_width().to_bits().hash(&mut hasher);
         cosmic::iced::advanced::graphics::text::font_system().read().unwrap().version().hash(&mut hasher);
         hasher.finish()
     };
@@ -2472,7 +2505,6 @@ fn block_editor_in<'a>(ws: Option<&'a Workspace>, t: &'a Theory, window: bool, i
     let vim_mode = vim_mode_now();
     // The block's source, coloured as the source view colours it, without a box
     // Looks as the block did shown, outlined as the current one, so opening it moves nothing
-    let columns = be.content.text().lines().map(|l| l.chars().count()).max().unwrap_or(0);
     if be.wrap.is_some() && !window {
         return prose_editor(t, be, vim_mode);
     }
@@ -2482,11 +2514,16 @@ fn block_editor_in<'a>(ws: Option<&'a Workspace>, t: &'a Theory, window: bool, i
         .size(code_size())
         .line_height(iced::widget::text::LineHeight::Relative(CODE_LINE))
         .padding(code_padding())
+        .wrapping(super::wrap::WRAPPING)
         .on_action(Message::BlockAction)
         .key_binding(key_bindings(!t.completions.is_empty(), vim_mode, super::EditorTarget::Block))
         .style(code_style())
         .highlight_with::<super::editor::Highlighter>(t.block_highlight.themed(), highlight_format);
     let lines = be.content.line_count();
+    // (lines wrap at the cell's width, so what is level with a line is in rows; in the proof's own
+    // window, as wide as the window, each is taken as one)
+    let rows = if window { vec![1; lines] } else { open_rows(be) };
+    let line_top = |line: usize| open_line_top(&rows, line);
     // The construct the proof state is for, tinted
     // (from the cell's very top when it starts on the first line, to its very bottom when it ends
     // on the last, so that the tint and the cell's strip begin and end together)
@@ -2496,8 +2533,8 @@ fn block_editor_in<'a>(ws: Option<&'a Workspace>, t: &'a Theory, window: bool, i
         .map(|(cs, ce)| (block_line(be, cs), block_line(be, ce.saturating_sub(1).max(cs))))
         .filter(|(l0, _)| *l0 < lines);
     let band = band_lines.map(|(l0, l1)| {
-        let from = if l0 == 0 { 0.0 } else { code_padding().top + l0 as f32 * code_line_height() };
-        let to = if l1 + 1 >= lines { f32::INFINITY } else { code_padding().top + (l1 + 1) as f32 * code_line_height() };
+        let from = if l0 == 0 { 0.0 } else { code_padding().top + line_top(l0) };
+        let to = if l1 + 1 >= lines { f32::INFINITY } else { code_padding().top + line_top(l1 + 1) };
         (from, to)
     });
     // (the selection's fill is one colour: the tint over the band if most of the selected lines
@@ -2514,7 +2551,7 @@ fn block_editor_in<'a>(ws: Option<&'a Workspace>, t: &'a Theory, window: bool, i
     let editor = code_selection(editor, on_code(selected_in_band));
     // A long proof in a narrow window: the goal opens a gap in the editor just after the construct
     // the caret is in (the proof stays one editor; what follows moves down, nothing is covered)
-    let after = (!window && formal_at_caret(t) && inline.is_some() && goal_placement(false, lines) == GoalPlacement::AfterConstruct)
+    let after = (!window && formal_at_caret(t) && inline.is_some() && goal_placement(false, rows.iter().sum()) == GoalPlacement::AfterConstruct)
         .then(|| t.construct_at(be.start, be.end))
         .flatten()
         .and_then(|(cs, ce)| {
@@ -2529,8 +2566,8 @@ fn block_editor_in<'a>(ws: Option<&'a Workspace>, t: &'a Theory, window: bool, i
     // cell's very top on its first line, to its very bottom on its last)
     let caret = {
         let line = be.content.cursor().position.line.min(lines.saturating_sub(1));
-        let from = if line == 0 { 0.0 } else { code_padding().top + line as f32 * code_line_height() };
-        let to = if line + 1 >= lines { f32::INFINITY } else { code_padding().top + (line + 1) as f32 * code_line_height() };
+        let from = if line == 0 { 0.0 } else { code_padding().top + line_top(line) };
+        let to = if line + 1 >= lines { f32::INFINITY } else { code_padding().top + line_top(line + 1) };
         (from, to, super::tones::caret_line(&theme::active()))
     };
     // (the bands run over the editor's padding, to the strip: the card has no fill before it)
@@ -2549,7 +2586,7 @@ fn block_editor_in<'a>(ws: Option<&'a Workspace>, t: &'a Theory, window: bool, i
         let code = banded(super::gap::Gap::new(editor.height(Length::Shrink), widget::Space::new().height(Length::Fixed(0.0)), 0.0));
         thin(code).id(popout_scroll_id()).height(Length::Fill).into()
     } else {
-        let width = block_code_width(columns);
+        let width = block_code_width();
         let code = hoverable(ws, super::HoverTarget::Block, code_padding(), editor.width(width).into());
         // (always in a gap, empty when there is nothing to put there: the editor keeps its state)
         let code: Element<'_, Message> = match after {
@@ -2565,7 +2602,7 @@ fn block_editor_in<'a>(ws: Option<&'a Workspace>, t: &'a Theory, window: bool, i
                 banded(super::gap::Gap::new(
                     code,
                     widget::container(inset).padding(Padding { top: 6.0, bottom: 8.0, left, right: 6.0 }).width(Length::Fixed(width)),
-                    code_padding().top + (line + 1) as f32 * code_line_height(),
+                    code_padding().top + line_top(line + 1),
                 ))
                 .into()
             }
@@ -2599,7 +2636,7 @@ fn block_editor_in<'a>(ws: Option<&'a Workspace>, t: &'a Theory, window: bool, i
         col = col.push(widget::text::caption("Unfinished while the tool runs: pick a proof it finds"));
     }
     // (in the pop-out window there is no card: its messages are under the code)
-    if window && let Some(strips) = edit_messages(t, be, table, block_code_width(columns)) {
+    if window && let Some(strips) = edit_messages(t, be, table, block_code_width()) {
         col = col.push(strips);
     }
     // Prose has no proof state
@@ -2619,7 +2656,7 @@ fn block_editor_in<'a>(ws: Option<&'a Workspace>, t: &'a Theory, window: bool, i
     if window {
         return col.into();
     }
-    col.width(Length::Fixed(block_code_width(columns) + CARD_CHROME)).into()
+    col.width(Length::Fixed(block_code_width() + CARD_CHROME)).into()
 }
 
 /// The size scale and relative line height the prose editor sets a heading of `level` in
@@ -3212,7 +3249,7 @@ const PAGE_MARGIN: f32 = 24.0;
 /// Room kept for the page's scroll bar
 const SCROLLBAR_ROOM: f32 = 16.0;
 
-/// The page's side margins when the goal is beside it, as the layout computed them
+/// The page's side margins, as the layout computed them
 static PAGE_GUTTER: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 pub const GOAL_GAP_PUB: f32 = GOAL_GAP;
 
@@ -3337,6 +3374,7 @@ fn source_editor(t: &Theory, height: Length) -> Element<'_, Message> {
         .size(code_size())
         .line_height(iced::widget::text::LineHeight::Relative(CODE_LINE))
         .padding(sp.space_s)
+        .wrapping(super::wrap::WRAPPING)
         .height(height)
         .on_action(Message::SourceAction)
         .key_binding(move |press| {
@@ -3684,10 +3722,18 @@ fn state_body<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols, on: &Ben
             controls = controls.push(widget::text::caption(format!("by this step: {}", parts.join(", "))));
         }
     }
+    // (in a narrow panel the count has a row of its own, and nothing is cut off at the panel's edge)
+    let stacked = GOAL_HEADING_STACKED.load(std::sync::atomic::Ordering::Relaxed);
+    let (count, controls) = if stacked {
+        (Some(controls), widget::row::with_capacity(3).spacing(sp.space_s).align_y(Alignment::Center))
+    } else {
+        (None, controls)
+    };
     let controls = controls
         .push(widget::Space::new().width(Length::Fill))
         .push(switch)
         .push_maybe(ws.profile.goal_types_option().then(|| widget::checkbox(ws.show_types).label("Types").on_toggle(Message::ShowTypes)));
+    let controls = widget::column::with_capacity(2).spacing(sp.space_xxs).push_maybe(count).push(controls);
     #[cfg(test)]
     let controls = widget::container(controls).id(test_panel_id("heading"));
     // On a proof tool typed in the text (sledgehammer, nitpick, …): what it is doing and what it
