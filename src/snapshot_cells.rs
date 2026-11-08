@@ -1332,3 +1332,54 @@ fn the_gap_after_the_strip_is_three_quarters_of_an_em_of_the_code_at_any_zoom() 
         assert!(ink_at >= gap - 1.0 && ink_at <= gap + 3.0, "zoom {zoom}: the code begins {ink_at} px after the strip, the gap being {gap}");
     }
 }
+
+
+// ----- Paper: Ctrl+= / - / 0 zoom the content, not the interface
+
+/// The bounds of chrome (the pop-out button, the tools' bar) and of content (the open cell, the
+/// goal's first subgoal) at `zoom`
+fn zoomed_bounds(zoom: f32) -> Vec<(&'static str, Rectangle)> {
+    let app = goal_app();
+    in_light(PANEL, |h| {
+        let _zoomed = Zoomed::new(zoom);
+        super::view::set_goal_beside(false);
+        let _ = h.draw(&app, "paper-zoom-warm");
+        let _ = h.draw(&app, "paper-zoom");
+        let mut all = Bounds(Vec::new());
+        h.operate(&app, &mut all);
+        super::view::set_goal_beside(true);
+        let get = |id: cosmic::widget::Id| all.0.iter().find(|(x, _)| *x == id).map(|(_, b)| *b);
+        [
+            ("the pop-out button", get(super::view::pop_out_button_id())),
+            ("the tools' bar", get(super::insert::insert_bar_id())),
+            ("the open cell", get(super::view::selected_block_id())),
+            ("the goal's first subgoal", get(super::view::test_panel_id("subgoal-1"))),
+        ]
+        .into_iter()
+        .map(|(name, b)| (name, b.unwrap_or_else(|| panic!("{name} is on the page"))))
+        .collect()
+    })
+}
+
+/// Zoom changes the size of the content (prose, code in cells, goals) and not of the interface
+/// (buttons, the tools' chips and bar): the interface's size is its own setting
+#[test]
+fn zoom_scales_the_content_and_not_the_interface() {
+    let (at_100, at_150) = (zoomed_bounds(1.0), zoomed_bounds(1.5));
+    let by_name = |v: &[(&'static str, Rectangle)], n: &str| v.iter().find(|(name, _)| *name == n).unwrap().1;
+    for chrome in ["the pop-out button", "the tools' bar"] {
+        let (a, b) = (by_name(&at_100, chrome), by_name(&at_150, chrome));
+        assert!((a.height - b.height).abs() < 0.5, "{chrome} is {} px tall at 100% and {} px at 150%", a.height, b.height);
+        if chrome == "the pop-out button" {
+            assert!((a.width - b.width).abs() < 0.5, "{chrome} is {} px wide at 100% and {} px at 150%", a.width, b.width);
+        }
+    }
+    for content in ["the goal's first subgoal"] {
+        let (a, b) = (by_name(&at_100, content), by_name(&at_150, content));
+        // (its text zooms by half, its padding does not)
+        assert!(b.height > a.height * 1.15, "{content} is {} px tall at 100% and {} px at 150%: it did not zoom", a.height, b.height);
+    }
+    // and the prose above the cell: the cell sits lower the larger the prose and the headings
+    let (a, b) = (by_name(&at_100, "the open cell").y, by_name(&at_150, "the open cell").y);
+    assert!(b > a * 1.3, "the prose above the cell did not zoom: the cell is at {a} and {b}");
+}
