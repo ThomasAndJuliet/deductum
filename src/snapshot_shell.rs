@@ -718,3 +718,59 @@ fn sidebar_frames_for_the_review() {
         draw_in(light, || super::sidebar::sidebar(&app), &format!("sidebar-review-{name}"), Size::new(300.0, 640.0));
     }
 }
+
+// ----- the outline, theorems and problems rows
+
+/// The Theorems rows (the demo's caret is in `add_zero`): the current row has COSMIC's wash and its
+/// name in the accent, bold; the others are clear, in the text colour; hovering a row is COSMIC's
+/// wash, and a name wraps after an underscore
+#[test]
+fn the_theorems_rows_use_the_sidebar_row_style() {
+    use cosmic::widget::button::Catalog as _;
+    for light in [true, false] {
+        let app = demo_app(Mode::Literate);
+        let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+        let (w, h) = (320u32, 220u32);
+        let frame = draw_in(light, || super::view::theorems(&app, t), &format!("theorems-{}", if light { "light" } else { "dark" }), Size::new(w as f32, h as f32));
+        let theme = theme_of(light);
+        let bg = px(&frame, w, w - 3, h - 3);
+        let page = Color::from_rgb8(bg[0], bg[1], bg[2]);
+        let wash = super::tones::over(theme.cosmic().icon_button.hover.into(), page);
+        // the current row is washed (a row's width and a row's height); no other is
+        let rows: Vec<usize> = (0..h).filter(|y| (0..w).filter(|x| { let p = px(&frame, w, *x, *y); [wash.into_rgba8()[0], wash.into_rgba8()[1], wash.into_rgba8()[2]].iter().zip(p).all(|(a, b)| a.abs_diff(b) <= 1) }).count() > 200).map(|y| y as usize).collect();
+        assert!(!rows.is_empty(), "light={light}: no washed row");
+        assert!(rows.windows(2).all(|p| p[1] == p[0] + 1) && rows.len() < 60, "light={light}: the wash is on one row: {} rows, {:?}..", rows.len(), rows.first());
+        // its name is in the accent, and bold: more accent ink than a name in the accent at the regular weight
+        let accent: Color = theme.cosmic().accent_color().into();
+        assert!(count_of(&frame, accent, 24) > 40, "light={light}: the current name is not in the accent");
+        // the old chrome is gone: the MenuItem wash is not behind any other row
+        let washed = count_of(&frame, wash, 1);
+        assert!(washed < (w * 60) as usize, "light={light}: {washed} washed pixels: more than the one row");
+        // the states of a row's button: clear at rest, COSMIC's wash on hover, the current row washed at rest
+        let rest = theme.active(false, false, &super::sidebar::nav_style(false));
+        assert!(rest.background.is_none(), "a row at rest has a fill");
+        let hover = theme.hovered(false, false, &super::sidebar::nav_style(false));
+        assert_eq!(hover.background, Some(cosmic::iced::Background::Color(theme.cosmic().icon_button.hover.into())), "light={light}: hover is not COSMIC's wash");
+        let current = theme.active(false, false, &super::sidebar::nav_style(true));
+        assert_eq!(current.text_color, Some(accent), "light={light}: the current row's text");
+        assert!(current.background.is_some(), "the current row keeps the wash");
+    }
+    assert_eq!(super::sidebar::row_font(true), cosmic::font::bold());
+}
+
+/// The outline's current row is the heading the caret is under
+#[test]
+fn the_outline_marks_the_heading_the_caret_is_under() {
+    for light in [true, false] {
+        let app = demo_app(Mode::Literate);
+        let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+        let (w, h) = (320u32, 80u32);
+        let frame = draw_in(light, || super::view::outline(&app, t), &format!("outline-{}", if light { "light" } else { "dark" }), Size::new(w as f32, h as f32));
+        let theme = theme_of(light);
+        let bg = px(&frame, w, w - 3, h - 3);
+        let page = Color::from_rgb8(bg[0], bg[1], bg[2]);
+        let wash = super::tones::over(theme.cosmic().icon_button.hover.into(), page);
+        assert!(count_of(&frame, wash, 1) > 3_000, "light={light}: the current heading is not washed");
+        assert!(count_of(&frame, theme.cosmic().accent_color().into(), 24) > 40, "light={light}: the current heading is not in the accent");
+    }
+}

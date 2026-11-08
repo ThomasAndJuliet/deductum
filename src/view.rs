@@ -361,7 +361,7 @@ fn welcome(app: &App) -> Element<'_, Message> {
     widget::container(col.max_width(640)).center(Length::Fill).into()
 }
 
-fn nav_item<'a>(label: String, detail: Option<String>, indent: f32, color: Option<Status>, message: Message, table: &dyn super::codec::Symbols) -> Element<'a, Message> {
+fn nav_item<'a>(label: String, detail: Option<String>, indent: f32, color: Option<Status>, current: bool, message: Message, table: &dyn super::codec::Symbols) -> Element<'a, Message> {
     let mut row = widget::row::with_capacity(3).spacing(6).align_y(Alignment::Center);
     if let Some(status) = color {
         row = row.push(
@@ -375,17 +375,27 @@ fn nav_item<'a>(label: String, detail: Option<String>, indent: f32, color: Optio
                 })),
         );
     }
-    let mut col = widget::column::with_capacity(2).push(symbol_text_with_font(&label, table, z(14.0), cosmic::font::default()));
+    // (the one row style of the sidebar: COSMIC's wash on hover, the current row bold in the accent,
+    // a long name wrapping after an underscore)
+    let mut col = widget::column::with_capacity(2).width(Length::Fill).push(super::sidebar::name_text(&table.decode(&label).text, z(14.0), current));
     if let Some(d) = detail {
         col = col.push(symbol_text_with_font(&d, table, z(12.0), cosmic::font::default()));
     }
     row = row.push(col);
-    widget::button::custom(row)
+    let button = widget::button::custom(row)
         .width(Length::Fill)
         .padding(Padding { left: 6.0 + indent, right: 6.0, top: 3.0, bottom: 3.0 })
-        .class(theme::Button::MenuItem)
-        .on_press(message)
-        .into()
+        .class(super::sidebar::nav_style(current))
+        .on_press(message);
+    #[cfg(test)]
+    let button = widget::container(button).id(test_nav_id(&label));
+    button.into()
+}
+
+/// The id a navigation row has under test, by its label
+#[cfg(test)]
+pub fn test_nav_id(label: &str) -> widget::Id {
+    widget::Id::new(format!("deductum-test-nav-{label}"))
 }
 
 fn block_title(t: &Theory, table: &dyn super::codec::Symbols, block: &Block, max: usize) -> String {
@@ -400,10 +410,12 @@ fn block_title(t: &Theory, table: &dyn super::codec::Symbols, block: &Block, max
 pub fn outline<'a>(app: &'a App, t: &'a Theory) -> Element<'a, Message> {
     let table = app.table(&app.workspace.as_ref().map(|w| w.machine.clone()).unwrap_or_default());
     let mut col = widget::column::with_capacity(t.blocks.len()).spacing(1);
+    // (the current row: the last heading at or before the caret)
+    let current = t.blocks.iter().filter(|b| matches!(b.kind, Kind::Heading(_))).rev().find(|b| b.start <= t.cursor).map(|b| b.start);
     for block in &t.blocks {
         if let Kind::Heading(level) = block.kind {
             let title = block_title(t, &*table, block, 60).replace("\\<open>", "").replace("\\<close>", "");
-            col = col.push(nav_item(title, None, 12.0 * (level.saturating_sub(1) as f32), None, Message::Goto(block.start), &*table));
+            col = col.push(nav_item(title, None, 12.0 * (level.saturating_sub(1) as f32), None, current == Some(block.start), Message::Goto(block.start), &*table));
         }
     }
     col.into()
@@ -426,24 +438,25 @@ pub fn theorems<'a>(app: &'a App, t: &'a Theory) -> Element<'a, Message> {
             border: Border { radius: 4.0.into(), ..Default::default() },
             ..Default::default()
         }));
-        let one_line = |text: String, mono: bool| {
-            let w = widget::text(text).size(z(13.0)).wrapping(iced::widget::text::Wrapping::None).ellipsize(iced::core::text::Ellipsize::End(iced::core::text::EllipsizeHeightLimit::Lines(1)));
-            if mono { w.font(cosmic::font::mono()) } else { w }
-        };
-        let mut row = widget::row::with_capacity(3)
-            .spacing(z(8.0))
-            .align_y(Alignment::Center)
-            .push(dot)
-            .push(one_line(name, false).font(cosmic::iced::Font { weight: cosmic::iced::font::Weight::Semibold, ..cosmic::font::default() }));
+        let current = block.start <= t.cursor && t.cursor < block.end;
+        let mut names = widget::column::with_capacity(2).width(Length::Fill).push(super::sidebar::name_text(&name, z(13.0), current));
         if !rest.is_empty() {
-            row = row.push(one_line(rest, true).class(muted()).width(Length::Fill));
+            names = names.push(
+                widget::text(rest)
+                    .size(z(13.0))
+                    .font(cosmic::font::mono())
+                    .wrapping(iced::widget::text::Wrapping::None)
+                    .ellipsize(iced::core::text::Ellipsize::End(iced::core::text::EllipsizeHeightLimit::Lines(1)))
+                    .class(muted())
+                    .width(Length::Fill),
+            );
         }
+        let row = widget::row::with_capacity(2).spacing(z(8.0)).align_y(Alignment::Center).push(dot).push(names);
         let tip = if sorry { format!("{first}  (unfinished)") } else { first };
-        col = col.push(widget::tooltip(
-            widget::button::custom(row).width(Length::Fill).padding([z(4.0), z(8.0)]).class(theme::Button::MenuItem).on_press(Message::Goto(block.start)),
-            widget::text(tip).font(cosmic::font::mono()).size(z(12.0)),
-            widget::tooltip::Position::Right,
-        ));
+        let button = widget::button::custom(row).width(Length::Fill).padding([z(4.0), z(8.0)]).class(super::sidebar::nav_style(current)).on_press(Message::Goto(block.start));
+        #[cfg(test)]
+        let button = widget::container(button).id(test_nav_id(&statement_name(&tip)));
+        col = col.push(widget::tooltip(button, widget::text(tip).font(cosmic::font::mono()).size(z(12.0)), widget::tooltip::Position::Right));
     }
     col.into()
 }
@@ -458,7 +471,7 @@ pub fn problems<'a>(app: &'a App, t: &'a Theory) -> Element<'a, Message> {
                 && let Some(path) = th["path"].as_str()
             {
                 let msg = errors.iter().filter_map(|e| e.as_str()).collect::<Vec<_>>().join("; ");
-                col = col.push(nav_item(format!("{} cannot load", file_name(path)), Some(msg), 0.0, Some(Status::Failed), Message::OpenTheory(path.to_string()), &*table));
+                col = col.push(nav_item(format!("{} cannot load", file_name(path)), Some(msg), 0.0, Some(Status::Failed), false, Message::OpenTheory(path.to_string()), &*table));
             }
         }
     }
@@ -468,12 +481,12 @@ pub fn problems<'a>(app: &'a App, t: &'a Theory) -> Element<'a, Message> {
         }
         let line = super::ot::line_col(&t.local, m.start).0;
         let text: String = table.decode(&m.text).text.lines().next().unwrap_or("").chars().take(80).collect();
-        col = col.push(nav_item(format!("Error, line {line}"), Some(text), 0.0, Some(Status::Failed), Message::Goto(m.start), &*table));
+        col = col.push(nav_item(format!("Error, line {line}"), Some(text), 0.0, Some(Status::Failed), false, Message::Goto(m.start), &*table));
     }
     for block in &t.blocks {
         for c in block.commands.iter().filter(|c| t.profile.unfinished().contains(&c.name.as_str())) {
             let line = super::ot::line_col(&t.local, c.start).0;
-            col = col.push(nav_item(format!("{}, line {line}", c.name), Some(block_title(t, &*table, block, 48)), 0.0, Some(Status::Warned), Message::Goto(c.start), &*table));
+            col = col.push(nav_item(format!("{}, line {line}", c.name), Some(block_title(t, &*table, block, 48)), 0.0, Some(Status::Warned), false, Message::Goto(c.start), &*table));
         }
     }
     col.into()
