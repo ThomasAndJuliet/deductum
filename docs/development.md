@@ -60,7 +60,8 @@ covers visible GUI use, second-user isolation and Windows-to-Linux SSH.
 `.github/workflows/release-binaries.yml` runs after the **entire** main-branch
 CI run succeeds, including native Windows and Linux prover tests. It publishes
 the tested Windows ZIP and Linux `.flatpak`, their source/checksum receipts,
-`SHA256SUMS` and generated release notes to a permanent private GitHub Release.
+`SHA256SUMS` and generated release notes to a permanent GitHub Release, which
+has the repository's visibility.
 It downloads CI artifacts instead of recompiling either app. Download filenames
 include the release version, such as `deductum-v0.2.0-linux-x86_64.flatpak`;
 renaming preserves the tested package and receipt bytes.
@@ -85,15 +86,29 @@ history at or before the adoption commit. Older tags such as
 source Cargo package version is retained in the Windows build receipt; the
 SemVer tag identifies the downloadable Deductum release.
 
-The publisher accepts only successful, completed CI pushes from this private
-repository's `main`. It verifies the package source revision, architecture,
-size, checksum and Linux run identity. It reserves each version tag atomically
+The publisher accepts only successful, completed CI pushes from `main` of the
+repository named in `release-config.json`. It verifies the package source
+revision, architecture, size, checksum and Linux run identity. It reserves each version tag atomically
 on that exact tested commit before uploading. Assets are immutable, and an
 interrupted upload can resume without replacing existing files. A newer main
 push supersedes an older candidate that has not reserved a version; its
 release includes those still-unreleased commits. Already reserved releases
 can finish. No shared concurrency group drops pending revisions, and delayed
 runs never move a shared latest pointer backwards.
+
+A public repository adds three rules. `public_signing` in `release-config.json`
+must record the signing decision (`github-attestation` is the one implemented);
+until then CI runs normally and nothing is released, and the next release covers
+the waiting commits. `scripts/release_scan.py` must find no household network
+names in the Windows package, the Linux payload (scanned when CI bundles it and
+recorded in the receipt) or the receipts, and generated notes omit any commit
+subject naming household systems. And `publish-release.py stage` uploads to a
+draft, the workflow attests every file with `actions/attest`, and
+`publish-release.py finish` verifies each attestation with `gh attestation
+verify` before making the release visible. A failure at any point leaves a draft
+that the retry below resumes. The attestation identifies the release workflow;
+it signs the JSON receipts too, and those bind each package to its source
+revision and CI run.
 
 No human tag or separate release approval is needed. The publisher uses the
 job-scoped `GITHUB_TOKEN`; it creates no version-bump commits, so publication
@@ -114,8 +129,8 @@ when Neo reuses a previously validated build. Run
 environment to reproduce it. The bundler verifies the input digest and source,
 rechecks desktop/AppStream/catalog metadata, exports that payload to a local
 repository and runs `flatpak build-bundle` with Flathub as the runtime source.
-The bundle contains no `home-apps` repository URL. It is unsigned: no signing
-key is exposed to CI. Users install new bundles explicitly using the commands
+The bundle contains no `home-apps` repository URL. It has no repository
+signature: no signing key is exposed to CI. Users install new bundles explicitly using the commands
 in [the README](../README.md#linux-downloaded-flatpak).
 
 The real Flatpak export/install/update test runs on the build runner, outside
