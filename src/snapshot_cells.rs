@@ -2340,7 +2340,10 @@ fn a_tall_goal_beside_its_cell_scrolls_inside_a_height_the_window_sets() {
         let (scrolled, view) = panel_of(h, &app);
         assert!(view.y > 0.0, "the page moved");
         assert_eq!(scrolled.height, panel.height, "scrolling the page does not resize the panel");
-        // the wheel over the panel moves the goals, not the page
+        // the wheel over the panel moves the goals, not the page (once the page's own scrolling has
+        // ended: a wheel turned just after it goes on moving the page, on a fast machine too)
+        std::thread::sleep(std::time::Duration::from_millis(150));
+        let _ = panel_of(h, &app);
         let over = Point::new(scrolled.x + scrolled.width / 2.0, scrolled.y - view.y + scrolled.height - 40.0);
         wheel(h, &app, over, -100.0);
         let (_, after) = panel_of(h, &app);
