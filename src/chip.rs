@@ -42,7 +42,7 @@ impl State {
     /// The words in the chip
     pub fn label(&self) -> String {
         match self {
-            State::NoSession => String::new(),
+            State::NoSession => "No session".into(),
             State::Starting => "Starting\u{2026}".into(),
             State::Loading { done, total } => format!("Loading imports \u{b7} {done} of {total}"),
             State::Checking(p) => format!("Checking \u{b7} {p} %"),
@@ -209,8 +209,7 @@ pub fn chip(app: &App) -> Element<'_, Message> {
     let state = state_of(app);
     let Some(ws) = &app.workspace else {
         return household_widgets::tooltip_with(
-            // (empty: its place stays, so that nothing in the header moves when a session opens)
-            pill(0.0, widget::Space::new().width(Length::Fixed(160.0)).into()),
+            pill(16.0, widget::text::body(state.label()).class(super::view::muted()).into()),
             widget::text(state.tip()),
             widget::tooltip::Position::Bottom,
         )

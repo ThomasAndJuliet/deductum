@@ -803,7 +803,7 @@ fn the_chip_says_its_state_with_a_mark_in_each() {
     use super::sidebar::Mark;
     let path = "/home/me/Research/Demo/Demo.thy";
     let cases: Vec<(&str, App, State, &str, Mark)> = vec![
-        ("no session", chip_scene(|a| a.workspace = None), State::NoSession, "", Mark::Blank),
+        ("no session", chip_scene(|a| a.workspace = None), State::NoSession, "No session", Mark::Blank),
         ("starting", chip_scene(|a| a.workspace.as_mut().unwrap().activity = None), State::Starting, "Starting\u{2026}", Mark::Spinner),
         (
             "loading imports",
@@ -1873,15 +1873,14 @@ fn the_start_page_opens_a_folder_or_a_session_with_a_click() {
 }
 
 #[test]
-fn with_no_session_the_chip_is_empty_and_the_prover_buttons_are_disabled() {
-    use super::chip::{State, controls_for, state_of};
+fn with_no_session_the_header_has_no_chip_pause_or_stop() {
+    use super::chip::{State, state_of};
     let app = start_app();
     assert_eq!(state_of(&app), State::NoSession);
-    assert_eq!(State::NoSession.label(), "");
-    assert_eq!(State::NoSession.mark(), super::sidebar::Mark::Blank);
-    let c = controls_for(&State::NoSession);
-    assert!(c.first.2.is_none() && !c.stop.1, "pause and stop cannot be pressed");
+    assert!(shell::header_center(&app).is_empty(), "no chip, no pause, no stop");
     assert!(x_where(&app, |m| matches!(m, Message::Lifecycle(_))).is_none(), "nothing in the header sends a lifecycle op");
+    // with a session open they are there again
+    assert_eq!(shell::header_center(&mixed_app()).len(), 3);
 }
 
 #[test]

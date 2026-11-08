@@ -3,8 +3,8 @@
 //! The start page: what the window shows with no session open (Tom, 8 Nov, t27 (b)). Centred, the
 //! app's icon, "Deductum", one sentence and a Primary "Open a folder"; under it the sessions
 //! last used as rows, the latest highlighted. A click opens a row; right-click offers Open and
-//! Forget. The sidebar starts closed at launch, the header's chip is empty and the prover's
-//! buttons are disabled while no session is open.
+//! Forget. The sidebar starts closed at launch, and the header has no chip, pause or stop while
+//! no session is open.
 
 use std::collections::HashMap;
 
@@ -134,7 +134,7 @@ pub fn page_at(app: &App, now: u64) -> Element<'_, Message> {
         .spacing(sp.space_s)
         .align_x(Alignment::Center)
         .push(icon(72))
-        .push(widget::text::title1("Deductum"))
+        .push(widget::text::title3("Deductum"))
         .push(widget::text::body(SENTENCE))
         .push(widget::button::suggested("Open a folder").on_press(Message::NewSession(true)));
     let rows = rows(app);

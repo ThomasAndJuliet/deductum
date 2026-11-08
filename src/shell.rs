@@ -637,6 +637,10 @@ pub fn header_end(app: &App) -> Vec<Element<'_, Message>> {
 
 /// The prover's state in the header: the status chip, then pause and stop (see `chip`)
 pub fn header_center(app: &App) -> Vec<Element<'_, Message>> {
+    // (no session: no chip and no pause or stop, rather than a disabled set)
+    if app.workspace.is_none() {
+        return Vec::new();
+    }
     let mut items = vec![super::chip::chip(app)];
     items.extend(super::chip::controls(app));
     items
