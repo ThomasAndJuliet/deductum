@@ -2,8 +2,8 @@
 """Decide what a CI run may use, from GitHub's own description of the event.
 
 Only a run in the configured repository, from that repository's own code, is
-trusted with deploy keys. Household runners additionally require the repository
-to be private: their shared caches treat every job as household code.
+trusted. Household runners additionally require the repository to be private:
+their shared caches treat every job as household code.
 
 This keeps honest workflows honest. A fork's pull request can rewrite this file
 and the workflow, so the boundary against hostile code is the runner group and
@@ -45,8 +45,7 @@ def main():
         output.writelines(f"{key}={value}\n" for key, value in decision.items())
     print(json.dumps(decision, sort_keys=True))
     if decision["trusted"] != "true":
-        print("::notice::This run gets no deploy keys or household runners: only the source "
-              "checks and prover integrations run. Jobs that fetch private crates are skipped.")
+        print("::notice::This run uses GitHub-hosted runners only.")
 
 
 if __name__ == "__main__":

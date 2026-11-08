@@ -280,11 +280,10 @@ and `appstreamcli validate --no-net`; the guide gives the complete commands.
 
 ### CI and contributions from forks
 
-A pull request from a fork runs on GitHub-hosted runners with a read-only token
-and no secrets: `source-checks` and the real prover integrations run, and jobs
-that fetch the private crates are skipped, with a notice saying why. Jobs in this
-repository also use those deploy keys, and household runners only while the
-repository is private. `scripts/ci-trust.py` makes these choices.
+A pull request from a fork runs the same jobs on GitHub-hosted runners, with a
+read-only token and no secrets. No job in CI uses a secret. Jobs in this repository
+use household runners only while it is private. `scripts/ci-trust.py` makes these
+choices.
 
 A fork can rewrite the workflow in its own pull request, so these choices keep
 honest runs correct but do not stop hostile code. These repository and
