@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Starting a session (design: provers §6.4). Pick the machine, browse to a folder; the host's
+//! Starting a session (design: provers §6.4). Pick the machine, type or browse to a folder; the host's
 //! detection (`suggest` → `detections`) then shows one card per backend that recognised the
 //! folder, with its evidence. Picking a card shows that backend's project form:
 //!
@@ -13,14 +13,19 @@
 //! `session_create {folder, backend, toolchain, project}`; Isabelle's logic and directories also
 //! go at the top level, as older hosts read them.
 //!
-//! A document clicked in the folder browser, or named on the command line, opens in a session of
-//! its own backend: the session on that machine that holds it, else a new one for its folder.
+//! A document named on the command line opens in a session of its own backend: the session on that
+//! machine that holds it, else a new one for its folder.
+//!
+//! Browse picks the folder in a dialog. For this computer that is the desktop's own file chooser
+//! (the portal, which on COSMIC is COSMIC Files' dialog; on Windows the system folder dialog, both
+//! through libcosmic's `dialog`). A remote machine has no such mount on every platform, so its
+//! folders are listed by the host (`list_dir`) in `Picker`, Deductum's own dialog.
 
 use cosmic::iced::{Alignment, Border, Color, Length, Padding};
 use cosmic::Application;
 use cosmic::app::Task;
 use cosmic::prelude::*;
-use cosmic::widget::{self, button, settings};
+use cosmic::widget::{self, button};
 use cosmic::{iced, theme};
 use serde_json::{Value, json};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -50,6 +55,34 @@ pub struct NewSession {
     pub reason: Option<String>,
     /// Changes on every folder edit or navigation, including across form instances.
     pub generation: u64,
+    /// The prover's other choices are shown (Change was pressed)
+    pub changing: bool,
+    /// Deductum's folder dialog for a remote machine, while it is open
+    pub picker: Option<Picker>,
+}
+
+/// The remote folder dialog: the folder it is looking at and what the host listed there
+#[derive(Default)]
+pub struct Picker {
+    pub path: String,
+    pub listing: Option<Value>,
+    pub error: Option<String>,
+    /// Changes on every request, so that a late reply to an earlier one is dropped
+    pub seq: u64,
+}
+
+impl Picker {
+    /// The folders of a listing, by name (the host leaves out hidden ones)
+    pub fn folders(&self) -> Vec<String> {
+        self.listing.as_ref().and_then(|l| l["entries"].as_array()).into_iter().flatten().filter(|e| e["dir"].as_bool() == Some(true)).filter_map(|e| e["name"].as_str().map(str::to_string)).collect()
+    }
+    /// The folder a name in this listing is
+    pub fn child(&self, name: &str) -> String {
+        format!("{}/{}", self.path.trim_end_matches('/'), name)
+    }
+    pub fn parent(&self) -> Option<String> {
+        self.listing.as_ref()?["parent"].as_str().filter(|p| *p != self.path).map(str::to_string)
+    }
 }
 
 impl NewSession {
@@ -64,6 +97,7 @@ impl NewSession {
         self.logic.clear();
         self.dirs.clear();
         self.error = None;
+        self.changing = false;
     }
 
     pub fn ready(&self) -> bool {
@@ -163,8 +197,67 @@ impl App {
                 ns.toolchain = None;
             }
             ns.backend = Some(backend);
+            ns.changing = false;
         }
         Task::none()
+    }
+
+    /// Browse: this computer's own folder dialog, or Deductum's over the remote link
+    pub fn new_session_browse(&mut self) -> Task<Message> {
+        let Some(ns) = &mut self.new_session else { return Task::none() };
+        let Some(link) = self.links.get(ns.machine) else { return Task::none() };
+        if link.target.destination.is_none() {
+            return cosmic::task::future(async {
+                use cosmic::dialog::file_chooser::{Error, open::Dialog};
+                match Dialog::new().title("Choose a folder").open_folder().await {
+                    Ok(response) => match response.url().to_file_path() {
+                        Ok(path) => Message::Shell(Msg::NewBrowseTo(path.display().to_string())),
+                        Err(()) => Message::Shell(Msg::NewBrowseFailed("the folder is not on this computer".into())),
+                    },
+                    Err(Error::Cancelled) => Message::Noop,
+                    Err(why) => Message::Shell(Msg::NewBrowseFailed(why.to_string())),
+                }
+            });
+        }
+        // (the dialog opens in the folder typed, else the machine's home)
+        ns.picker = Some(Picker { path: ns.folder.clone(), ..Default::default() });
+        self.picker_go(None)
+    }
+
+    /// The remote dialog to a folder (none: the one it is in, or the machine's home)
+    pub fn picker_go(&mut self, path: Option<String>) -> Task<Message> {
+        let Some(ns) = &mut self.new_session else { return Task::none() };
+        let Some(picker) = &mut ns.picker else { return Task::none() };
+        static NEXT: AtomicU64 = AtomicU64::new(1);
+        picker.seq = NEXT.fetch_add(1, Ordering::Relaxed);
+        let seq = picker.seq;
+        let path = path.unwrap_or_else(|| picker.path.clone());
+        picker.error = None;
+        let params = if path.is_empty() { json!({}) } else { json!({"path": path}) };
+        let key = self.links.get(ns.machine).map(|l| l.target.key.clone()).unwrap_or_default();
+        self.send(&key, "list_dir", params, super::Pending::PickDir(seq));
+        Task::none()
+    }
+
+    /// The host's listing for the remote dialog
+    pub fn picker_listed(&mut self, seq: u64, v: Value) {
+        if let Some(picker) = self.new_session.as_mut().and_then(|ns| ns.picker.as_mut()).filter(|p| p.seq == seq) {
+            picker.path = v["path"].as_str().unwrap_or("").to_string();
+            picker.listing = Some(v);
+        }
+    }
+
+    /// The host could not list a folder for the remote dialog
+    pub fn picker_failed(&mut self, error: String) {
+        if let Some(picker) = self.new_session.as_mut().and_then(|ns| ns.picker.as_mut()) {
+            picker.error = Some(error);
+        }
+    }
+
+    /// The remote dialog's Choose: the folder it is in goes to the form
+    pub fn picker_choose(&mut self) -> Task<Message> {
+        let Some(path) = self.new_session.as_mut().and_then(|ns| ns.picker.take()).map(|p| p.path) else { return Task::none() };
+        self.update(Message::NewBrowse(path))
     }
 
     /// The backend whose documents a path is, by the extensions a machine's host lists
@@ -213,56 +306,63 @@ impl App {
     }
 }
 
+/// The width of the labels' column (rule 24b: labels left of their fields)
+const LABEL: f32 = 110.0;
+/// More machines than this make the Machine row a dropdown
+const BAR_MAX: usize = 5;
+
 pub fn page<'a>(app: &'a App, ns: &'a NewSession) -> Element<'a, Message> {
     let s = sp();
-    let names: Vec<String> = app.links.iter().map(|l| l.name.clone()).collect();
-    let mut col = widget::column::with_capacity(16).spacing(s.space_m).padding(s.space_l).max_width(820);
+    let mut col = widget::column::with_capacity(12).spacing(s.space_m).padding(s.space_l).max_width(760);
     col = col.push(widget::text::title3("New session"));
-    col = col.push(widget::text::body(
-        "A session is one shared prover for a folder: an Isabelle session for its theories, a Lean server for its Lake package. It keeps running when you close the window, and agents can attach to it.",
-    ));
+    col = col.push(widget::text::body("One shared prover for a folder. It keeps running when you close the window, and agents can attach to it."));
     if let Some(reason) = &ns.reason {
         col = col.push(note(reason.clone(), false));
     }
-    // Where
-    let mut place = settings::section().title("Folder").add(settings::item("Machine", widget::dropdown(names, Some(ns.machine), Message::NewMachine)));
-    place = place.add(settings::item(
-        "Folder",
-        widget::text_input("/path/to/project", &ns.folder).on_input(Message::NewFolder).on_submit(Message::NewBrowse).width(Length::Fixed(420.0)),
-    ));
-    col = col.push(place);
-    if let Some(listing) = &ns.listing {
-        col = col.push(browser(listing));
+    // Machine
+    let name_of = |l: &super::Link| if l.target.destination.is_none() { "This computer".to_string() } else { l.name.clone() };
+    let names: Vec<String> = app.links.iter().map(name_of).collect();
+    let machine: Element<'a, Message> = if names.len() <= BAR_MAX {
+        bar(names, ns.machine)
+    } else {
+        widget::dropdown(names, Some(ns.machine), Message::NewMachine).into()
+    };
+    col = col.push(field("Machine", machine));
+    // Folder: the field, Browse, and what the host said about it
+    let on = app.links.get(ns.machine).map(|l| if l.target.destination.is_none() { "this computer".to_string() } else { format!("{}", l.name) }).unwrap_or_default();
+    let input = widget::text_input("/path/to/project", &ns.folder).on_input(Message::NewFolder).on_submit(Message::NewBrowse).width(Length::Fixed(340.0));
+    let folder_row = widget::row::with_capacity(2).spacing(s.space_s).align_y(Alignment::Center).push(input).push(super::view::secondary("Browse", Some(Message::Shell(Msg::NewBrowseOpen))));
+    let mut folder = widget::column::with_capacity(3).spacing(4).push(folder_row);
+    let looked_at = ns.listing.is_some();
+    match &ns.error {
+        Some(err) if !looked_at => folder = folder.push(error_line(err.clone())),
+        _ if ns.folder.is_empty() => folder = folder.push(widget::text::caption(format!("A folder on {on}."))),
+        _ if !looked_at => folder = folder.push(widget::text::caption("Press Enter to look at the folder.")),
+        _ => folder = folder.push(widget::text::caption(format!("On {on}. A folder can have one session for each prover."))),
     }
-    // What the host found there: a card per backend
-    if !ns.folder.is_empty() && ns.listing.is_some() {
-        col = col.push(widget::text::heading("Backend"));
+    col = col.push(field("Folder", folder.into()));
+    // Prover: what the host found, as one line
+    if !ns.folder.is_empty() && looked_at {
         match &ns.detections {
-            None => col = col.push(widget::row::with_capacity(2).spacing(8).align_y(Alignment::Center).push(shell::spinner(14.0)).push(widget::text::caption("Looking at the folder…"))),
+            None => col = col.push(field("Prover", widget::row::with_capacity(2).spacing(8).align_y(Alignment::Center).push(shell::spinner(14.0)).push(widget::text::caption("Looking at the folder\u{2026}")).into())),
             Some(found) if found.is_empty() => {
-                col = col.push(widget::text::caption("Nothing here says which prover it is for (no ROOT, no lakefile, no documents): pick one."));
+                let mut cards = widget::column::with_capacity(3).spacing(s.space_xs).push(widget::text::caption("Nothing here says which prover it is for (no ROOT, no lakefile, no documents): pick one."));
                 for b in app.backends(ns.machine) {
                     let backend = b["backend"].as_str().unwrap_or("isabelle").to_string();
                     let documents: Vec<&str> = b["documents"].as_array().into_iter().flatten().filter_map(Value::as_str).collect();
-                    col = col.push(card(&backend, format!("No {} project found", shell::backend_label(&backend)), vec![format!("Documents: {}", documents.join(", "))], ns.backend.as_deref() == Some(backend.as_str())));
+                    cards = cards.push(card(&backend, format!("No {} project found", shell::backend_label(&backend)), vec![format!("Documents: {}", documents.join(", "))], ns.backend.as_deref() == Some(backend.as_str())));
                 }
+                col = col.push(field("Prover", cards.into()));
             }
-            Some(found) => {
-                if found.len() > 1 && ns.backend.is_none() {
-                    col = col.push(widget::text::caption("More than one prover recognises this folder: pick the one to start. A folder can have a session of each."));
-                }
-                for d in found {
-                    let backend = d["backend"].as_str().unwrap_or("isabelle").to_string();
-                    let evidence: Vec<String> = d["evidence"].as_array().into_iter().flatten().filter_map(|e| e.as_str().map(str::to_string)).collect();
-                    col = col.push(card(&backend, summary(d), evidence, ns.backend.as_deref() == Some(backend.as_str())));
-                }
-            }
+            Some(found) => col = col.push(field("Prover", prover(app, ns, found, &on))),
         }
         if let Some(backend) = &ns.backend {
-            col = col.push(form(app, ns, backend));
+            for row in form(app, ns, backend) {
+                col = col.push(row);
+            }
         }
     }
-    if let Some(err) = &ns.error {
+    if let Some(err) = ns.error.as_ref().filter(|_| looked_at) {
         col = col.push(note(err.clone(), true));
     }
     // (a backend picked: by the human, or as the only one found)
@@ -270,11 +370,164 @@ pub fn page<'a>(app: &'a App, ns: &'a NewSession) -> Element<'a, Message> {
     col = col.push(
         widget::row::with_capacity(3)
             .spacing(s.space_s)
-            .push(widget::Space::new().width(Length::Fill))
-            .push(widget::button::standard("Cancel").on_press(Message::NewSession(false)))
-            .push(widget::button::suggested("Start session").on_press_maybe(ready.then_some(Message::NewCreate))),
+            .push(widget::Space::new().width(Length::Fixed(LABEL)))
+            .push(widget::button::suggested("Start session").on_press_maybe(ready.then_some(Message::NewCreate)))
+            .push(super::view::secondary("Cancel", Some(Message::NewSession(false)))),
     );
-    widget::scrollable(widget::container(col).center_x(Length::Fill)).height(Length::Fill).into()
+    let page = widget::scrollable(widget::container(col).center_x(Length::Fill)).height(Length::Fill);
+    match &ns.picker {
+        Some(picker) => iced::widget::stack![page, picker_dialog(app, ns, picker)].into(),
+        None => page.into(),
+    }
+}
+
+/// A row of the form: its label at the left, its field and the help under it
+fn field<'a>(label: &'static str, control: Element<'a, Message>) -> Element<'a, Message> {
+    widget::row::with_capacity(2)
+        .spacing(sp().space_s)
+        .push(widget::container(widget::text::body(label)).width(Length::Fixed(LABEL)).padding(Padding { top: 6.0, ..Padding::ZERO }))
+        .push(widget::container(control).width(Length::Fill))
+        .into()
+}
+
+/// The machines as a bar sized to its parts, the chosen one filled with the muted accent
+fn bar<'a>(names: Vec<String>, selected: usize) -> Element<'a, Message> {
+    let mut row = widget::row::with_capacity(names.len()).spacing(2).align_y(Alignment::Center);
+    for (i, name) in names.into_iter().enumerate() {
+        let class = if i == selected { super::tones::muted_button(theme::Button::Text) } else { theme::Button::Text };
+        row = row.push(widget::button::text(name).class(class).on_press(Message::NewMachine(i)));
+    }
+    widget::container(row)
+        .padding(2)
+        .class(theme::Container::custom(|t| iced::widget::container::Style {
+            background: Some(Color { a: 0.12, ..Color::from(t.cosmic().on_bg_color()) }.into()),
+            border: Border { radius: t.cosmic().radius_s().into(), ..Default::default() },
+            ..Default::default()
+        }))
+        .into()
+}
+
+/// A line of error under the field that caused it
+fn error_line<'a>(text: String) -> Element<'a, Message> {
+    widget::row::with_capacity(2)
+        .spacing(sp().space_xxs)
+        .align_y(Alignment::Center)
+        .push(shell::tinted_icon("dialog-error-symbolic", 14, shell::destructive))
+        .push(widget::text::caption(text).class(theme::Text::Custom(|t| iced::widget::text::Style { color: Some(shell::destructive(t)), ..Default::default() })))
+        .into()
+}
+
+/// A detection for the prover's line: what `summary` says without the base logic (the form has
+/// its own field for it), its theories counted in words: "ROOT session Timed_Circus, 14 theories"
+pub fn prover_line(d: &Value) -> String {
+    let line = summary(d);
+    let line = line.split(", base logic").next().unwrap_or(&line);
+    line.replace(" .thy files", " theories").replace(" .thy file", " theory")
+}
+
+/// Where the prover was found from, in words: "the ROOT file"
+pub fn found_from(d: &Value) -> String {
+    let evidence: Vec<&str> = d["evidence"].as_array().into_iter().flatten().filter_map(Value::as_str).collect();
+    let has = |prefix: &str| evidence.iter().any(|e| e.starts_with(prefix));
+    match d["backend"].as_str() {
+        Some("lean") if has("lakefile") => "the lakefile".into(),
+        Some("lean") => "the Lean package".into(),
+        _ if has("ROOT") => "the ROOT file".into(),
+        _ => "its .thy files".into(),
+    }
+}
+
+/// The prover as one line, with Change when more than one fits, and cards while changing or
+/// while none is picked
+fn prover<'a>(app: &'a App, ns: &'a NewSession, found: &'a [Value], on: &str) -> Element<'a, Message> {
+    let s = sp();
+    let mut col = widget::column::with_capacity(4).spacing(4).width(Length::Fill);
+    let picked = ns.backend.as_deref().and_then(|b| found.iter().find(|d| d["backend"].as_str() == Some(b)));
+    if let Some(d) = picked {
+        let backend = d["backend"].as_str().unwrap_or("isabelle");
+        let mut line = widget::row::with_capacity(4)
+            .spacing(s.space_xs)
+            .align_y(Alignment::Center)
+            .push(backend_mark(backend))
+            .push(widget::text::body(shell::backend_label(backend)).font(cosmic::font::semibold()))
+            .push(widget::text::body(format!("\u{b7} {}", prover_line(d))).width(Length::Fill));
+        if found.len() > 1 {
+            line = line.push(super::view::tertiary("Change", Message::Shell(Msg::NewChange)));
+        }
+        col = col.push(line);
+        let toolchain = d["toolchain"].as_str().and_then(|t| {
+            app.toolchains(ns.machine, backend).iter().find(|c| c["id"].as_str() == Some(t)).and_then(|c| c["label"].as_str().map(str::to_string)).or_else(|| Some(t.rsplit(['/', ':']).next().unwrap_or(t).to_string()))
+        });
+        let help = match toolchain {
+            Some(t) => format!("Found from {}. {t} on {on}.", found_from(d)),
+            None => format!("Found from {}.", found_from(d)),
+        };
+        col = col.push(widget::text::caption(help));
+    } else {
+        col = col.push(widget::text::caption("More than one prover recognises this folder: pick the one to start. A folder can have a session of each."));
+    }
+    if picked.is_none() || ns.changing {
+        for d in found {
+            let backend = d["backend"].as_str().unwrap_or("isabelle").to_string();
+            let evidence: Vec<String> = d["evidence"].as_array().into_iter().flatten().filter_map(|e| e.as_str().map(str::to_string)).collect();
+            col = col.push(card(&backend, summary(d), evidence, ns.backend.as_deref() == Some(backend.as_str())));
+        }
+    }
+    col.into()
+}
+
+/// The remote folder dialog over the page: COSMIC Files' look of a title, the location with its
+/// way up, the folders, and Cancel with Choose
+fn picker_dialog<'a>(app: &'a App, ns: &'a NewSession, picker: &'a Picker) -> Element<'a, Message> {
+    let s = sp();
+    let machine = app.links.get(ns.machine).map(|l| l.name.clone()).unwrap_or_default();
+    let mut list = widget::column::with_capacity(40).spacing(1);
+    let row = |icon: &'static str, label: String| {
+        widget::row::with_capacity(2).spacing(8).align_y(Alignment::Center).push(widget::icon::from_name(icon).size(16).icon()).push(widget::text::body(label).wrapping(iced::widget::text::Wrapping::None))
+    };
+    for name in picker.folders() {
+        let full = picker.child(&name);
+        list = list.push(button::custom(row("folder-symbolic", name)).class(super::sidebar::nav_style(false)).padding([6, 8]).width(Length::Fill).on_press(Message::Shell(Msg::PickerGo(full))));
+    }
+    let body: Element<'a, Message> = match (&picker.error, &picker.listing) {
+        (Some(err), _) => error_line(err.clone()),
+        (None, None) => widget::row::with_capacity(2).spacing(8).align_y(Alignment::Center).push(shell::spinner(14.0)).push(widget::text::caption("Listing the folder\u{2026}")).into(),
+        (None, Some(_)) if picker.folders().is_empty() => widget::text::caption("No folders here.").into(),
+        _ => widget::scrollable(list).height(Length::Fixed(280.0)).into(),
+    };
+    let up = widget::button::icon(widget::icon::from_name("go-up-symbolic").size(16)).on_press_maybe(picker.parent().map(|p| Message::Shell(Msg::PickerGo(p))));
+    let location = widget::row::with_capacity(2)
+        .spacing(s.space_xs)
+        .align_y(Alignment::Center)
+        .push(up)
+        .push(widget::text::body(picker.path.clone()).font(cosmic::font::mono()).wrapping(iced::widget::text::Wrapping::WordOrGlyph).width(Length::Fill));
+    let card = widget::column::with_capacity(5)
+        .spacing(s.space_s)
+        .push(widget::text::title4(format!("Choose a folder on {machine}")))
+        .push(location)
+        .push(widget::container(body).padding(4).width(Length::Fill).class(theme::Container::Card))
+        .push(
+            widget::row::with_capacity(3)
+                .spacing(s.space_s)
+                .push(widget::Space::new().width(Length::Fill))
+                .push(super::view::secondary("Cancel", Some(Message::Shell(Msg::PickerClose))))
+                .push(widget::button::suggested("Choose").on_press_maybe(picker.listing.is_some().then_some(Message::Shell(Msg::PickerChoose)))),
+        );
+    let dialog = widget::container(card).padding(s.space_m).width(Length::Fixed(520.0)).class(theme::Container::custom(|t| {
+        let c = t.cosmic();
+        iced::widget::container::Style {
+            background: Some(Color::from(c.bg_component_color()).into()),
+            border: Border { radius: c.corner_radii.radius_m.into(), width: 1.0, color: Color::from(c.bg_divider()) },
+            text_color: Some(c.on_bg_color().into()),
+            ..Default::default()
+        }
+    }));
+    // (the scrim takes the clicks, so the form under the dialog is not reachable)
+    iced::widget::opaque(
+        widget::container(dialog)
+            .center(Length::Fill)
+            .class(theme::Container::custom(|_| iced::widget::container::Style { background: Some(Color { a: 0.45, ..Color::BLACK }.into()), ..Default::default() })),
+    )
 }
 
 /// A detection in a line: "Lake package, Mathlib, toolchain v4.19.0", "ROOT session Foo, 12 .thy files"
@@ -356,55 +609,65 @@ fn card_style(picked: bool) -> theme::Button {
     }
 }
 
-/// The picked backend's project form
-fn form<'a>(app: &'a App, ns: &'a NewSession, backend: &str) -> Element<'a, Message> {
+/// The picked backend's rows of the form, after the prover line: Isabelle's base logic and what
+/// goes with it, or the Lean project's notes
+fn form<'a>(app: &'a App, ns: &'a NewSession, backend: &str) -> Vec<Element<'a, Message>> {
     let detected = ns.detection(backend);
-    let mut section = settings::section().title(format!("{} project", shell::backend_label(backend)));
+    let mut rows: Vec<Element<'a, Message>> = Vec::new();
+    let optional = |input: Element<'a, Message>| -> Element<'a, Message> {
+        widget::row::with_capacity(2).spacing(sp().space_xs).align_y(Alignment::Center).push(input).push(widget::text::caption("(optional)")).into()
+    };
     match backend {
         "isabelle" => {
             let toolchains: Vec<Value> = app.toolchains(ns.machine, "isabelle");
-            let labels: Vec<String> = toolchains
-                .iter()
-                .map(|t| {
-                    let label = t["label"].as_str().unwrap_or("?").to_string();
-                    if t["ok"] == json!(false) { format!("{label} (not usable)") } else { label }
-                })
-                .collect();
-            let wanted = ns.toolchain.clone().or_else(|| detected.and_then(|d| d["toolchain"].as_str()).map(str::to_string));
-            let selected = wanted
-                .and_then(|w| toolchains.iter().position(|t| t["id"].as_str() == Some(w.as_str())))
-                .or_else(|| toolchains.iter().position(|t| t["ok"] != json!(false)));
-            if toolchains.is_empty() {
-                section = section.add(settings::item::builder("Runtime").description("The host found no Isabelle installation with a Deductum backend").control(widget::Space::new()));
-            } else {
-                section = section.add(settings::item::builder("Runtime").description("The Isabelle installation the prover runs in").control(widget::dropdown(labels, selected, |i| Message::Shell(Msg::NewToolchain(i)))));
+            // (one Isabelle installation is what the prover line already says)
+            if toolchains.len() > 1 {
+                let labels: Vec<String> = toolchains
+                    .iter()
+                    .map(|t| {
+                        let label = t["label"].as_str().unwrap_or("?").to_string();
+                        if t["ok"] == json!(false) { format!("{label} (not usable)") } else { label }
+                    })
+                    .collect();
+                let wanted = ns.toolchain.clone().or_else(|| detected.and_then(|d| d["toolchain"].as_str()).map(str::to_string));
+                let selected = wanted
+                    .and_then(|w| toolchains.iter().position(|t| t["id"].as_str() == Some(w.as_str())))
+                    .or_else(|| toolchains.iter().position(|t| t["ok"] != json!(false)));
+                let mut control = widget::column::with_capacity(2).spacing(4).push(widget::dropdown(labels, selected, |i| Message::Shell(Msg::NewToolchain(i))));
+                if let Some(problem) = selected.and_then(|i| toolchains[i]["problem"].as_str()) {
+                    control = control.push(widget::text::caption(problem.to_string()));
+                }
+                rows.push(field("Runtime", control.into()));
+            } else if toolchains.is_empty() {
+                rows.push(field("Runtime", widget::text::caption("The host found no Isabelle installation with a Deductum backend").into()));
             }
-            if let Some(problem) = selected.and_then(|i| toolchains[i]["problem"].as_str()) {
-                section = section.add(settings::item::builder("").description(problem.to_string()).control(widget::Space::new()));
-            }
-            section = section
-                .add(settings::item::builder("Base logic").description("The heap the theories build on; its parent session when the folder is one").control(widget::text_input("HOL", &ns.logic).on_input(Message::NewLogic).width(Length::Fixed(240.0))))
-                .add(settings::item::builder("Session directories").description("Other folders whose ROOT sessions the theories import, separated by commas").control(widget::text_input("none", &ns.dirs).on_input(|d| Message::Shell(Msg::NewDirs(d))).width(Length::Fixed(240.0))));
+            let logic = widget::column::with_capacity(2)
+                .spacing(4)
+                .push(optional(widget::text_input("HOL", &ns.logic).on_input(Message::NewLogic).width(Length::Fixed(200.0)).into()))
+                .push(widget::text::caption("The heap the theories build on; its parent session when the folder is one"));
+            rows.push(field("Base logic", logic.into()));
+            let dirs = widget::column::with_capacity(2)
+                .spacing(4)
+                .push(optional(widget::text_input("none", &ns.dirs).on_input(|d| Message::Shell(Msg::NewDirs(d))).width(Length::Fixed(200.0)).into()))
+                .push(widget::text::caption("Other folders whose ROOT sessions the theories import, separated by commas"));
+            rows.push(field("Session directories", dirs.into()));
         }
         "lean" => {
             let p = detected.map(|d| &d["project"]);
-            let root = p.and_then(|p| p["lake_root"].as_str()).unwrap_or("(the folder's Lake package)").to_string();
-            let tc = p.and_then(|p| p["toolchain"].as_str()).or(detected.and_then(|d| d["toolchain"].as_str())).unwrap_or("the newest installed").to_string();
-            section = section
-                .add(settings::item::builder("Lake root").description("From the lakefile: the session runs lake serve here").control(widget::text::body(root).wrapping(iced::widget::text::Wrapping::WordOrGlyph)))
-                .add(settings::item::builder("Toolchain").description("From lean-toolchain, through elan").control(widget::text::body(tc)));
+            let root = p.and_then(|p| p["lake_root"].as_str()).unwrap_or("the folder's Lake package").to_string();
             let packages: Vec<&str> = p.and_then(|p| p["packages"].as_array()).into_iter().flatten().filter_map(Value::as_str).collect();
+            let mut help = format!("The session runs lake serve in {root}, with the toolchain of lean-toolchain through elan.");
             if !packages.is_empty() {
-                section = section.add(settings::item::builder("Packages").control(widget::text::body(packages.join(", "))));
+                help.push_str(&format!(" Packages: {}.", packages.join(", ")));
             }
+            rows.push(field("", widget::text::caption(help).into()));
         }
         _ => {}
     }
-    let mut col = widget::column::with_capacity(2).spacing(sp().space_s).push(section);
     if let Some(n) = detected.and_then(|d| d["note"].as_str()).filter(|n| !n.is_empty()) {
-        col = col.push(note(n.to_string(), false));
+        rows.push(note(n.to_string(), false));
     }
-    col.into()
+    rows
 }
 
 /// A note in a tinted box (an error in the destructive colour)
@@ -422,29 +685,6 @@ fn note<'a>(text: String, error: bool) -> Element<'a, Message> {
             }
         }))
         .into()
-}
-
-/// The folder's entries: folders to browse into, documents to open in their backend's session
-fn browser<'a>(listing: &'a Value) -> Element<'a, Message> {
-    let mut list = widget::column::with_capacity(40).spacing(1);
-    let row = |icon: &'static str, label: String| {
-        widget::row::with_capacity(2).spacing(8).align_y(Alignment::Center).push(widget::icon::from_name(icon).size(16).icon()).push(widget::text::body(label).wrapping(iced::widget::text::Wrapping::None))
-    };
-    if let Some(parent) = listing["parent"].as_str() {
-        list = list.push(button::custom(row("go-up-symbolic", "..".into())).class(super::sidebar::nav_style(false)).padding([4, 8]).width(Length::Fill).on_press(Message::NewBrowse(parent.to_string())));
-    }
-    let base = listing["path"].as_str().unwrap_or("");
-    for e in listing["entries"].as_array().into_iter().flatten() {
-        let name = e["name"].as_str().unwrap_or("");
-        let dir = e["dir"].as_bool() == Some(true);
-        let full = format!("{}/{}", base.trim_end_matches('/'), name);
-        let b = button::custom(row(if dir { "folder-symbolic" } else { "text-x-generic-symbolic" }, if dir { format!("{name}/") } else { name.to_string() }))
-            .class(super::sidebar::nav_style(false))
-            .padding([4, 8])
-            .width(Length::Fill);
-        list = list.push(if dir { b.on_press(Message::NewBrowse(full)) } else { b.on_press(Message::Shell(Msg::OpenDocument(full))) });
-    }
-    widget::container(widget::scrollable(list)).height(Length::Fixed(240.0)).padding(4).class(theme::Container::Card).into()
 }
 
 #[cfg(test)]
@@ -478,6 +718,8 @@ mod tests {
         assert!(p.get("logic").is_none() && p.get("toolchain").is_none(), "{p}");
         assert_eq!(summary(ns.detection("lean").unwrap()), "Lake package, toolchain v4.19.0");
         assert_eq!(summary(ns.detection("isabelle").unwrap()), "ROOT session Demo, 4 .thy files, base logic HOL-Library");
+        assert_eq!(prover_line(ns.detection("isabelle").unwrap()), "ROOT session Demo, 4 theories", "the line leaves the logic to its own field");
+        assert_eq!(prover_line(ns.detection("lean").unwrap()), "Lake package, toolchain v4.19.0");
     }
 
     #[test]

@@ -50,6 +50,18 @@ features = [
     "advanced-shaping",
 ]
 
+# The local folder picker (src/new_session.rs): the desktop's file chooser portal, which on COSMIC is
+# COSMIC Files' dialog, and on Windows the system folder dialog through rfd. Same libcosmic as above
+[target.'cfg(unix)'.dependencies.libcosmic]
+git = "https://github.com/pop-os/libcosmic.git"
+default-features = false
+features = ["xdg-portal"]
+
+[target.'cfg(windows)'.dependencies.libcosmic]
+git = "https://github.com/pop-os/libcosmic.git"
+default-features = false
+features = ["rfd"]
+
 [target.'cfg(unix)'.dependencies]
 # The global allocator of the GUI binary (src/):
 # libcosmic's malloc_trim after each update and view then has only glibc's
