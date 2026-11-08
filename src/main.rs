@@ -295,6 +295,8 @@ pub enum Message {
     InsertUsing,
     /// The proof state as parts (false) or as Isabelle's text (true)
     StateText(bool),
+    /// Goals or text, with types or without: the narrow goal panel's one dropdown
+    GoalView { text: bool, types: bool },
     TheoryFilter(String),
     /// The pointer over an editor (where, in its coordinates), or off it
     HoverMove(HoverTarget, cosmic::iced::Point),
@@ -364,7 +366,7 @@ pub enum Message {
     DragStart(bool),
     DragMove(cosmic::iced::Point),
     DragEnd,
-    WindowWidth(f32),
+    WindowResized(f32, f32),
     /// Zoom in (1), out (-1) or back to 100% (0)
     Zoom(i8),
     ToggleRight,
@@ -392,7 +394,7 @@ pub enum Message {
 
 /// The context a delayed proof-state reply must still belong to.
 #[derive(Clone, Debug)]
-struct StateRequest {
+pub(crate) struct StateRequest {
     generation: u64,
     session: String,
     path: String,
@@ -701,6 +703,7 @@ pub struct App {
     /// The sidebar being resized: true for the left one
     pub dragging: Option<bool>,
     pub window_width: f32,
+    pub window_height: f32,
     pub vim: vim::Vim,
     pub vim_enabled: bool,
     pub mode_model: widget::segmented_button::SingleSelectModel,
@@ -1446,9 +1449,14 @@ impl App {
                         let state = table.as_ref().map_or(state.clone(), |tb| tb.decode(&state).text);
                         t.goal = t.profile.parse_goal(&state);
                     }
+                    // (another command's goal opens at its top; the same one, as it is rechecked, stays where it was read to)
+                    let another = ws.output.as_ref().map(|o| o["command"]["start"].clone()) != Some(v["command"]["start"].clone());
                     ws.output = Some(v);
                     if let Some(tb) = &table {
                         ws.rebuild_views(&**tb);
+                    }
+                    if another {
+                        return cosmic::iced::widget::scrollable::scroll_to(view::goal_scroll_id(), cosmic::iced::widget::scrollable::AbsoluteOffset { x: None, y: Some(0.0) });
                     }
                 }
             }
@@ -2714,6 +2722,7 @@ impl cosmic::Application for App {
             right_width: 420.0,
             dragging: None,
             window_width: 1400.0,
+            window_height: 900.0,
             vim: vim::Vim::default(),
             vim_enabled: false,
             mode_model,
@@ -2776,7 +2785,7 @@ impl cosmic::Application for App {
                 return None;
             }
             if let cosmic::iced::Event::Window(cosmic::iced::window::Event::Resized(size)) = event {
-                return Some(Message::WindowWidth(size.width));
+                return Some(Message::WindowResized(size.width, size.height));
             }
             let cosmic::iced::Event::Keyboard(Key::KeyPressed { key, modified_key, physical_key, modifiers, text, .. }) = event else { return None };
             match key.as_ref() {
@@ -3582,7 +3591,10 @@ impl cosmic::Application for App {
                 self.dragging = None;
                 self.save_settings();
             }
-            Message::WindowWidth(w) => self.window_width = w,
+            Message::WindowResized(w, h) => {
+                self.window_width = w;
+                self.window_height = h;
+            }
             Message::DragMove(p) => match self.dragging {
                 Some(true) => self.left_width = p.x.clamp(180.0, (self.window_width - 360.0).max(180.0)),
                 Some(false) => {
@@ -4096,6 +4108,15 @@ impl cosmic::Application for App {
             Message::StateText(on) => {
                 if let Some(ws) = &mut self.workspace {
                     ws.state_text = on;
+                }
+            }
+            Message::GoalView { text, types } => {
+                let Some(ws) = &mut self.workspace else { return Task::none() };
+                ws.state_text = text;
+                // (only asking the prover again when what it prints changes)
+                if ws.show_types != types {
+                    ws.show_types = types;
+                    return self.schedule_state();
                 }
             }
             Message::ShowTypes(on) => {

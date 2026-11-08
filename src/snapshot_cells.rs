@@ -1243,24 +1243,24 @@ fn the_page_on_screen_with_the_sidebar_open_and_closed() {
     }
 }
 
-/// At its narrowest the panel still shows all of its heading: on two rows, Types not cut off at its
-/// edge; with room for them, on one
+/// At its narrowest the panel still shows all of its heading: the count and one dropdown on one
+/// line, nothing cut off at its edge; with room for them, Goals | Text and Types on that line
 #[test]
 fn the_goal_heading_stays_inside_a_narrow_panel() {
     let app = goal_app();
     let b = beside(&app, 1000.0);
     assert!((b.panel.width - 300.0).abs() < 0.5, "{:?}", b.panel);
     let heading = b.heading.expect("the goal's heading");
-    assert!(heading.height > 45.0, "two rows at 300 px: {heading:?}");
+    assert!(heading.height < 40.0, "one row at 300 px: {heading:?}");
     let page = super::view::page_color(&cosmic::Theme::light());
     // the panel's own padding, inside its outline, is clear down the heading's whole height
     let x = b.panel.x + b.panel.width - 8.0;
     for y in heading.y as u32..(heading.y + heading.height) as u32 {
         assert!(is(px(&b.frame, b.size.width as u32, x, y as f32), page), "something runs into the panel's edge at ({x}, {y})");
     }
-    // and Types is drawn: there is ink in the last part of the second row
-    let row = heading.y + heading.height - 15.0;
-    assert!((0..60).any(|d| !is(px(&b.frame, b.size.width as u32, x - 2.0 - d as f32, row), page)), "Types is on the second row, at the right");
+    // and the dropdown is drawn: there is ink at the right of the row
+    let row = heading.y + heading.height / 2.0;
+    assert!((0..60).any(|d| !is(px(&b.frame, b.size.width as u32, x - 2.0 - d as f32, row), page)), "the dropdown is on the row, at the right");
     let b = beside(&app, 1400.0);
     let heading = b.heading.expect("the goal's heading");
     assert!(b.panel.width > 340.0 && heading.height < 40.0, "one row with room: {:?} {heading:?}", b.panel);
@@ -2259,4 +2259,198 @@ fn a_wrapped_term_in_the_goal_continues_at_its_indentation_and_two_characters() 
     let advance = 14.0 * super::view::CODE_ADVANCE;
     assert!((first - 2.0 * advance).abs() < 3.0, "the term starts at its two blanks: {first}");
     assert!((second - 4.0 * advance).abs() < 3.0, "its next row at two blanks and two characters: {second}");
+}
+
+/// In a narrow panel Goals, Text and Types are in one dropdown at the right of the heading line:
+/// the line itself sends nothing until it is opened, and the open menu sets the view and the types
+/// together
+#[test]
+fn the_narrow_goal_panel_holds_its_views_in_a_dropdown() {
+    let app = goal_app();
+    let size = Size::new(1000.0, 900.0);
+    in_light(size, |h| {
+        super::view::set_goal_beside(true);
+        let _ = h.draw(&app, "dropdown-warm");
+        let closed = h.draw(&app, "dropdown-closed");
+        let moved = if super::view::last_wide() { super::gap::goal_moved() } else { cosmic::iced::Vector::ZERO };
+        let mut all = Bounds(Vec::new());
+        h.operate(&app, &mut all);
+        let heading = part(&all.0, super::view::test_panel_id("heading"));
+        assert!(heading.height < 40.0, "one line: {heading:?}");
+        let (x, y) = (heading.x + moved.x + heading.width - 30.0, heading.y + moved.y + heading.height / 2.0);
+        let opener = cosmic::iced::Point::new(x, y);
+        assert!(h.click(&app, opener).is_empty(), "opening the dropdown changes nothing yet");
+        assert_ne!(closed, h.draw(&app, "dropdown-open"), "the menu opens");
+        // each row sends what it says; a click elsewhere closes the menu, so it is opened again
+        let mut seen = Vec::new();
+        for dy in (20..200).step_by(8) {
+            let sent = h.click(&app, cosmic::iced::Point::new(x - 20.0, y + dy as f32));
+            let _ = h.draw(&app, "dropdown-row");
+            seen.extend(sent.iter().filter_map(|m| match m {
+                super::Message::GoalView { text, types } => Some((*text, *types)),
+                _ => None,
+            }));
+            let _ = h.click(&app, opener);
+            let _ = h.draw(&app, "dropdown-row");
+        }
+        for wanted in [(false, false), (false, true), (true, false), (true, true)] {
+            assert!(seen.contains(&wanted), "{wanted:?} is in the menu: {seen:?}");
+        }
+    });
+}
+
+/// A goal beside its cell is no taller than a share of the page, whatever the page's scroll: only
+/// the window's height changes it. The goals scroll inside the panel, and the page goes on far
+/// enough to show all of the panel, even on the last cell
+#[test]
+fn a_tall_goal_beside_its_cell_scrolls_inside_a_height_the_window_sets() {
+    use cosmic::iced::{Event, Point, mouse};
+    let mut app = goal_app();
+    let mut raw = vec!["#deductum:count 12".to_string()];
+    for i in 1..=12 {
+        raw.push(format!("#deductum:param {i}\nxs :: 'a list"));
+        raw.push(format!("#deductum:prem {i}\n0 < n"));
+        raw.push(format!("#deductum:concl {i}\nxs \\<noteq> [] \\<and> length xs = n + {i}"));
+    }
+    let ws = app.workspace.as_mut().unwrap();
+    ws.goals.messages = raw.iter().map(|r| serde_json::json!({"kind": "writeln", "raw": r, "text": r, "spans": []})).collect();
+    ws.all_goals = true;
+    let panel_of = |h: &mut Harness, app: &App| {
+        let _ = h.draw(app, "tall-goal");
+        let moved = super::gap::goal_moved();
+        let mut all = Bounds(Vec::new());
+        h.operate(app, &mut all);
+        let panel = part(&all.0, super::view::test_panel_id("panel"));
+        (Rectangle { x: panel.x + moved.x, y: panel.y + moved.y, ..panel }, *super::gap::GOAL_VIEWPORT.lock().unwrap())
+    };
+    in_light(Size::new(1000.0, 900.0), |h| {
+        super::view::set_goal_beside(true);
+        let _ = h.draw(&app, "tall-goal-warm");
+        let (panel, _) = panel_of(h, &app);
+        let tallest = super::view::goal_max_height();
+        assert!((panel.height - tallest).abs() < 1.0, "the panel stops at {tallest}: {panel:?}");
+        // the wheel over the page moves the page, and the panel keeps its height
+        let wheel = |h: &mut Harness, app: &App, at: Point, by: f32| {
+            let _ = h.move_to(app, at);
+            let _ = h.events(app, &[Event::Mouse(mouse::Event::WheelScrolled { delta: mouse::ScrollDelta::Pixels { x: 0.0, y: by } })]);
+        };
+        wheel(h, &app, Point::new(100.0, 500.0), -150.0);
+        let (scrolled, view) = panel_of(h, &app);
+        assert!(view.y > 0.0, "the page moved");
+        assert_eq!(scrolled.height, panel.height, "scrolling the page does not resize the panel");
+        // the wheel over the panel moves the goals, not the page
+        let over = Point::new(scrolled.x + scrolled.width / 2.0, scrolled.y - view.y + scrolled.height - 40.0);
+        wheel(h, &app, over, -100.0);
+        let (_, after) = panel_of(h, &app);
+        assert_eq!(after.y, view.y, "the goals scroll first");
+        // at the end of the page, all of the panel can be seen
+        wheel(h, &app, Point::new(100.0, 500.0), -1_000_000.0);
+        let (end, view) = panel_of(h, &app);
+        assert!(end.y + end.height <= view.y + view.height, "the panel's end is in sight: {end:?} {view:?}");
+    });
+    // a shorter window, a shorter panel
+    app.window_height = 600.0;
+    in_light(Size::new(1000.0, 600.0), |h| {
+        super::view::set_goal_beside(true);
+        let _ = h.draw(&app, "tall-goal-warm");
+        let (panel, _) = panel_of(h, &app);
+        assert!(panel.height < 450.0 && (panel.height - super::view::goal_max_height()).abs() < 1.0, "{panel:?}");
+    });
+}
+
+/// The greatest height is only that: a short goal's panel is as tall as what it holds
+#[test]
+fn a_short_goal_beside_its_cell_is_only_as_tall_as_it_needs() {
+    let app = goal_app();
+    let b = beside(&app, 1000.0);
+    assert!(b.panel.height < super::view::goal_max_height() - 100.0, "{:?} against {}", b.panel, super::view::goal_max_height());
+}
+
+/// The source view's goal is not cut off by the end of the page either; what does not follow the
+/// view (the pop-out button) adds nothing to the page
+#[test]
+fn the_page_goes_on_to_show_a_goal_past_its_end_in_the_source_view_too() {
+    use cosmic::iced::advanced::renderer::Headless;
+    use cosmic::iced::advanced::widget::Tree;
+    use cosmic::iced::advanced::layout::Limits;
+    let _turn = super::snapshot::ui_turn();
+    let renderer = cosmic::iced::futures::executor::block_on(<cosmic::Renderer as Headless>::new(cosmic::iced::Font::default(), cosmic::iced::Pixels(14.0), Some("tiny-skia"))).unwrap();
+    let height_of = |fixed: bool| {
+        let space = |h: f32| cosmic::widget::Space::new().width(cosmic::iced::Length::Fixed(10.0)).height(cosmic::iced::Length::Fixed(h));
+        let beside = super::gap::Beside::new(space(100.0), space(500.0), cosmic::iced::Vector::new(0.0, 80.0));
+        let mut element: cosmic::Element<'_, super::Message> = if fixed { beside.fixed().into() } else { beside.into() };
+        let mut tree = Tree::new(element.as_widget());
+        element.as_widget_mut().layout(&mut tree, &renderer, &Limits::new(Size::ZERO, Size::INFINITE)).size().height
+    };
+    assert!(height_of(false) >= 580.0, "{}", height_of(false));
+    assert_eq!(height_of(true), 100.0);
+}
+
+/// Moving to another command's goal shows it from its top; the same command, rechecked, stays
+/// where it was read to
+#[test]
+fn the_goals_scroll_back_to_the_top_for_another_command() {
+    use cosmic::iced::{Event, Point, mouse};
+    let mut app = goal_app();
+    let mut raw = vec!["#deductum:count 24".to_string()];
+    for i in 1..=24 {
+        raw.push(format!("#deductum:concl {i}\nxs \\<noteq> [] \\<and> length xs = n + {i}"));
+    }
+    let ws = app.workspace.as_mut().unwrap();
+    ws.goals.messages = raw.iter().map(|r| serde_json::json!({"kind": "writeln", "raw": r, "text": r, "spans": []})).collect();
+    ws.all_goals = true;
+    let (machine, sid, path, revision) = { let ws = app.workspace.as_ref().unwrap(); let t = ws.theory.as_ref().unwrap(); (ws.machine.clone(), ws.sid.clone(), t.path.clone(), t.confirmed_rev) };
+    let output = |start: u64| serde_json::json!({"ok": true, "command": {"name": "apply", "status": "finished", "start": start, "end": start + 5}, "messages": []});
+    let reply = |app: &mut App, start: u64| {
+        let request = super::StateRequest { generation: app.state_gen, session: sid.clone(), path: path.clone(), revision };
+        app.on_reply(machine.clone(), super::Pending::State(request), output(start))
+    };
+    let _ = reply(&mut app, 1);
+    let size = Size::new(1000.0, 900.0);
+    in_light(size, |h| {
+        super::view::set_goal_beside(true);
+        let _ = h.draw(&app, "goals-warm");
+        let _ = h.draw(&app, "goals-warm");
+        let moved = super::gap::goal_moved();
+        let view = *super::gap::GOAL_VIEWPORT.lock().unwrap();
+        let mut all = Bounds(Vec::new());
+        h.operate(&app, &mut all);
+        let panel = part(&all.0, super::view::test_panel_id("panel"));
+        let over = Point::new(panel.x + moved.x + panel.width / 2.0, panel.y + moved.y - view.y + panel.height - 40.0);
+        // (the pointer where it will wheel from, so that it is no difference between the frames)
+        let _ = h.move_to(&app, over);
+        let top = h.draw(&app, "goals-top");
+        let _ = h.events(&app, &[Event::Mouse(mouse::Event::WheelScrolled { delta: mouse::ScrollDelta::Pixels { x: 0.0, y: -120.0 } })]);
+        let down = h.draw(&app, "goals-down");
+        assert_ne!(top, down, "the goals scrolled");
+        // the same command again: where it was
+        let task = reply(&mut app, 1);
+        let _ = h.run_task(&app, task);
+        assert_eq!(down, h.draw(&app, "goals-same"), "the same command stays where it was read to");
+        // another command: from the top
+        let task = reply(&mut app, 2);
+        let _ = h.run_task(&app, task);
+        assert_eq!(top, h.draw(&app, "goals-another"), "another command's goal opens at its top");
+    });
+}
+
+/// Under the goal's heading, one step of spacing: no gap is left for output there is none of
+#[test]
+fn the_first_subgoal_follows_close_under_the_goal_heading() {
+    let mut app = goal_app();
+    let ws = app.workspace.as_mut().unwrap();
+    ws.goals.messages.retain(|m| !m["raw"].as_str().is_some_and(|r| r.starts_with("#deductum:fact")));
+    ws.output = Some(serde_json::json!({"command": {"name": "apply", "status": "finished"}, "messages": []}));
+    let mut h = Harness::new(PANEL);
+    cosmic::theme::set_active(cosmic::theme::ThemeType::Light);
+    super::view::set_goal_beside(false);
+    let _ = h.draw(&app, "under-heading-warm");
+    let _ = h.draw(&app, "under-heading");
+    let mut all = Bounds(Vec::new());
+    h.operate(&app, &mut all);
+    cosmic::theme::set_active(cosmic::theme::ThemeType::Dark);
+    let heading = part(&all.0, super::view::test_panel_id("heading"));
+    let first = part(&all.0, super::view::test_panel_id("subgoal-1"));
+    let gap = first.y - (heading.y + heading.height);
+    assert!(gap <= cosmic::theme::spacing().space_xs as f32 + 0.5, "{gap} px between the heading and the first subgoal");
 }
