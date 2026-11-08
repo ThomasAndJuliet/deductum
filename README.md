@@ -29,11 +29,9 @@ computer or a Linux machine reached over SSH.
 
 ## Install
 
-Download prebuilt Linux and Windows packages from GitHub Releases, or install
-the Linux app through the household's `home-apps` Flatpak repository. While
-this repository is private, GitHub downloads need repository access; `home-apps`
-needs household tailnet access. Both packages are built by GitHub Actions; you
-do not need Rust or a source checkout to install them.
+Download prebuilt Linux and Windows packages from GitHub Releases. Both packages
+are built by GitHub Actions; you do not need Rust or a source checkout to install
+them.
 
 ### Release downloads
 
@@ -64,8 +62,7 @@ flatpak run dev.twright.Deductum
 
 Flatpak downloads the required Freedesktop 25.08 runtime from Flathub if it is
 missing. The app bundle does not include the runtime, so the first installation
-needs internet access. This installation needs no `home-apps` remote or tailnet
-access. You can also launch **Deductum** from your application menu afterwards.
+needs internet access. You can also launch **Deductum** from your application menu afterwards.
 
 For an update, download the newer `.flatpak` asset and install it over the
 existing app:
@@ -88,29 +85,6 @@ A public release also carries a [GitHub artifact attestation](#checking-where-a-
 The Flatpak includes the app and its session-host code. Local provers run on
 your Linux system, so install Python 3 and the prover you need there, outside
 the Flatpak. The separate Terminal Agents app is optional.
-
-### Linux: household Flatpak repository
-
-For signed packages and repository updates on the household tailnet, add
-Flathub for the runtime and `home-apps` for Deductum instead:
-
-```sh
-flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
-flatpak remote-add --user --if-not-exists home-apps http://neo:8099/home-apps.flatpakrepo
-flatpak install --user home-apps dev.twright.Deductum//stable
-```
-
-Open **Deductum** from your application launcher, or run:
-
-```sh
-flatpak run dev.twright.Deductum
-```
-
-To update:
-
-```sh
-flatpak update --user dev.twright.Deductum
-```
 
 ### Windows: portable app
 

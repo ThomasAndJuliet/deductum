@@ -139,12 +139,10 @@ are temporary, and `--no-deps` keeps the fixture test offline. It leaves the
 user's normal Flatpak installation alone. The policy and publisher unit tests
 also run inside the SDK test manifest.
 
-Every successful main push still publishes the signed private `home-apps`
-Flatpak below, including docs-only pushes. That publication remains on Neo;
-the versioned GitHub downloads neither change its ordering nor repository
-visibility.
+The private `home-apps` publication does not run from this public repository:
+a public repository cannot use the household's private publishing workflow.
 
-## CI and private releases
+## CI and releases
 
 Branch pushes and pull requests run `.github/workflows/ci.yml`. The SDK job checks
 all targets and tests the complete Rust workspace with all features, including
@@ -237,19 +235,13 @@ libcosmic and household-tones are fetched from private household repositories
 using read-only deploy keys. No sibling checkout is needed.
 The successful default-branch push preserves its artifact for seven days.
 The release workflow waits for the entire CI workflow, including both prover
-integrations, to succeed before submitting to Neo's trusted reusable publisher.
-Other branches and pull requests do not publish stable.
+integrations, to succeed before publishing. Other branches and pull requests do
+not publish.
 
 CI cancels superseded runs for the same pull request or feature branch to save
 hosted runner minutes. Each push to `main` uses its own concurrency group and
 never automatically cancels another release-branch push, including a pending
 run. Every passing default-branch push retains its publication opportunity.
-
-Neo independently verifies the repository, source, successful CI run and immutable
-artifact before its offline publisher signs the private stable release. GitHub
-holds no signing key. The repository variable `NEO_CI_MINIMUM_RUN_NUMBER` and Neo's
-matching policy must be set before enabling publication. Missed successful releases
-are retried twice daily; signed source provenance is the acceptance criterion.
 
 Local Flatpak builds use `scripts/build-flatpak.sh`. To reproduce the SDK tests,
 run `python3 scripts/prepare-ci-manifest.py` and build the generated
