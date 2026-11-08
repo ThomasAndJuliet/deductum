@@ -286,6 +286,93 @@ fn the_construct_band_is_the_ten_percent_tint_and_a_selection_is_darker_over_it(
     assert!(luminance(tint_over_band) < luminance(band), "{} is not darker than the band {}", hex(tint_over_band), hex(band));
 }
 
+/// The proof being edited with the caret on line `line` of it (its construct, `show` to `qed`,
+/// is lines 4 to 7): the frame, and the open editor's bounds
+fn caret_frame(line: usize) -> (Vec<u8>, Rectangle) {
+    struct Focusables(Vec<(Option<cosmic::widget::Id>, Rectangle)>);
+    impl cosmic::iced::advanced::widget::Operation<()> for Focusables {
+        fn traverse(&mut self, f: &mut dyn FnMut(&mut dyn cosmic::iced::advanced::widget::Operation<()>)) {
+            f(self);
+        }
+        fn focusable(&mut self, id: Option<&cosmic::widget::Id>, bounds: Rectangle, _: &mut dyn cosmic::iced::advanced::widget::operation::Focusable) {
+            self.0.push((id.cloned(), bounds));
+        }
+    }
+    let mut app = super::highlight_main_tests::proof_app(Mode::Literate);
+    let t = app.workspace.as_mut().unwrap().theory.as_mut().unwrap();
+    let i = t.blocks.iter().position(|b| b.kind == Kind::Formal && b.start <= t.cursor && t.cursor < b.end).expect("the proof's block");
+    let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(i));
+    let be = app.workspace.as_mut().unwrap().theory.as_mut().unwrap().block_editor.as_mut().unwrap();
+    for _ in 0..line {
+        be.content.perform(Action::Move(Motion::Down));
+    }
+    in_light(BAND_SIZE, |h| {
+        h.focus(&app, super::view::block_editor_id());
+        let _ = h.draw(&app, "caret-line-warm");
+        let frame = h.draw(&app, &format!("caret-line-{line}"));
+        let mut found = Focusables(Vec::new());
+        h.operate(&app, &mut found);
+        let id = super::view::block_editor_id();
+        (frame, found.0.iter().find(|(i, _)| i.as_ref() == Some(&id)).expect("the editor is on the page").1)
+    })
+}
+
+/// The pixel at the middle of code line `line` of an editor, `dx` from its left edge
+fn on_line(frame: &[u8], editor: Rectangle, line: usize, dx: f32) -> [u8; 3] {
+    px(frame, BAND_SIZE.width as u32, editor.x + dx, editor.y + super::view::CODE_PADDING.top + (line as f32 + 0.5) * super::view::code_line_height())
+}
+
+/// The automatic band runs from the strip's right edge to the card's inner right edge, with no
+/// page-coloured gap, and the text does not move: at the left, 4 px of the card's padding lie
+/// between the strip and the editor, and the band covers them
+#[test]
+fn the_band_runs_edge_to_edge_inside_the_card() {
+    let t = cosmic::Theme::light();
+    let page = super::view::page_color(&t);
+    let band = super::tones::over(super::tones::band(&t), page);
+    let (frame, editor) = caret_frame(0);
+    // (line 5 is in the construct, and the caret is not on it)
+    for dx in [-4.0, -3.0, -1.0, 0.0, 2.0, editor.width - 2.0, editor.width - 1.0] {
+        let p = on_line(&frame, editor, 5, dx);
+        assert!(is(p, band), "line 5 at {dx} from the editor's left edge is {p:?}, not the band {}", hex(band));
+    }
+    // (and the status strip is the card's left edge, right of which the band begins)
+    let strip = on_line(&frame, editor, 5, -6.0);
+    assert!(is(strip, strip_color(Status::Finished, true, &t)), "the strip: {strip:?}");
+    // (the page, not the band, outside the construct: the band is not the whole editor)
+    assert!(is(on_line(&frame, editor, 1, -4.0), page), "line 1 is outside the construct");
+    // (the text did not move: the first character of line 5 is 10 px in, as the padding is)
+    assert_eq!(super::view::CODE_PADDING.left, 10.0);
+}
+
+/// The caret's line is COSMIC's grey hover wash: over the band where the line is in the construct,
+/// darker than the band, and over the page outside it; edge to edge as the band is
+#[test]
+fn the_caret_line_is_the_grey_wash_over_the_band_or_the_page() {
+    let t = cosmic::Theme::light();
+    let page = super::view::page_color(&t);
+    let band = super::tones::over(super::tones::band(&t), page);
+    let wash = super::tones::caret_line(&t);
+    assert_eq!(hex(Color { a: 1.0, ..wash }), "#636363");
+    assert!((wash.a - 0.2).abs() < 0.01, "COSMIC's hover wash is 20 %, not {}", wash.a);
+    let (frame, editor) = caret_frame(6);
+    let on_band = super::tones::over(wash, band);
+    for dx in [-4.0, 0.0, editor.width - 1.0] {
+        let p = on_line(&frame, editor, 6, dx);
+        assert!(is(p, on_band), "the caret's line at {dx}: {p:?}, not the wash over the band {}", hex(on_band));
+    }
+    assert!(luminance(on_band) < luminance(band), "the wash is not darker than the band");
+    // (the lines either side are the band alone)
+    assert!(is(on_line(&frame, editor, 5, -4.0), band) && is(on_line(&frame, editor, 7, 0.0), band));
+    // outside a construct: the grey wash over the page
+    let (frame, editor) = caret_frame(1);
+    let on_page = super::tones::over(wash, page);
+    for dx in [-4.0, editor.width - 1.0] {
+        let p = on_line(&frame, editor, 1, dx);
+        assert!(is(p, on_page), "outside a construct, the caret's line at {dx}: {p:?}, not the wash over the page {}", hex(on_page));
+    }
+}
+
 // ----- the colours of code
 
 /// A block of code being edited, all of it one Isabelle token class, in the light theme: the
@@ -329,11 +416,12 @@ fn isabelle_tokens_are_drawn_in_the_household_colours() {
     ] {
         let frame = class_frame(sem);
         let want = Color::from_rgb8((rgb >> 16) as u8, (rgb >> 8) as u8, rgb as u8);
+        // (the caret's line has COSMIC's grey wash over it, so its stems are a little off the colour)
         // (text is anti-aliased and its gamma darkens it a little: the pixels within 16 units of
         // the colour in each channel are the stems of the capitals; no other class's colour is
         // that near, and the page and the cell's strip are not)
         let [r, g, b, _] = want.into_rgba8();
         let n = frame.chunks(4).filter(|p| [r, g, b].iter().zip(p.iter()).all(|(a, b)| a.abs_diff(*b) <= 16)).count();
-        assert!(n > 30, "{sem:?}: only {n} pixels are {}", hex(want));
+        assert!(n > 20, "{sem:?}: only {n} pixels are {}", hex(want));
     }
 }

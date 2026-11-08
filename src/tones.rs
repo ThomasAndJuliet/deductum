@@ -215,6 +215,19 @@ pub fn dark_status(source: Color) -> Color {
     color(household_tones::Oklch::new(DARK_STATUS_LIGHTNESS, DARK_STATUS_CHROMA, hue).to_srgb())
 }
 
+/// How strong COSMIC's grey hover wash is drawn on the caret's line in a dark theme: COSMIC's own
+/// 20 % is too faint over #1b1b1b (Tom, 8 Nov)
+const CARET_LINE_DARK: f32 = 0.35;
+
+/// The wash on the caret's line: COSMIC's grey hover wash (`icon_button.hover`, #636363 at 20 %
+/// in the light theme), translucent, laid over the page or the construct's band; in a dark theme
+/// the same grey at [`CARET_LINE_DARK`]
+pub fn caret_line(theme: &cosmic::Theme) -> Color {
+    let c = theme.cosmic();
+    let hover: Color = c.icon_button.hover.into();
+    if c.is_dark { Color { a: CARET_LINE_DARK, ..hover } } else { hover }
+}
+
 /// `bright` at 35 % over `page`, opaque: a status colour faded
 pub fn faded(bright: Color, page: Color) -> Color {
     over(Color { a: FADED, ..bright }, page)

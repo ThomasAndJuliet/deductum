@@ -729,7 +729,12 @@ fn the_source_selection_is_one_tint_on_every_line_also_over_the_construct_band()
         assert!(under_band.len() > 20, "{name}: the construct's band {} covers only {} selected rows: the test's set-up is wrong", hex(band), under_band.len());
         let want = theme.tint_over(page);
         // (a row where two lines' fills meet is partly covered: between the page and the tint)
-        let judged: Vec<&(u32, V, V)> = under_band.iter().chain(on_page.iter()).copied().collect();
+        // (and the caret's line, where the selection's end leaves it with no text selected, shows
+        // COSMIC's grey wash, over the page or the band, or an edge row of it between that and what is
+        // beneath: not a selection)
+        let wash = super::tones::caret_line(&theme.theme);
+        let washed = |b: V| v_of(super::tones::over(wash, cosmic::iced::Color::from_rgb(b[0] / 255.0, b[1] / 255.0, b[2] / 255.0)));
+        let judged: Vec<&(u32, V, V)> = under_band.iter().chain(on_page.iter()).copied().filter(|(_, b, f)| off_segment(*f, *b, washed(*b)) > 2.0).collect();
         let right = judged.iter().filter(|(_, _, f)| dist(*f, want) <= 2.0).count();
         let wrong: Vec<&(u32, V, V)> = judged.iter().copied().filter(|(_, _, f)| off_segment(*f, page, want) > 2.0 || right * 100 < judged.len() * 75 && dist(*f, want) > 2.0).collect();
         assert!(
