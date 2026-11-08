@@ -4,7 +4,10 @@
 //! toolchain, a mark and the state in words, and the memory, each with a tooltip of its own; then
 //! pause (resume when paused or stopped, Restart after a crash) and stop. The chip is live status
 //! (a spinner while it works, a check when checked), never a ▶ or ⏸. It and its buttons are
-//! there in every state, at one width, so that nothing beside them moves.
+//! there in every state. The chip is as wide as its content, with even padding at both ends; pause
+//! and stop sit right after it and shift when its width does (Tom's decided exception to rule 3,
+//! 8 Nov). The header's other groups are at its edges and do not move; the group of chip, pause
+//! and stop is centred on the window as a whole, as the header bar centres its middle.
 
 use cosmic::iced::{Alignment, Border, Color, Length};
 use cosmic::prelude::*;
@@ -137,15 +140,6 @@ pub fn state_of(app: &App) -> State {
     if failed + unfinished > 0 { State::Problems { failed, unfinished } } else { State::Checked }
 }
 
-/// Where the chip is: one width in every state, so that pause and stop, and the rest of the
-/// header, stay where they are. A narrow window gets a narrower one without the memory
-pub const CHIP_WIDTH: f32 = 410.0;
-pub const CHIP_WIDTH_NARROW: f32 = 340.0;
-
-pub fn chip_width(app: &App) -> f32 {
-    if app.window_width < 1250.0 { CHIP_WIDTH_NARROW } else { CHIP_WIDTH }
-}
-
 /// The prover's logo: Isabelle's and Lean's symbolic icons (res/icons; one flat colour, so they
 /// take the text's), and Rocq, which has no mark yet, its letter mark. Replacing this one
 /// function's body changes the chip's logo
@@ -189,11 +183,12 @@ fn part<'a>(content: Element<'a, Message>, tip: String, press: Option<Message>) 
     .into()
 }
 
-fn pill<'a>(width: f32, content: Element<'a, Message>) -> Element<'a, Message> {
+/// The chip's pill: as wide as its content, with `pad` before and after it (a chip of parts has
+/// none of its own: each part has its 8 px, the same at both ends)
+fn pill<'a>(pad: f32, content: Element<'a, Message>) -> Element<'a, Message> {
     widget::container(content)
-        .width(Length::Fixed(width))
+        .padding([0.0, pad])
         .height(Length::Fixed(32.0))
-        .center_x(Length::Fixed(width))
         .center_y(Length::Fixed(32.0))
         .class(theme::Container::custom(|theme| {
             let c = theme.cosmic();
@@ -212,10 +207,9 @@ fn pill<'a>(width: f32, content: Element<'a, Message>) -> Element<'a, Message> {
 pub fn chip(app: &App) -> Element<'_, Message> {
     let s = sp();
     let state = state_of(app);
-    let width = chip_width(app);
     let Some(ws) = &app.workspace else {
         return widget::tooltip(
-            pill(width, widget::text::body(state.label()).class(super::view::muted()).into()),
+            pill(16.0, widget::text::body(state.label()).class(super::view::muted()).into()),
             widget::text(state.tip()),
             widget::tooltip::Position::Bottom,
         )
@@ -273,7 +267,7 @@ pub fn chip(app: &App) -> Element<'_, Message> {
             ));
         }
     }
-    pill(width, parts.align_y(Alignment::Center).into())
+    pill(0.0, parts.align_y(Alignment::Center).into())
 }
 
 /// What the buttons beside the chip are, by the state
