@@ -473,40 +473,6 @@ pub fn header_start(app: &App) -> Vec<Element<'_, Message>> {
     items
 }
 
-/// A segment of a switch or a tab: filled with the muted accent when it is the current one, its
-/// icon in the fill's on colour, hovered with COSMIC's wash over the fill (household-ui RULES.md
-/// rule 6: the chosen tab of a row does not catch the eye as a Primary button does)
-pub fn segment_style(on: bool) -> theme::Button {
-    fn style(theme: &cosmic::Theme, on: bool, hover: bool) -> button::Style {
-        let c = theme.cosmic();
-        let text: Color = c.on_bg_color().into();
-        let mut s = button::Style::new();
-        s.border_radius = 14.0.into();
-        if on {
-            let (fill, label) = super::tones::muted(theme);
-            s.background = Some(if hover { super::tones::muted_washed(theme, c.icon_button.hover) } else { fill }.into());
-            s.text_color = Some(label);
-            s.icon_color = Some(label);
-        } else {
-            s.background = hover.then(|| Color { a: 0.08, ..text }.into());
-            s.text_color = Some(text);
-            s.icon_color = Some(text);
-        }
-        s
-    }
-    theme::Button::Custom {
-        active: Box::new(move |_, t| style(t, on, false)),
-        disabled: Box::new(move |t| {
-            let mut s = style(t, on, false);
-            s.text_color = s.text_color.map(|c| Color { a: 0.4, ..c });
-            s.icon_color = s.icon_color.map(|c| Color { a: 0.4, ..c });
-            s
-        }),
-        hovered: Box::new(move |_, t| style(t, on, true)),
-        pressed: Box::new(move |_, t| style(t, on, true)),
-    }
-}
-
 /// The header's end: the session's lifecycle, its folder in other apps, the goal's place, the
 /// settings and the right sidebar
 pub fn header_end(app: &App) -> Vec<Element<'_, Message>> {

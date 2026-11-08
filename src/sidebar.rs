@@ -19,7 +19,7 @@ use cosmic::widget::{self, button};
 use cosmic::{iced, theme};
 use serde_json::Value;
 
-use super::shell::{self, Msg, backend_mark, badge, blend, destructive, sp, spinner, success, tinted_icon, warning};
+use super::shell::{self, Msg, backend_mark, badge, blend, destructive, sp, spinner, success, tinted_icon};
 use super::theory::Status;
 use super::{App, LeftMode, Message, Workspace, file_name};
 
@@ -57,30 +57,31 @@ pub fn sidebar(app: &App) -> Element<'_, Message> {
     let theory = app.workspace.as_ref().and_then(|w| w.theory.as_ref());
     let current = shown(app);
     let tabs = tabs(app);
-    // Equal hit areas across the sidebar's width, the current one filled
-    let mut bar = widget::row::with_capacity(tabs.len()).spacing(2).align_y(Alignment::Center);
-    for (mode, icon_name, label) in &tabs {
+    // Cerea's icon bar: the parts sized to their icons, at the bar's left, rounded at its ends only
+    let mut bar = widget::row::with_capacity(tabs.len()).align_y(Alignment::Center);
+    let last = tabs.len() - 1;
+    for (i, (mode, icon_name, label)) in tabs.iter().enumerate() {
         let enabled = matches!(mode, LeftMode::Sessions | LeftMode::Project) || theory.is_some();
         // (a section with nothing to show yet is dimmed, as well as not pressable)
         let icon: Element<'_, Message> = if enabled { widget::icon::from_name(*icon_name).size(16).icon().into() } else { tinted_icon(icon_name, 16, shell::dimmed) };
         let b: Element<'_, Message> = if enabled {
-            button::custom(widget::container(icon).center_x(Length::Fill))
-                .width(Length::Fill)
+            button::custom(icon)
+                .width(Length::Shrink)
                 .height(Length::Fixed(32.0))
-                .padding([8, 0])
-                .class(shell::segment_style(current == *mode))
+                .padding([8, 12])
+                .class(tab_style(current == *mode, i == 0, i == last))
                 .on_press(Message::LeftMode(*mode))
                 .into()
         } else {
             // (a disabled button draws its icon in the button's colour, whatever the icon's own)
-            widget::container(icon).center_x(Length::Fill).center_y(Length::Fixed(32.0)).width(Length::Fill).height(Length::Fixed(32.0)).into()
+            widget::container(icon).padding([8, 12]).center_y(Length::Fixed(32.0)).height(Length::Fixed(32.0)).into()
         };
         let tip = if enabled { label.to_string() } else { format!("{label} (open a document first)") };
         bar = bar.push(widget::tooltip(b, widget::text(tip), widget::tooltip::Position::Bottom));
     }
-    let bar = widget::container(bar).padding(3).class(theme::Container::custom(|theme| iced::widget::container::Style {
+    let bar = widget::container(bar).width(Length::Shrink).class(theme::Container::custom(|theme| iced::widget::container::Style {
         background: Some(Color::from(theme.cosmic().bg_component_color()).into()),
-        border: Border { radius: 18.0.into(), ..Default::default() },
+        border: Border { radius: theme.cosmic().radius_xl().into(), ..Default::default() },
         ..Default::default()
     }));
     let title = tabs.iter().find(|t| t.0 == current).map_or("", |t| t.2);
@@ -245,7 +246,6 @@ fn connection<'a>(link: &super::Link, memory: Option<String>) -> Element<'a, Mes
 /// and memory
 fn session_row<'a>(app: &'a App, machine: &str, sid: &str, v: &'a Value, indent: f32) -> Element<'a, Message> {
     let current = app.workspace.as_ref().is_some_and(|w| w.machine == machine && w.sid == sid);
-    let backend = v["backend"].as_str().unwrap_or("isabelle");
     let name = v["name"].as_str().unwrap_or(sid).to_string();
     // (whose independent session it is, unless its name says so)
     let owner = v["owner"]["label"].as_str().filter(|l| !name.contains(l)).map(|l| format!(" ({l})")).unwrap_or_default();
@@ -270,88 +270,213 @@ fn session_row<'a>(app: &'a App, machine: &str, sid: &str, v: &'a Value, indent:
     if let Some(mb) = memory_mb(app, machine, sid, v).filter(|_| app.left_width >= 280.0) {
         detail.push(gigabytes(mb));
     }
-    let mut text = widget::column::with_capacity(3).push(
-        widget::text(format!("{name}{owner}"))
-            .size(14.0)
-            .font(if current { cosmic::font::semibold() } else { cosmic::font::default() })
-            .wrapping(iced::widget::text::Wrapping::None),
-    );
+    // The caption: the machine and the state in words, then the toolchain, agents and memory
+    let s = sp();
+    let machine_label = machine_name(app, machine);
+    let mut text = widget::column::with_capacity(3)
+        .push(name_text(&format!("{name}{owner}"), 14.0, current))
+        .push(widget::text::caption(caption_line(machine_label, lifecycle)).class(super::view::muted()).wrapping(iced::widget::text::Wrapping::Word));
     // The details on one line where they fit (about 6.5 px a character of a caption, in the room
-    // left beside the mark and the state), else the toolchain on a line of its own: a wrapped line
-    // never begins or ends with a separator
-    let room = app.left_width - 130.0 - indent;
-    let joined = detail.join("  ·  ");
-    if joined.chars().count() as f32 * 6.5 <= room || detail.len() < 2 {
-        text = text.push(widget::text::caption(joined).wrapping(iced::widget::text::Wrapping::None));
-    } else {
-        text = text
-            .push(widget::text::caption(detail[0].clone()).wrapping(iced::widget::text::Wrapping::None))
-            .push(widget::text::caption(detail[1..].join("  ·  ")).wrapping(iced::widget::text::Wrapping::None));
+    // left beside the mark), else the toolchain on a line of its own: a wrapped line never begins
+    // or ends with a separator
+    let room = app.left_width - 80.0 - indent;
+    let caption = |t: String| widget::text::caption(t).class(super::view::muted()).wrapping(iced::widget::text::Wrapping::Word);
+    let joined = detail.join("  \u{b7}  ");
+    if detail.len() > 1 && joined.chars().count() as f32 * 6.5 > room {
+        text = text.push(caption(detail[0].clone())).push(caption(detail[1..].join("  \u{b7}  ")));
+    } else if !detail.is_empty() {
+        text = text.push(caption(joined));
     }
-    let text = text.width(Length::Fill).clip(true);
-    // Its lifecycle: an icon (a spinner while it checks), a word unless it is simply running, and
-    // what fails
-    let mut state = widget::row::with_capacity(3).spacing(4).align_y(Alignment::Center);
-    let mut tip = vec![lifecycle.to_string()];
-    match lifecycle {
-        "Running" if checking => {
-            state = state.push(spinner(12.0));
-            tip.push("checking".into());
-        }
-        "Running" => state = state.push(tinted_icon("media-playback-start-symbolic", 14, success)),
-        "Paused" => state = state.push(tinted_icon("media-playback-pause-symbolic", 14, warning)),
-        "Stopped" => state = state.push(tinted_icon("media-playback-stop-symbolic", 14, shell::muted)),
-        "Failed" => state = state.push(tinted_icon("dialog-error-symbolic", 14, destructive)),
-        other => state = state.push(widget::text::caption(other.to_string())),
+    let text = text.width(Length::Fill);
+    // Its state: a mark (a spinner while it checks), and what fails
+    let mark = mark_of(lifecycle, checking);
+    let mut tip = vec![format!("{name}{owner}"), caption_line(machine_label, lifecycle)];
+    if mark == Mark::Spinner {
+        tip.push("checking".into());
     }
-    // (the word too, where the sidebar has room for it beside the name)
-    if matches!(lifecycle, "Paused" | "Stopped" | "Failed") && app.left_width >= 270.0 {
-        state = state.push(widget::text::caption(lifecycle.to_string()));
+    let mut row = widget::row::with_capacity(4).spacing(s.space_xs).align_y(Alignment::Start).push(mark_widget(mark));
+    if mark == Mark::Word {
+        row = row.push(widget::text::caption(lifecycle.to_string()));
     }
+    row = row.push(text);
     if failing > 0 {
-        state = state.push(badge(failing.to_string(), destructive));
+        row = row.push(badge(failing.to_string(), destructive));
         tip.push(format!("{failing} document{} failing", if failing == 1 { "" } else { "s" }));
     }
-    let row = widget::row::with_capacity(3)
-        .spacing(8)
-        .align_y(Alignment::Center)
-        .push(backend_mark(backend))
-        .push(text)
-        .push(widget::tooltip(state, widget::text(tip.join(" · ")), widget::tooltip::Position::Bottom));
-    widget::container(
-        button::custom(row)
-            .width(Length::Fill)
-            .padding([5, 8])
-            .class(nav_style(current))
-            .on_press(Message::OpenSession(machine.to_string(), sid.to_string())),
-    )
-    .padding(Padding { left: indent, ..Padding::ZERO })
-    .into()
+    let row = widget::tooltip(
+        button::custom(row).width(Length::Fill).padding([s.space_xxs, s.space_xs]).class(nav_style(current)).on_press(Message::OpenSession(machine.to_string(), sid.to_string())),
+        widget::text(tip.join("\n")),
+        widget::tooltip::Position::Bottom,
+    );
+    widget::container(row).padding(Padding { left: indent, ..Padding::ZERO }).into()
 }
 
-/// A row of a navigation list: the current one tinted with the accent
-pub fn nav_style(current: bool) -> theme::Button {
-    fn style(theme: &cosmic::Theme, current: bool, hover: bool) -> button::Style {
+/// A tab of the icon bar: filled with the muted accent when it is the chosen one (hovered and
+/// pressed with COSMIC's washes over the fill), else clear with COSMIC's wash on hover; rounded
+/// (`radius_xl`) only at the bar's ends
+fn tab_style(on: bool, first: bool, last: bool) -> theme::Button {
+    fn style(theme: &cosmic::Theme, on: bool, ends: (bool, bool), wash: Option<Color>) -> button::Style {
         let c = theme.cosmic();
-        let text: Color = c.on_bg_color().into();
-        let accent: Color = c.accent_color().into();
+        let r = c.radius_xl()[0];
+        let (left, right) = (if ends.0 { r } else { 0.0 }, if ends.1 { r } else { 0.0 });
         let mut s = button::Style::new();
-        s.border_radius = 8.0.into();
-        s.background = match (current, hover) {
-            (true, _) => Some(Color { a: if hover { 0.22 } else { 0.16 }, ..accent }.into()),
-            (false, true) => Some(Color { a: 0.07, ..text }.into()),
-            (false, false) => None,
-        };
-        s.text_color = Some(text);
-        s.icon_color = Some(text);
+        s.border_radius = [left, right, right, left].into();
+        let (fill, label) = super::tones::muted(theme);
+        let text: Color = c.on_bg_color().into();
+        if on {
+            s.background = Some(wash.map_or(fill, |w| super::tones::muted_washed(theme, w)).into());
+            s.text_color = Some(label);
+            s.icon_color = Some(label);
+        } else {
+            s.background = wash.map(Into::into);
+            s.text_color = Some(text);
+            s.icon_color = Some(text);
+        }
+        s
+    }
+    let ends = (first, last);
+    theme::Button::Custom {
+        active: Box::new(move |_, t| style(t, on, ends, None)),
+        disabled: Box::new(move |t| style(t, on, ends, None)),
+        hovered: Box::new(move |_, t| style(t, on, ends, Some(t.cosmic().icon_button.hover.into()))),
+        pressed: Box::new(move |_, t| style(t, on, ends, Some(t.cosmic().icon_button.pressed.into()))),
+    }
+}
+
+/// The one row style of a navigation list (household-ui rule 6a): clear at rest, COSMIC's
+/// `icon_button` hover wash on hover, its pressed wash when pressed; the current row keeps the
+/// hover wash, its text and icon in the accent (bold: [`row_font`])
+pub fn nav_style(current: bool) -> theme::Button {
+    fn style(theme: &cosmic::Theme, current: bool, wash: Option<Color>) -> button::Style {
+        let c = theme.cosmic();
+        let ink: Color = if current { c.accent_color().into() } else { c.on_bg_color().into() };
+        let mut s = button::Style::new();
+        s.border_radius = c.radius_s().into();
+        s.background = wash.or_else(|| current.then(|| c.icon_button.hover.into())).map(Into::into);
+        s.text_color = Some(ink);
+        s.icon_color = Some(ink);
         s
     }
     theme::Button::Custom {
-        active: Box::new(move |_, t| style(t, current, false)),
-        disabled: Box::new(move |t| style(t, current, false)),
-        hovered: Box::new(move |_, t| style(t, current, true)),
-        pressed: Box::new(move |_, t| style(t, current, true)),
+        active: Box::new(move |_, t| style(t, current, None)),
+        disabled: Box::new(move |t| style(t, current, None)),
+        hovered: Box::new(move |_, t| style(t, current, Some(t.cosmic().icon_button.hover.into()))),
+        pressed: Box::new(move |_, t| style(t, current, Some(t.cosmic().icon_button.pressed.into()))),
     }
+}
+
+/// The font of a row's name: bold for the current one
+pub(crate) fn row_font(current: bool) -> cosmic::iced::Font {
+    if current { cosmic::font::bold() } else { cosmic::font::default() }
+}
+
+/// A name that wraps onto further lines where it must: a break opportunity is put after each
+/// underscore (the font's own are at spaces), so never inside a word
+pub(crate) fn wrappable(name: &str) -> String {
+    let mut out = String::with_capacity(name.len() + 8);
+    let mut chars = name.chars().peekable();
+    while let Some(c) = chars.next() {
+        out.push(c);
+        if c == '_' && chars.peek().is_some_and(|n| *n != '_') {
+            out.push('\u{200b}');
+        }
+    }
+    out
+}
+
+/// A row's name: wrapped, bold when it is the current row
+pub(crate) fn name_text<'a>(name: &str, size: f32, current: bool) -> widget::Text<'a, cosmic::Theme> {
+    widget::text(wrappable(name)).size(size).font(row_font(current)).wrapping(iced::widget::text::Wrapping::Word).width(Length::Fill)
+}
+
+/// What marks a session's state beside its name
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub(crate) enum Mark {
+    /// A filled dot: running
+    Dot,
+    /// A hollow ring: paused
+    Ring,
+    /// The error icon: failed
+    Error,
+    /// A spinner: running, and checking
+    Spinner,
+    /// Nothing: stopped
+    Blank,
+    /// Any other state: its word alone
+    Word,
+}
+
+pub(crate) fn mark_of(lifecycle: &str, checking: bool) -> Mark {
+    match lifecycle {
+        "Running" if checking => Mark::Spinner,
+        "Running" => Mark::Dot,
+        "Paused" => Mark::Ring,
+        "Stopped" => Mark::Blank,
+        "Failed" => Mark::Error,
+        _ => Mark::Word,
+    }
+}
+
+/// The caption line: the machine, then the state in words
+pub(crate) fn caption_line(machine: &str, lifecycle: &str) -> String {
+    format!("{machine} \u{b7} {}", lifecycle.to_lowercase())
+}
+
+// The cell palette's muted tones (`tones::muted_status`) of the success, unfinished and error colours
+fn muted_green(theme: &cosmic::Theme) -> Color {
+    super::tones::muted_status(theme.cosmic().success_color().into(), theme.cosmic().is_dark)
+}
+fn muted_amber(theme: &cosmic::Theme) -> Color {
+    super::tones::muted_status(super::view::sorry_color(theme), theme.cosmic().is_dark)
+}
+fn muted_red(theme: &cosmic::Theme) -> Color {
+    super::tones::muted_status(super::view::error_color(theme), theme.cosmic().is_dark)
+}
+
+/// A mark's widget, in a 16 px column so that names line up
+fn mark_widget<'a>(mark: Mark) -> Element<'a, Message> {
+    const D: f32 = 8.0;
+    let dot = |filled: bool| -> Element<'a, Message> {
+        widget::container(widget::Space::new())
+            .width(Length::Fixed(D))
+            .height(Length::Fixed(D))
+            .class(theme::Container::custom(move |theme| iced::widget::container::Style {
+                background: filled.then(|| muted_green(theme).into()),
+                border: Border { radius: (D / 2.0).into(), width: if filled { 0.0 } else { 1.5 }, color: muted_amber(theme) },
+                ..Default::default()
+            }))
+            .into()
+    };
+    let inner: Element<'a, Message> = match mark {
+        Mark::Dot => dot(true),
+        Mark::Ring => dot(false),
+        Mark::Spinner => spinner(12.0),
+        Mark::Error => widget::icon::from_name("dialog-error-symbolic")
+            .size(14)
+            .icon()
+            .class(theme::Svg::custom(|theme| iced::widget::svg::Style { color: Some(muted_red(theme)) }))
+            .into(),
+        Mark::Blank | Mark::Word => widget::Space::new().into(),
+    };
+    widget::container(inner).width(Length::Fixed(16.0)).height(Length::Fixed(20.0)).center_x(Length::Fixed(16.0)).center_y(Length::Fixed(20.0)).into()
+}
+
+/// A file's icon, in the accent when it is the current row
+fn file_icon<'a>(current: bool) -> Element<'a, Message> {
+    if current {
+        widget::icon::from_name("text-x-generic-symbolic")
+            .size(14)
+            .icon()
+            .class(theme::Svg::custom(|theme| iced::widget::svg::Style { color: Some(theme.cosmic().accent_color().into()) }))
+            .into()
+    } else {
+        tinted_icon("text-x-generic-symbolic", 14, shell::muted)
+    }
+}
+
+/// The name of a machine by its key
+fn machine_name<'a>(app: &'a App, key: &'a str) -> &'a str {
+    app.links.iter().find(|l| l.target.key == key).map_or(key, |l| l.name.as_str())
 }
 
 /// The extensions of the session's documents, and the names of its project files: as its host
@@ -409,17 +534,15 @@ fn documents<'a>(app: &'a App, ws: &'a Workspace) -> Element<'a, Message> {
         );
     }
     let open = ws.theory.as_ref().map(|t| t.path.as_str());
+    let machine = machine_name(app, &ws.machine);
     for p in projects.iter().filter(|_| !collapsed) {
         let rel = p.strip_prefix(folder).unwrap_or(p).trim_start_matches('/');
-        let row = widget::row::with_capacity(2)
-            .spacing(6)
-            .align_y(Alignment::Center)
-            .push(tinted_icon("text-x-generic-symbolic", 14, shell::muted))
-            .push(widget::text(rel.to_string()).size(13.0).wrapping(iced::widget::text::Wrapping::None));
+        let is_open = open == Some(p.as_str());
+        let row = widget::row::with_capacity(2).spacing(6).align_y(Alignment::Start).push(file_icon(is_open)).push(name_text(rel, 13.0, is_open));
         col = col.push(widget::tooltip(
-            button::custom(row).width(Length::Fill).padding([2, 6]).class(nav_style(open == Some(p.as_str()))).on_press(Message::OpenTheory(p.clone())),
-            widget::text("A project file: opens in the source view"),
-            widget::tooltip::Position::Bottom,
+            button::custom(row).width(Length::Fill).padding([2, 6]).class(nav_style(is_open)).on_press(Message::OpenTheory(p.clone())),
+            widget::text(format!("{rel}\n{machine}\nA project file: opens in the source view")),
+            widget::tooltip::Position::Right,
         ));
     }
     let filter = ws.theory_filter.to_lowercase();
@@ -473,27 +596,32 @@ fn documents<'a>(app: &'a App, ws: &'a Workspace) -> Element<'a, Message> {
                 None
             };
             let dirty = if t["dirty"].as_bool() == Some(true) { " •" } else { "" };
+            let is_open = open == Some(path.as_str());
             let row = widget::row::with_capacity(2)
                 .spacing(6)
-                .align_y(Alignment::Center)
+                .align_y(Alignment::Start)
                 .push(
-                    widget::container(widget::Space::new())
-                        .width(Length::Fixed(7.0))
-                        .height(Length::Fixed(7.0))
-                        .class(theme::Container::custom(move |theme| iced::widget::container::Style {
-                            background: status.map(|s| super::view::status_color(s, theme).into()),
-                            border: Border { radius: 4.0.into(), ..Default::default() },
-                            ..Default::default()
-                        })),
+                    widget::container(
+                        widget::container(widget::Space::new())
+                            .width(Length::Fixed(7.0))
+                            .height(Length::Fixed(7.0))
+                            .class(theme::Container::custom(move |theme| iced::widget::container::Style {
+                                background: status.map(|s| super::view::status_color(s, theme).into()),
+                                border: Border { radius: 4.0.into(), ..Default::default() },
+                                ..Default::default()
+                            })),
+                    )
+                    .height(Length::Fixed(18.0))
+                    .center_y(Length::Fixed(18.0)),
                 )
-                .push(widget::text(format!("{name}{dirty}")).size(13.0).wrapping(iced::widget::text::Wrapping::None));
+                .push(name_text(&format!("{name}{dirty}"), 13.0, is_open));
             col = col.push(widget::tooltip(
                 button::custom(row)
                     .width(Length::Fill)
                     .padding(Padding { left: 6.0 + indent, right: 6.0, top: 2.0, bottom: 2.0 })
-                    .class(nav_style(open == Some(path.as_str())))
+                    .class(nav_style(is_open))
                     .on_press(Message::OpenTheory(path.clone())),
-                widget::text::caption(file_name(&path).to_string()),
+                widget::text(format!("{}\n{machine}", file_name(&path))),
                 widget::tooltip::Position::Right,
             ));
         }
@@ -560,12 +688,13 @@ fn project<'a>(app: &'a App, ws: &'a Workspace) -> Element<'a, Message> {
         col = col.push(widget::container(widget::text::heading("Files")).padding(Padding { top: 8.0, ..Padding::ZERO }));
         let open = ws.theory.as_ref().map(|t| t.path.as_str());
         for p in files {
-            let row = widget::row::with_capacity(2)
-                .spacing(6)
-                .align_y(Alignment::Center)
-                .push(tinted_icon("text-x-generic-symbolic", 14, shell::muted))
-                .push(widget::text(file_name(&p).to_string()).size(13.0).wrapping(iced::widget::text::Wrapping::None));
-            col = col.push(button::custom(row).width(Length::Fill).padding([3, 6]).class(nav_style(open == Some(p.as_str()))).on_press(Message::OpenTheory(p.clone())));
+            let is_open = open == Some(p.as_str());
+            let row = widget::row::with_capacity(2).spacing(6).align_y(Alignment::Start).push(file_icon(is_open)).push(name_text(file_name(&p), 13.0, is_open));
+            col = col.push(widget::tooltip(
+                button::custom(row).width(Length::Fill).padding([3, 6]).class(nav_style(is_open)).on_press(Message::OpenTheory(p.clone())),
+                widget::text(format!("{}\n{}", file_name(&p), machine_name(app, &ws.machine))),
+                widget::tooltip::Position::Right,
+            ));
         }
     }
     // Its actions
