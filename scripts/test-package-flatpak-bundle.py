@@ -64,6 +64,12 @@ class BundleTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 bundler.validate_source(artifact, SHA, 123)
 
+    def test_receipt_records_household_names_without_failing_the_build(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            artifact = self.fixture(Path(temporary), "ssh machine.tail0a1b2c.ts.net")
+            _, receipt = bundler.package(artifact, SHA, 123)
+            self.assertEqual(json.loads(receipt.read_text())["public_scan"], ["tailnet name"])
+
     def test_installs_and_updates_without_a_home_apps_remote(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -75,7 +81,9 @@ class BundleTests(unittest.TestCase):
                 directory.mkdir()
                 artifact = self.fixture(directory, f"echo revision-{revision}")
                 archive, receipt = bundler.package(artifact, SHA, 123)
-                self.assertEqual(json.loads(receipt.read_text())["archive_sha256"], bundler.digest(archive))
+                metadata = json.loads(receipt.read_text())
+                self.assertEqual(metadata["archive_sha256"], bundler.digest(archive))
+                self.assertEqual(metadata["public_scan"], [])
                 # Isolated user installation. --no-deps keeps this test offline;
                 # the user instructions install the real runtime from Flathub.
                 subprocess.run(["flatpak", "install", "--user", "--noninteractive", "--no-deps",

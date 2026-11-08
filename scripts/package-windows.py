@@ -19,6 +19,8 @@ import tomllib
 import urllib.request
 import zipfile
 
+import release_config
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -109,7 +111,7 @@ def package(root: Path, binary: Path, python_zip: Path, output: Path, *, allow_d
             shutil.copytree(root / folder, bundle / folder,
                             ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "tests", "lib"))
         metadata = {
-            "repository": "ThomasAndJuliet/deductum", "source_sha": source_sha,
+            "repository": release_config.repository(), "source_sha": source_sha,
             "source_dirty": dirty, "version": version, "architecture": "x86_64",
             "bundle_sha256": bundle_digest(bundle), "binary_sha256": sha256(binary),
             "python": runtime,
