@@ -299,7 +299,7 @@ fn a_failed_cells_message_is_inside_its_border_with_no_plate() {
     let (b, frame) = cell(2, None);
     let w = SIZE.width as u32;
     // (the card is taller than its two lines of code: the message is in it)
-    let code_only = 2.0 * super::view::code_line_height() + super::view::CODE_PADDING.top + super::view::CODE_PADDING.bottom;
+    let code_only = 2.0 * super::view::code_line_height() + super::view::code_padding().top + super::view::code_padding().bottom;
     assert!(b.height > code_only + 14.0, "the card is {} tall, as tall as its code alone ({code_only})", b.height);
     // the message's text, in the muted colour, within the card's bounds
     let [r, g, bl, _] = muted.into_rgba8();
@@ -357,12 +357,12 @@ fn caret_frame(line: usize) -> (Vec<u8>, Rectangle) {
 
 /// The pixel at the middle of code line `line` of an editor, `dx` from its left edge
 fn on_line(frame: &[u8], editor: Rectangle, line: usize, dx: f32) -> [u8; 3] {
-    px(frame, BAND_SIZE.width as u32, editor.x + dx, editor.y + super::view::CODE_PADDING.top + (line as f32 + 0.5) * super::view::code_line_height())
+    px(frame, BAND_SIZE.width as u32, editor.x + dx, editor.y + super::view::code_padding().top + (line as f32 + 0.5) * super::view::code_line_height())
 }
 
 /// The automatic band runs from the strip's right edge to the card's inner right edge, with no
-/// page-coloured gap, and the text does not move: at the left, 4 px of the card's padding lie
-/// between the strip and the editor, and the band covers them
+/// page-coloured gap: at the left the editor's own padding (the gap, 0.75 em of the code's size)
+/// lies between the strip and the text, and the band covers it
 #[test]
 fn the_band_runs_edge_to_edge_inside_the_card() {
     let t = cosmic::Theme::light();
@@ -370,17 +370,18 @@ fn the_band_runs_edge_to_edge_inside_the_card() {
     let band = super::tones::over(super::tones::band(&t), page);
     let (frame, editor) = caret_frame(0);
     // (line 5 is in the construct, and the caret is not on it)
-    for dx in [-4.0, -3.0, -1.0, 0.0, 2.0, editor.width - 2.0, editor.width - 1.0] {
+    for dx in [0.0, 1.0, 5.0, 9.0, editor.width - 2.0, editor.width - 1.0] {
         let p = on_line(&frame, editor, 5, dx);
         assert!(is(p, band), "line 5 at {dx} from the editor's left edge is {p:?}, not the band {}", hex(band));
     }
     // (and the status strip is the card's left edge, right of which the band begins)
-    let strip = on_line(&frame, editor, 5, -6.0);
+    let strip = on_line(&frame, editor, 5, -2.0);
     assert!(is(strip, strip_color(Status::Finished, true, &t)), "the strip: {strip:?}");
     // (the page, not the band, outside the construct: the band is not the whole editor)
-    assert!(is(on_line(&frame, editor, 1, -4.0), page), "line 1 is outside the construct");
-    // (the text did not move: the first character of line 5 is 10 px in, as the padding is)
-    assert_eq!(super::view::CODE_PADDING.left, 10.0);
+    assert!(is(on_line(&frame, editor, 1, 1.0), page), "line 1 is outside the construct");
+    // (the gap between the strip and the code is the editor's own padding, 0.75 em of the code's
+    // size: the band, which covers the whole editor, reaches the strip with no fill between)
+    assert!((super::view::code_padding().left - 10.5).abs() < 1e-3, "{}", super::view::code_padding().left);
 }
 
 /// The caret's line is COSMIC's grey hover wash: over the band where the line is in the construct,
@@ -395,17 +396,17 @@ fn the_caret_line_is_the_grey_wash_over_the_band_or_the_page() {
     assert!((wash.a - 0.2).abs() < 0.01, "COSMIC's hover wash is 20 %, not {}", wash.a);
     let (frame, editor) = caret_frame(6);
     let on_band = super::tones::over(wash, band);
-    for dx in [-4.0, 0.0, editor.width - 1.0] {
+    for dx in [1.0, 0.0, editor.width - 1.0] {
         let p = on_line(&frame, editor, 6, dx);
         assert!(is(p, on_band), "the caret's line at {dx}: {p:?}, not the wash over the band {}", hex(on_band));
     }
     assert!(luminance(on_band) < luminance(band), "the wash is not darker than the band");
     // (the lines either side are the band alone)
-    assert!(is(on_line(&frame, editor, 5, -4.0), band) && is(on_line(&frame, editor, 7, 0.0), band));
+    assert!(is(on_line(&frame, editor, 5, 1.0), band) && is(on_line(&frame, editor, 7, 0.0), band));
     // outside a construct: the grey wash over the page
     let (frame, editor) = caret_frame(1);
     let on_page = super::tones::over(wash, page);
-    for dx in [-4.0, editor.width - 1.0] {
+    for dx in [1.0, editor.width - 1.0] {
         let p = on_line(&frame, editor, 1, dx);
         assert!(is(p, on_page), "outside a construct, the caret's line at {dx}: {p:?}, not the wash over the page {}", hex(on_page));
     }
@@ -499,7 +500,7 @@ fn a_long_error_is_one_line_opens_inside_the_card_and_copies_whole() {
         let cell_id = super::view::test_block_id(i);
         let before = bounds_of(h, &app, cell_id.clone());
         // one row of message under two lines of code
-        let code_only = 2.0 * super::view::code_line_height() + super::view::CODE_PADDING.top + super::view::CODE_PADDING.bottom;
+        let code_only = 2.0 * super::view::code_line_height() + super::view::code_padding().top + super::view::code_padding().bottom;
         assert!(before.height < code_only + 40.0, "the collapsed card is {} tall, code alone {code_only}: more than one line of message", before.height);
         assert!(text.lines().count() > 1, "the demo's error is long");
         let toggle = bounds_of(h, &app, super::view::test_message_id(start, "toggle"));
@@ -653,7 +654,7 @@ fn a_note_is_inside_its_cells_border_with_no_plate_and_a_violet_heading() {
     let grey = card_border_color(&t);
     // (the demo's note is on its first cell, the checked one)
     let (b, frame) = cell(0, None);
-    let code_only = 3.0 * super::view::code_line_height() + super::view::CODE_PADDING.top + super::view::CODE_PADDING.bottom;
+    let code_only = 3.0 * super::view::code_line_height() + super::view::code_padding().top + super::view::code_padding().bottom;
     assert!(b.height > code_only + 80.0, "the card is {} tall, as tall as its code alone ({code_only}): the note is not in it", b.height);
     // the heading: pixels of the violet, in the card under the code
     let mut rows = Vec::new();
@@ -1206,4 +1207,128 @@ fn thicken_text_draws_semibold_where_the_family_has_one_and_regular_otherwise() 
     let (plain, heavy) = (ink(&Settings::default(), TextFont::Libertinus), ink(&thick, TextFont::Libertinus));
     assert!(dark_ink(&heavy) as f32 > dark_ink(&plain) as f32 * 1.05, "Semibold Libertinus is not heavier: {} against {}", dark_ink(&heavy), dark_ink(&plain));
     assert_eq!(ink(&Settings::default(), TextFont::NewComputerModern), ink(&thick, TextFont::NewComputerModern), "no semibold: drawn as before");
+}
+
+
+// ----- Paper: the cells' shared width and the gap after the strip
+
+/// The zoom set for the length of a test (under its harness's turn), 100% again after
+struct Zoomed;
+
+impl Zoomed {
+    fn new(zoom: f32) -> Self {
+        super::view::set_zoom(zoom);
+        Zoomed
+    }
+}
+
+impl Drop for Zoomed {
+    fn drop(&mut self) {
+        super::view::set_zoom(1.0);
+    }
+}
+
+/// What a cell takes beside its code: the 4 px strip and the room for its border
+const CHROME: f32 = 6.0;
+
+/// A theory of three one-line lemmas, the second with a line of `long` characters
+fn widths_app(long: usize) -> App {
+    // (a first line of exactly n characters: `lemma a: "` is 10 of them, then the closing quote)
+    let line = |name: char, n: usize| format!("lemma {name}: \"{}\"", "x".repeat(n - 11));
+    let text = format!("theory W imports Main begin\n\n{}\n  by simp\n\n{}\n  by simp\n\n{}\n  by simp\n\nend\n", line('a', 20), line('b', long), line('c', 30));
+    let mut app = demo_app(Mode::Literate);
+    let doc = serde_json::json!({"text": text, "revision": 1, "prover": super::snapshot::prover_json(&text)});
+    app.workspace.as_mut().unwrap().theory = Some(super::editor::Theory::new("/tmp/W.thy".into(), &doc, &super::prover::isabelle::symbols::Table::fallback(), std::sync::Arc::new(std::collections::HashMap::new()), Mode::Literate, super::prover::profile(None)));
+    app.show_right = false;
+    app.show_sidebar = false;
+    app.workspace.as_mut().unwrap().output = None;
+    app
+}
+
+/// The cells' widths (the card with its strip and border) and the page's column, as laid out
+fn cell_widths(app: &App, settings: &Settings) -> (Vec<f32>, f32) {
+    in_light(Size::new(1200.0, 700.0), |h| {
+        let _published = Published::new(settings);
+        let _ = h.draw(app, "paper-widths-warm");
+        let _ = h.draw(app, "paper-widths");
+        let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+        let mut all = Bounds(Vec::new());
+        h.operate(app, &mut all);
+        let widths = t.blocks.iter().enumerate().filter(|(_, b)| b.kind == Kind::Formal)
+            .map(|(i, _)| all.0.iter().find(|(x, _)| *x == super::view::test_block_id(i)).expect("the cell is on the page").1.width).collect();
+        (widths, super::view::last_column())
+    })
+}
+
+/// Cells have one shared width, Settings ▸ Code ▸ Cell width in characters (80 by default); a cell
+/// with a longer line widens to fit, up to the column; Fill is the column's whole width
+#[test]
+fn cells_share_the_cell_width_widen_for_long_lines_and_fill_means_the_column() {
+    let near = |a: f32, b: f32| (a - b).abs() < 1.0;
+    let settings = Settings::default();
+    assert_eq!((settings.code.cell_width, settings.code.size), (80, 14));
+    // 80 characters of 14 px code: 8.4 px each, and the half character kept after them, between the
+    // gap (0.75 em, 10.5 px) either side, and the strip and border
+    let eighty = (80.5 * 8.4) + 2.0 * 10.5 + CHROME;
+    let (widths, column) = cell_widths(&widths_app(30), &settings);
+    assert!(widths.iter().all(|w| near(*w, eighty)), "every cell is 80 characters wide whatever its lines: {widths:?} (wanted {eighty})");
+    assert!(column > eighty + 100.0, "the column ({column}) is wider than the cells, not the cells' width");
+
+    // a line of 100 characters: that cell widens, the others stay
+    let (widths, _) = cell_widths(&widths_app(100), &settings);
+    let hundred = (100.0 + 0.5) * 8.4 + 2.0 * 10.5 + CHROME;
+    assert!(near(widths[0], eighty) && near(widths[2], eighty), "the other cells keep the shared width: {widths:?}");
+    assert!(near(widths[1], hundred), "the long cell is as wide as its line needs: {} (wanted {hundred})", widths[1]);
+
+    // a line longer than the column: as wide as the column, and no more
+    let (widths, column) = cell_widths(&widths_app(300), &settings);
+    assert!(near(widths[1], column) && widths[1] < 300.0 * 8.4, "capped at the column: {} of {column}", widths[1]);
+
+    // another width in characters, the same for every cell
+    let mut wide = Settings::default();
+    wide.change(settings::Change::CellWidth(100));
+    let (widths, _) = cell_widths(&widths_app(30), &wide);
+    assert!(widths.iter().all(|w| near(*w, hundred)), "{widths:?}");
+
+    // Fill: every cell the column's whole width
+    let mut fill = Settings::default();
+    fill.change(settings::Change::CellWidth(0));
+    let (widths, column) = cell_widths(&widths_app(30), &fill);
+    assert!(widths.iter().all(|w| near(*w, column)), "Fill is the column: {widths:?} against {column}");
+    assert!(column > eighty + 100.0);
+}
+
+/// The gap between the status strip and the code (and the code and the card's right edge) is
+/// 0.75 em of the code's size: 10.5 px at 14 px, and it scales with the zoom. The strip stays 4 px
+#[test]
+fn the_gap_after_the_strip_is_three_quarters_of_an_em_of_the_code_at_any_zoom() {
+    let app = cells_app(None);
+    for zoom in [1.0f32, 1.5] {
+        let (gap, ink_at, strip) = in_light(SIZE, |h| {
+            let _zoomed = Zoomed::new(zoom);
+            let gap = super::view::code_padding().left;
+            let _ = h.draw(&app, "paper-gap-warm");
+            let frame = h.draw(&app, "paper-gap");
+            let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+            let first = t.blocks.iter().position(|b| b.kind == Kind::Formal).unwrap();
+            let mut all = Bounds(Vec::new());
+            h.operate(&app, &mut all);
+            let card = all.0.iter().find(|(x, _)| *x == super::view::test_block_id(first)).unwrap().1;
+            // the first character of the first line: the first pixel right of the strip that is
+            // not the card's page colour, on the middle of that line
+            let page = super::view::page_color(&cosmic::Theme::light());
+            let y = card.y + 1.0 + super::view::code_padding().top + super::view::code_line_height() / 2.0;
+            let width = SIZE.width as u32;
+            let ink = (card.x as u32 + 5..card.x as u32 + 80).find(|&x| (-8..=8).any(|dy| !is(px(&frame, width, x as f32, y + dy as f32), page))).expect("code on the line");
+            let strip_end = (card.x as u32..card.x as u32 + 12).find(|&x| is(px(&frame, width, x as f32, y), page)).expect("the strip ends");
+            (gap, ink as f32 - strip_end as f32, strip_end as f32 - card.x)
+        });
+        let code = (14.0 * zoom).round();
+        assert!(zoom != 1.0 || (gap - 10.5).abs() < 1e-3, "10.5 px at 14 px code");
+        assert!((gap - 0.75 * code).abs() < 1e-3, "zoom {zoom}: the gap is {gap}, not 0.75 em of {code} px");
+        assert!((strip - 4.0).abs() < 1.5, "zoom {zoom}: the strip is {strip} px wide");
+        // (the first glyph's own side bearing, a pixel or two, comes after the gap)
+        // 
+        assert!(ink_at >= gap - 1.0 && ink_at <= gap + 3.0, "zoom {zoom}: the code begins {ink_at} px after the strip, the gap being {gap}");
+    }
 }

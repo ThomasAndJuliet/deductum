@@ -43,7 +43,7 @@ lemma broken: "(x::nat) < x"
 end
 "#;
 
-fn prover_json(text: &str) -> serde_json::Value {
+pub(super) fn prover_json(text: &str) -> serde_json::Value {
     let cmds = super::prover::isabelle::blocks::lexical_commands(text, &HashMap::new());
     let chars: Vec<char> = text.chars().collect();
     let commands: Vec<serde_json::Value> = cmds
@@ -1368,9 +1368,9 @@ fn the_goal_beside_stays_level_with_its_construct() {
     // page's background
     let img = image::RgbaImage::from_raw(1460, 966, png).expect("the frame's pixels");
     let bg = *img.get_pixel(1440, 5);
-    // (right of the cells, which are 14 px code wide; the goal sits past what is level with it,
+    // (right of the cells, which are 80 characters of 14 px code wide; the goal sits past what is level with it,
     // which is the cell, or the whole column where the page has a wide item there)
-    let top = (0..img.height()).find(|&y| (460..1440).step_by(10).any(|x| img.get_pixel(x, y) != &bg));
+    let top = (0..img.height()).find(|&y| (760..1440).step_by(10).any(|x| img.get_pixel(x, y) != &bg));
     eprintln!("goal card top at {top:?}");
     let top = top.expect("a goal beside") as f32;
     assert!(top > 300.0, "not jumped to the top of the window (top = {top})");

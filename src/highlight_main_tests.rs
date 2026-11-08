@@ -22,7 +22,8 @@
 //! were such changes: the Neo
 //! set was made again for the frames it changed, from that commit. The original and SDK sets of
 //! those frames (made with other fonts) still show the old look and need making again the same
-//! way in the SDK build.
+//! way in the SDK build. Paper (the 80 character cells at 14 px, with the 0.75 em gap) is such a
+//! change for the block frames: the Neo set was made again for them, the others still show the old look.
 
 use std::collections::HashMap;
 use std::path::Path;
