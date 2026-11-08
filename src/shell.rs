@@ -72,6 +72,8 @@ pub enum Msg {
     Keywords(bool),
     /// The pause before a keyword line asks, in milliseconds
     KeywordPause(u32),
+    /// Forget a session on the start page: discard it on its host
+    ForgetSession(String, String),
     ShowTypes(bool),
     ShowChanges(bool),
     /// One of the settings the Settings page added (see `settings::Change`)
@@ -91,6 +93,15 @@ pub enum Msg {
     NewToolchain(usize),
     NewDirs(String),
     OpenDocument(String),
+    /// Browse (the folder dialog), the folder it returned or why it could not, Change (the other
+    /// provers), and the remote folder dialog: into a folder, Choose, Cancel
+    NewBrowseOpen,
+    NewBrowseTo(String),
+    NewBrowseFailed(String),
+    NewChange,
+    PickerGo(String),
+    PickerChoose,
+    PickerClose,
     /// Collapse or expand the open session's whole document list
     ToggleDocuments,
     /// Collapse or expand one folder of the open session's document list
@@ -152,7 +163,8 @@ impl App {
         super::view::set_goal_beside(settings.appearance.goal_beside);
         self.left_width = settings.layout.left_width;
         self.right_width = settings.layout.right_width;
-        self.show_sidebar = settings.layout.show_left;
+        // (the sidebar starts closed: the start page is the way in; F9 opens it)
+        self.show_sidebar = false;
         self.show_right = settings.layout.show_right;
         let theme = settings.appearance.theme;
         super::settings::publish(&settings);
@@ -238,6 +250,11 @@ impl App {
                 self.save_settings();
                 self.tell_hosts();
             }
+            Msg::ForgetSession(machine, sid) => {
+                self.send(&machine, "discard", json!({"session": sid}), Pending::Plain);
+                super::recent::forget(&machine, &sid);
+                self.sessions.remove(&(machine, sid));
+            }
             Msg::KeywordPause(ms) => {
                 self.shell.settings.editing.keyword_pause_ms = ms.clamp(500, 10_000);
                 self.save_settings();
@@ -315,6 +332,25 @@ impl App {
                 }
             }
             Msg::OpenDocument(path) => return self.open_document(path),
+            Msg::NewBrowseOpen => return self.new_session_browse(),
+            Msg::NewBrowseTo(path) => return self.update(Message::NewBrowse(path)),
+            Msg::NewBrowseFailed(why) => {
+                if let Some(ns) = &mut self.new_session {
+                    ns.error = Some(format!("The folder dialog could not open: {why}"));
+                }
+            }
+            Msg::NewChange => {
+                if let Some(ns) = &mut self.new_session {
+                    ns.changing = !ns.changing;
+                }
+            }
+            Msg::PickerGo(path) => return self.picker_go(Some(path)),
+            Msg::PickerChoose => return self.picker_choose(),
+            Msg::PickerClose => {
+                if let Some(ns) = &mut self.new_session {
+                    ns.picker = None;
+                }
+            }
             Msg::ContextOpen(target, at) => self.shell.context = Some(super::context_menu::Open { target, at, sub: None }),
             Msg::ContextClose => self.shell.context = None,
             Msg::ContextSub(sub) => {
@@ -649,6 +685,10 @@ pub fn header_end(app: &App) -> Vec<Element<'_, Message>> {
 
 /// The prover's state in the header: the status chip, then pause and stop (see `chip`)
 pub fn header_center(app: &App) -> Vec<Element<'_, Message>> {
+    // (no session: no chip and no pause or stop, rather than a disabled set)
+    if app.workspace.is_none() {
+        return Vec::new();
+    }
     let mut items = vec![super::chip::chip(app)];
     items.extend(super::chip::controls(app));
     items

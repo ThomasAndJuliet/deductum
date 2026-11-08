@@ -364,17 +364,7 @@ fn splitter<'a>(left: bool) -> Element<'a, Message> {
 }
 
 fn welcome(app: &App) -> Element<'_, Message> {
-    let sp = spacing();
-    let mut col = widget::column::with_capacity(6)
-        .spacing(sp.space_s)
-        .push(widget::text::title1("Deductum"))
-        .push(widget::text::body("Isabelle theories and Lean files as literate documents, worked on together with agents in one live session."))
-        .push(widget::button::suggested("Open a folder…").on_press(Message::NewSession(true)));
-    let any = !app.sessions.is_empty();
-    if any {
-        col = col.push(widget::text::body("Or pick a session on the left."));
-    }
-    widget::container(col.max_width(640)).center(Length::Fill).into()
+    super::start_page::page(app)
 }
 
 fn nav_item<'a>(label: String, detail: Option<String>, indent: f32, color: Option<Status>, current: bool, message: Message, table: &dyn super::codec::Symbols) -> Element<'a, Message> {

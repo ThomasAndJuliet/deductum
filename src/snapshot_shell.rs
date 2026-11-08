@@ -376,7 +376,7 @@ fn new_session_cards_for_a_folder_of_both_backends() {
 #[test]
 fn a_card_picks_its_backend_and_start_sends_it() {
     let mut app = new_session_app(None, both());
-    let picks: Vec<Message> = (500..1100).step_by(8).flat_map(|y| clicks(window(&app), Point::new(800.0, y as f32), Size::new(1400.0, 1100.0))).collect();
+    let picks: Vec<Message> = (300..700).step_by(8).flat_map(|y| clicks(window(&app), Point::new(800.0, y as f32), Size::new(1400.0, 1100.0))).collect();
     let backends: Vec<String> = picks.iter().filter_map(|m| if let Message::Shell(Msg::NewBackend(b)) = m { Some(b.clone()) } else { None }).collect();
     assert!(backends.contains(&"isabelle".to_string()) && backends.contains(&"lean".to_string()), "{picks:?}");
     let _ = cosmic::Application::update(&mut app, Message::Shell(Msg::NewBackend("lean".into())));
@@ -397,6 +397,129 @@ fn a_card_picks_its_backend_and_start_sends_it() {
     assert!(ns.reason.as_deref().is_some_and(|r| r.contains("Scratch.lean is a Lean document")), "{:?}", ns.reason);
 }
 
+
+/// A neo link whose requests the test can read
+fn neo_with_requests() -> (Link, tokio::sync::mpsc::UnboundedReceiver<String>) {
+    let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+    let mut neo = connected("neo", "neo", Some(hello()));
+    neo.sender = Some(sender);
+    (neo, receiver)
+}
+
+fn requests(receiver: &mut tokio::sync::mpsc::UnboundedReceiver<String>) -> Vec<Value> {
+    let mut out = Vec::new();
+    while let Ok(line) = receiver.try_recv() {
+        out.push(serde_json::from_str(&line).unwrap());
+    }
+    out
+}
+
+/// Browse on a remote machine opens Deductum's own dialog, listing folders through the link's
+/// `list_dir` (no mount, so it works on Windows too); going into folders asks again, a late reply
+/// to an earlier request is dropped, and Choose hands the folder to the form's own lookup
+#[test]
+fn browse_on_a_remote_machine_lists_folders_over_the_link_and_choose_fills_the_form() {
+    let mut app = new_session_app(None, json!([]));
+    let (neo, mut receiver) = neo_with_requests();
+    app.links[1] = neo;
+    let update = |app: &mut App, m: Message| {
+        let _ = cosmic::Application::update(app, m);
+    };
+    update(&mut app, Message::NewMachine(1));
+    assert!(requests(&mut receiver).iter().any(|r| r["op"] == "list_dir"), "the form's own lookup of the machine's home");
+    app.new_session.as_mut().unwrap().folder = "/home/me/Proofs".into();
+    update(&mut app, Message::Shell(Msg::NewBrowseOpen));
+    let asked = requests(&mut receiver);
+    assert_eq!(asked.len(), 1, "{asked:?}");
+    assert_eq!((asked[0]["op"].as_str(), asked[0]["path"].as_str()), (Some("list_dir"), Some("/home/me/Proofs")), "it opens where the form is");
+    assert!(app.new_session.as_ref().unwrap().picker.is_some());
+    // the reply fills the dialog; only folders are offered, and the way up is the host's parent
+    let pending = |app: &App| {
+        let mut seqs: Vec<u64> = app.pending.values().filter_map(|(_, p)| if let super::Pending::PickDir(seq) = p { Some(*seq) } else { None }).collect();
+        seqs.sort();
+        seqs
+    };
+    let reply = |app: &mut App, seq: u64, path: &str| {
+        let listing = json!({"ok": true, "path": path, "parent": "/home/me", "entries": [
+            {"name": "tock-circus", "dir": true}, {"name": "notes.thy", "dir": false}, {"name": "utp", "dir": true}]});
+        let _ = app.on_reply("neo".into(), super::Pending::PickDir(seq), listing);
+    };
+    let first = pending(&app);
+    assert_eq!(first.len(), 1);
+    update(&mut app, Message::Shell(Msg::PickerGo("/home/me/Proofs/utp".into())));
+    let second = pending(&app);
+    assert_eq!(second.len(), 2, "a second request is out");
+    // (the late reply to the first request is dropped; the second one is shown)
+    reply(&mut app, second[1], "/home/me/Proofs/utp");
+    reply(&mut app, first[0], "/home/me/Proofs");
+    let picker = app.new_session.as_ref().unwrap().picker.as_ref().unwrap();
+    assert_eq!(picker.path, "/home/me/Proofs/utp");
+    assert_eq!(picker.folders(), vec!["tock-circus", "utp"], "no documents in a folder dialog");
+    assert_eq!(picker.child("utp"), "/home/me/Proofs/utp/utp");
+    assert_eq!(picker.parent().as_deref(), Some("/home/me"));
+    draw_in(false, || window(&app), "shell-new-session-remote-dialog", Size::new(1000.0, 800.0));
+    draw_in(true, || window(&app), "shell-new-session-remote-dialog-light", Size::new(1000.0, 800.0));
+    // Choose closes the dialog and looks at the folder, as typing it and pressing Enter does
+    let _ = requests(&mut receiver);
+    update(&mut app, Message::Shell(Msg::PickerChoose));
+    let ns = app.new_session.as_ref().unwrap();
+    assert!(ns.picker.is_none());
+    assert_eq!(ns.folder, "/home/me/Proofs/utp");
+    let asked = requests(&mut receiver);
+    assert!(asked.iter().any(|r| r["op"] == "list_dir" && r["path"] == "/home/me/Proofs/utp"), "{asked:?}");
+    // Cancel closes it without touching the folder
+    update(&mut app, Message::Shell(Msg::NewBrowseOpen));
+    update(&mut app, Message::Shell(Msg::PickerClose));
+    let ns = app.new_session.as_ref().unwrap();
+    assert!(ns.picker.is_none());
+    assert_eq!(ns.folder, "/home/me/Proofs/utp");
+}
+
+/// A host that cannot list the folder is said in the dialog, and Choose stays unavailable
+#[test]
+fn the_remote_dialog_says_when_the_host_cannot_list_a_folder() {
+    let mut app = new_session_app(None, json!([]));
+    let (neo, _receiver) = neo_with_requests();
+    app.links[1] = neo;
+    let update = |app: &mut App, m: Message| {
+        let _ = cosmic::Application::update(app, m);
+    };
+    update(&mut app, Message::NewMachine(1));
+    update(&mut app, Message::Shell(Msg::NewBrowseOpen));
+    app.picker_failed("No such directory".into());
+    let picker = app.new_session.as_ref().unwrap().picker.as_ref().unwrap();
+    assert_eq!(picker.error.as_deref(), Some("No such directory"));
+    assert!(picker.listing.is_none());
+    update(&mut app, Message::Shell(Msg::PickerChoose));
+    // (nothing was listed, so there is no folder to choose; the page asks for nothing more)
+    assert!(app.new_session.as_ref().unwrap().picker.is_none());
+}
+
+/// The prover is one line; Change shows the other choices, and picking one hides them again
+#[test]
+fn the_prover_is_a_line_and_change_shows_the_others() {
+    let mut app = new_session_app(Some("isabelle"), both());
+    assert!(!app.new_session.as_ref().unwrap().changing);
+    let _ = cosmic::Application::update(&mut app, Message::Shell(Msg::NewChange));
+    assert!(app.new_session.as_ref().unwrap().changing);
+    draw_in(false, || window(&app), "shell-new-session-change", Size::new(1000.0, 900.0));
+    // the form as the mock-up draws it: no sidebar, the machines as a bar
+    app.show_sidebar = false;
+    app.new_session.as_mut().unwrap().changing = false;
+    draw_in(true, || window(&app), "new-session-light", Size::new(1280.0, 640.0));
+    draw_in(false, || window(&app), "new-session-dark", Size::new(1280.0, 640.0));
+    let _ = cosmic::Application::update(&mut app, Message::Shell(Msg::NewBackend("lean".into())));
+    let ns = app.new_session.as_ref().unwrap();
+    assert!((ns.changing, ns.backend.as_deref()) == (false, Some("lean")));
+    // a new folder forgets it
+    let ns = app.new_session.as_mut().unwrap();
+    ns.changing = true;
+    ns.invalidate_folder();
+    assert!(!ns.changing);
+    let found = both();
+    assert_eq!(super::new_session::found_from(&found[0]), "the ROOT file");
+    assert_eq!(super::new_session::found_from(&found[1]), "the lakefile");
+}
 
 /// The sidebar, the status bar and the settings read a machine's connection from one place, so
 /// they never disagree in one frame
@@ -1815,4 +1938,100 @@ fn tooltips_are_drawn_for_review() {
             cosmic::theme::set_active(cosmic::theme::ThemeType::Dark);
         }
     }
+}
+
+// ----- the start page
+
+const NOW: u64 = 1_800_000_000;
+
+/// The mixed scene with no session open and some history: Demo last (two hours ago), UTP
+/// yesterday, CausalSemantics three days ago
+fn start_app() -> App {
+    let mut app = mixed_app();
+    app.workspace = None;
+    app.show_sidebar = false;
+    app.show_right = false;
+    super::recent::set("local", "s1", "/home/me/Research/Demo/Stop.thy", NOW - 7200);
+    super::recent::set("local", "s2", "/home/me/Isabelle/UTP/Fixpoint.thy", NOW - 90_000);
+    super::recent::set("local", "s5", "/home/me/Research/Repositories/DSRVLean/Refine.lean", NOW - 3 * 86_400 - 5);
+    super::recent::set("local", "s3", "/home/me/Research/Demo/Old.lean", NOW - 12 * 86_400);
+    app
+}
+
+fn start_window(app: &App) -> Element<'_, Message> {
+    widget::column::with_capacity(2).push(header(app)).push(widget::container(super::start_page::page_at(app, NOW)).width(Length::Fill).height(Length::Fill).class(cosmic::theme::Container::custom(|t| cosmic::iced::widget::container::Style { background: Some(super::view::page_color(t).into()), ..Default::default() }))).into()
+}
+
+#[test]
+fn the_start_page_lists_the_sessions_last_used_first() {
+    let app = start_app();
+    let rows = super::start_page::rows(&app);
+    let names: Vec<&str> = rows.iter().map(|r| r.name.as_str()).collect();
+    // newest first; forks are not listed; one never opened here ends the list
+    assert_eq!(&names[..4], ["Demo", "UTP", "CausalSemantics with a long name", "DSRV"], "{names:?}");
+    assert!(!names.iter().any(|n| n.contains("copy")), "{names:?}");
+    assert_eq!(rows[0].file.as_deref(), Some("Stop.thy"));
+    assert_eq!(super::recent::ago(rows[0].at.unwrap(), NOW), "2 hours ago");
+    assert_eq!(super::recent::ago(rows[1].at.unwrap(), NOW), "yesterday");
+}
+
+#[test]
+fn the_start_page_opens_a_folder_or_a_session_with_a_click() {
+    let app = start_app();
+    let size = Size::new(1400.0, 800.0);
+    let mut open_folder = false;
+    let mut opened = Vec::new();
+    for y in (60..800u32).step_by(4) {
+        for m in clicks(start_window(&app), Point::new(700.0, y as f32), size) {
+            match m {
+                Message::NewSession(true) => open_folder = true,
+                Message::OpenSession(machine, sid) => opened.push((machine, sid)),
+                _ => {}
+            }
+        }
+    }
+    assert!(open_folder, "the Primary button opens the New session form");
+    assert!(opened.contains(&("local".to_string(), "s1".to_string())), "the last used row opens its session: {opened:?}");
+    assert!(opened.contains(&("local".to_string(), "s2".to_string())), "{opened:?}");
+}
+
+#[test]
+fn with_no_session_the_header_has_no_chip_pause_or_stop() {
+    use super::chip::{State, state_of};
+    let app = start_app();
+    assert_eq!(state_of(&app), State::NoSession);
+    assert!(shell::header_center(&app).is_empty(), "no chip, no pause, no stop");
+    assert!(x_where(&app, |m| matches!(m, Message::Lifecycle(_))).is_none(), "nothing in the header sends a lifecycle op");
+    // with a session open they are there again
+    assert_eq!(shell::header_center(&mixed_app()).len(), 3);
+}
+
+#[test]
+fn the_sidebar_starts_closed_at_launch() {
+    let mut app = start_app();
+    let mut settings = super::settings::Settings::default();
+    settings.layout.show_left = true;
+    let _ = app.apply_loaded_settings(settings);
+    assert!(!app.show_sidebar);
+}
+
+#[test]
+fn forgetting_a_session_discards_it_on_its_host() {
+    let mut app = start_app();
+    let _ = app.shell_update(Msg::ForgetSession("local".into(), "s5".into()));
+    assert!(!app.sessions.contains_key(&("local".to_string(), "s5".to_string())));
+    assert!(super::recent::get("local", "s5").is_none());
+    assert!(!super::start_page::rows(&app).iter().any(|r| r.sid == "s5"));
+}
+
+#[test]
+fn start_page_frames_for_the_review() {
+    let app = start_app();
+    for (light, theme) in [(true, "light"), (false, "dark")] {
+        draw_in(light, || start_window(&app), &format!("start-page-{theme}"), Size::new(1400.0, 800.0));
+        draw_in(light, || start_window(&app), &format!("start-page-{theme}-narrow"), Size::new(900.0, 760.0));
+    }
+    let mut empty = start_app();
+    empty.sessions.clear();
+    draw_in(true, || start_window(&empty), "start-page-light-no-history", Size::new(1400.0, 600.0));
 }

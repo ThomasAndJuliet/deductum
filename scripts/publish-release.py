@@ -113,6 +113,15 @@ def gh(*args):
     return subprocess.check_output(["gh", *map(str, args)], text=True)
 
 
+def newest_version(tag):
+    """Whether no other version tag is higher than this one's."""
+    rows = gh("api", "--paginate", f"repos/{REPOSITORY}/tags?per_page=100",
+              "--jq", ".[] | [.name, .commit.sha] | @json")
+    version = lambda name: tuple(map(int, release_policy.TAG.fullmatch(name).groups()))
+    names = [json.loads(row)[0] for row in rows.splitlines()]
+    return all(version(name) <= version(tag) for name in names if release_policy.TAG.fullmatch(name))
+
+
 def release_plan(sha):
     rows = gh("api", "--paginate", f"repos/{REPOSITORY}/tags?per_page=100",
               "--jq", ".[] | [.name, .commit.sha] | @json")
@@ -304,8 +313,9 @@ def finish(run_id, tag, root):
         for asset in assets:
             verify_attestation(asset)
     # Unique tags preserve each version. A delayed older run never
-    # changes the latest pointer or overwrites another revision.
-    gh("release", "edit", tag, "--repo", REPOSITORY, "--draft=false", "--latest=false")
+    # takes the latest pointer or overwrites another revision.
+    latest = "true" if newest_version(tag) else "false"
+    gh("release", "edit", tag, "--repo", REPOSITORY, "--draft=false", f"--latest={latest}")
     print(f"https://github.com/{REPOSITORY}/releases/tag/{tag}")
 
 

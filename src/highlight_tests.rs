@@ -932,7 +932,7 @@ fn primary_buttons_stay_full_accent() {
         let theme = Themed::set(dark);
         let f = frame(&mut h, &app, "hl-primary");
         let probe = Probe::of(&mut h, &app);
-        let b = probe.button_with("Open a folder…").expect("the Primary button of the welcome page");
+        let b = probe.button_with("Open a folder").expect("the Primary button of the welcome page");
         let fill = fill_at(&f, b);
         let accent = v(theme.accent());
         assert!(off(fill, accent) <= 3.0, "the Primary button ({}) is {}, not the accent {}", theme.name(), hex(fill), hex(accent));

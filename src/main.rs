@@ -38,7 +38,9 @@ mod menubar;
 mod new_session;
 mod ot;
 mod platform;
+mod start_page;
 mod prover;
+mod recent;
 mod settings;
 mod settings_page;
 mod shell;
@@ -485,6 +487,8 @@ enum Pending {
     Fill,
     History(String),
     ListDir(u64, String),
+    /// The remote folder dialog's listing (its request number)
+    PickDir(u64),
     Suggest(u64, String),
     Create,
     Plain,
@@ -1279,6 +1283,7 @@ impl App {
                         ws.fill.error = Some(error);
                     }
                 }
+                Pending::PickDir(_) => self.picker_failed(error),
                 Pending::Create | Pending::Suggest(..) | Pending::ListDir(..) => {
                     if let Some(ns) = &mut self.new_session {
                         ns.error = Some(error);
@@ -1420,6 +1425,7 @@ impl App {
                         theory.replace_change(&rebased, &*table);
                     }
                     ws.theory = Some(theory);
+                    recent::note(&ws.machine, &ws.sid, &path);
                     let goto = if ws.opening.as_deref() == Some(path.as_str()) {
                         ws.opening = None;
                         ws.pending_goto.take()
@@ -1504,6 +1510,7 @@ impl App {
                     ws.history = v["history"].as_array().cloned().unwrap_or_default();
                 }
             }
+            Pending::PickDir(seq) => self.picker_listed(seq, v),
             Pending::ListDir(generation, _) => {
                 if let Some(ns) = &mut self.new_session {
                     ns.folder = v["path"].as_str().unwrap_or("").to_string();
