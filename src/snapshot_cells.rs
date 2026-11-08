@@ -551,3 +551,89 @@ fn a_long_error_is_one_line_opens_inside_the_card_and_copies_whole() {
         assert!((folded.height - before.height).abs() < 1.0, "folded again: {} vs {}", folded.height, before.height);
     });
 }
+
+// ----- the actions under a cell
+
+/// Whether `p` is on the line from `page` to `ink` (a pixel of text in `ink` over the page, or one
+/// of its anti-aliased edges), to a few units
+fn on_ink_line(p: [u8; 3], page: Color, ink: Color) -> bool {
+    let (page, ink) = (page.into_rgba8(), ink.into_rgba8());
+    let d: Vec<f32> = (0..3).map(|c| ink[c] as f32 - page[c] as f32).collect();
+    let n: f32 = d.iter().map(|x| x * x).sum();
+    if n < 1.0 {
+        return true;
+    }
+    let t = (0..3).map(|c| (p[c] as f32 - page[c] as f32) * d[c]).sum::<f32>() / n;
+    let t = t.clamp(0.0, 1.0);
+    (0..3).all(|c| (page[c] as f32 + t * d[c] - p[c] as f32).abs() <= 14.0)
+}
+
+/// Under the selected failed cell: "+ Text", "+ Section" and "+ Lemma" are links in the accent (no
+/// pill fill behind them, an underline under each), and Delete is a link in the destructive red at
+/// the cell's right edge, a space_m or more from the last of them
+#[test]
+fn the_add_links_are_accent_with_no_fill_and_delete_is_red_at_the_right() {
+    let t = cosmic::Theme::light();
+    let app = cells_app(Some(2));
+    let w = TALL.width as u32;
+    in_light(TALL, |h| {
+        let _ = h.draw(&app, "actions-warm");
+        let frame = h.draw(&app, "actions-selected");
+        let (i, ..) = failed_cell(&app);
+        let b = bounds_of(h, &app, super::view::test_block_id(i));
+        let page = super::view::page_color(&t);
+        let accent: Color = cosmic::theme::active().cosmic().accent_text_color().into();
+        let red = strip_color(Status::Failed, true, &t);
+        assert_eq!(hex(red), "#c01c28");
+        // the band under the card where the row is
+        let (top, bottom) = ((b.y + b.height + 3.0) as u32, (b.y + b.height + 40.0) as u32);
+        let (mut left_ink, mut right_ink) = (Vec::new(), Vec::new());
+        let mut stray = Vec::new();
+        for y in top..bottom {
+            for x in (b.x as u32)..((b.x + b.width) as u32 + 4) {
+                let p = px(&frame, w, x as f32, y as f32);
+                if is(p, page) {
+                    continue;
+                }
+                // (the accent is teal, so its blue is over its red; the destructive red is the other way)
+                if on_ink_line(p, page, accent) && p[2] >= p[0] {
+                    left_ink.push((x, y));
+                } else if on_ink_line(p, page, red) && p[0] > p[2] {
+                    right_ink.push((x, y));
+                } else {
+                    stray.push((x, y, p));
+                }
+            }
+        }
+        assert!(left_ink.len() > 150, "only {} pixels of the accent {} in the row under the cell", left_ink.len(), hex(accent));
+        assert!(stray.len() < 6, "{} pixels that are neither the page, the accent nor the red (a pill's fill?): {:?}", stray.len(), &stray[..stray.len().min(4)]);
+        // no fill: the pixels between the links, and just above each label, are the page
+        let ink_rows: Vec<u32> = left_ink.iter().map(|p| p.1).collect();
+        let (y0, y1) = (*ink_rows.iter().min().unwrap(), *ink_rows.iter().max().unwrap());
+        let cy = (y0 + y1) / 2;
+        let lefts: Vec<u32> = left_ink.iter().filter(|p| p.1 == cy).map(|p| p.0).collect();
+        let gaps = lefts.windows(2).filter(|p| p[1] - p[0] > 8).count();
+        assert!(gaps >= 2, "three links leave two gaps between them on the row: {gaps}");
+        for x in (b.x as u32 + 400)..(b.x as u32 + 440) {
+            assert!(is(px(&frame, w, x as f32, cy as f32), page), "the row has a fill at {x}: {:?}", px(&frame, w, x as f32, cy as f32));
+        }
+        // an underline: a long horizontal run of the accent under the labels
+        let underline = (y0..=y1).any(|y| {
+            let mut run = 0;
+            let mut best = 0;
+            for x in (b.x as u32)..((b.x + b.width) as u32) {
+                let p = px(&frame, w, x as f32, y as f32);
+                if !is(p, page) && on_ink_line(p, page, accent) { run += 1; best = best.max(run) } else { run = 0 }
+            }
+            best >= 20
+        });
+        assert!(underline, "no underline under the links");
+        // Delete: red, at the cell's right edge, a space_m or more from the links
+        assert!(right_ink.len() > 40, "only {} pixels of the destructive red", right_ink.len());
+        let (rmin, rmax) = (right_ink.iter().map(|p| p.0).min().unwrap() as f32, right_ink.iter().map(|p| p.0).max().unwrap() as f32);
+        let right_edge = b.x + b.width;
+        assert!(right_edge - rmax < 8.0, "Delete ends {} px short of the cell's right edge", right_edge - rmax);
+        let lmax = left_ink.iter().map(|p| p.0).max().unwrap() as f32;
+        assert!(rmin - lmax >= super::view::spacing().space_m as f32, "Delete is {} px from the add links", rmin - lmax);
+    });
+}

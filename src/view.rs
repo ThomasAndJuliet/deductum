@@ -908,24 +908,57 @@ fn mono_block<'a>(text: String, status: Status, table: &dyn super::codec::Symbol
     card(body.into(), status, false)
 }
 
+/// A Tertiary button (household rule 7): no box, its label bold, underlined and in the accent,
+/// and COSMIC's own link states for hover and press
+fn tertiary<'a>(label: &'static str, msg: Message) -> widget::Button<'a, Message> {
+    widget::button::custom(link_label(label)).padding([z(2.0) as u16, z(2.0) as u16]).class(theme::Button::Link).on_press(msg)
+}
+
+/// A Tertiary button that destroys what it acts on, in the failed colour of the cell palette (the
+/// household's destructive red), the link's own shape and states otherwise
+fn tertiary_destructive<'a>(label: &'static str, msg: Message) -> widget::Button<'a, Message> {
+    use widget::button::Catalog as _;
+    fn red(mut style: widget::button::Style, theme: &cosmic::Theme) -> widget::button::Style {
+        let c = strip_color(Status::Failed, true, theme);
+        style.text_color = Some(c);
+        style.icon_color = Some(c);
+        style
+    }
+    let link = || theme::Button::Link;
+    widget::button::custom(link_label(label))
+        .padding([z(2.0) as u16, z(2.0) as u16])
+        .class(theme::Button::Custom {
+            active: Box::new(move |focused, theme| red(theme.active(focused, false, &link()), theme)),
+            disabled: Box::new(move |theme| red(theme.disabled(&link()), theme)),
+            hovered: Box::new(move |focused, theme| red(theme.hovered(focused, false, &link()), theme)),
+            pressed: Box::new(move |focused, theme| red(theme.pressed(focused, false, &link()), theme)),
+        })
+        .on_press(msg)
+}
+
+fn link_label<'a>(label: &'static str) -> Element<'a, Message> {
+    let font = cosmic::iced::Font { weight: cosmic::iced::font::Weight::Bold, ..cosmic::font::default() };
+    let spans: Vec<iced::widget::text::Span<'a, (), cosmic::iced::Font>> = vec![iced::widget::span(label).font(font).underline(true)];
+    iced::widget::rich_text(spans).size(z(13.0)).into()
+}
+
 /// Add a block after a block (or at the end) from the profile's templates (a text, section or
-/// lemma), and delete the block: small filled buttons, short enough for the gap between blocks
-/// that offers them on hover, Delete in the destructive style and set apart
-fn block_actions<'a>(t: &Theory, after: Option<usize>, delete: bool) -> Element<'a, Message> {
-    let small = |label: &'static str, class: theme::Button, msg: Message| {
-        widget::button::custom(widget::text(label).size(z(12.0)).line_height(iced::widget::text::LineHeight::Relative(1.2)))
-            .padding([z(2.0) as u16, z(10.0) as u16])
-            .class(class)
-            .on_press(msg)
-    };
-    let mut row = widget::row::with_capacity(5).spacing(z(6.0)).align_y(Alignment::Center);
+/// lemma), and delete the block: Tertiary links, short enough for the gap between blocks that
+/// offers them on hover. Delete is a red link at the right edge, `width` wide (the cell's), and
+/// at least `space_m` from the add links
+fn block_actions<'a>(t: &Theory, after: Option<usize>, delete: bool, width: Option<f32>) -> Element<'a, Message> {
+    let sp = spacing();
+    let mut row = widget::row::with_capacity(5).spacing(sp.space_s).align_y(Alignment::Center);
     for template in t.profile.block_templates() {
-        row = row.push(small(template.label, theme::Button::Standard, Message::InsertBlock(after, template.kind)));
+        row = row.push(tertiary(template.label, Message::InsertBlock(after, template.kind)));
     }
-    if let Some(i) = after.filter(|_| delete) {
-        row = row.push(widget::Space::new().width(Length::Fixed(z(16.0)))).push(small("Delete", theme::Button::Destructive, Message::DeleteBlock(i)));
-    }
-    row.into()
+    let Some(i) = after.filter(|_| delete) else { return row.into() };
+    // (a space_m of room before Delete however narrow the cell, and the rest of the cell's width)
+    row.push(widget::Space::new().width(Length::Fixed(sp.space_m as f32)))
+        .push(widget::Space::new().width(Length::Fill))
+        .push(tertiary_destructive("Delete", Message::DeleteBlock(i)))
+        .width(width.map_or(Length::Fill, Length::Fixed))
+        .into()
 }
 
 /// The line of the block editor's text a source offset is on
@@ -1663,7 +1696,7 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
     let build_table = table.clone();
     let build = move |i: usize| -> Element<'a, Message> {
         let table = build_table.clone();
-        if i == t.blocks.len() { return if last_selected { side(widget::Space::new().into(), false) } else { side(block_actions(t, None, false), false) }; }
+        if i == t.blocks.len() { return if last_selected { side(widget::Space::new().into(), false) } else { side(block_actions(t, None, false, None), false) }; }
         if i > t.blocks.len() { return widget::Space::new().height(Length::Fixed(if beside.is_some() { view_height() * 0.5 } else { 0.0 })).into(); }
         let block = &t.blocks[i];
         // Each block is one element of the page, whatever it shows, so that the open block's
@@ -1795,12 +1828,16 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
         }
         // The selected block: what can be added after it, and Delete, set a little below it
         if selected_here {
-            item = item.push(side(widget::container(block_actions(t, Some(i), true)).padding(Padding { top: z(8.0), ..Padding::ZERO }).into(), false));
+            let width = (block.kind == Kind::Formal).then(|| {
+                let columns = t.block_views.get(i).and_then(Option::as_ref).map_or(0, |v| v.columns);
+                block_code_width(t.code_columns.max(columns)) + CARD_CHROME
+            });
+            item = item.push(side(widget::container(block_actions(t, Some(i), true, width)).padding(Padding { top: z(8.0), ..Padding::ZERO }).into(), false));
         }
         // The gap after it: hovered, it offers what can be added there
         if !selected_here && block.kind != Kind::End {
             let hovered = app.workspace.as_ref().is_some_and(|w| w.gap_hover == Some(i));
-            let inner: Element<'a, Message> = if hovered { block_actions(t, Some(i), false) } else { widget::Space::new().into() };
+            let inner: Element<'a, Message> = if hovered { block_actions(t, Some(i), false, None) } else { widget::Space::new().into() };
             let gap = widget::mouse_area(widget::container(inner).height(Length::Fixed(z(BLOCK_GAP))).width(Length::Fill).center_y(Length::Fixed(z(BLOCK_GAP))))
                 .on_enter(Message::GapHover(Some(i)))
                 .on_exit(Message::GapLeave(i))
