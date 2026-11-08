@@ -288,7 +288,32 @@ async fn install(target: &Target) -> Result<(), String> {
     if !out.status.success() {
         return Err(format!("installing the host failed: {}", String::from_utf8_lossy(&out.stderr)));
     }
+    // The deductum MCP server for Claude and Codex there, where it is missing. Agents that the app
+    // starts on that machine find the proof tools; a failure here does not stop the host's use
+    #[cfg(not(windows))]
+    {
+        let script = register_mcp_script(&root, &env);
+        let run = match &target.destination {
+            None => host_command("sh", &["-c".into(), script]),
+            Some(dest) => host_command("ssh", &["-o".into(), "BatchMode=yes".into(), "-o".into(), "ConnectTimeout=10".into(), dest.clone(), "sh".into(), "-c".into(), format!("'{script}'")]),
+        }
+        .stdin(Stdio::null())
+        .output()
+        .await;
+        match run {
+            Ok(o) if o.status.success() => log::info!("registering the deductum MCP server on {}: {}", target.key, String::from_utf8_lossy(&o.stdout).trim()),
+            Ok(o) => log::warn!("registering the deductum MCP server on {} failed: {}", target.key, String::from_utf8_lossy(&o.stderr).trim()),
+            Err(e) => log::warn!("registering the deductum MCP server on {} failed: {e}", target.key),
+        }
+    }
     Ok(())
+}
+
+/// What registers the deductum MCP server for Claude and Codex (at user level, where it is missing,
+/// leaving what is there as it is) with the host installed in `root`: run on that machine
+#[cfg(not(windows))]
+fn register_mcp_script(root: &str, env: &str) -> String {
+    format!("{env}python3 {root}/host/deductum_host.py register-mcp")
 }
 
 #[cfg(windows)]
@@ -726,6 +751,42 @@ mod tests {
         assert!(commands.is_closed());
         assert!(read_dropped.load(Ordering::SeqCst));
         assert!(write_dropped.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    #[cfg(not(windows))]
+    fn installing_the_host_registers_the_mcp_server_in_a_home_of_its_own() {
+        use std::process::Command;
+        // The script as install runs it, with the checkout's own host in place of an installed one,
+        // and a temporary HOME: the real configuration is never read
+        let root = env!("CARGO_MANIFEST_DIR");
+        let script = super::register_mcp_script(root, "");
+        assert_eq!(script, format!("python3 {root}/host/deductum_host.py register-mcp"));
+        assert_eq!(super::register_mcp_script("~/.local/share/deductum", "DEDUCTUM_STATE_DIR=/r/state "), "DEDUCTUM_STATE_DIR=/r/state python3 ~/.local/share/deductum/host/deductum_host.py register-mcp");
+        let home = std::env::temp_dir().join(format!("deductum-mcp-home-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        std::fs::create_dir_all(home.join(".claude")).unwrap();
+        std::fs::create_dir_all(home.join(".codex")).unwrap();
+        std::fs::write(home.join(".claude.json"), r#"{"mcpServers":{"other":{"type":"stdio","command":"x","args":[],"env":{}}}}"#).unwrap();
+        std::fs::write(home.join(".codex/config.toml"), "model = \"m\"\n").unwrap();
+        let run = || {
+            let out = Command::new("sh").arg("-c").arg(&script).env("HOME", &home).env_remove("CODEX_HOME").output().unwrap();
+            assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+            serde_json::from_slice::<serde_json::Value>(&out.stdout).unwrap()
+        };
+        assert_eq!(run(), serde_json::json!({"claude": "added", "codex": "added"}));
+        let claude: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(home.join(".claude.json")).unwrap()).unwrap();
+        assert_eq!(claude["mcpServers"]["other"]["command"], "x", "what was there stays");
+        assert_eq!(claude["mcpServers"]["deductum"]["args"], serde_json::json!([format!("{root}/host/deductum_host.py"), "mcp"]));
+        let codex = std::fs::read_to_string(home.join(".codex/config.toml")).unwrap();
+        assert!(codex.starts_with("model = \"m\"\n") && codex.contains("[mcp_servers.deductum]"), "{codex}");
+        // a second install changes nothing
+        let (c1, t1) = (std::fs::read_to_string(home.join(".claude.json")).unwrap(), std::fs::read_to_string(home.join(".codex/config.toml")).unwrap());
+        assert_eq!(run(), serde_json::json!({"claude": "present", "codex": "present"}));
+        assert_eq!((std::fs::read_to_string(home.join(".claude.json")).unwrap(), std::fs::read_to_string(home.join(".codex/config.toml")).unwrap()), (c1, t1));
+        let _ = std::fs::remove_dir_all(&home);
+        // and it is only here, not in the Windows build
+        assert!(include_str!("link.rs").contains("#[cfg(not(windows))]\n    {\n        let script = register_mcp_script"));
     }
 
     #[test]
