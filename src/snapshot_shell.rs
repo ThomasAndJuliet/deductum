@@ -1816,3 +1816,99 @@ fn tooltips_are_drawn_for_review() {
         }
     }
 }
+
+// ----- the start page
+
+const NOW: u64 = 1_800_000_000;
+
+/// The mixed scene with no session open and some history: Demo last (two hours ago), UTP
+/// yesterday, CausalSemantics three days ago
+fn start_app() -> App {
+    let mut app = mixed_app();
+    app.workspace = None;
+    app.show_sidebar = false;
+    app.show_right = false;
+    super::recent::set("local", "s1", "/home/me/Research/Demo/Stop.thy", NOW - 7200);
+    super::recent::set("local", "s2", "/home/me/Isabelle/UTP/Fixpoint.thy", NOW - 90_000);
+    super::recent::set("local", "s5", "/home/me/Research/Repositories/DSRVLean/Refine.lean", NOW - 3 * 86_400 - 5);
+    super::recent::set("local", "s3", "/home/me/Research/Demo/Old.lean", NOW - 12 * 86_400);
+    app
+}
+
+fn start_window(app: &App) -> Element<'_, Message> {
+    widget::column::with_capacity(2).push(header(app)).push(widget::container(super::start_page::page_at(app, NOW)).width(Length::Fill).height(Length::Fill).class(cosmic::theme::Container::custom(|t| cosmic::iced::widget::container::Style { background: Some(super::view::page_color(t).into()), ..Default::default() }))).into()
+}
+
+#[test]
+fn the_start_page_lists_the_sessions_last_used_first() {
+    let app = start_app();
+    let rows = super::start_page::rows(&app);
+    let names: Vec<&str> = rows.iter().map(|r| r.name.as_str()).collect();
+    // newest first; forks are not listed; one never opened here ends the list
+    assert_eq!(&names[..4], ["Demo", "UTP", "CausalSemantics with a long name", "DSRV"], "{names:?}");
+    assert!(!names.iter().any(|n| n.contains("copy")), "{names:?}");
+    assert_eq!(rows[0].file.as_deref(), Some("Stop.thy"));
+    assert_eq!(super::recent::ago(rows[0].at.unwrap(), NOW), "2 hours ago");
+    assert_eq!(super::recent::ago(rows[1].at.unwrap(), NOW), "yesterday");
+}
+
+#[test]
+fn the_start_page_opens_a_folder_or_a_session_with_a_click() {
+    let app = start_app();
+    let size = Size::new(1400.0, 800.0);
+    let mut open_folder = false;
+    let mut opened = Vec::new();
+    for y in (60..800u32).step_by(4) {
+        for m in clicks(start_window(&app), Point::new(700.0, y as f32), size) {
+            match m {
+                Message::NewSession(true) => open_folder = true,
+                Message::OpenSession(machine, sid) => opened.push((machine, sid)),
+                _ => {}
+            }
+        }
+    }
+    assert!(open_folder, "the Primary button opens the New session form");
+    assert!(opened.contains(&("local".to_string(), "s1".to_string())), "the last used row opens its session: {opened:?}");
+    assert!(opened.contains(&("local".to_string(), "s2".to_string())), "{opened:?}");
+}
+
+#[test]
+fn with_no_session_the_header_has_no_chip_pause_or_stop() {
+    use super::chip::{State, state_of};
+    let app = start_app();
+    assert_eq!(state_of(&app), State::NoSession);
+    assert!(shell::header_center(&app).is_empty(), "no chip, no pause, no stop");
+    assert!(x_where(&app, |m| matches!(m, Message::Lifecycle(_))).is_none(), "nothing in the header sends a lifecycle op");
+    // with a session open they are there again
+    assert_eq!(shell::header_center(&mixed_app()).len(), 3);
+}
+
+#[test]
+fn the_sidebar_starts_closed_at_launch() {
+    let mut app = start_app();
+    let mut settings = super::settings::Settings::default();
+    settings.layout.show_left = true;
+    let _ = app.apply_loaded_settings(settings);
+    assert!(!app.show_sidebar);
+}
+
+#[test]
+fn forgetting_a_session_discards_it_on_its_host() {
+    let mut app = start_app();
+    let _ = app.shell_update(Msg::ForgetSession("local".into(), "s5".into()));
+    assert!(!app.sessions.contains_key(&("local".to_string(), "s5".to_string())));
+    assert!(super::recent::get("local", "s5").is_none());
+    assert!(!super::start_page::rows(&app).iter().any(|r| r.sid == "s5"));
+}
+
+#[test]
+fn start_page_frames_for_the_review() {
+    let app = start_app();
+    for (light, theme) in [(true, "light"), (false, "dark")] {
+        draw_in(light, || start_window(&app), &format!("start-page-{theme}"), Size::new(1400.0, 800.0));
+        draw_in(light, || start_window(&app), &format!("start-page-{theme}-narrow"), Size::new(900.0, 760.0));
+    }
+    let mut empty = start_app();
+    empty.sessions.clear();
+    draw_in(true, || start_window(&empty), "start-page-light-no-history", Size::new(1400.0, 600.0));
+}
