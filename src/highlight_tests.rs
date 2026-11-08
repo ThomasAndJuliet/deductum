@@ -31,7 +31,7 @@
 //!   control and the chosen side-panel tab use a muted version of the accent,
 //!   so a row of them doesn't catch the eye the way a Primary button does;
 //!   enabled text on it keeps at least 4.5:1." The side-panel tabs
-//!   (`panel_tabs`), the sidebar's section tabs (`segment_style`) and the
+//!   (`panel_tabs`), the sidebar's section tabs (`sidebar::tab_style`) and the
 //!   Goals/Text switch are chosen parts of a row; today each is the solid
 //!   accent (`Suggested`, or `Color::from(c.accent_color())`).
 //!   -> `the_chosen_*`
@@ -212,14 +212,14 @@ struct Themed {
 
 impl Themed {
     fn set(dark: bool) -> Self {
-        cosmic::theme::set_active(if dark { cosmic::theme::ThemeType::Dark } else { cosmic::theme::ThemeType::Light });
+        cosmic::theme::set_active(if dark { cosmic::theme::ThemeType::Dark } else { crate::tones::light_type_for_tests() });
         Self { dark, theme: cosmic::theme::active() }
     }
 
     /// The theme with its text colour set to a grey that does not read on the tint
     /// (the real themes' text always does, and is left as it is)
     fn with_text(dark: bool, grey: u8) -> Self {
-        let base = if dark { cosmic::cosmic_theme::Theme::dark_default() } else { cosmic::cosmic_theme::Theme::light_default() };
+        let base = if dark { cosmic::cosmic_theme::Theme::dark_default() } else { crate::tones::light_for_tests().cosmic().clone() };
         // (the background's text colour is a private field: set through the theme's serde form)
         let mut value = serde_json::to_value(&base).expect("the theme as JSON");
         assert!(value["background"]["on"].is_string(), "the text colour's form changed: {:?}", value["background"]["on"]);
@@ -729,7 +729,12 @@ fn the_source_selection_is_one_tint_on_every_line_also_over_the_construct_band()
         assert!(under_band.len() > 20, "{name}: the construct's band {} covers only {} selected rows: the test's set-up is wrong", hex(band), under_band.len());
         let want = theme.tint_over(page);
         // (a row where two lines' fills meet is partly covered: between the page and the tint)
-        let judged: Vec<&(u32, V, V)> = under_band.iter().chain(on_page.iter()).copied().collect();
+        // (and the caret's line, where the selection's end leaves it with no text selected, shows
+        // COSMIC's grey wash, over the page or the band, or an edge row of it between that and what is
+        // beneath: not a selection)
+        let wash = super::tones::caret_line(&theme.theme);
+        let washed = |b: V| v_of(super::tones::over(wash, cosmic::iced::Color::from_rgb(b[0] / 255.0, b[1] / 255.0, b[2] / 255.0)));
+        let judged: Vec<&(u32, V, V)> = under_band.iter().chain(on_page.iter()).copied().filter(|(_, b, f)| off_segment(*f, *b, washed(*b)) > 2.0).collect();
         let right = judged.iter().filter(|(_, _, f)| dist(*f, want) <= 2.0).count();
         let wrong: Vec<&(u32, V, V)> = judged.iter().copied().filter(|(_, _, f)| off_segment(*f, page, want) > 2.0 || right * 100 < judged.len() * 75 && dist(*f, want) > 2.0).collect();
         assert!(
@@ -1001,7 +1006,7 @@ fn the_chosen_part_of_the_header_view_switch_is_the_muted_accent() {
             let turn = super::snapshot::ui_turn();
             let theme = Themed::set(dark);
             let app = demo_app(mode);
-            let row = widget::row::with_children(super::shell::header_start(&app)).align_y(Alignment::Center);
+            let row = widget::row::with_children(vec![super::shell::views_bar(&app)]).align_y(Alignment::Center);
             let element: cosmic::Element<'_, super::Message> = widget::container(row).padding(20).width(Length::Fixed(600.0)).into();
             let rgba = super::snapshot::render(element, &format!("hl-header-switch-{}-{mode:?}", theme.name()), Size::new(600.0, 80.0));
             let f = Frame { width: 600, height: 80, rgba };
@@ -1052,7 +1057,7 @@ fn the_goal_beside_toggle_is_the_muted_accent_when_on() {
         for on in [true, false] {
             let turn = super::snapshot::ui_turn();
             let theme = Themed::set(dark);
-            let row = widget::row::with_children(super::shell::header_end(&app)).align_y(Alignment::Center);
+            let row = widget::row::with_children(vec![super::shell::goal_beside_button()]).align_y(Alignment::Center);
             let element: cosmic::Element<'_, super::Message> = widget::container(row).padding(20).width(Length::Fixed(500.0)).into();
             let rgba = super::snapshot::render(element, &format!("hl-goal-beside-{}-{on}", theme.name()), Size::new(500.0, 80.0));
             let f = Frame { width: 500, height: 80, rgba };

@@ -1,7 +1,7 @@
 # Deductum (formerly Isabellum): Isabelle, Lean and Rocq backends
 
-Status: design, 2026-10-11 (Rocq deferred, C17c), on branch `multi-prover`
-(`~/Documents/cosmic-term-multi-prover`). No production code has changed for
+Status: design, 2026-10-11 (Rocq deferred, C17c), on branch `multi-prover`.
+No production code has changed for
 it yet. The branch starts from the Deductum branch `worktree-2026-10-10-isabelle`
 at `4b6b42c3b`. Cerea's rendering split (`shared-prose`, `9a556ee36`) is merged
 into it, and `prose/` has been pulled up to Cerea's `9f8c181d`.
@@ -73,14 +73,14 @@ prose/prose-spell   (subtree from Cerea): Harper; prose in every backend's liter
 
 | Component | Path (planned) | Role |
 |---|---|---|
-| Host core | `deductum/host/deductum_host.py` | As now: sessions, buffers, edit log, OT, undo, grants, notices, notes, autosave, disk watch, independent sessions, LLM plumbing. It no longer knows any prover. |
-| Driver interface | `deductum/host/drivers/__init__.py` | The `Driver` base class and the registry of backends (§4). |
-| Isabelle driver | `deductum/host/drivers/isabelle.py` | The current Isabelle-specific host code, moved here: runtimes, component registration, ROOT and logic suggestion, symbol table, keyword kinds, the backend process. |
-| LSP client | `deductum/host/drivers/lsp.py` | JSON-RPC framing, UTF-16 positions, document versions, request cancellation. Standard library only, like the rest of the host. |
-| Lean driver | `deductum/host/drivers/lean.py` | `lake serve`, goals (`$/lean/plainGoal`, RPC interactive goals), `$/lean/fileProgress`, "Try this" suggestions, scratch-document checking, Lake actions. |
-| Rocq driver | `deductum/host/drivers/rocq.py` | `coq-lsp`, `proof/goals`, `coq/getDocument` sentence spans, `$/coq/fileProgress`, Petanque for checking without editing, `coq/saveVo`. |
-| Backend sources | `deductum/backend/Isabelle2025/` | Unchanged. Lean and Rocq need no server-side code for the first version (§12 lists an optional Lean REPL). |
-| App | `src/bin/deductum/` | The generic app, plus `prover/{isabelle,lean,rocq}/` profiles (§7). |
+| Host core | `host/deductum_host.py` | As now: sessions, buffers, edit log, OT, undo, grants, notices, notes, autosave, disk watch, independent sessions, LLM plumbing. It no longer knows any prover. |
+| Driver interface | `host/drivers/__init__.py` | The `Driver` base class and the registry of backends (§4). |
+| Isabelle driver | `host/drivers/isabelle.py` | The current Isabelle-specific host code, moved here: runtimes, component registration, ROOT and logic suggestion, symbol table, keyword kinds, the backend process. |
+| LSP client | `host/drivers/lsp.py` | JSON-RPC framing, UTF-16 positions, document versions, request cancellation. Standard library only, like the rest of the host. |
+| Lean driver | `host/drivers/lean.py` | `lake serve`, goals (`$/lean/plainGoal`, RPC interactive goals), `$/lean/fileProgress`, "Try this" suggestions, scratch-document checking, Lake actions. |
+| Rocq driver | `host/drivers/rocq.py` | `coq-lsp`, `proof/goals`, `coq/getDocument` sentence spans, `$/coq/fileProgress`, Petanque for checking without editing, `coq/saveVo`. |
+| Backend sources | `backend/Isabelle2025/` | Unchanged. Lean and Rocq need no server-side code for the first version (§12 lists an optional Lean REPL). |
+| App | `src/` | The generic app, plus `prover/{isabelle,lean,rocq}/` profiles (§7). |
 | Renderer | `prose/prose-render` | Shared with Cerea and Terminal Agents. One addition is needed: prover code colours (§8.5). |
 
 **Chosen: Lean and Rocq drivers live inside the host process, not as separate
@@ -725,7 +725,7 @@ plan above.
 
 - **The driver interface is the backend protocol** (chosen, refining §4.1). Rather than a new set
   of Python calls, a driver answers the JSON operations the Isabelle backend already served
-  (`deductum/host/drivers/__init__.py` documents them). The Isabelle driver passes them to
+  (`host/drivers/__init__.py` documents them). The Isabelle driver passes them to
   `isabelle deductum_backend`; the Lean driver (`drivers/lean.py`, with `drivers/lsp.py`) answers
   them itself over LSP to `lake serve`. The host core and the app needed only additive changes.
 - **Goal parts are the neutral goal model** (refining §9.1). Every driver answers the

@@ -9,6 +9,7 @@ a ``by`` block. Their statuses come from ``$/lean/fileProgress`` and the diagnos
 Protocol facts this relies on, checked on Lean v4.19.0 (see tests/integration_lean.py):
 ``$/lean/fileProgress`` carries tactic-level ranges, the last one running to the end of
 the file; ``publishDiagnostics`` is cumulative and carries the document version;
+``textDocument/waitForDiagnostics`` fences final diagnostics after progress ends;
 ``$/lean/plainGoal`` answers with the state after a tactic when the position is past its
 first character; ``Lean.Widget.getInteractiveGoals`` goes through ``$/lean/rpc/call``;
 "Try this" suggestions are information diagnostics (and quickfix code actions); a changed
@@ -28,6 +29,7 @@ import stat
 import sys
 import time
 import subprocess
+import platform_support as platform
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -40,6 +42,19 @@ from .lsp import LspClient, LspClosed, LspError, TextIndex, UNHANDLED
 from background import OrderedIO
 
 HOME = os.path.expanduser("~")
+
+def path_from_uri(uri: str) -> str:
+    parsed = urllib.parse.urlparse(uri)
+    path = urllib.parse.unquote(parsed.path)
+    if platform.WINDOWS:
+        if parsed.netloc:
+            return "\\\\" + parsed.netloc + path.replace("/", "\\")
+        if re.match(r"^/[A-Za-z]:", path):
+            path = path[1:]
+        path = path.replace("/", "\\")
+    return path
+
+
 ELAN_BIN = os.path.join(HOME, ".elan", "bin")
 
 # ---------------------------------------------------------------------------
@@ -593,7 +608,9 @@ def build_report(commands: List[Tuple[int, int, str]], diags: List[Dict[str, Any
                 else:
                     states[i] = "unprocessed"
     count = {k: states.count(k) for k in ("unprocessed", "running", "warned", "failed", "finished")}
-    done = not live
+    # A zero-width range still identifies a pending Lean task, even though it
+    # does not overlap a command. Only an empty task list reports completion.
+    done = not processing
     reached = n - count["unprocessed"] - count["running"]
     status = dict(count, total=n, canceled=0, consolidated=done,
                   percentage=100 if n == 0 else int(100 * reached / n))
@@ -778,7 +795,7 @@ def loogle_fetch(query: str, source: str, timeout: float = LOOGLE_TIMEOUT) -> Di
             raise HostError("There is no loogle program on the PATH of this machine "
                             "(github.com/nomeata/loogle); choose the public Loogle in the settings, or install it")
         try:
-            run = subprocess.run([binary, "--json", query], capture_output=True, text=True, timeout=timeout)
+            run = platform.run([binary, "--json", query], capture_output=True, text=True, encoding="utf-8", timeout=timeout)
         except subprocess.TimeoutExpired:
             raise HostError(f"The local loogle did not answer within {timeout:g} seconds")
         if run.returncode != 0 and not run.stdout.strip():
@@ -838,19 +855,22 @@ def version_tuple(s: Optional[str]) -> Optional[Tuple[int, int, int]]:
 
 
 def find_elan() -> Optional[str]:
-    p = os.path.join(ELAN_BIN, "elan")
+    directory = os.path.join(os.environ["ELAN_HOME"], "bin") if os.environ.get("ELAN_HOME") else ELAN_BIN
+    p = os.path.join(directory, "elan.exe" if platform.WINDOWS else "elan")
     return p if os.access(p, os.X_OK) else shutil.which("elan")
 
 
 def tool_env() -> Dict[str, str]:
     """The environment for elan's tools: PATH with ``~/.elan/bin`` (a Flatpak or service may lack it)"""
     env = dict(os.environ)
-    env["PATH"] = ELAN_BIN + os.pathsep + env.get("PATH", "")
+    directory = os.path.join(env["ELAN_HOME"], "bin") if env.get("ELAN_HOME") else ELAN_BIN
+    env["PATH"] = directory + os.pathsep + env.get("PATH", "")
     return env
 
 
 def toolchain_dir(tid: str) -> str:
-    return os.path.join(HOME, ".elan", "toolchains", tid.replace("/", "--").replace(":", "---"))
+    home = os.environ.get("ELAN_HOME") or os.path.join(HOME, ".elan")
+    return os.path.join(home, "toolchains", tid.replace("/", "--").replace(":", "---"))
 
 
 def read_text(path: str) -> Optional[str]:
@@ -994,6 +1014,8 @@ class LDoc:
         self.splits: Dict[int, Splitter] = {}
         self.diags: Optional[Tuple[int, List[Dict[str, Any]]]] = None  # version, with offsets
         self.progress: Optional[Tuple[int, List[Tuple[int, int]]]] = None
+        self.diagnostics_complete: Optional[Tuple[int, int]] = None  # version, open generation
+        self.diagnostics_task: Optional[asyncio.Task] = None
         self.colours: Optional[Tuple[int, List[List[Any]]]] = None
         self.stale = False
         self.import_error = False
@@ -1093,7 +1115,7 @@ class LeanDriver(Driver):
             return []
         import subprocess
         try:
-            out = subprocess.run([elan, "toolchain", "list"], capture_output=True, text=True, timeout=30,
+            out = platform.run([elan, "toolchain", "list"], capture_output=True, text=True, encoding="utf-8", timeout=30,
                                  env=tool_env()).stdout
         except (OSError, subprocess.SubprocessError):
             return []
@@ -1253,21 +1275,27 @@ class LeanDriver(Driver):
         env = tool_env()
         self.emit({"event": "log", "text": "$ " + " ".join(commands[name])})
         try:
-            proc = await asyncio.create_subprocess_exec(
+            proc = await platform.create_subprocess_exec(
                 *commands[name], cwd=self.lake_root, env=env, stdin=asyncio.subprocess.DEVNULL,
                 stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT, start_new_session=True)
         except OSError as exn:
             return {"ok": False, "output_tail": f"Cannot run {commands[name][0]}: {exn}"}
         tail: List[str] = []
         assert proc.stdout
-        while True:
-            raw = await proc.stdout.readline()
-            if not raw:
-                break
-            line = raw.decode("utf-8", "replace").rstrip()
-            tail = (tail + [line])[-40:]
-            self.emit({"event": "log", "text": line})
-        code = await proc.wait()
+        try:
+            while True:
+                raw = await proc.stdout.readline()
+                if not raw:
+                    break
+                line = raw.decode("utf-8", "replace").rstrip()
+                tail = (tail + [line])[-40:]
+                self.emit({"event": "log", "text": line})
+            code = await proc.wait()
+        finally:
+            if proc.returncode is None:
+                platform.terminate_process_tree(proc, force=True)
+                await proc.wait()
+            self.build_task = None
         if code == 0:
             for doc in self.docs.values():
                 if doc.stale or doc.import_error or doc.diags and any(d["message"].startswith("unknown module") for d in doc.diags[1]):
@@ -1302,7 +1330,7 @@ class LeanDriver(Driver):
         self.check_slots = asyncio.Semaphore(resource_limit(s, "scratch_checks", 2))
         server_args = ["--", "-j", str(threads)] if (threads := resource_limit(s, "prover_threads")) else []
         try:
-            self.proc = await asyncio.create_subprocess_exec(
+            self.proc = await platform.create_subprocess_exec(
                 lake, "serve", *server_args, cwd=self.lake_root, env=env, stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, start_new_session=True,
                 limit=64 * 1024 * 1024)
@@ -1315,6 +1343,7 @@ class LeanDriver(Driver):
             result = await self.client.request("initialize", self._initialize_params(), timeout=1800)
         except (LspClosed, LspError, asyncio.TimeoutError) as exn:
             tail = "\n".join(self.stderr_tail[-8:])
+            await self.client.shutdown()
             return self._fail(f"The Lean server did not start ({exn or type(exn).__name__})" + (": " + tail if tail else ""))
         self.legend = (((result or {}).get("capabilities") or {}).get("semanticTokensProvider") or {}) \
             .get("legend", {}).get("tokenTypes", [])
@@ -1326,13 +1355,18 @@ class LeanDriver(Driver):
         self.emit({"event": "phase", "phase": "failed", "message": text})
 
     async def _lean_version(self, lake: str, env: Dict[str, str]) -> str:
+        proc = None
         try:
-            proc = await asyncio.create_subprocess_exec(
+            proc = await platform.create_subprocess_exec(
                 lake, "env", "lean", "--version", cwd=self.lake_root, env=env, stdin=asyncio.subprocess.DEVNULL,
                 stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
             out, _ = await asyncio.wait_for(proc.communicate(), 900)
         except (OSError, asyncio.TimeoutError):
             return ""
+        finally:
+            if proc is not None and proc.returncode is None:
+                platform.terminate_process_tree(proc, force=True)
+                await proc.wait()
         m = re.search(r"version (\S+?),", out.decode("utf-8", "replace"))
         return m.group(1) if m else ""
 
@@ -1361,6 +1395,9 @@ class LeanDriver(Driver):
     async def stop(self) -> None:
         self.stopping = True
         self.ready = False
+        if self.build_task is not None and self.build_task is not asyncio.current_task():
+            self.build_task.cancel()
+            await asyncio.gather(self.build_task, return_exceptions=True)
         self.disk_pending.clear()
         if self.disk_task is not None:
             self.disk_task.cancel()
@@ -1378,6 +1415,7 @@ class LeanDriver(Driver):
             await stop_process(self.proc)
 
     def _cancel_doc_tasks(self, doc: LDoc) -> None:
+        self._reset_diagnostics(doc)
         for t in (doc.rpc_task, doc.colour_task, doc.import_task):
             if t:
                 t.cancel()
@@ -1394,6 +1432,7 @@ class LeanDriver(Driver):
         if self.disk_task is not None:
             self.disk_task.cancel()
         for doc in self.docs.values():
+            self._reset_diagnostics(doc)
             if doc.import_task:
                 doc.import_task.cancel()
         if self.standalone_io is not None:
@@ -1450,6 +1489,7 @@ class LeanDriver(Driver):
         self._schedule_node(doc)
 
     def _did_open(self, doc: LDoc) -> None:
+        self._reset_diagnostics(doc)
         doc.import_generation += 1
         doc.import_pending = False
         doc.server_open = True
@@ -1479,6 +1519,7 @@ class LeanDriver(Driver):
         doc = self.docs.get(obj["file"])
         if doc is None:
             return
+        self._reset_diagnostics(doc)
         changes = []
         first = len(doc.text)
         for ed in obj.get("edits", []):
@@ -1637,7 +1678,8 @@ class LeanDriver(Driver):
         return {}
 
     def _busy(self, doc: LDoc) -> bool:
-        return bool(doc.server_open and doc.progress and any(e > s for s, e in doc.progress[1]))
+        return bool(doc.server_open and (not doc.progress or doc.progress[0] != doc.version
+                    or doc.progress[1] or doc.diagnostics_complete != (doc.version, doc.import_generation)))
 
     async def _req_cancel(self, obj: Dict[str, Any]) -> Dict[str, Any]:
         """No request stops Lean's elaboration, so the files that are being checked are closed and opened"""
@@ -1752,9 +1794,46 @@ class LeanDriver(Driver):
         index = doc.splitter(version).index
         ranges = [index.range_to_offsets(p["range"]) for p in params.get("processing", [])]
         doc.progress = (version, ranges)
-        if not any(e > s for s, e in ranges):
+        if ranges:
+            self._reset_diagnostics(doc)
+        elif version == doc.version:
+            if (doc.diagnostics_complete != (version, doc.import_generation)
+                    and doc.diagnostics_task is None):
+                doc.diagnostics_task = asyncio.create_task(
+                    self._wait_for_diagnostics(doc, version, doc.import_generation))
             self._schedule_colours(doc)
         self._schedule_node(doc)
+
+    def _reset_diagnostics(self, doc: LDoc) -> None:
+        if doc.diagnostics_task is not None:
+            doc.diagnostics_task.cancel()
+            doc.diagnostics_task = None
+        doc.diagnostics_complete = None
+
+    async def _wait_for_diagnostics(self, doc: LDoc, version: int, generation: int) -> None:
+        """Lean's reporter, rather than a timing delay, fences final diagnostics."""
+        try:
+            if self.client is None:
+                return
+            await self.client.request("textDocument/waitForDiagnostics",
+                                      {"uri": doc.uri, "version": version}, timeout=1800)
+            if (not self.stopping and self.docs.get(doc.path) is doc and doc.server_open
+                    and doc.diagnostics_task is asyncio.current_task()
+                    and doc.version == version and doc.import_generation == generation
+                    and doc.progress == (version, []) and doc.diags is not None
+                    and doc.diags[0] == version):
+                doc.diagnostics_complete = (version, generation)
+        except (LspError, LspClosed, asyncio.TimeoutError) as exn:
+            if (not self.stopping and self.docs.get(doc.path) is doc and doc.server_open
+                    and doc.diagnostics_task is asyncio.current_task()
+                    and doc.version == version and doc.import_generation == generation):
+                self.emit({"event": "log", "text": "Could not verify final Lean diagnostics: " +
+                           str(exn or type(exn).__name__)})
+        finally:
+            if doc.diagnostics_task is asyncio.current_task():
+                doc.diagnostics_task = None
+                if not self.stopping and self.docs.get(doc.path) is doc:
+                    self._schedule_node(doc)
 
     # ----- node events
 
@@ -1870,6 +1949,9 @@ class LeanDriver(Driver):
             if version != seq:
                 processing = None
         rep = build_report(sp.commands, diags, processing)
+        if doc.diagnostics_complete != (seq, doc.import_generation):
+            rep["done"] = False
+            rep["status"] = dict(rep["status"], consolidated=False)
         doc.report, doc.report_seq = rep, seq
         colours: List[List[Any]] = lexical_colours(sp.mask)
         if doc.colours:
@@ -2021,8 +2103,15 @@ class LeanDriver(Driver):
         rng = loc.get("targetSelectionRange") or loc.get("range")
         if not uri or not rng:
             return None
-        path = urllib.parse.unquote(urllib.parse.urlparse(uri).path)
+        path = path_from_uri(uri)
         target = self.docs.get(path)
+        if target is None and platform.WINDOWS:
+            # Lean normalizes drive-letter case in definition URIs. Keep the
+            # host's authoritative open document identity and unsaved buffer.
+            key = os.path.normcase(path)
+            target = next((doc for name, doc in self.docs.items() if os.path.normcase(name) == key), None)
+        if target is not None:
+            path = target.path
         text = target.text if target else read_text(path)
         if text is None:
             return None

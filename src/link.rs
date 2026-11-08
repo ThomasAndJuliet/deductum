@@ -46,6 +46,31 @@ struct Machine {
 /// This computer, then the machines Terminal Agents has registered
 pub fn targets() -> Vec<(String, Target)> {
     let mut out = vec![(local_name(), Target { key: "local".into(), destination: None })];
+    // Deductum can run without Terminal Agents, including on Windows.
+    let path = super::platform::config_dir().join("machines.json");
+    if let Ok(text) = std::fs::read_to_string(path) {
+        match serde_json::from_str::<Vec<Machine>>(&text) {
+            Ok(machines) => {
+                for machine in machines {
+                    let destination = if machine.user.trim().is_empty() {
+                        machine.host.trim().to_string()
+                    } else {
+                        format!("{}@{}", machine.user.trim(), machine.host.trim())
+                    };
+                    if !machine.name.trim().is_empty()
+                        && machine.name != "local"
+                        && !destination.is_empty()
+                        && !destination.starts_with('-')
+                        && !destination.chars().any(char::is_whitespace)
+                        && !out.iter().any(|(_, target)| target.key == machine.name)
+                    {
+                        out.push((machine.name.clone(), Target { key: machine.name, destination: Some(destination) }));
+                    }
+                }
+            }
+            Err(error) => log::error!("could not read Deductum's machines.json: {error}"),
+        }
+    }
     // Extra machines, `name=destination,…`, for trying a host without registering it
     if let Ok(extra) = std::env::var("DEDUCTUM_MACHINES") {
         for item in extra.split(',').filter(|s| !s.trim().is_empty()) {
@@ -80,7 +105,7 @@ pub fn targets() -> Vec<(String, Target)> {
         }
     }
     if out.len() == 1 {
-        // No machines registered here: the fleet's, as COSMIC Terminal's mount helper lists them
+        // No machines registered here: the fleet's, as the Terminal Agents mount helper lists them
         // (`NAME  ssh DESTINATION  MOUNT  STATUS`)
         let helper = home().join(".config/cosmic-term-agents/ct-mount");
         if let Ok(output) = std::process::Command::new(&helper).arg("--list").output() {
@@ -99,17 +124,18 @@ pub fn targets() -> Vec<(String, Target)> {
 }
 
 fn config_dir() -> PathBuf {
-    std::env::var_os("XDG_CONFIG_HOME")
-        .map(PathBuf::from)
-        .filter(|p| p.is_absolute())
-        .unwrap_or_else(|| home().join(".config"))
+    super::platform::config_home()
 }
 
 fn home() -> PathBuf {
-    std::env::var_os("HOME").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("/"))
+    super::platform::home()
 }
 
 pub fn local_name() -> String {
+    #[cfg(windows)]
+    if let Ok(name) = std::env::var("COMPUTERNAME") {
+        return name;
+    }
     std::fs::read_to_string("/etc/hostname")
         .ok()
         .map(|s| s.trim().to_string())
@@ -123,7 +149,7 @@ fn sandboxed() -> bool {
 }
 
 /// A command run on this computer's host system, outside a Flatpak sandbox
-fn host_command(program: &str, args: &[String]) -> tokio::process::Command {
+pub(crate) fn host_command(program: &str, args: &[String]) -> tokio::process::Command {
     if sandboxed() {
         let mut cmd = tokio::process::Command::new("flatpak-spawn");
         cmd.arg("--host").arg(program).args(args);
@@ -131,6 +157,8 @@ fn host_command(program: &str, args: &[String]) -> tokio::process::Command {
     } else {
         let mut cmd = tokio::process::Command::new(program);
         cmd.args(args);
+        #[cfg(windows)]
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW for connection helpers
         cmd
     }
 }
@@ -145,10 +173,12 @@ pub fn bundle() -> Option<PathBuf> {
     if let Ok(exe) = std::env::current_exe()
         && let Some(dir) = exe.parent()
     {
+        candidates.push(dir.join("share/deductum"));
         candidates.push(dir.join("../share/deductum"));
-        candidates.push(dir.join("../../deductum"));
+        // target/<profile>/deductum in a source checkout: the checkout root holds host/ and backend/
+        candidates.push(dir.join("../.."));
     }
-    candidates.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("deductum"));
+    candidates.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")));
     candidates.into_iter().find(|p| p.join("host/deductum_host.py").is_file())
 }
 
@@ -199,6 +229,10 @@ fn remote_root(target: &Target) -> (String, String) {
 
 /// Install the bundled sources on the target when its copy differs
 async fn install(target: &Target) -> Result<(), String> {
+    #[cfg(windows)]
+    if target.destination.is_none() {
+        return bundle().map(|_| ()).ok_or_else(|| "Deductum's bundled session host is missing; reinstall the complete Windows package".into());
+    }
     let Some(bundle) = bundle() else { return Ok(()) };
     // Running from the installed copy itself: nothing to install
     let installed = home().join(".local/share/deductum");
@@ -225,7 +259,9 @@ async fn install(target: &Target) -> Result<(), String> {
     }
     // tar the sources, without built jars, and unpack them there
     let mut tar = std::process::Command::new("tar");
-    tar.arg("-C").arg(&bundle).args(["--exclude=__pycache__", "--exclude=lib", "--exclude=tests", "-cf", "-", "host", "backend"]);
+    // Windows tar narrows non-ACP command-line paths. Set the directory through
+    // CreateProcessW instead, keeping argv ASCII and preserving bundle spelling.
+    tar.current_dir(&bundle).args(["-C", ".", "--exclude=__pycache__", "--exclude=lib", "--exclude=tests", "-cf", "-", "host", "backend"]);
     let archive = tar.output().map_err(|e| format!("tar: {e}"))?;
     if !archive.status.success() {
         return Err("could not pack the host sources".into());
@@ -252,10 +288,57 @@ async fn install(target: &Target) -> Result<(), String> {
     if !out.status.success() {
         return Err(format!("installing the host failed: {}", String::from_utf8_lossy(&out.stderr)));
     }
+    // The deductum MCP server for Claude and Codex there, where it is missing. Agents that the app
+    // starts on that machine find the proof tools; a failure here does not stop the host's use
+    #[cfg(not(windows))]
+    {
+        let script = register_mcp_script(&root, &env);
+        let run = match &target.destination {
+            None => host_command("sh", &["-c".into(), script]),
+            Some(dest) => host_command("ssh", &["-o".into(), "BatchMode=yes".into(), "-o".into(), "ConnectTimeout=10".into(), dest.clone(), "sh".into(), "-c".into(), format!("'{script}'")]),
+        }
+        .stdin(Stdio::null())
+        .output()
+        .await;
+        match run {
+            Ok(o) if o.status.success() => log::info!("registering the deductum MCP server on {}: {}", target.key, String::from_utf8_lossy(&o.stdout).trim()),
+            Ok(o) => log::warn!("registering the deductum MCP server on {} failed: {}", target.key, String::from_utf8_lossy(&o.stderr).trim()),
+            Err(e) => log::warn!("registering the deductum MCP server on {} failed: {e}", target.key),
+        }
+    }
     Ok(())
 }
 
-fn connect_command(target: &Target) -> tokio::process::Command {
+/// What registers the deductum MCP server for Claude and Codex (at user level, where it is missing,
+/// leaving what is there as it is) with the host installed in `root`: run on that machine
+#[cfg(not(windows))]
+fn register_mcp_script(root: &str, env: &str) -> String {
+    format!("{env}python3 {root}/host/deductum_host.py register-mcp")
+}
+
+#[cfg(windows)]
+fn native_python(bundle: &std::path::Path) -> PathBuf {
+    if let Some(python) = std::env::var_os("DEDUCTUM_PYTHON").filter(|value| !value.is_empty()) {
+        return PathBuf::from(python);
+    }
+    let python = bundle.join("../../python/python.exe");
+    if python.is_file() { python } else { PathBuf::from("python.exe") }
+}
+
+fn connect_command(target: &Target) -> Result<tokio::process::Command, String> {
+    #[cfg(windows)]
+    if target.destination.is_none() {
+        let bundle = bundle().ok_or_else(|| "Deductum's bundled session host is missing".to_string())?;
+        let mut cmd = tokio::process::Command::new(native_python(&bundle));
+        cmd.args(["-X", "utf8"]).arg(bundle.join("host/deductum_host.py")).arg("connect");
+        cmd.env("PYTHONUTF8", "1");
+        if let Some(root) = std::env::var_os("DEDUCTUM_LOCAL_ROOT") {
+            cmd.env("DEDUCTUM_STATE_DIR", PathBuf::from(root).join("state"));
+        }
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).kill_on_drop(true);
+        return Ok(cmd);
+    }
     let (root, env) = remote_root(target);
     let script = format!("{env}python3 {root}/host/deductum_host.py connect");
     let mut cmd = match &target.destination {
@@ -266,7 +349,7 @@ fn connect_command(target: &Target) -> tokio::process::Command {
         ),
     };
     cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).kill_on_drop(true);
-    cmd
+    Ok(cmd)
 }
 
 /// Read host events and write commands independently. Delivering an event can
@@ -324,7 +407,7 @@ pub fn run(target: &Target) -> impl Stream<Item = (String, Event)> + use<> {
             if output.send((key.clone(), Event::Connecting("connecting".into()))).await.is_err() {
                 return;
             }
-            let mut child = match connect_command(&target).spawn() {
+            let mut child = match connect_command(&target).and_then(|mut command| command.spawn().map_err(|error| error.to_string())) {
                 Ok(child) => child,
                 Err(err) => {
                     if output.send((key.clone(), Event::Disconnected(err.to_string()))).await.is_err() {
@@ -396,9 +479,49 @@ pub enum Opener {
 }
 
 /// Open a session's folder, on the computer `target` names, in the file manager (through
-/// COSMIC Terminal's sshfs mount if it is remote), Zed (as an ssh project) or a terminal
+/// Terminal Agents' sshfs mount if it is remote), Zed (as an ssh project) or a terminal
 /// (ssh'd there), the way Terminal Agents opens a tab's project
 pub async fn open_folder(opener: Opener, target: Target, folder: String) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        return open_folder_windows(opener, target, folder).await;
+    }
+    #[cfg(not(windows))]
+    open_folder_unix(opener, target, folder).await
+}
+
+#[cfg(windows)]
+async fn open_folder_windows(opener: Opener, target: Target, folder: String) -> Result<(), String> {
+    let mut command = match (opener, target.destination) {
+        (Opener::Files, None) => {
+            return open::that_detached(folder).map_err(|error| error.to_string());
+        }
+        (Opener::Files, Some(_)) => return Err("A remote folder needs a mounted drive to open in Explorer. Use Open in Zed or Open terminal for this SSH connection.".into()),
+        (Opener::Zed, destination) => {
+            let mut command = tokio::process::Command::new("zed.exe");
+            command.arg("--new").arg(destination.map_or(folder.clone(), |destination| format!("ssh://{destination}{folder}")));
+            command
+        }
+        (Opener::Terminal, None) => {
+            return tokio::task::spawn_blocking(move || super::platform::windows::launch_console(
+                "powershell.exe", &["-NoLogo".into(), "-NoExit".into()], Some(&folder)))
+                .await.map_err(|error| error.to_string())?.map_err(|error| error.to_string());
+        }
+        (Opener::Terminal, Some(destination)) => {
+            let quote = format!("'{}'", folder.replace('\'', r"'\''"));
+            return tokio::task::spawn_blocking(move || super::platform::windows::launch_console(
+                "ssh.exe", &["-t".into(), destination, format!("cd {quote} && exec \"$SHELL\" -l")], None))
+                .await.map_err(|error| error.to_string())?.map_err(|error| error.to_string());
+        }
+    };
+    if opener == Opener::Zed {
+        command.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
+    }
+    command.spawn().map(|_| ()).map_err(|error| error.to_string())
+}
+
+#[cfg(not(windows))]
+async fn open_folder_unix(opener: Opener, target: Target, folder: String) -> Result<(), String> {
     let quote = |s: &str| format!("'{}'", s.replace('\'', r"'\''"));
     let script = match (opener, &target.destination) {
         (Opener::Files, None) => format!("exec xdg-open {}", quote(&folder)),
@@ -425,7 +548,7 @@ pub async fn open_folder(opener: Opener, target: Target, folder: String) -> Resu
             )
         }
         (Opener::Terminal, dest) => {
-            // Terminal Agents if it is installed, else COSMIC Terminal, else any terminal
+            // Terminal Agents if it is installed, else the plain cosmic-term, else any terminal
             let (dir, command) = match dest {
                 None => (quote(&folder), String::new()),
                 Some(dest) => (
@@ -628,6 +751,42 @@ mod tests {
         assert!(commands.is_closed());
         assert!(read_dropped.load(Ordering::SeqCst));
         assert!(write_dropped.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    #[cfg(not(windows))]
+    fn installing_the_host_registers_the_mcp_server_in_a_home_of_its_own() {
+        use std::process::Command;
+        // The script as install runs it, with the checkout's own host in place of an installed one,
+        // and a temporary HOME: the real configuration is never read
+        let root = env!("CARGO_MANIFEST_DIR");
+        let script = super::register_mcp_script(root, "");
+        assert_eq!(script, format!("python3 {root}/host/deductum_host.py register-mcp"));
+        assert_eq!(super::register_mcp_script("~/.local/share/deductum", "DEDUCTUM_STATE_DIR=/r/state "), "DEDUCTUM_STATE_DIR=/r/state python3 ~/.local/share/deductum/host/deductum_host.py register-mcp");
+        let home = std::env::temp_dir().join(format!("deductum-mcp-home-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        std::fs::create_dir_all(home.join(".claude")).unwrap();
+        std::fs::create_dir_all(home.join(".codex")).unwrap();
+        std::fs::write(home.join(".claude.json"), r#"{"mcpServers":{"other":{"type":"stdio","command":"x","args":[],"env":{}}}}"#).unwrap();
+        std::fs::write(home.join(".codex/config.toml"), "model = \"m\"\n").unwrap();
+        let run = || {
+            let out = Command::new("sh").arg("-c").arg(&script).env("HOME", &home).env_remove("CODEX_HOME").output().unwrap();
+            assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+            serde_json::from_slice::<serde_json::Value>(&out.stdout).unwrap()
+        };
+        assert_eq!(run(), serde_json::json!({"claude": "added", "codex": "added"}));
+        let claude: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(home.join(".claude.json")).unwrap()).unwrap();
+        assert_eq!(claude["mcpServers"]["other"]["command"], "x", "what was there stays");
+        assert_eq!(claude["mcpServers"]["deductum"]["args"], serde_json::json!([format!("{root}/host/deductum_host.py"), "mcp"]));
+        let codex = std::fs::read_to_string(home.join(".codex/config.toml")).unwrap();
+        assert!(codex.starts_with("model = \"m\"\n") && codex.contains("[mcp_servers.deductum]"), "{codex}");
+        // a second install changes nothing
+        let (c1, t1) = (std::fs::read_to_string(home.join(".claude.json")).unwrap(), std::fs::read_to_string(home.join(".codex/config.toml")).unwrap());
+        assert_eq!(run(), serde_json::json!({"claude": "present", "codex": "present"}));
+        assert_eq!((std::fs::read_to_string(home.join(".claude.json")).unwrap(), std::fs::read_to_string(home.join(".codex/config.toml")).unwrap()), (c1, t1));
+        let _ = std::fs::remove_dir_all(&home);
+        // and it is only here, not in the Windows build
+        assert!(include_str!("link.rs").contains("#[cfg(not(windows))]\n    {\n        let script = register_mcp_script"));
     }
 
     #[test]

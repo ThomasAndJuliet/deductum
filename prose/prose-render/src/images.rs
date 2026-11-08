@@ -7,7 +7,8 @@ use std::path::{Path, PathBuf};
 
 /// Whether the image at `path` is an SVG drawing, by its name
 pub fn is_svg(path: &Path) -> bool {
-    path.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("svg") || ext.eq_ignore_ascii_case("svgz"))
+    path.extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("svg") || ext.eq_ignore_ascii_case("svgz"))
 }
 
 /// An image's size in pixels, reading no more of it than that needs: for a
@@ -33,7 +34,9 @@ pub const THUMBNAIL_SIZE: u32 = 960;
 
 /// Write a thumbnail of a large image at [`thumbnail_path`]
 pub fn make_thumbnail(path: &Path) {
-    let Ok((w, h)) = image::image_dimensions(path) else { return };
+    let Ok((w, h)) = image::image_dimensions(path) else {
+        return;
+    };
     if w <= THUMBNAIL_SIZE && h <= THUMBNAIL_SIZE {
         return;
     }

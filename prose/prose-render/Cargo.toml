@@ -6,7 +6,7 @@ license = "GPL-3.0-only"
 description = "Markdown rendered for COSMIC: selectable rich text with LaTeX, Mermaid diagrams, charts and images"
 
 [dependencies]
-# Each app patches this to its own libcosmic subtree
+# Each app patches this to the household libcosmic fork (its root Cargo.toml)
 libcosmic = { git = "https://github.com/pop-os/libcosmic.git", default-features = false }
 cosmic-text = { version = "0.19", features = ["monospace_fallback", "shape-run-cache"] }
 pulldown-cmark = { version = "0.13", default-features = false }

@@ -341,6 +341,12 @@ pub trait Profile: Send + Sync {
         text.trim_end().to_string()
     }
 
+    /// The quote mark that sets a name or term off in this prover's messages (Isabelle: `"`;
+    /// Lean: `'`), for the summary's code-font terms where its markup says none
+    fn message_quote(&self) -> char {
+        '"'
+    }
+
     // ----- goals (§9.1)
 
     /// How a subgoal reads: labels and layout

@@ -17,19 +17,28 @@ pub struct Gap<'a, Message, Theme, Renderer> {
     inset: Element<'a, Message, Theme, Renderer>,
     /// Where the gap opens, below the editor's top
     at: f32,
-    /// A band of the editor's text tinted (from, to, below its top; the colour): the construct the
-    /// proof state is for
-    band: Option<(f32, f32, cosmic::iced::Color)>,
+    /// Bands of the editor's text tinted (from, to, below its top; the colour), laid one over the
+    /// other in the order given: the construct the proof state is for, then the caret's line
+    washes: Vec<(f32, f32, cosmic::iced::Color)>,
+    /// How far the bands reach past the editor's left edge, to the left edge of the card the
+    /// editor is padded inside (they run edge to edge; the text does not move)
+    reach: f32,
 }
 
 impl<'a, Message, Theme, Renderer> Gap<'a, Message, Theme, Renderer> {
     pub fn new(editor: impl Into<Element<'a, Message, Theme, Renderer>>, inset: impl Into<Element<'a, Message, Theme, Renderer>>, at: f32) -> Self {
-        Self { editor: editor.into(), inset: inset.into(), at, band: None }
+        Self { editor: editor.into(), inset: inset.into(), at, washes: Vec::new(), reach: 0.0 }
     }
 
     /// Tint the editor's text from `from` to `to` below its top
     pub fn band(mut self, from: f32, to: f32, color: cosmic::iced::Color) -> Self {
-        self.band = Some((from, to, color));
+        self.washes.push((from, to, color));
+        self
+    }
+
+    /// Let the bands reach `left` past the editor's left edge
+    pub fn reach(mut self, left: f32) -> Self {
+        self.reach = left;
         self
     }
 }
@@ -92,26 +101,30 @@ where
         // layer that takes the editor's background and text and before those the editor makes
         // for its selection (layers are drawn in the order they are made), so a selection, which
         // libcosmic draws opaque in layers of its own, lies over the band
-        let band = |r: &mut Renderer, y0: f32, y1: f32| {
-            if let Some((_, _, color)) = self.band
-                && y1 > y0
-            {
-                let bounds = Rectangle { y: y0, height: y1 - y0, ..editor };
-                r.with_layer(bounds, |r| {
-                    r.fill_quad(renderer::Quad { bounds, ..Default::default() }, cosmic::iced::Background::Color(color));
-                });
+        let reach = self.reach;
+        // (the layers reach left too, as the bands do)
+        let wide = |r: Rectangle| Rectangle { x: r.x - reach, width: r.width + reach, ..r };
+        let bands = |r: &mut Renderer, below: bool| {
+            for (from, to, color) in &self.washes {
+                // (no further than the editor's own bottom)
+                let to = to.min(editor.height);
+                let (y0, y1) = if below { (editor.y + from.max(at) + gap, editor.y + to.max(at) + gap) } else { (editor.y + from.min(at), editor.y + to.min(at)) };
+                if y1 > y0 {
+                    let bounds = wide(Rectangle { y: y0, height: y1 - y0, ..editor });
+                    r.with_layer(bounds, |r| {
+                        r.fill_quad(renderer::Quad { bounds, ..Default::default() }, cosmic::iced::Background::Color(*color));
+                    });
+                }
             }
         };
-        // (no further than the editor's own bottom)
-        let (from, to) = self.band.map_or((0.0, 0.0), |(from, to, _)| (from, to.min(editor.height)));
         // Above the gap: as it is
-        renderer.with_layer(Rectangle { height: at, ..editor }, |r| {
-            band(r, editor.y + from.min(at), editor.y + to.min(at));
+        renderer.with_layer(wide(Rectangle { height: at, ..editor }), |r| {
+            bands(r, false);
             self.editor.as_widget().draw(&tree.children[0], r, theme, style, editor_layout, moved(cursor), viewport);
         });
         // Below it: moved down by the gap
-        renderer.with_layer(Rectangle { y: editor.y + at + gap, height: (editor.height - at).max(0.0), ..editor }, |r| {
-            band(r, editor.y + from.max(at) + gap, editor.y + to.max(at) + gap);
+        renderer.with_layer(wide(Rectangle { y: editor.y + at + gap, height: (editor.height - at).max(0.0), ..editor }), |r| {
+            bands(r, true);
             r.with_translation(Vector::new(0.0, gap), |r| {
                 self.editor.as_widget().draw(&tree.children[0], r, theme, style, editor_layout, moved(cursor), viewport);
             });
@@ -278,7 +291,10 @@ where
         let main = self.main.as_widget_mut().layout(&mut tree.children[0], renderer, limits);
         let side = self.side.as_widget_mut().layout(&mut tree.children[1], renderer, &layout::Limits::new(Size::ZERO, Size::new(f32::INFINITY, f32::INFINITY)));
         let x = if self.right { main.size().width - side.size().width - self.at.x } else { self.at.x };
-        layout::Node::with_children(main.size(), vec![main, side.move_to((x, self.at.y))])
+        // (what stays in sight may be the goal, which the end of the page must not cut off)
+        let reach = if self.follow { self.at.y + side.size().height + GOAL_ROOM } else { 0.0 };
+        let size = Size::new(main.size().width, main.size().height.max(reach));
+        layout::Node::with_children(size, vec![main, side.move_to((x, self.at.y))])
     }
 
     fn draw(&self, tree: &Tree, renderer: &mut Renderer, theme: &Theme, style: &renderer::Style, layout: Layout<'_>, cursor: mouse::Cursor, viewport: &Rectangle) {
@@ -399,9 +415,15 @@ pub struct GoalLayer<'a, Message, Theme, Renderer> {
 static GOAL_MOVED: std::sync::Mutex<Vector> = std::sync::Mutex::new(Vector::new(0.0, 0.0));
 
 #[cfg(test)]
+pub static GOAL_VIEWPORT: std::sync::Mutex<Rectangle> = std::sync::Mutex::new(Rectangle { x: 0.0, y: 0.0, width: 0.0, height: 0.0 });
+
+#[cfg(test)]
 pub fn goal_moved() -> Vector {
     GOAL_MOVED.lock().map_or(Vector::ZERO, |v| *v)
 }
+
+/// What is left under the goal when the page has gone on to show it
+const GOAL_ROOM: f32 = 16.0;
 
 impl<'a, Message, Theme, Renderer> GoalLayer<'a, Message, Theme, Renderer> {
     pub fn new(page: impl Into<Element<'a, Message, Theme, Renderer>>, goal: impl Into<Element<'a, Message, Theme, Renderer>>, anchor: Option<(usize, f32)>, gap: f32) -> Self {
@@ -474,7 +496,17 @@ where
     fn layout(&mut self, tree: &mut Tree, renderer: &Renderer, limits: &layout::Limits) -> layout::Node {
         let page = self.page.as_widget_mut().layout(&mut tree.children[0], renderer, limits);
         let goal = self.goal.as_widget_mut().layout(&mut tree.children[1], renderer, &layout::Limits::new(Size::ZERO, Size::new(f32::INFINITY, f32::INFINITY)));
-        layout::Node::with_children(page.size(), vec![page, goal])
+        // The page goes on far enough to show all of the goal: under the theory's last cell, there
+        // may be less page than there is goal
+        let reach = self.anchor.and_then(|(index, top)| {
+            let slot = match &self.indices {
+                Some(indices) => indices.lock().unwrap_or_else(|e| e.into_inner()).binary_search(&index).ok()?,
+                None => index,
+            };
+            Some(page.children().get(slot)?.bounds().y + top + goal.size().height + GOAL_ROOM)
+        });
+        let size = Size::new(page.size().width, page.size().height.max(reach.unwrap_or(0.0)));
+        layout::Node::with_children(size, vec![page, goal])
     }
 
     fn draw(&self, tree: &Tree, renderer: &mut Renderer, theme: &Theme, style: &renderer::Style, layout: Layout<'_>, cursor: mouse::Cursor, viewport: &Rectangle) {
@@ -484,6 +516,10 @@ where
         let Some(at) = self.place(layout, viewport) else { return };
         if let Ok(mut last) = GOAL_MOVED.lock() {
             *last = at;
+        }
+        #[cfg(test)]
+        if let Ok(mut last) = GOAL_VIEWPORT.lock() {
+            *last = *viewport;
         }
         let cursor = match cursor.position() {
             Some(p) => mouse::Cursor::Available(p - at),

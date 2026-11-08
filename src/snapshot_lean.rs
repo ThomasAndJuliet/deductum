@@ -129,7 +129,7 @@ fn update(app: &mut App, m: super::Message) {
 
 /// (tests hold the UI's turn through their Harness before changing the theme or toggles)
 fn light(on: bool) {
-    cosmic::theme::set_active(if on { cosmic::theme::ThemeType::Light } else { cosmic::theme::ThemeType::Dark });
+    cosmic::theme::set_active(if on { crate::tones::light_type_for_tests() } else { cosmic::theme::ThemeType::Dark });
 }
 
 /// The pixels differing from the background in a region: something was drawn there
@@ -337,9 +337,12 @@ fn clicking_a_lean_paragraph_puts_the_caret_there() {
         (app, opened)
     };
     // The page's text column, by where a click opens the block
-    let probe: Vec<i32> = (200..1200).step_by(20).filter(|x| click_at(*x as f32).1).collect();
+    let probe: Vec<i32> = (20..1200).step_by(20).filter(|x| click_at(*x as f32).1).collect();
     assert!(probe.len() > 6, "the paragraph is under the pointer somewhere: {probe:?}");
-    let (lo, hi) = (probe[1] as f32, probe[probe.len() - 2] as f32);
+    // (the first half of the column: Paper sets the closed text justified, and the editor opened by
+    // the click sets it ragged, so a click right of the editor's first row lands at its end)
+    let lo = probe[1] as f32;
+    let hi = lo + (probe[probe.len() - 2] as f32 - lo) / 2.0;
     // Clicks along the module doc's first line of text: the caret goes to the word clicked
     let mut results = Vec::new();
     for x in [lo, lo + (hi - lo) / 3.0, lo + 2.0 * (hi - lo) / 3.0, hi] {
@@ -399,6 +402,7 @@ fn unsolved_goals_are_summarised_under_the_proof() {
             end: at + 11,
             kind: "error".into(),
             text: "unsolved goals\ncase left\np q : Prop\nhp : p\nhq : q\n⊢ q\n\ncase right\np q : Prop\nhp : p\nhq : q\n⊢ p".into(),
+            ..Default::default()
         });
         t.refresh(&*symbols);
     }
@@ -492,7 +496,7 @@ fn prose_edges(doc: &str, text_of_block: &str, w: f32, dark: bool, tag: &str) ->
         }
     }
     let (x, y) = top.expect("the block under the pointer");
-    let closed = ink_edges(&png, size.width as u32, 900, y as u32, 60).unwrap_or((0, 0));
+    let closed = ink_edges(&png, size.width as u32, 900, y as u32, 10).unwrap_or((0, 0));
     // a click on its first line (a little in from the left)
     let msgs = h.click(&app, cosmic::iced::Point::new(x + 60.0, y + 6.0));
     assert!(msgs.iter().any(|m| matches!(m, super::Message::EditBlock(_))), "a click opens the block");
@@ -722,7 +726,7 @@ fn the_pop_out_button_sits_in_the_corner_of_its_proof() {
                         let drawn = cosmic::iced::Rectangle { y: pop.y - place.scrolled.y, x: pop.x - place.scrolled.x, ..pop };
                         // Where the proof's first line is: the cell's first line, or the source
                         // view's line of the proof's start
-                        let lh = if mode == Mode::Literate { super::view::z(13.0) * 1.4 } else { super::view::source_line_height() };
+                        let lh = if mode == Mode::Literate { super::view::code_line_height() } else { super::view::source_line_height() };
                         let img = image::RgbaImage::from_raw(w, h, png.clone()).unwrap();
                         let (first_top, right) = if mode == Mode::Literate {
                             (cell.y + 5.0, cell.x + cell.width)
@@ -744,8 +748,10 @@ fn the_pop_out_button_sits_in_the_corner_of_its_proof() {
                         let bg = *img.get_pixel(drawn.x as u32 - 2, (drawn.y + drawn.height / 2.0) as u32);
                         let far = |p: &image::Rgba<u8>| (0..3).map(|k| (p[k] as i32 - bg[k] as i32).abs()).sum::<i32>() > 120;
                         let (mut xs, mut ys) = (Vec::new(), Vec::new());
-                        for y in (drawn.y as i32 - 6).max(0)..((drawn.y + drawn.height) as i32 + 6).min(h as i32) {
-                            for x in (drawn.x as i32 - 6)..((drawn.x + drawn.width) as i32 + 6).min(w as i32) {
+                        // (inside the cell: its own border above is not the icon, and sits within 6 px of the
+                        // button where the code's 14 px lines make the button's inset 4.8 px)
+                        for y in (drawn.y as i32 - 6).max((cell.y - place.scrolled.y).ceil() as i32 + 1)..((drawn.y + drawn.height) as i32 + 6).min(h as i32) {
+                            for x in (drawn.x as i32 - 6)..((drawn.x + drawn.width) as i32 + 6).min(w as i32).min(if mode == Mode::Literate { (cell.x + cell.width - place.scrolled.x) as i32 - 1 } else { i32::MAX }) {
                                 if far(img.get_pixel(x as u32, y as u32)) {
                                     xs.push(x as f32);
                                     ys.push(y as f32);

@@ -1,15 +1,17 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! Deductum: proof documents (Isabelle theories now) as literate documents,
-//! worked on together with agents in one live prover session. A sibling of COSMIC Terminal Agents
+//! worked on together with agents in one live prover session. A companion to the separate Terminal Agents app
 //! (design C7), sharing its rendering and its list of machines.
 //!
 //! The design record is `docs/deductum-decisions.md`. The app is a client of
-//! the session host on each machine (`deductum/host`), which owns sessions,
+//! the session host on each machine (`host`), which owns sessions,
 //! buffers and provers; it keeps a replica of each open theory and shows it
 //! in a literate view and a source view. What depends on the prover is in
 //! `prover`: a profile per backend, and the capabilities each session's host
 //! reports, which decide what the UI offers.
+
+#![cfg_attr(all(windows, not(test)), windows_subsystem = "windows")]
 
 // jemalloc, not glibc's malloc: libcosmic calls malloc_trim after every
 // update and view, which with glibc scans the whole fragmented heap on the UI
@@ -18,6 +20,10 @@
 #[global_allocator]
 static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
+#[cfg(not(windows))]
+mod agent_session;
+mod attention;
+mod chip;
 mod cli;
 mod codec;
 mod editor;
@@ -27,17 +33,22 @@ mod goals;
 mod input;
 mod insert;
 mod link;
+mod menubar;
 mod new_session;
 mod ot;
+mod platform;
 mod prover;
 mod settings;
 mod settings_page;
 mod shell;
 mod sidebar;
+mod text_weight;
 mod theory;
+mod toast;
 mod tones;
 mod view;
 mod viewport;
+mod wrap;
 mod vim;
 
 #[cfg(test)]
@@ -59,6 +70,13 @@ mod highlight_tests;
 #[cfg(test)]
 mod highlight_main_tests;
 #[cfg(test)]
+mod snapshot_cells;
+#[cfg(test)]
+mod snapshot_code;
+#[cfg(test)]
+#[path = "../vendor/cosmic-text/tests/hanging_indent.rs"]
+mod cosmic_text_hanging;
+#[cfg(test)]
 mod live;
 #[cfg(test)]
 mod live_lean;
@@ -67,23 +85,41 @@ mod live_mixed;
 #[cfg(test)]
 mod live_tools;
 
-/// The bundled prose fonts, shared with Cerea and Terminal; see `res/fonts/README`
-pub const FONTS: [&[u8]; 9] = [
-    // Raised and lowered small glyphs for \<^sup> and \<^sub>; see res/deductum/make-scripts-font.py
-    include_bytes!("../../../res/deductum/fonts/IsabellumScripts.ttf"),
-    include_bytes!("../../../res/fonts/LibertinusSerif-Regular.otf"),
-    include_bytes!("../../../res/fonts/LibertinusSerif-Bold.otf"),
-    include_bytes!("../../../res/fonts/LibertinusSerif-Italic.otf"),
-    include_bytes!("../../../res/fonts/LibertinusSerif-BoldItalic.otf"),
-    include_bytes!("../../../res/fonts/NewCM10-Regular.otf"),
-    include_bytes!("../../../res/fonts/NewCM10-Bold.otf"),
-    include_bytes!("../../../res/fonts/NewCM10-Italic.otf"),
-    include_bytes!("../../../res/fonts/NewCM10-BoldItalic.otf"),
+/// The bundled prose fonts, shared with Cerea and Terminal Agents; see `res/fonts/README`
+pub const FONTS: [&[u8]; 11] = [
+    // Raised and lowered small glyphs for \<^sup> and \<^sub>; see res/make-scripts-font.py
+    include_bytes!("../res/fonts/IsabellumScripts.ttf"),
+    include_bytes!("../res/fonts/LibertinusSerif-Regular.otf"),
+    include_bytes!("../res/fonts/LibertinusSerif-Bold.otf"),
+    include_bytes!("../res/fonts/LibertinusSerif-Italic.otf"),
+    include_bytes!("../res/fonts/LibertinusSerif-BoldItalic.otf"),
+    // Thicken text draws regular text in these
+    include_bytes!("../res/fonts/LibertinusSerif-Semibold.otf"),
+    include_bytes!("../res/fonts/LibertinusSerif-SemiboldItalic.otf"),
+    include_bytes!("../res/fonts/NewCM10-Regular.otf"),
+    include_bytes!("../res/fonts/NewCM10-Bold.otf"),
+    include_bytes!("../res/fonts/NewCM10-Italic.otf"),
+    include_bytes!("../res/fonts/NewCM10-BoldItalic.otf"),
 ];
 
 pub fn load_fonts() {
     let mut font_system = cosmic::iced::advanced::graphics::text::font_system().write().unwrap();
     for data in FONTS {
+        font_system.load_font(std::borrow::Cow::Borrowed(data));
+    }
+    // The toolkit requests these families by name; Windows does not ship them, and neither does a
+    // bare SDK, where the tests would otherwise measure and draw in whatever fallback there is
+    #[cfg(any(windows, test))]
+    for data in [
+        include_bytes!("../res/windows-fonts/NotoSansMono[wght].ttf").as_slice(),
+        include_bytes!("../res/windows-fonts/NotoSansMono-Bold.ttf").as_slice(),
+        include_bytes!("../res/windows-fonts/OpenSans-Regular.ttf").as_slice(),
+        include_bytes!("../res/windows-fonts/OpenSans-Bold.ttf").as_slice(),
+        include_bytes!("../res/windows-fonts/OpenSans-Italic.ttf").as_slice(),
+        include_bytes!("../res/windows-fonts/OpenSans-BoldItalic.ttf").as_slice(),
+        include_bytes!("../res/windows-fonts/OpenSans-Semibold.ttf").as_slice(),
+        include_bytes!("../res/windows-fonts/OpenSans-SemiboldItalic.ttf").as_slice(),
+    ] {
         font_system.load_font(std::borrow::Cow::Borrowed(data));
     }
 }
@@ -260,6 +296,8 @@ pub enum Message {
     InsertUsing,
     /// The proof state as parts (false) or as Isabelle's text (true)
     StateText(bool),
+    /// Goals or text, with types or without: the narrow goal panel's one dropdown
+    GoalView { text: bool, types: bool },
     TheoryFilter(String),
     /// The pointer over an editor (where, in its coordinates), or off it
     HoverMove(HoverTarget, cosmic::iced::Point),
@@ -308,6 +346,8 @@ pub enum Message {
     /// Start the helper conversation again
     HelperReset,
     CopyText(String),
+    /// Fold or unfold a message in its cell (by where it starts)
+    ToggleMessage(usize),
     RefOpenHere(cosmic::iced::window::Id),
     RefBack(cosmic::iced::window::Id),
     RefAction(cosmic::iced::window::Id, Action),
@@ -327,7 +367,7 @@ pub enum Message {
     DragStart(bool),
     DragMove(cosmic::iced::Point),
     DragEnd,
-    WindowWidth(f32),
+    WindowResized(f32, f32),
     /// Zoom in (1), out (-1) or back to 100% (0)
     Zoom(i8),
     ToggleRight,
@@ -355,7 +395,7 @@ pub enum Message {
 
 /// The context a delayed proof-state reply must still belong to.
 #[derive(Clone, Debug)]
-struct StateRequest {
+pub(crate) struct StateRequest {
     generation: u64,
     session: String,
     path: String,
@@ -394,6 +434,7 @@ enum DeferredLeave {
     Theory { path: String, nav: Option<Navigation>, goto: Option<usize> },
     Session { machine: String, sid: String },
     Close,
+    Quit,
 }
 
 impl Navigation {
@@ -443,6 +484,10 @@ enum Pending {
     Entity(cosmic::iced::window::Id, RefUse),
     /// A project action of this session, by name
     ProjectAction(String, String),
+    /// A save, by the document's name: said in a toast once it has happened
+    Saved(String),
+    /// An edit reverted, by what it was: said in a toast with an Undo
+    Reverted(String),
 }
 
 /// What a look-up in a reference window is for: a tooltip (this generation of the pointer's
@@ -659,6 +704,7 @@ pub struct App {
     /// The sidebar being resized: true for the left one
     pub dragging: Option<bool>,
     pub window_width: f32,
+    pub window_height: f32,
     pub vim: vim::Vim,
     pub vim_enabled: bool,
     pub mode_model: widget::segmented_button::SingleSelectModel,
@@ -1404,9 +1450,14 @@ impl App {
                         let state = table.as_ref().map_or(state.clone(), |tb| tb.decode(&state).text);
                         t.goal = t.profile.parse_goal(&state);
                     }
+                    // (another command's goal opens at its top; the same one, as it is rechecked, stays where it was read to)
+                    let another = ws.output.as_ref().map(|o| o["command"]["start"].clone()) != Some(v["command"]["start"].clone());
                     ws.output = Some(v);
                     if let Some(tb) = &table {
                         ws.rebuild_views(&**tb);
+                    }
+                    if another {
+                        return cosmic::iced::widget::scrollable::scroll_to(view::goal_scroll_id(), cosmic::iced::widget::scrollable::AbsoluteOffset { x: None, y: Some(0.0) });
                     }
                 }
             }
@@ -1549,18 +1600,23 @@ impl App {
             }
             Pending::Undo => {
                 let mut task = Task::none();
+                let mut said = Task::none();
                 if let Some(ws) = &mut self.workspace
                     && let Some(t) = &mut ws.theory
                 {
                     let note = v["note"].as_str().unwrap_or("").to_string();
-                    self.status = (!note.is_empty()).then_some(note);
                     if let Some(at) = v["at"].as_u64() {
                         task = Task::done(cosmic::Action::App(Message::Goto(Self::local_offset(t, at as usize))));
                     }
+                    if !note.is_empty() {
+                        said = self.toast(note, false);
+                    }
                 }
-                return Task::batch([task, self.flush_edits()]);
+                return Task::batch([task, said, self.flush_edits()]);
             }
             Pending::ProjectAction(sid, name) => self.project_action_done(sid, name, &v),
+            Pending::Saved(name) => return self.toast(format!("Saved {name}"), false),
+            Pending::Reverted(what) => return self.toast(format!("Reverted {what}"), true),
             Pending::Plain => {
                 if let Some(files) = v.get("files")
                     && let Some(ws) = &mut self.workspace
@@ -1967,6 +2023,7 @@ impl App {
                 }
                 DeferredLeave::Session { machine, sid } => self.update(Message::OpenSession(machine, sid)),
                 DeferredLeave::Close => self.update(Message::CloseWorkspace),
+                DeferredLeave::Quit => self.shell_update(shell::Msg::Quit),
             };
         }
         Task::none()
@@ -2595,6 +2652,14 @@ impl cosmic::Application for App {
         &mut self.core
     }
 
+    /// The desktop changed its theme (its accent, say, or light to dark): libcosmic has put the
+    /// desktop's theme in place of Deductum's, so the household's tones are laid on it again
+    fn system_theme_update(&mut self, _keys: &[&'static str], _new: &cosmic::cosmic_theme::Theme) -> Task<Self::Message> {
+        let active = cosmic::theme::active();
+        let toned = tones::household(active.clone());
+        if toned == active { Task::none() } else { cosmic::command::set_theme(toned) }
+    }
+
     fn init(mut core: Core, flags: Self::Flags) -> (Self, Task<Self::Message>) {
         // (no inset card around the content: the theory's scroll bar at the window's edge, as in
         // the terminal)
@@ -2658,6 +2723,7 @@ impl cosmic::Application for App {
             right_width: 420.0,
             dragging: None,
             window_width: 1400.0,
+            window_height: 900.0,
             vim: vim::Vim::default(),
             vim_enabled: false,
             mode_model,
@@ -2684,7 +2750,8 @@ impl cosmic::Application for App {
 
     fn view(&self) -> Element<'_, Self::Message> {
         view::set_vim_mode(self.vim_enabled.then_some(self.vim.mode));
-        view::view(self)
+        // (what passed, as toasts at the foot of the window)
+        self.shell.toasts.over(view::view(self))
     }
 
     fn view_window(&self, id: cosmic::iced::window::Id) -> Element<'_, Self::Message> {
@@ -2719,7 +2786,7 @@ impl cosmic::Application for App {
                 return None;
             }
             if let cosmic::iced::Event::Window(cosmic::iced::window::Event::Resized(size)) = event {
-                return Some(Message::WindowWidth(size.width));
+                return Some(Message::WindowResized(size.width, size.height));
             }
             let cosmic::iced::Event::Keyboard(Key::KeyPressed { key, modified_key, physical_key, modifiers, text, .. }) = event else { return None };
             match key.as_ref() {
@@ -2727,6 +2794,11 @@ impl cosmic::Application for App {
                 K::Character("-") if modifiers.command() => Some(Message::Zoom(-1)),
                 K::Character("0") if modifiers.command() => Some(Message::Zoom(0)),
                 K::Character(",") if modifiers.command() => Some(Message::Shell(shell::Msg::ToggleSettings)),
+                K::Character("1") if modifiers.command() && !modifiers.shift() => Some(Message::SetMode(Mode::Literate)),
+                K::Character("2") if modifiers.command() && !modifiers.shift() => Some(Message::SetMode(Mode::Source)),
+                K::Named(cosmic::iced::keyboard::key::Named::F9) => Some(Message::ToggleSidebar),
+                K::Named(cosmic::iced::keyboard::key::Named::F8) if modifiers.shift() => Some(Message::Shell(shell::Msg::NextProblem(attention::Problem::Unfinished))),
+                K::Named(cosmic::iced::keyboard::key::Named::F8) => Some(Message::Shell(shell::Msg::NextProblem(attention::Problem::Failed))),
                 K::Named(cosmic::iced::keyboard::key::Named::ArrowLeft) if modifiers.alt() => Some(Message::Back),
                 _ if !modifiers.alt() && !modifiers.logo() => Some(Message::WindowKey(cosmic::widget::text_editor::KeyPress {
                     key, modified_key, physical_key, modifiers, text,
@@ -2749,6 +2821,18 @@ impl cosmic::Application for App {
     }
 
     fn update(&mut self, message: Self::Message) -> Task<Self::Message> {
+        // Esc closes the agent-session popover (a click outside does too: the popover's own)
+        #[cfg(not(windows))]
+        if self.shell.agent.open
+            && match &message {
+                Message::Escape => true,
+                Message::RawVim(_, press) | Message::WindowKey(press) => matches!(press.key.as_ref(), cosmic::iced::keyboard::Key::Named(cosmic::iced::keyboard::key::Named::Escape)),
+                _ => false,
+            }
+        {
+            self.shell.agent.open = false;
+            return Task::none();
+        }
         let escape = match &message {
             Message::Escape => true,
             Message::RawVim(_, press) | Message::WindowKey(press) => {
@@ -3174,7 +3258,8 @@ impl cosmic::Application for App {
                 if let Some((machine, sid)) = self.workspace_ids()
                     && let Some(path) = self.workspace.as_ref().and_then(|w| w.theory.as_ref()).map(|t| t.path.clone())
                 {
-                    self.send(&machine, op, json!({"session": sid, "path": path}), Pending::Plain);
+                    let name = file_name(&path).to_string();
+                    self.send(&machine, op, json!({"session": sid, "path": path}), Pending::Saved(name));
                 }
             }
             Message::Panel(panel) => {
@@ -3374,7 +3459,10 @@ impl cosmic::Application for App {
                 if let Some((machine, sid)) = self.workspace_ids()
                     && let Some(path) = self.workspace.as_ref().and_then(|w| w.theory.as_ref()).map(|t| t.path.clone())
                 {
-                    self.send(&machine, "revert", json!({"session": sid, "path": path, "entry": entry}), Pending::Plain);
+                    let what = self.workspace.as_ref().and_then(|w| w.history.iter().find(|h| h["id"] == json!(entry)))
+                        .map(|h| format!("{}'s edit at line {}", h["author"]["label"].as_str().unwrap_or("an"), h["line"]))
+                        .unwrap_or_else(|| "the edit".into());
+                    self.send(&machine, "revert", json!({"session": sid, "path": path, "entry": entry}), Pending::Reverted(what));
                 }
             }
             Message::Follow(key) => {
@@ -3504,11 +3592,14 @@ impl cosmic::Application for App {
                 self.dragging = None;
                 self.save_settings();
             }
-            Message::WindowWidth(w) => self.window_width = w,
+            Message::WindowResized(w, h) => {
+                self.window_width = w;
+                self.window_height = h;
+            }
             Message::DragMove(p) => match self.dragging {
-                Some(true) => self.left_width = p.x.clamp(180.0, (self.window_width - 360.0).max(180.0)),
+                Some(true) => self.left_width = (p.x - sidebar::card_margin()).clamp(180.0, (self.window_width - 360.0).max(180.0)),
                 Some(false) => {
-                    self.right_width = (self.window_width - p.x).clamp(260.0, (self.window_width - 360.0).max(260.0));
+                    self.right_width = (self.window_width - p.x - sidebar::card_margin()).clamp(260.0, (self.window_width - 360.0).max(260.0));
                 }
                 None => {}
             },
@@ -3707,7 +3798,7 @@ impl cosmic::Application for App {
                 let label = tool.label.clone();
                 let (machine, sid) = (ws.machine.clone(), ws.sid.clone());
                 self.send(&machine, "prover_options", json!({"session": sid, "set": options}), Pending::Plain);
-                self.status = Some(format!("{label} settings applied: they hold for {name} typed in the text"));
+                return self.toast(format!("{label} settings applied: they hold for {name} typed in the text"), false);
             }
             Message::Modifiers(ctrl, alt) => {
                 self.ctrl = ctrl;
@@ -3806,12 +3897,18 @@ impl cosmic::Application for App {
                     if let Some(ws) = &mut self.workspace {
                         ws.fill.conversation = None;
                     }
-                    self.status = Some(format!("The next {agent} query starts a new conversation"));
+                    return self.toast(format!("The next {agent} query starts a new conversation"), false);
+                }
+            }
+            Message::ToggleMessage(start) => {
+                if let Some(t) = self.workspace.as_mut().and_then(|w| w.theory.as_mut()) {
+                    if !t.open_messages.remove(&start) {
+                        t.open_messages.insert(start);
+                    }
                 }
             }
             Message::CopyText(text) => {
-                self.status = Some("Copied".into());
-                return cosmic::iced::clipboard::write(text);
+                return Task::batch([cosmic::iced::clipboard::write(text), self.toast("Copied", false)]);
             }
             Message::LineMove(target, down) => {
                 use cosmic::widget::text_editor::{Action as A, Motion as M};
@@ -3952,8 +4049,8 @@ impl cosmic::Application for App {
                 t.replace(b.start, end, "", &*table);
                 t.break_step();
                 t.selected = Some(i.min(t.blocks.len().saturating_sub(1)));
-                self.status = Some("Block deleted (Ctrl+Z brings it back)".into());
-                return Task::batch([self.flush_edits(), view::centre_selected(), Self::unfocus_all()]);
+                let said = self.toast("Block deleted", true);
+                return Task::batch([said, self.flush_edits(), view::centre_selected(), Self::unfocus_all()]);
             }
             Message::LiterateScrolled(scope, top, height) => {
                 if let Some(t) = self.workspace.as_ref().and_then(|w| w.theory.as_ref()).filter(|t| t.page_scope == scope) { t.page_viewport.set((top, height)); }
@@ -4012,6 +4109,15 @@ impl cosmic::Application for App {
             Message::StateText(on) => {
                 if let Some(ws) = &mut self.workspace {
                     ws.state_text = on;
+                }
+            }
+            Message::GoalView { text, types } => {
+                let Some(ws) = &mut self.workspace else { return Task::none() };
+                ws.state_text = text;
+                // (only asking the prover again when what it prints changes)
+                if ws.show_types != types {
+                    ws.show_types = types;
+                    return self.schedule_state();
                 }
             }
             Message::ShowTypes(on) => {

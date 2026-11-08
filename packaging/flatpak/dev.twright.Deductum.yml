@@ -22,10 +22,10 @@ modules:
   build-commands:
   - cargo --offline --locked build --release --bin deductum
   - install -Dm755 target/release/deductum /app/bin/deductum
-  - mkdir -p /app/share/deductum && cp -r deductum/host deductum/backend /app/share/deductum/
+  - mkdir -p /app/share/deductum && cp -r host backend /app/share/deductum/
   - rm -rf /app/share/deductum/host/tests /app/share/deductum/host/__pycache__ /app/share/deductum/backend/*/lib
-  - install -Dm644 res/deductum/dev.twright.Deductum.desktop /app/share/applications/dev.twright.Deductum.desktop
-  - install -Dm644 res/deductum/dev.twright.Deductum.svg /app/share/icons/hicolor/scalable/apps/dev.twright.Deductum.svg
+  - install -Dm644 res/dev.twright.Deductum.desktop /app/share/applications/dev.twright.Deductum.desktop
+  - install -Dm644 res/dev.twright.Deductum.svg /app/share/icons/hicolor/scalable/apps/dev.twright.Deductum.svg
   - install -Dm644 res/fonts/LICENSES.txt /app/share/licenses/deductum/fonts.txt
   - install -Dm644 res/icons/LICENSE.window-pop-out /app/share/licenses/deductum/LICENSE.window-pop-out
   - install -Dm644 res/icons/README.window-pop-out.md /app/share/licenses/deductum/README.window-pop-out.md
@@ -35,7 +35,7 @@ modules:
   sources:
   - type: dir
     path: ../..
-    dest: cosmic-term
+    dest: deductum
     skip:
     - target
     - build-flatpak
@@ -44,7 +44,7 @@ modules:
     - .local-design
     - ci-artifact
   - cargo-sources.json
-  subdir: cosmic-term
+  subdir: deductum
 sdk-extensions:
 - org.freedesktop.Sdk.Extension.rust-stable
 build-options:

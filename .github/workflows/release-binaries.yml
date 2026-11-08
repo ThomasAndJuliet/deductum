@@ -1,0 +1,55 @@
+name: Publish private release binaries
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Successful main-branch CI run to publish
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+# Each SemVer release keeps immutable assets. There is no shared concurrency
+# group that can cancel a different source revision's pending publication.
+jobs:
+  packages:
+    if: >-
+      github.repository == 'ThomasAndJuliet/deductum' &&
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event.workflow_run.event == 'push' &&
+        github.event.workflow_run.head_branch == 'main' &&
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.head_repository.full_name == github.repository))
+    runs-on: ${{ vars.CI_RUNNER == 'hosted' && 'ubuntu-24.04' || 'neo-ubuntu' }}
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - name: Install GitHub CLI on household runners
+        if: runner.environment == 'self-hosted'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gh
+      # workflow_run executes the trusted default-branch publisher, never code
+      # from the downloaded artifact. Downloaded packages are not executed.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Test publication trust and package checks
+        run: |
+          python3 scripts/test-publish-release.py
+          python3 scripts/test-release-policy.py
+      - name: Publish the tested packages under their automatic SemVer tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.event.workflow_run.id || inputs.run_id }}
+        run: python3 scripts/publish-release.py --run-id "$RUN_ID"

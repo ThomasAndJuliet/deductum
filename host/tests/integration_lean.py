@@ -19,10 +19,12 @@ import tempfile
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(HERE, ".."))
+HOST_ROOT = os.path.abspath(os.environ.get("DEDUCTUM_TEST_HOST_ROOT") or os.path.join(HERE, ".."))
+sys.path.insert(0, HERE)  # Embedded Python's isolated path omits the script directory.
+sys.path.insert(0, HOST_ROOT)
 from drivers.lean import LeanDriver, STALE_HEADER_ERROR, tool_env  # noqa: E402
 
-SCRATCH = os.path.expanduser("~/tmp-deductum-lean")
+SCRATCH = os.path.abspath(os.environ.get("DEDUCTUM_TEST_SCRATCH") or os.path.expanduser("~/tmp-deductum-lean"))
 FAILURES = 0
 
 
@@ -345,11 +347,11 @@ async def run_tiny():
     check("hover on Nat", bool(tip) and "Nat" in tip["items"][0]["text"] and t7[tip["start"]:tip["end"]] == "Nat", r)
     r = await drv.request({"op": "info", "file": main, "offset": t7.index("add_comm' a b") + 2})
     d = r["info"]["definition"]
-    check("definition in the same file", bool(d) and d["file"] == main and d["name"] == "add_comm'" and d["kind"] == "theorem"
+    check("definition in the same file", bool(d) and os.path.samefile(d["file"], main) and d["name"] == "add_comm'" and d["kind"] == "theorem"
           and t7[d["start"]:d["end"]] == "add_comm'" and d["line"] == t7.count("\n", 0, d["start"]) + 1, d)
     r = await drv.request({"op": "info", "file": main, "offset": t7.index("Nat", t7.index("def double")) + 1})
     d = r["info"]["definition"]
-    check("definition in the toolchain's sources", bool(d) and d["file"].endswith("Init/Prelude.lean") and d["name"] == "Nat", d)
+    check("definition in the toolchain's sources", bool(d) and d["file"].endswith(os.path.join("Init", "Prelude.lean")) and d["name"] == "Nat", d)
 
     # ----- Pause and resume, cancel
     count = len(sess.events)
@@ -521,15 +523,13 @@ def run_core(path):
     state = tempfile.mkdtemp(prefix="deductum-lean-state-", dir=SCRATCH)
     os.environ["DEDUCTUM_STATE_DIR"] = state
     fake = tempfile.mkdtemp(prefix="deductum-bin-", dir=SCRATCH)
-    with open(os.path.join(fake, "claude"), "w") as f:
-        f.write("#!/bin/sh\necho '{\"proofs\": [\"simp [evalOne, InSupport] at reported\", \"exact rfl\"], "
-                "\"using\": [\"Nat.add_comm\", \"no_such_fact_xyz\"]}'\n")
-    os.chmod(os.path.join(fake, "claude"), 0o755)
-    os.environ["PATH"] = fake + os.pathsep + os.environ.get("PATH", "")
-    work = path.rstrip("/") + "-core"
+    from fixture_helpers import json_agent
+    json_agent(fake, {"proofs": ["simp [evalOne, InSupport] at reported", "exact rfl"],
+                      "using": ["Nat.add_comm", "no_such_fact_xyz"]})
+    work = os.path.join(SCRATCH, os.path.basename(os.path.normpath(path)) + "-core")
     shutil.rmtree(work, ignore_errors=True)
     shutil.copytree(path, work)
-    sys.path.insert(0, os.path.join(HERE, ".."))
+    sys.path.insert(0, HOST_ROOT)
     import deductum_host as H
     f = os.path.join(work, "DSRV", "CausalCorrectness.lean")
     text = open(f, encoding="utf-8").read()

@@ -274,7 +274,7 @@ fn the_tool_panel_in_each_state() {
         for dark in [true, false] {
             for (w, beside, layout) in [(1400.0, true, "1400-beside"), (1400.0, false, "1400-under"), (800.0, true, "800")] {
                 let mut h = Harness::new(Size::new(w, 900.0));
-                cosmic::theme::set_active(if dark { cosmic::theme::ThemeType::Dark } else { cosmic::theme::ThemeType::Light });
+                cosmic::theme::set_active(if dark { cosmic::theme::ThemeType::Dark } else { crate::tones::light_type_for_tests() });
                 super::view::set_goal_beside(beside);
                 let app = scene.app(w);
                 h.focus(&app, super::view::block_editor_id());
@@ -370,8 +370,8 @@ fn clicking_insert_gives_the_editor_its_focus_back() {
     h.focus(&app, super::view::block_editor_id());
     h.draw(&app, "click-0");
     let mut clicked = None;
-    'scan: for y in (150..600).step_by(6) {
-        for x in (1000..1220).step_by(10) {
+    'scan: for y in (150..880).step_by(6) {
+        for x in (990..1380).step_by(10) {
             let msgs = h.click(&app, cosmic::iced::Point::new(x as f32, y as f32));
             if let Some(m) = msgs.iter().find(|m| matches!(m, Message::InsertOutput(p) if p == "by presburger")) {
                 clicked = Some(m.clone());

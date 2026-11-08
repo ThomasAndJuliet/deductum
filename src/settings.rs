@@ -26,7 +26,15 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 /// The version this app writes
-pub const VERSION: u32 = 1;
+pub const VERSION: u32 = 2;
+
+/// The Paper defaults of the Literate view (Q5): Libertinus Serif 20 px, line spacing 1.5, a prose
+/// column at most 48 em wide, justified and centred. Version 1 files kept the older look
+/// ([`legacy_display`]) unless the user had never changed it
+pub const PAPER_TEXT_SIZE: f32 = 20.0;
+pub const PAPER_MEASURE: f32 = 48.0;
+/// Paper's maths against the text (household-kit#3; see [`Display::default`])
+pub const PAPER_MATH_SCALE: f32 = 1.05;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -39,6 +47,10 @@ pub struct Settings {
     pub proof_state: ProofState,
     pub llm: Llm,
     pub lean: Lean,
+    /// Code's font, size and cell width (the Settings page's Code section)
+    pub code: Code,
+    /// What new agent sessions start with
+    pub agents: Agents,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -49,9 +61,72 @@ pub struct Appearance {
     pub zoom: f32,
     /// The goal beside the text when the window has room (else under the proof, the page centred)
     pub goal_beside: bool,
+    /// The interface's text size in px (labels, menus, buttons); the content zooms separately
+    pub interface_size: u8,
+    /// Regular text drawn in semibold, as in Cerea and Terminal
+    pub thicken_text: bool,
 }
 
-/// Reading controls shared in vocabulary with Cerea and Terminal's threads.
+/// The interface sizes the Settings page offers
+pub const INTERFACE_SIZES: [u8; 4] = [13, 14, 15, 16];
+/// The code sizes the Settings page offers
+pub const CODE_SIZES: [u8; 4] = [13, 14, 15, 16];
+/// The code font before the human chooses one
+pub const DEFAULT_CODE_FONT: &str = "Noto Sans Mono";
+
+/// Where code is set. Stored and shown; the document view applies them as it learns to
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Code {
+    /// The family of code in cells, the Source view, goals and names in the text
+    pub font: String,
+    /// Code's size in px
+    pub size: u8,
+    /// A cell's width in characters of code; zero is the page's whole column (Fill)
+    pub cell_width: u16,
+}
+
+impl Default for Code {
+    fn default() -> Self {
+        Self { font: DEFAULT_CODE_FONT.to_string(), size: 14, cell_width: 80 }
+    }
+}
+
+/// The editing rights a new agent session starts with
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Rights {
+    /// None until the agent asks and the human answers
+    Ask,
+    Proof,
+    Folder,
+    /// (also what a name this app does not know reads as)
+    #[serde(other)]
+    #[default]
+    Theory,
+}
+
+impl Rights {
+    pub const ALL: [Rights; 4] = [Rights::Ask, Rights::Proof, Rights::Theory, Rights::Folder];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Rights::Ask => "Ask first",
+            Rights::Proof => "This proof",
+            Rights::Theory => "This theory",
+            Rights::Folder => "Whole folder",
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Agents {
+    /// The rights a new agent session starts with (not on Windows)
+    pub default_rights: Rights,
+}
+
+/// Reading controls shared in vocabulary with Cerea and Terminal Agents' threads.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Display {
@@ -98,24 +173,33 @@ impl TextFont {
     }
 
     pub fn editor_font(self) -> cosmic::iced::Font {
-        use cosmic::iced::font::Family;
-        cosmic::iced::Font {
-            family: match self {
-                Self::Sans => Family::SansSerif,
-                Self::Serif => Family::Serif,
-                _ => Family::Name(self.family()),
-            },
-            ..cosmic::font::default()
-        }
+        use cosmic::iced::font::{Family, Weight};
+        let family = match self {
+            Self::Sans => Family::SansSerif,
+            Self::Serif => Family::Serif,
+            _ => Family::Name(self.family()),
+        };
+        // (Thicken text: Semibold where the family has one)
+        let weight = if thicken() && super::text_weight::has_semibold(cosmic_family(family)) { Weight::Semibold } else { Weight::Normal };
+        cosmic::iced::Font { family, weight, ..cosmic::font::default() }
     }
 }
 
 impl Default for Display {
     fn default() -> Self {
-        Self { font: TextFont::default(), text_size: 17.0, line_height: 1.5,
-            measure: 0.0, paragraph_spacing: 0.7, math_scale: 1.1,
-            justify: false, centred: true }
+        // (the maths at x1.05: Juliet approved it for the household, household-kit#3, a draft
+        // not yet merged; Deductum pins household-kit at bef3a9e, so the value is kept here
+        // until the pin moves)
+        Self { font: TextFont::Libertinus, text_size: PAPER_TEXT_SIZE, line_height: 1.5,
+            measure: PAPER_MEASURE, paragraph_spacing: 0.7, math_scale: PAPER_MATH_SCALE,
+            justify: true, centred: true }
     }
+}
+
+/// The reading controls' defaults before Paper (settings versions 0 and 1)
+pub fn legacy_display() -> Display {
+    Display { font: TextFont::NewComputerModern, text_size: 17.0, line_height: 1.5,
+        measure: 0.0, paragraph_spacing: 0.7, math_scale: 1.1, justify: false, centred: true }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -149,11 +233,11 @@ impl Display {
         fn finite(value: f32, fallback: f32, min: f32, max: f32) -> f32 {
             if value.is_finite() { value.clamp(min, max) } else { fallback }
         }
-        self.text_size = finite(self.text_size, 17.0, 10.0, 36.0);
+        self.text_size = finite(self.text_size, PAPER_TEXT_SIZE, 10.0, 36.0);
         self.line_height = finite(self.line_height, 1.5, 1.0, 2.5);
         self.measure = if self.measure == 0.0 { 0.0 } else { finite(self.measure, 0.0, 24.0, 200.0) };
         self.paragraph_spacing = finite(self.paragraph_spacing, 0.7, 0.2, 2.0);
-        self.math_scale = finite(self.math_scale, 1.1, 0.75, 2.0);
+        self.math_scale = finite(self.math_scale, PAPER_MATH_SCALE, 0.75, 2.0);
     }
 }
 
@@ -180,6 +264,8 @@ pub struct Editing {
     pub keywords: bool,
     /// How long typing must pause on such a line before it asks (Enter asks at once)
     pub keyword_pause_ms: u32,
+    /// Check the spelling of the theory's prose
+    pub spelling: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -262,10 +348,16 @@ impl ThemeChoice {
         }
     }
 
-    /// The theme to apply. A desktop that never saved one of its themes (or saved only some of its
-    /// fields) gives libcosmic's dark defaults for what is missing, so the light theme would then
-    /// be dark: COSMIC's own stands in for it, as COSMIC Terminal does
+    /// The theme to apply: COSMIC's for the choice, with the household's text tones
+    /// (`tones::household`)
     pub fn theme(self) -> cosmic::Theme {
+        super::tones::household(self.cosmic_theme())
+    }
+
+    /// COSMIC's theme for the choice. A desktop that never saved one of its themes (or saved only
+    /// some of its fields) gives libcosmic's dark defaults for what is missing, so the light theme
+    /// would then be dark: COSMIC's own stands in for it, as the Terminal Agents app does
+    fn cosmic_theme(self) -> cosmic::Theme {
         use cosmic::theme;
         match self {
             ThemeChoice::System => theme::system_preference(),
@@ -300,13 +392,15 @@ impl Default for Settings {
             proof_state: ProofState::default(),
             llm: Llm::default(),
             lean: Lean::default(),
+            code: Code::default(),
+            agents: Agents::default(),
         }
     }
 }
 
 impl Default for Appearance {
     fn default() -> Self {
-        Self { theme: ThemeChoice::System, zoom: 1.0, goal_beside: true }
+        Self { theme: ThemeChoice::System, zoom: 1.0, goal_beside: true, interface_size: 14, thicken_text: false }
     }
 }
 
@@ -319,7 +413,7 @@ impl Default for Layout {
 
 impl Default for Editing {
     fn default() -> Self {
-        Self { vim: false, indent_width: 2, complete_while_typing: true, keywords: true, keyword_pause_ms: 2500 }
+        Self { vim: false, indent_width: 2, complete_while_typing: true, keywords: true, keyword_pause_ms: 2500, spelling: true }
     }
 }
 
@@ -329,7 +423,34 @@ impl Default for ProofState {
     }
 }
 
+/// A change to one of the settings the Settings page added (those not held in the older
+/// sections' own messages)
+#[derive(Clone, Debug, PartialEq)]
+pub enum Change {
+    InterfaceSize(u8),
+    ThickenText(bool),
+    Spelling(bool),
+    CodeFont(String),
+    CodeSize(u8),
+    /// Characters of code across a cell; zero is Fill
+    CellWidth(u16),
+    DefaultRights(Rights),
+}
+
 impl Settings {
+    pub fn change(&mut self, change: Change) {
+        match change {
+            Change::InterfaceSize(v) => self.appearance.interface_size = v,
+            Change::ThickenText(v) => self.appearance.thicken_text = v,
+            Change::Spelling(v) => self.editing.spelling = v,
+            Change::CodeFont(v) => self.code.font = v,
+            Change::CodeSize(v) => self.code.size = v,
+            Change::CellWidth(v) => self.code.cell_width = v,
+            Change::DefaultRights(v) => self.agents.default_rights = v,
+        }
+        self.clamp();
+    }
+
     /// Settings from a file's JSON, of any version. Version 0 (no `version` field) kept its few
     /// fields at the top level; they move into their sections here. A field that does not parse
     /// takes its default rather than losing the whole file
@@ -337,6 +458,9 @@ impl Settings {
         let mut v = v.clone();
         if v.get("version").is_none() && v.is_object() {
             v = migrate_v0(&v);
+        }
+        if v.get("version").and_then(Value::as_u64).is_some_and(|n| n < 2) {
+            migrate_display_v1(&mut v);
         }
         match serde_json::from_value::<Settings>(v.clone()) {
             Ok(mut s) => {
@@ -357,6 +481,8 @@ impl Settings {
                 s.proof_state = part(&v, "proof_state");
                 s.llm = part(&v, "llm");
                 s.lean = part(&v, "lean");
+                s.code = part(&v, "code");
+                s.agents = part(&v, "agents");
                 s.clamp();
                 s
             }
@@ -369,6 +495,12 @@ impl Settings {
         self.appearance.zoom = if self.appearance.zoom.is_finite() { self.appearance.zoom.clamp(0.5, 3.0) } else { 1.0 };
         self.editing.indent_width = self.editing.indent_width.clamp(1, 8);
         self.editing.keyword_pause_ms = self.editing.keyword_pause_ms.clamp(250, 30_000);
+        self.appearance.interface_size = self.appearance.interface_size.clamp(10, 24);
+        self.code.size = self.code.size.clamp(8, 36);
+        self.code.cell_width = if self.code.cell_width == 0 { 0 } else { self.code.cell_width.clamp(40, 240) };
+        if self.code.font.trim().is_empty() {
+            self.code.font = DEFAULT_CODE_FONT.to_string();
+        }
         self.layout.left_width = self.layout.left_width.clamp(180.0, 1200.0);
         self.layout.right_width = self.layout.right_width.clamp(260.0, 1600.0);
     }
@@ -415,6 +547,30 @@ impl Settings {
     }
 }
 
+/// Version 1 files wrote the whole `display` section whatever the user had chosen, so a stored
+/// value alone does not say it was chosen. A section equal to the old defaults (or absent) is the
+/// look of a user who never changed it: it is dropped, and the Paper defaults apply. A section
+/// with any other value is the user's: it is kept, its missing fields filled from the old
+/// defaults so that the look the user has does not change under them
+fn migrate_display_v1(v: &mut Value) {
+    let Some(obj) = v.as_object_mut() else { return };
+    let Some(section) = obj.get("display").cloned() else { return };
+    if section.is_null() {
+        obj.remove("display");
+        return;
+    }
+    let (Some(stored), Ok(mut merged)) = (section.as_object(), serde_json::to_value(legacy_display())) else { return };
+    for (key, value) in stored {
+        merged[key] = value.clone();
+    }
+    let Ok(read) = serde_json::from_value::<Display>(merged.clone()) else { return };
+    if read == legacy_display() {
+        obj.remove("display");
+    } else {
+        obj.insert("display".into(), merged);
+    }
+}
+
 /// The first previews' flat file, in this version's sections
 fn migrate_v0(v: &Value) -> Value {
     let mut out = serde_json::json!({"version": VERSION});
@@ -443,7 +599,7 @@ pub fn path() -> PathBuf {
     if cfg!(test) {
         return std::env::temp_dir().join(format!("deductum-test-config-{}", std::process::id())).join("settings.json");
     }
-    std::env::var_os("HOME").map(PathBuf::from).unwrap_or_default().join(".config/deductum/settings.json")
+    super::platform::config_dir().join("settings.json")
 }
 
 // ----- the published copy
@@ -487,6 +643,39 @@ pub fn show_changes() -> bool {
 
 pub fn display() -> Display {
     read(|s| s.display.clone())
+}
+
+/// Whether regular text is drawn in semibold (Appearance ▸ Thicken text)
+pub fn thicken() -> bool {
+    read(|s| s.appearance.thicken_text)
+}
+
+/// The family of code in cells, the Source view, goals and names in the text
+pub fn code_font() -> String {
+    read(|s| s.code.font.clone())
+}
+
+/// Code's size in px, before the zoom
+pub fn code_size() -> f32 {
+    read(|s| f32::from(s.code.size))
+}
+
+/// A cell's width in characters of code; zero is the page's whole column (Fill)
+pub fn cell_width() -> u16 {
+    read(|s| s.code.cell_width)
+}
+
+/// iced's family as cosmic-text's
+pub fn cosmic_family(family: cosmic::iced::font::Family) -> cosmic_text::Family<'static> {
+    use cosmic::iced::font::Family;
+    match family {
+        Family::Name(name) => cosmic_text::Family::Name(name),
+        Family::Serif => cosmic_text::Family::Serif,
+        Family::SansSerif => cosmic_text::Family::SansSerif,
+        Family::Cursive => cosmic_text::Family::Cursive,
+        Family::Fantasy => cosmic_text::Family::Fantasy,
+        Family::Monospace => cosmic_text::Family::Monospace,
+    }
 }
 
 #[cfg(test)]
@@ -582,5 +771,120 @@ mod tests {
         assert_eq!(future.display.font, TextFont::default());
         assert_eq!(future.display.line_height, 1.6);
         assert_eq!(future.appearance.zoom, 1.2);
+    }
+
+    #[test]
+    fn settings_files_from_before_the_settings_page_load_with_the_new_fields_at_their_defaults() {
+        let d = Settings::default();
+        let new_fields = |s: &Settings| {
+            assert_eq!(s.appearance.interface_size, 14);
+            assert!(!s.appearance.thicken_text);
+            assert!(s.editing.spelling);
+            assert_eq!((s.code.font.as_str(), s.code.size, s.code.cell_width), ("Noto Sans Mono", 14, 80));
+            assert_eq!(s.agents.default_rights, Rights::Theory);
+            assert_eq!((s.appearance.interface_size, s.code.clone(), s.agents.clone()), (d.appearance.interface_size, d.code.clone(), d.agents.clone()));
+        };
+        // the first previews' flat file
+        let v0 = Settings::from_json(&json!({"vim": true, "zoom": 1.1}));
+        new_fields(&v0);
+        assert!(v0.editing.vim);
+        // a version-1 file as the app wrote it before: whole sections, none of the new fields
+        let v1 = json!({"version": 1,
+            "appearance": {"theme": "dark", "zoom": 1.3, "goal_beside": false},
+            "display": {"font": "Libertinus", "text_size": 20.0, "line_height": 1.6, "measure": 0.0,
+                        "paragraph_spacing": 0.9, "math_scale": 1.3, "justify": true, "centred": false},
+            "editing": {"vim": true, "indent_width": 4, "complete_while_typing": false, "keywords": false, "keyword_pause_ms": 1000},
+            "proof_state": {"show_types": true, "show_changes": false},
+            "llm": {"claude_model": "opus", "codex_model": ""},
+            "lean": {"loogle": "off"}});
+        let old = Settings::from_json(&v1);
+        new_fields(&old);
+        // what the file had is kept
+        assert_eq!(old.appearance.theme, ThemeChoice::Dark);
+        assert_eq!(old.appearance.zoom, 1.3);
+        assert!(!old.appearance.goal_beside);
+        assert_eq!((old.display.font, old.display.text_size, old.display.measure, old.display.math_scale), (TextFont::Libertinus, 20.0, 0.0, 1.3));
+        assert_eq!((old.editing.indent_width, old.editing.complete_while_typing, old.editing.keywords, old.editing.keyword_pause_ms), (4, false, false, 1000));
+        assert_eq!(old.llm.claude_model, "opus");
+        assert_eq!(old.lean.loogle, Loogle::Off);
+        // and a file with a broken new section loses only that section
+        let mut broken = serde_json::to_value(&old).unwrap();
+        broken["code"] = json!({"size": "big"});
+        broken["lean"]["loogle"] = json!("everywhere");
+        let read = Settings::from_json(&broken);
+        assert_eq!(read.code, Code::default());
+        assert_eq!(read.llm.claude_model, "opus");
+    }
+
+    #[test]
+    fn the_new_fields_round_trip_and_stay_in_range() {
+        let mut s = Settings::default();
+        for change in [
+            Change::InterfaceSize(16), Change::ThickenText(true), Change::Spelling(false),
+            Change::CodeFont("Source Code Pro".into()), Change::CodeSize(15), Change::CellWidth(0),
+            Change::DefaultRights(Rights::Folder),
+        ] {
+            s.change(change);
+        }
+        let v = serde_json::to_value(&s).unwrap();
+        assert_eq!(v["agents"]["default_rights"], "folder");
+        assert_eq!(v["code"]["font"], "Source Code Pro");
+        assert_eq!(Settings::from_json(&v), s);
+        assert_eq!((s.appearance.interface_size, s.appearance.thicken_text, s.editing.spelling, s.code.cell_width), (16, true, false, 0));
+        s.change(Change::CodeSize(200));
+        s.change(Change::InterfaceSize(1));
+        s.change(Change::CellWidth(5));
+        s.change(Change::CodeFont("  ".into()));
+        assert_eq!((s.code.size, s.appearance.interface_size, s.code.cell_width, s.code.font.as_str()), (36, 10, 40, "Noto Sans Mono"));
+        let future = Settings::from_json(&json!({"version": 1, "agents": {"default_rights": "everything"}}));
+        assert_eq!(future.agents.default_rights, Rights::Theory, "a name this app does not know takes the default");
+        assert_eq!(Rights::ALL.map(Rights::label), ["Ask first", "This proof", "This theory", "Whole folder"]);
+    }
+
+    #[test]
+    fn paper_defaults_apply_to_files_that_never_chose_the_look_and_users_changes_are_kept() {
+        let d = Display::default();
+        assert_eq!((d.font, d.text_size, d.line_height, d.measure, d.justify, d.centred), (TextFont::Libertinus, 20.0, 1.5, 48.0, true, true));
+        assert_eq!(d.math_scale, 1.05, "Juliet approved x1.05 (household-kit#3)");
+        assert_eq!(legacy_display().math_scale, 1.1);
+        // the first previews' flat file, and a version 1 file with no display section
+        assert_eq!(Settings::from_json(&json!({"vim": true})).display, d);
+        assert_eq!(Settings::from_json(&json!({"version": 1, "appearance": {"zoom": 1.2}})).display, d);
+        // a version 1 file as the app wrote it, the display section at the old defaults throughout
+        let written = |display: Value| json!({"version": 1, "appearance": {"zoom": 1.3}, "display": display});
+        let untouched = serde_json::to_value(legacy_display()).unwrap();
+        let s = Settings::from_json(&written(untouched.clone()));
+        assert_eq!(s.display, d, "never chosen: the Paper defaults, maths x1.05 with them");
+        assert_eq!(s.appearance.zoom, 1.3, "the rest of the file is kept");
+        assert_eq!(s.version, VERSION);
+        // any changed value is a choice: all the stored values stay, and the Paper defaults do not
+        for (key, value) in [("font", json!("Sans")), ("text_size", json!(18.0)), ("line_height", json!(1.8)),
+            ("measure", json!(60.0)), ("paragraph_spacing", json!(1.0)), ("math_scale", json!(1.2)),
+            ("justify", json!(true)), ("centred", json!(false))] {
+            let mut display = untouched.clone();
+            display[key] = value;
+            let kept = Settings::from_json(&written(display.clone()));
+            let mut expected: Display = serde_json::from_value(display).unwrap();
+            expected.clamp();
+            assert_eq!(kept.display, expected, "{key} changed: the user's look is kept whole");
+            assert_ne!(kept.display, d);
+        }
+        // a partial section (a hand-edited file) fills what it lacks from the old defaults
+        let partial = Settings::from_json(&written(json!({"text_size": 18.0})));
+        assert_eq!((partial.display.text_size, partial.display.font, partial.display.measure), (18.0, TextFont::NewComputerModern, 0.0));
+        assert_eq!(partial.display.math_scale, 1.1, "a user who changed something else cannot be told from one who chose x1.1: kept");
+        // a file the app writes now (version 2) is read as it is, the old values included
+        let current = serde_json::to_value(Settings { display: legacy_display(), ..Settings::default() }).unwrap();
+        assert_eq!(Settings::from_json(&current).display, legacy_display());
+        // and a migrated file, saved and read again, keeps what was chosen
+        let round = Settings::from_json(&serde_json::to_value(Settings::from_json(&written(json!({"font": "Sans"})))).unwrap());
+        assert_eq!((round.display.font, round.display.text_size), (TextFont::Sans, 17.0));
+    }
+
+    #[test]
+    fn the_prose_column_default_is_48_em_and_fill_stays_a_choice() {
+        assert_eq!(Display::default().measure, 48.0);
+        assert_eq!(Settings::from_json(&json!({"version": 2, "display": {"measure": 0.0}})).display.measure, 0.0);
+        assert_eq!(Settings::from_json(&json!({"version": 2, "display": {"text_size": 18.0}})).display.measure, 48.0);
     }
 }

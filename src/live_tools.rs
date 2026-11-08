@@ -247,7 +247,7 @@ fn live_tools_isabelle() {
         let _ = std::process::Command::new("bash")
             .arg("-c")
             .arg(format!(
-                "b=$HOME/.local/share/deductum/backend/Isabelle2025; s={}/deductum/backend/Isabelle2025; diff -rq $b/src $s/src >/dev/null && diff -q $b/etc/build.props $s/etc/build.props >/dev/null && mkdir -p {root}/host/backend/Isabelle2025/lib && cp $b/lib/deductum_backend.jar {root}/host/backend/Isabelle2025/lib/",
+                "b=$HOME/.local/share/deductum/backend/Isabelle2025; s={}/backend/Isabelle2025; diff -rq $b/src $s/src >/dev/null && diff -q $b/etc/build.props $s/etc/build.props >/dev/null && mkdir -p {root}/host/backend/Isabelle2025/lib && cp $b/lib/deductum_backend.jar {root}/host/backend/Isabelle2025/lib/",
                 env!("CARGO_MANIFEST_DIR")
             ))
             .status();

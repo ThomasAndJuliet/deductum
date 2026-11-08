@@ -1,6 +1,7 @@
 name: CI
 on:
   push:
+  pull_request:
   workflow_dispatch:
 permissions:
   contents: read
@@ -83,6 +84,19 @@ jobs:
       - name: Keep this validated build on neo for its release-branch push
         if: runner.environment == 'self-hosted' && github.event_name == 'push' && github.ref != 'refs/heads/main' && steps.reuse.outputs.reused != 'true'
         run: neo-ci-build-cache store ci-artifact
+      - name: Test standalone Flatpak installation and update
+        run: python3 scripts/test-package-flatpak-bundle.py
+      - name: Bundle the exact tested payload for standalone installation
+        run: python3 scripts/package-flatpak-bundle.py ci-artifact
+      - name: Preserve the standalone Linux package
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: linux-x86_64
+          path: ci-artifact/linux/*
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
       - name: Preserve this successful release-branch build
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
@@ -128,9 +142,111 @@ jobs:
           tar -xzf "$RUNNER_TEMP/Isabelle2025_linux.tar.gz" -C "$RUNNER_TEMP"
           rm "$RUNNER_TEMP/Isabelle2025_linux.tar.gz"
       - name: Test Lean driver and host core on disposable projects
-        run: python3 deductum/host/tests/integration_lean.py --skip-dsrv --core-fixture "$GITHUB_WORKSPACE/scripts/ci-fixtures/lean"
+        run: python3 host/tests/integration_lean.py --skip-dsrv --core-fixture "$GITHUB_WORKSPACE/scripts/ci-fixtures/lean"
       - name: Test the host against real Isabelle2025
         env:
           DEDUCTUM_ISABELLE: ${{ runner.temp }}/Isabelle2025/bin/isabelle
           DEDUCTUM_STATE_DIR: ${{ runner.temp }}/deductum-isabelle-state
-        run: python3 deductum/host/tests/integration_host.py
+        run: python3 host/tests/integration_host.py
+
+  windows-build:
+    name: Native Windows portable package
+    runs-on: ${{ vars.CI_RUNNER == 'hosted' && 'ubuntu-24.04' || 'neo-ubuntu' }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install the Windows cross compiler and Rust target
+        env:
+          CARGO_HOME: ${{ runner.temp }}/deductum-windows-cargo
+          RUSTUP_HOME: ${{ runner.temp }}/deductum-windows-rustup
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64
+          curl --proto '=https' --tlsv1.2 --fail --location https://sh.rustup.rs --output "$RUNNER_TEMP/rustup-init.sh"
+          sh "$RUNNER_TEMP/rustup-init.sh" -y --no-modify-path --profile minimal --default-toolchain 1.99.0 --target x86_64-pc-windows-gnu
+          printf '%s\n' "$CARGO_HOME/bin" >> "$GITHUB_PATH"
+          printf 'CARGO_HOME=%s\nRUSTUP_HOME=%s\n' "$CARGO_HOME" "$RUSTUP_HOME" >> "$GITHUB_ENV"
+      - name: Fetch the private toolkit with read-only build identities
+        env:
+          LIBCOSMIC_DEPLOY_KEY: ${{ secrets.LIBCOSMIC_DEPLOY_KEY }}
+          HOUSEHOLD_KIT_DEPLOY_KEY: ${{ secrets.HOUSEHOLD_KIT_DEPLOY_KEY }}
+        run: scripts/ci-private-crates.sh libcosmic household-kit
+      - name: Build the app and its complete Windows test executable
+        run: |
+          cargo +1.99.0 build --locked --release --bin deductum --no-default-features --features wgpu --target x86_64-pc-windows-gnu
+          cargo +1.99.0 test --locked --release --no-run --bin deductum --no-default-features --features wgpu --target x86_64-pc-windows-gnu --message-format=json > "$RUNNER_TEMP/windows-tests.jsonl"
+          python3 -c 'import json,os,pathlib,shutil; rows=(json.loads(s) for s in pathlib.Path(os.environ["RUNNER_TEMP"],"windows-tests.jsonl").read_text().splitlines()); tests=[r["executable"] for r in rows if r.get("reason")=="compiler-artifact" and r.get("target",{}).get("name")=="deductum" and r.get("profile",{}).get("test") and r.get("executable")]; assert len(tests)==1,tests; pathlib.Path("dist/windows").mkdir(parents=True,exist_ok=True); shutil.copy2(tests[0],"dist/windows/deductum-tests.exe")'
+      - name: Check packaging and assemble the exact source revision
+        run: |
+          python3 scripts/test-package-windows.py
+          python3 scripts/package-windows.py
+      - name: Fetch and verify the Windows Isabelle test runtime
+        run: |
+          python3 - <<'PY'
+          import hashlib, os, pathlib, shutil, time, urllib.request
+          directory = pathlib.Path(os.environ['RUNNER_TEMP']) / 'windows-test-provers'
+          directory.mkdir()
+          destination = directory / 'Isabelle2025.exe'
+          partial = destination.with_suffix('.part')
+          for attempt in range(3):
+              try:
+                  with urllib.request.urlopen('https://isabelle.in.tum.de/website-Isabelle2025/dist/Isabelle2025.exe', timeout=180) as source, partial.open('wb') as target:
+                      shutil.copyfileobj(source, target)
+                  with partial.open('rb') as source:
+                      assert hashlib.file_digest(source, 'sha256').hexdigest() == '5225d0e28a3c9cb3e4e348b508d332165c65b806201f3936a7a861a6bb39a748', 'Windows Isabelle checksum mismatch'
+                  partial.replace(destination)
+                  break
+              except Exception:
+                  partial.unlink(missing_ok=True)
+                  if attempt == 2:
+                      raise
+                  time.sleep(5 * (attempt + 1))
+          PY
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: windows-x86_64
+          path: |
+            dist/windows/*.zip
+            dist/windows/*.json
+            dist/windows/deductum-tests.exe
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: windows-test-provers
+          path: ${{ runner.temp }}/windows-test-provers/Isabelle2025.exe
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+  windows-native:
+    name: Windows native host, app and real provers
+    needs: [windows-build]
+    runs-on: windows-2025
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: windows-x86_64
+          path: ${{ runner.temp }}/deductum-artifact
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: windows-test-provers
+          path: ${{ runner.temp }}/windows-test-provers
+      - name: Verify the source identity before standard-user execution
+        shell: pwsh
+        run: |
+          $zip = @(Get-ChildItem "$env:RUNNER_TEMP/deductum-artifact" -Filter '*.zip')
+          if ($zip.Count -ne 1) { throw 'Expected exactly one Windows package' }
+          $receipt = Get-Content ([IO.Path]::ChangeExtension($zip[0].FullName, '.json')) -Raw | ConvertFrom-Json
+          if ($receipt.source_sha -ne (git rev-parse HEAD) -or $receipt.source_dirty) { throw 'Package is not this clean source revision' }
+      - name: Run the full native suite and real provers as a standard user
+        shell: pwsh
+        run: ./scripts/run-windows-native-ci.ps1

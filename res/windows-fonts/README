@@ -1,0 +1,18 @@
+Windows does not ship the toolkit's default Open Sans and Noto Sans Mono
+families. These unmodified fonts are embedded on Windows so interface/proof
+text uses the requested families, including in existing pixel regressions.
+
+Source: Fedora 44 open-sans-fonts 1.10-25, google-noto-sans-mono-fonts 20251201-2,
+and google-noto-sans-mono-vf-fonts 20251201-2, from Neo's installed font packages.
+Copyright and redistribution terms are in LICENSE.OpenSans (Apache 2.0) and
+LICENSE.Noto (SIL Open Font License 1.1). The Noto copyright and license are
+recorded in each font's name table; the included OFL text carries that notice.
+Font file name tables retain their upstream notices.
+Linux continues to use its installed fonts.
+
+The regular face is the original variable NotoSansMono[wght].ttf, SHA256
+3c874b97ce11dc54de004c81df02c8f0974033ed1b113377130cbdd71d478f11.
+A cosmic-text 0.19 shaping probe on Neo selects that file for normal weight 400
+and the static NotoSansMono-Bold.ttf for weight 700. Bundling the static regular
+face instead changes unstyled glyph rasterization and fails the preserved
+Neo pixel fixtures. No visual baseline was regenerated for this Windows port.

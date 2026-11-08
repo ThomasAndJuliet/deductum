@@ -43,7 +43,7 @@ lemma broken: "(x::nat) < x"
 end
 "#;
 
-fn prover_json(text: &str) -> serde_json::Value {
+pub(super) fn prover_json(text: &str) -> serde_json::Value {
     let cmds = super::prover::isabelle::blocks::lexical_commands(text, &HashMap::new());
     let chars: Vec<char> = text.chars().collect();
     let commands: Vec<serde_json::Value> = cmds
@@ -209,6 +209,7 @@ pub fn demo_app(mode: Mode) -> App {
         right_width: 420.0,
         dragging: None,
         window_width: 1400.0,
+        window_height: 900.0,
         vim: super::vim::Vim::default(),
         vim_enabled: false,
         mode_model,
@@ -413,7 +414,8 @@ fn clicking_blocks_opens_their_source() {
     assert!(prose.iter().any(|m| matches!(m, super::Message::EditBlock(_))), "{prose:?}");
     // A lemma takes the click itself, as text: it opens with the caret where the click landed
     let mut app = app;
-    let lemma = click(&app, cosmic::iced::Point::new(500.0, 300.0), Size::new(1400.0, 900.0));
+    // (its second line, `apply simp`: Paper sets the prose larger, so the lemma starts lower)
+    let lemma = click(&app, cosmic::iced::Point::new(500.0, 313.0), Size::new(1400.0, 900.0));
     // the pointer's place (hover), then the press, which the shown block's own editor never sees
     draw(&app, "deductum-literate-click", Size::new(1400.0, 900.0));
     for m in lemma.iter().filter(|m| matches!(m, super::Message::HoverMove(..))) {
@@ -451,7 +453,7 @@ fn draws_navigation_and_inline_goals() {
 #[test]
 fn sidebars_resize_and_the_header_shows_the_prover() {
     let app = demo_app(Mode::Literate);
-    let pressed = click(&app, cosmic::iced::Point::new(292.0, 500.0), Size::new(1400.0, 900.0));
+    let pressed = click(&app, cosmic::iced::Point::new(303.0, 500.0), Size::new(1400.0, 900.0));
     assert!(pressed.iter().any(|m| matches!(m, super::Message::DragStart(true))), "{pressed:?}");
     let header: cosmic::Element<'_, super::Message> =
         cosmic::widget::row::with_children(super::view::header_center(&app)).padding(8).into();
@@ -507,7 +509,7 @@ fn scripts_font_loads() {
     println!("faces: {found:?}");
     let ncm: Vec<String> = fs.raw().db().faces().flat_map(|f| f.families.iter().map(|(n, _)| n.clone())).filter(|n| n.contains("NewComputer")).collect();
     println!("ncm: {}", ncm.len());
-    let data = include_bytes!("../../../res/deductum/fonts/IsabellumScripts.ttf");
+    let data = include_bytes!("../res/fonts/IsabellumScripts.ttf");
     println!("ttf-parser: {:?}", cosmic_text::fontdb::Database::new().len());
     let mut db = cosmic_text::fontdb::Database::new();
     db.load_font_data(data.to_vec());
@@ -1001,7 +1003,7 @@ fn hovering_a_shown_block_follows_the_pointer() {
 }
 
 #[test]
-fn the_header_stop_button_stops_a_running_sledgehammer() {
+fn a_running_sledgehammer_is_stopped_from_its_panel_not_the_header() {
     let _turn = ui_turn();
     super::load_fonts();
     let mut app = demo_app(Mode::Literate);
@@ -1021,13 +1023,13 @@ fn the_header_stop_button_stops_a_running_sledgehammer() {
         for e in [Event::Mouse(mouse::Event::CursorMoved { position: at }), Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)), Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left))] {
             let _ = ui.update(&[e], mouse::Cursor::Available(at), &mut renderer, &mut clipboard::Null, &mut msgs);
         }
-        if msgs.iter().any(|m| matches!(m, super::Message::StopTools)) {
+        // (the header's Stop is the prover's, and the chip is one width however busy it is)
+        if msgs.iter().any(|m| matches!(m, super::Message::StopTools | super::Message::Lifecycle("cancel"))) {
             found = Some(x);
             break;
         }
-        assert!(!msgs.iter().any(|m| matches!(m, super::Message::Lifecycle("cancel"))), "only sledgehammer running: no general Interrupt");
     }
-    assert!(found.is_some(), "a stop button for the running sledgehammer in the header");
+    assert!(found.is_none(), "the header has no stop for a tool or Interrupt: the panel has them ({found:?})");
     // pressing it: stopping, asked again until it has stopped
     let _ = cosmic::Application::update(&mut app, super::Message::StopTools);
     assert!(app.workspace.as_ref().unwrap().tools_stopping);
@@ -1070,13 +1072,14 @@ fn the_goal_opens_a_gap_in_a_long_proof_and_clicks_below_it_land_right() {
     let i = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.name == "lemma").unwrap();
     let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(i));
     app.workspace.as_mut().unwrap().theory.as_mut().unwrap().cursor = text[..text.find("have three").unwrap()].chars().count() + 3;
-    let mut h = Harness::new(Size::new(1000.0, 900.0));
+    // (taller than the old 900: the 14 px code of Paper's cells makes the proof longer than that)
+    let mut h = Harness::new(Size::new(1000.0, 1100.0));
     h.focus(&app, super::view::block_editor_id());
     h.draw(&app, "gap-narrow-long");
     // Click down the left of the proof until the caret lands on "have ten"'s line (below the gap)
     let want = text.lines().skip(2).position(|l| l.contains("have ten")).unwrap();
     let mut landed = None;
-    for y in (150..880).step_by(6) {
+    for y in (150..1080).step_by(6) {
         let msgs = h.click(&app, cosmic::iced::Point::new(130.0, y as f32));
         // (only what reaches the open editor: a click outside the proof would close it)
         for m in msgs.into_iter().filter(|m| matches!(m, super::Message::BlockAction(_))) {
@@ -1366,8 +1369,10 @@ fn the_goal_beside_stays_level_with_its_construct() {
     // page's background
     let img = image::RgbaImage::from_raw(1460, 966, png).expect("the frame's pixels");
     let bg = *img.get_pixel(1440, 5);
-    let x = 1100;
-    let top = (0..img.height()).find(|&y| img.get_pixel(x, y) != &bg);
+    // (right of the cells, which are 80 characters of 14 px code wide and here end at 768; the goal
+    // sits past what is level with it, which is the cell, or the whole column where the page has a
+    // wide item there)
+    let top = (0..img.height()).find(|&y| (800..1440).step_by(10).any(|x| img.get_pixel(x, y) != &bg));
     eprintln!("goal card top at {top:?}");
     let top = top.expect("a goal beside") as f32;
     assert!(top > 300.0, "not jumped to the top of the window (top = {top})");
@@ -1562,7 +1567,7 @@ fn the_views_in_light_mode() {
     let i = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.name == "lemma").unwrap();
     let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(i));
     let mut h = Harness::new(Size::new(1500.0, 900.0));
-    cosmic::theme::set_active(cosmic::theme::ThemeType::Light);
+    cosmic::theme::set_active(crate::tones::light_type_for_tests());
     h.focus(&app, super::view::block_editor_id());
     h.draw(&app, "light-literate-open");
     let _ = cosmic::Application::update(&mut app, super::Message::CloseBlock);
@@ -1625,12 +1630,14 @@ fn nothing_on_the_page_runs_into_the_goal_beside_it() {
         let accent = |p: &image::Rgba<u8>| p[2] > 170 && p[1] > 150 && p[0] < 150;
         // (the pill filled with the accent, not accent-coloured text such as a note's Resolve)
         let pill = |x: u32, y: u32| (x..x + 20).all(|xx| accent(img.get_pixel(xx, y)));
-        let button = (w / 2..w - 40).find(|&x| (0..h).any(|y| pill(x, y))).expect("the goal beside");
+        let button = (w * 2 / 3..w - 40).find(|&x| (0..h).any(|y| pill(x, y))).expect("the goal beside");
         let by = (0..h).find(|&y| pill(button, y)).unwrap();
         // (left from the button, to where the card's background ends)
         let card = (0..button).rev().find(|&x| img.get_pixel(x, by) == &bg).map_or(button, |x| x + 1);
         // the gap before it: background on every row
-        let strip = card - super::view::GOAL_GAP_PUB as u32 + 1..card - 1;
+        // (from one pixel in: Paper's justified prose ends exactly at the column's edge, and its last
+        // glyph may be anti-aliased over it)
+        let strip = card - super::view::GOAL_GAP_PUB as u32 + 2..card - 1;
         let crossing: Vec<(u32, u32)> = strip.clone().flat_map(|x| (0..h).map(move |y| (x, y))).filter(|&(x, y)| img.get_pixel(x, y) != &bg).take(5).collect();
         eprintln!("{name}: goal card at x = {card}; strip {strip:?}; crossing {crossing:?}");
         assert!(crossing.is_empty(), "{name}: something on the page reaches into the goal's gap at {crossing:?}");
@@ -1654,13 +1661,14 @@ fn margins_pictures() {
     }
 }
 
-/// The user's window (about 1344 px wide, code about 85 columns): the margins give way so that
-/// the goal goes beside the code, and they give way before the goal does in narrower windows
+/// The user's window (about 1344 px wide, code about 85 columns): the margins give way, then the
+/// goal, then the cells, so that the goal goes beside the code, whatever the length of its lines,
+/// down to where a 60 character cell and a 300 px goal no longer fit (893 px, without the sidebar)
 #[test]
 fn the_margins_collapse_before_the_goal_goes_under() {
     let wide_line = "lemma wide: \"timed_contract_wf true\\<^sub>r skip_unstable (timed_assign_final f) \\<and> timed_reactive P\"\n  by simp\n\n";
     let text = format!("theory W imports Main begin\n\n{wide_line}lemma low: \"(a::nat) + b = b + a\"\nproof -\n  show ?thesis\n    by simp\nqed\n\nend\n");
-    for (w, beside) in [(1320.0f32, true), (1100.0, true), (1000.0, false)] {
+    for (w, beside) in [(1500.0f32, true), (1320.0, true), (1100.0, true), (1000.0, true), (900.0, true), (890.0, false), (760.0, false)] {
         let mut app = demo_app(Mode::Literate);
         let doc = json!({"text": text, "revision": 1, "prover": prover_json(&text)});
         app.workspace.as_mut().unwrap().theory = Some(Theory::new("/tmp/W.thy".into(), &doc, &Table::fallback(), Arc::new(HashMap::new()), Mode::Literate, crate::prover::profile(None)));
@@ -1995,7 +2003,7 @@ fn vim_up_from_proof_enters_the_last_row_of_wrapped_prose() {
 fn vim_down_from_proof_traverses_wrapped_prose_rows() {
     use cosmic::iced::keyboard::Key;
     use cosmic::widget::text_editor::{Action, Motion};
-    let para = "Paragraph 1: café naïve αβ repeated repeated; see [link](https://example.test) and $x + 0 = x$. This deliberately long paragraph wraps across multiple lines and continues with repeated repeated words for navigation.";
+    let para = "Paragraph 1: café naïve αβ repeated repeated; see [link](https://example.test) and $x + 0 = x$. This deliberately long paragraph wraps across multiple lines and continues with repeated repeated words for navigation. It goes on, with more repeated words, so that it still wraps onto at least four rows in Paper's wide, large type, and then a few more words to be sure of the fourth row, and a few more again.";
     let text = format!("theory P imports Main begin\n\nlemma before: \"True\"\n  by simp\n\ntext \\<open>{para}\\<close>\n\nlemma after: \"True\"\n  by simp\n\nend\n");
     let mut app = demo_app(Mode::Literate);
     let doc = json!({"text": text, "revision": 1});
@@ -2335,7 +2343,9 @@ fn the_goal_is_beside_the_selected_block_with_none_open() {
     let has_goal_beside = |png: Vec<u8>| {
         let img = image::RgbaImage::from_raw(1320, 800, png).unwrap();
         let bg = *img.get_pixel(12, 400);
-        (1000..1290).any(|x| (60..780).step_by(4).any(|y| img.get_pixel(x, y) != &bg))
+        // (right of the cells, which end well before it, and under the prose above them: the panel is
+        // just past the cell, no longer at the prose column's edge)
+        (1000..1290).any(|x| (250..780).step_by(4).any(|y| img.get_pixel(x, y) != &bg))
     };
     assert!(has_goal_beside(h.draw(&app, "selected-beside")), "the goal beside the selected proof");
     let _ = cosmic::Application::update(&mut app, super::Message::ToggleGoalBeside);
@@ -2485,6 +2495,7 @@ fn up_and_down_leave_a_block_from_its_edge_rows() {
             let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
             t.block_editor.as_ref().and_then(|be| t.blocks.iter().position(|b| b.start <= be.start && be.start <= b.end))
         };
+        let rows = super::view::open_rows(app.workspace.as_ref().unwrap().theory.as_ref().unwrap().block_editor.as_ref().unwrap())[0];
         let mut presses = 0;
         for _ in 0..8 {
             presses += 1;
@@ -2497,9 +2508,10 @@ fn up_and_down_leave_a_block_from_its_edge_rows() {
                 break;
             }
         }
-        eprintln!("up {up}: left the block after {presses} presses");
-        // up: by simp -> row 2 -> row 1 -> out; down: row 1 -> row 2 -> by simp -> out
-        assert!(presses <= 3 + usize::from(!up), "up {up}: out of the block within a press per row ({presses} presses)");
+        eprintln!("up {up}: left the block after {presses} presses, its first line {rows} rows");
+        assert!(rows >= 2, "the first line wraps at this width");
+        // up: by simp -> its rows, last first -> out; down: its other rows -> by simp -> out
+        assert!(presses <= rows + 1, "up {up}: out of the block within a press per row ({presses} presses, {rows} rows)");
         assert!(open(&app) != Some(wi), "up {up}: left the block");
     }
 }
@@ -2767,7 +2779,7 @@ fn frame_matrix() {
             let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(i));
         }
         let mut h = Harness::new(Size::new(c.width, 860.0));
-        cosmic::theme::set_active(if c.dark { cosmic::theme::ThemeType::Dark } else { cosmic::theme::ThemeType::Light });
+        cosmic::theme::set_active(if c.dark { cosmic::theme::ThemeType::Dark } else { crate::tones::light_type_for_tests() });
         super::view::set_goal_beside(c.beside);
         if c.mode == Mode::Literate {
             h.focus(&app, super::view::block_editor_id());
@@ -2966,7 +2978,7 @@ fn the_insert_bar_sits_above_the_isabelle_goal() {
     for dark in [true, false] {
         for (w, h, beside) in [(1400.0, 900.0, true), (1400.0, 900.0, false), (800.0, 760.0, true), (800.0, 760.0, false)] {
             let mut harness = Harness::new(Size::new(w, h));
-            cosmic::theme::set_active(if dark { cosmic::theme::ThemeType::Dark } else { cosmic::theme::ThemeType::Light });
+            cosmic::theme::set_active(if dark { cosmic::theme::ThemeType::Dark } else { crate::tones::light_type_for_tests() });
             super::view::set_goal_beside(beside);
             let mut app = demo_app(Mode::Literate);
             app.show_right = false;

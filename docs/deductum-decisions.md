@@ -2,7 +2,7 @@
 
 Deductum opens a folder of Isabelle theories and shows it as a literate
 document. You and any number of agents work in the same live prover session.
-The app is a sibling of COSMIC Terminal Agents and lives in the same repository.
+Deductum began inside the household's COSMIC Terminal Agents work and is now a project of its own; Terminal Agents remains a separate app that it integrates with (C10).
 
 This app was called **Isabellum** until 2026-10-11 (C17a); the record below keeps its history under the new name. On branch `multi-prover` it is being extended to Lean and Rocq (Coq)
 backends alongside Isabelle (C16). That design is in
@@ -40,11 +40,11 @@ deductum command, Terminal Agents ┘   socket, or         │ edit log, undo, g
 
 | Component | Path | Role |
 |---|---|---|
-| Backend | `deductum/backend/Isabelle2025/src/backend.scala` | One PIDE session per prover epoch. Holds the prover's copy of each opened theory and reports command spans and status, messages, proof states at any offset, and query operations (Sledgehammer, Find Theorems). |
-| Session host | `deductum/host/deductum_host.py` | Owns sessions, the authoritative buffers, the edit log, undo, grants, notices, autosave and disk watching. Starts and stops backends. Standard library only. |
-| Transforms | `deductum/host/deductum_ot.py`, `src/bin/deductum/ot.rs` | Rebasing a change past later changes under the `strict`, `partial` and `merge` policies. |
-| MCP adapter | `deductum/host/deductum_mcp.py` | The agent tools. Run with `deductum_host.py mcp [--ssh DEST]`. |
-| App | `src/bin/deductum/` | Sessions sidebar, the literate and source views, panels, the `deductum` command. |
+| Backend | `backend/Isabelle2025/src/backend.scala` | One PIDE session per prover epoch. Holds the prover's copy of each opened theory and reports command spans and status, messages, proof states at any offset, and query operations (Sledgehammer, Find Theorems). |
+| Session host | `host/deductum_host.py` | Owns sessions, the authoritative buffers, the edit log, undo, grants, notices, autosave and disk watching. Starts and stops backends. Standard library only. |
+| Transforms | `host/deductum_ot.py`, `src/ot.rs` | Rebasing a change past later changes under the `strict`, `partial` and `merge` policies. |
+| MCP adapter | `host/deductum_mcp.py` | The agent tools. Run with `deductum_host.py mcp [--ssh DEST]`. |
+| App | `src/` | Sessions sidebar, the literate and source views, panels, the `deductum` command. |
 | Renderer | `prose/prose-render`, `prose/prose-spell` | Cerea's shared crates, as a git subtree. They replace the `#[path]` borrowing of `src/thread/{markdown,rich,math}.rs` described under "The literate view" (merged from `shared-prose`). |
 
 ## Specified behaviour
@@ -57,7 +57,7 @@ deductum command, Terminal Agents ┘   socket, or         │ edit log, undo, g
 | C4 | `.thy` files are authoritative. Prose in `text` blocks is editable. Clicking rendered LaTeX or Isabelle content reveals its own source. Proofs are edited inline, with an expanded proof workspace that can pop out into its own window. Agents may be granted direct editing rights. |
 | C5 | Undo is per author: Ctrl+Z undoes your own edits, and agents' changes have a separate revert action. |
 | C6 | Grant scopes: the whole folder, one theory, or a selected proof. The grant screen defaults to the folder. |
-| C7 | A sibling app. Undo is handled intelligently, so that work is **hard to lose**. Agents are told when their edits conflict. **Pause** keeps the Isabelle server running but pauses work. |
+| C7 | A separate app, not a mode of Terminal Agents. Undo is handled intelligently, so that work is **hard to lose**. Agents are told when their edits conflict. **Pause** keeps the Isabelle server running but pauses work. |
 | C8 | Both collaborative and **independent** agent work. Independent work means the agent's own session on its own copy, which you can watch and which comes back as a reviewed merge. |
 | C9 | Editing rights last until revoked. Agents are identified by conversation ID, accepting that this is not a security boundary. |
 | C10 | From Terminal Agents, the human can open, view and work on the theory an agent is working on. |
@@ -129,22 +129,22 @@ deductum command, Terminal Agents ┘   socket, or         │ edit log, undo, g
 
 | Area | Evidence |
 |---|---|
-| Transforms | `deductum/host/tests/test_ot.py`: 14 tests, including randomised properties. Strict rebasing equals applying both changes simultaneously; merging never drops inserted text; inverses round-trip. The Rust port has matching tests. |
-| Host against a real prover | `deductum/host/tests/integration_host.py` passes 28 checks on au-laptop with CyPhyAssure Isabelle2025: proof states, refusing edits without a grant, rebasing stale edits, rejecting conflicting ones, overlap notices, per-author undo and redo, revert with notice, autosave, clean reload as a logged edit, disk conflicts holding autosave, agent resolution, Sledgehammer with the span to replace, Pause refusing queries immediately, Resume rechecking, Stop and Resume with a new epoch, agents unable to resume the human's session, `find_sessions` by Zellij session, and refusal after revoking. |
+| Transforms | `host/tests/test_ot.py`: 14 tests, including randomised properties. Strict rebasing equals applying both changes simultaneously; merging never drops inserted text; inverses round-trip. The Rust port has matching tests. |
+| Host against a real prover | `host/tests/integration_host.py` passes 28 checks on au-laptop with CyPhyAssure Isabelle2025: proof states, refusing edits without a grant, rebasing stale edits, rejecting conflicting ones, overlap notices, per-author undo and redo, revert with notice, autosave, clean reload as a logged edit, disk conflicts holding autosave, agent resolution, Sledgehammer with the span to replace, Pause refusing queries immediately, Resume rechecking, Stop and Resume with a new epoch, agents unable to resume the human's session, `find_sessions` by Zellij session, and refusal after revoking. |
 | MCP | A scripted agent session on au-laptop: open, check, read, proof state, Sledgehammer refused without rights and then inserting `by simp` after a grant, history, Find Theorems. |
-| App views | `src/bin/deductum/snapshot.rs` renders the literate view, the source view, and the Sledgehammer, Agents and History panels headlessly with tiny-skia (`CT_SNAPSHOTS=dir`). |
-| App against a real host | `src/bin/deductum/live.rs` (`DEDUCTUM_LIVE=d59500`, `--ignored`) drives the window's state machine over ssh. You type in the source view while an agent replaces a `sorry` against an older revision; the replica converges on both edits. The goal query, Sledgehammer and autosave are checked too. |
+| App views | `src/snapshot.rs` renders the literate view, the source view, and the Sledgehammer, Agents and History panels headlessly with tiny-skia (`CT_SNAPSHOTS=dir`). |
+| App against a real host | `src/live.rs` (`DEDUCTUM_LIVE=d59500`, `--ignored`) drives the window's state machine over ssh. You type in the source view while an agent replaces a `sorry` against an older revision; the replica converges on both edits. The goal query, Sledgehammer and autosave are checked too. |
 | Unit tests | 43 Rust tests (`cargo test --bin deductum`): symbols and offset maps, blocks, the literate conversion, the replica with concurrent edits, typed symbol escapes, the command line. |
 
 Building and running:
 
 ```sh
 cargo build --release --bin deductum                       # inside the Flatpak SDK on neo
-python3 deductum/host/deductum_host.py runtimes           # the runtimes the host can use
+python3 host/deductum_host.py runtimes           # the runtimes the host can use
 claude mcp add deductum -- python3 ~/.local/share/deductum/host/deductum_host.py mcp
 ```
 
-The app installs `deductum/host` and `deductum/backend` into
+The app installs `host` and `backend` into
 `~/.local/share/deductum` on each machine it connects to. The host builds
 the backend jar with the runtime's `isabelle scala_build`.
 
@@ -231,7 +231,7 @@ the backend jar with the runtime's `isabelle scala_build`.
   - `isabelle_human_view` gives where the human is, the selection and the proof around the caret. `isabelle_show` offers the human a place, or goes there if they follow the agent.
   - `isabelle_add_note` leaves a note on lines. It moves with edits and shows under its block; the human replies or resolves, and the reply reaches the agent as a notice.
 - **Files.** The folder is relisted every 5 s and the app is told when theories appear or disappear. The sidebar groups theories by folder, drops a shared name prefix, shows status as a dot, and gets a filter for large folders. The left sidebar starts hidden.
-- **Header.** Open the session's folder in Files, Zed or a terminal (Terminal Agents, else COSMIC Terminal, else any), over sshfs or ssh for remote sessions.
+- **Header.** Open the session's folder in Files, Zed or a terminal (Terminal Agents, else the plain cosmic-term, else any), over sshfs or ssh for remote sessions.
 - **Copy and paste.** Ctrl+C, Ctrl+X and Ctrl+V work in every vim mode. Copy writes Isabelle source, with symbols as escapes.
 
 - **Adding and removing blocks.** Under the selected block, and at the end of the theory, are + Text, + Section and + Lemma (and Delete for the selected block). `dd` in vim block navigation deletes it. A new block opens for editing, and each insert or delete is one undo step. Until the prover has seen new text, `theory::blocks` splits it where a theory-level command starts a line, so a new block is a block at once.
@@ -257,7 +257,7 @@ the backend jar with the runtime's `isabelle scala_build`.
 
 - **Agents, end to end.**
   - Deductum's MCP server is registered with Claude Code and Codex on au-laptop (local host) and neo (au-laptop's host over ssh, `mcp --ssh d59500`).
-  - A client on another machine names files as that machine does; the host reaches them through COSMIC Terminal's sshfs mount of it (`translate_path`), and git there trusts mounted repositories.
+  - A client on another machine names files as that machine does; the host reaches them through Terminal Agents' sshfs mount of it (`translate_path`), and git there trusts mounted repositories.
   - Tested with real agents. Claude (`claude -p`) and Codex (`codex exec`) each opened a session on a neo folder, asked for rights, waited for the grant, proved a lemma, checked it, saved or left a note. A scripted MCP test covers the same, and another covers independent work: fork, prove in the copy without asking, preview, and the human merges it into the shared session as the agent's change.
   - Codex starts MCP servers without a conversation id: the adapter takes the Codex process as the conversation (so a grant holds for its run) and labels it Codex. Codex asks for approval of MCP tools itself.
   - Fixed along the way: tools with relative paths (request access, show, notes) now resolve them against the session folder, the edit tool takes a single `old_text`/`new_text`, and the goal at a `sorry` is the goal it stands in for.

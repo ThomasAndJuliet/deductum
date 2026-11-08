@@ -67,6 +67,7 @@ pub(super) fn app(target: link::Target) -> App {
         right_width: 420.0,
         dragging: None,
         window_width: 1400.0,
+        window_height: 900.0,
         vim: super::vim::Vim::default(),
         vim_enabled: false,
         mode_model,

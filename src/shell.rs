@@ -19,9 +19,9 @@ use cosmic::{iced, theme};
 use serde_json::{Value, json};
 
 use super::editor::Mode;
-use super::settings::{DisplayChange, Loogle, Settings, ThemeChoice};
+use super::settings::{Change, DisplayChange, Loogle, Settings, ThemeChoice};
 use super::theory::Status;
-use super::{App, Message, Panel, Pending, Workspace, file_name, link};
+use super::{App, Message, Pending, Workspace, file_name, link};
 
 /// What the shell keeps between frames
 #[derive(Default)]
@@ -36,6 +36,13 @@ pub struct Shell {
     pub collapsed: std::collections::HashSet<(String, String)>,
     /// Folders collapsed in a session's document list, by machine, session and folder
     pub collapsed_dirs: std::collections::HashSet<(String, String, String)>,
+    /// The Settings page's own state: search, Show changed only, the section being read
+    pub page: super::settings_page::PageState,
+    /// What passed, said for a few seconds at the window's foot
+    pub toasts: super::toast::Toaster,
+    /// The agent-session popover (not on Windows)
+    #[cfg(not(windows))]
+    pub agent: super::agent_session::Popover,
 }
 
 /// A project action's run (`lake build`, building a heap)
@@ -65,6 +72,10 @@ pub enum Msg {
     KeywordPause(u32),
     ShowTypes(bool),
     ShowChanges(bool),
+    /// One of the settings the Settings page added (see `settings::Change`)
+    Setting(Change),
+    /// The Settings page's own doings (search, jump to a section, reset a row, Back)
+    Page(super::settings_page::PageMsg),
     /// Where this session's keyword lines go: the route's index among those offered
     Route(usize),
     ClaudeModel(String),
@@ -82,6 +93,28 @@ pub enum Msg {
     ToggleDocuments,
     /// Collapse or expand one folder of the open session's document list
     ToggleDocFolder(String),
+    /// Go to the next cell that failed or is unfinished
+    NextProblem(super::attention::Problem),
+    /// Quit, once the edits have reached the host
+    Quit,
+    /// The settings page, on one of its pages (Keyboard shortcuts, About)
+    SettingsAt(super::settings_page::Sub),
+    /// The agent-session popover: open or close it, choose the rights and the tool, start the session
+    #[cfg(not(windows))]
+    AgentOpen(bool),
+    #[cfg(not(windows))]
+    AgentRights(super::settings::Rights),
+    #[cfg(not(windows))]
+    AgentTool(super::agent_session::Tool),
+    #[cfg(not(windows))]
+    AgentStart,
+    /// Terminal Agents was asked for the thread's page: how that went
+    #[cfg(not(windows))]
+    AgentLaunched(Result<(), String>),
+    /// A toast's time ran out, or it was closed
+    ToastGone(cosmic::widget::ToastId),
+    /// A toast's Undo was pressed: the toast goes and the last step is undone
+    ToastUndo(cosmic::widget::ToastId),
 }
 
 impl App {
@@ -116,8 +149,13 @@ impl App {
         let theme = settings.appearance.theme;
         super::settings::publish(&settings);
         self.shell.settings = settings;
-        // (the desktop's theme is libcosmic's own default: nothing to set for it)
-        if theme == ThemeChoice::System { Task::none() } else { cosmic::command::set_theme(theme.theme()) }
+        // The desktop's theme is libcosmic's own default, but it too takes the household's tones
+        cosmic::command::set_theme(theme.theme())
+    }
+
+    /// Say what passed, in a toast that goes by itself; with an Undo where an undo exists
+    pub fn toast(&mut self, text: impl Into<String>, undo: bool) -> Task<Message> {
+        self.shell.toasts.push(text, undo, super::toast::STAY)
     }
 
     /// Tell a machine's host what this app wants of keyword lines and searches (the models to
@@ -142,6 +180,7 @@ impl App {
                 let closing = self.shell.settings_open && !open;
                 self.shell.settings_open = open;
                 if open {
+                    self.shell.page.sub = super::settings_page::Sub::Settings;
                     self.new_session = None;
                 } else if closing && let Some(t) = self.workspace.as_ref().and_then(|w| w.theory.as_ref()) {
                     if t.mode == Mode::Source {
@@ -204,6 +243,11 @@ impl App {
                 self.save_settings();
                 return self.schedule_state();
             }
+            Msg::Setting(change) => {
+                self.shell.settings.change(change);
+                self.save_settings();
+            }
+            Msg::Page(m) => return super::settings_page::update(self, m),
             Msg::Route(i) => {
                 let routes = self.workspace.as_ref().map(routes).unwrap_or_default();
                 if let Some((value, _)) = routes.get(i) {
@@ -263,6 +307,28 @@ impl App {
                 }
             }
             Msg::OpenDocument(path) => return self.open_document(path),
+            #[cfg(not(windows))]
+            m @ (Msg::AgentOpen(_) | Msg::AgentRights(_) | Msg::AgentTool(_) | Msg::AgentStart | Msg::AgentLaunched(_)) => return self.agent_update(m),
+            Msg::Quit => {
+                if self.defer_leave(super::DeferredLeave::Quit) {
+                    return self.flush_edits();
+                }
+                return cosmic::iced::exit();
+            }
+            Msg::SettingsAt(sub) => {
+                let task = self.shell_update(Msg::Settings(true));
+                self.shell.page.sub = sub;
+                return task;
+            }
+            Msg::ToastGone(id) => self.shell.toasts.gone(id),
+            Msg::ToastUndo(id) => {
+                self.shell.toasts.gone(id);
+                return self.update(Message::Undo);
+            }
+            Msg::NextProblem(kind) => {
+                let Some(at) = self.workspace.as_ref().and_then(|w| w.theory.as_ref()).and_then(|t| super::attention::next(t, kind)) else { return Task::none() };
+                return self.update(Message::Goto(at));
+            }
         }
         Task::none()
     }
@@ -319,6 +385,17 @@ pub fn icon_handle(name: &'static str) -> widget::icon::Handle {
     match name {
         "sidebar-left" => widget::icon::from_svg_bytes(SIDEBAR_LEFT).symbolic(true),
         "sidebar-right" => widget::icon::from_svg_bytes(SIDEBAR_RIGHT).symbolic(true),
+        // Cerea's views icons (res/icons, from its origin/main) and the terminal's agent session
+        "paper-mode-symbolic" => widget::icon::from_svg_bytes(include_bytes!("../res/icons/paper-mode-symbolic.svg").as_slice()).symbolic(true),
+        "source-view-symbolic" => widget::icon::from_svg_bytes(include_bytes!("../res/icons/source-view-symbolic.svg").as_slice()).symbolic(true),
+        // The prover logos (Tom approved them 8 Nov; drafts until Juliet approves them for household-ui)
+        "isabelle-symbolic" => widget::icon::from_svg_bytes(include_bytes!("../res/icons/isabelle-symbolic.svg").as_slice()).symbolic(true),
+        "lean-symbolic" => widget::icon::from_svg_bytes(include_bytes!("../res/icons/lean-symbolic.svg").as_slice()).symbolic(true),
+        "ai-session-symbolic" => widget::icon::from_svg_bytes(include_bytes!("../res/icons/ai-session-symbolic.svg").as_slice()).symbolic(true),
+        #[cfg(windows)]
+        "view-dual-symbolic" => widget::icon::from_svg_bytes(include_bytes!("../res/icons/view-dual-symbolic.svg").as_slice()).symbolic(true),
+        #[cfg(windows)]
+        "view-paged-symbolic" => widget::icon::from_svg_bytes(include_bytes!("../res/icons/view-paged-symbolic.svg").as_slice()).symbolic(true),
         _ => widget::icon::from_name(name).handle(),
     }
 }
@@ -398,9 +475,10 @@ pub fn tinted_icon<'a>(name: &'static str, size: u16, tint: fn(&cosmic::Theme) -
         .into()
 }
 
-/// The text's colour, faded towards the page (for icons that go with secondary text)
+/// Icons that go with secondary text: `tones::secondary_text`, the darkest tone on a light theme,
+/// the text's colour faded towards the page on a dark one
 pub fn muted(theme: &cosmic::Theme) -> Color {
-    Color { a: 0.7, ..Color::from(theme.cosmic().on_bg_color()) }
+    super::tones::secondary_text(theme, 0.7)
 }
 
 /// The text's colour, faded further (for what cannot be used yet)
@@ -410,14 +488,18 @@ pub fn dimmed(theme: &cosmic::Theme) -> Color {
 
 /// A backend's mark: a small rounded square with its initial, in its colour
 pub fn backend_mark<'a>(backend: &str) -> Element<'a, Message> {
+    widget::tooltip(backend_glyph(backend), widget::text(backend_label(backend)), widget::tooltip::Position::Bottom).into()
+}
+
+/// A backend's mark without its tooltip
+pub fn backend_glyph<'a>(backend: &str) -> Element<'a, Message> {
     let (letter, rgb): (&str, [u8; 3]) = match backend {
         "lean" => ("L", [0x3a, 0x8f, 0xe8]),
         "rocq" | "coq" => ("R", [0xe8, 0x7a, 0x2c]),
         _ => ("I", [0xd9, 0x9a, 0x1e]),
     };
     let base = Color::from_rgb8(rgb[0], rgb[1], rgb[2]);
-    widget::tooltip(
-        widget::container(widget::text(letter).size(11.0).font(cosmic::font::bold()))
+    widget::container(widget::text(letter).size(11.0).font(cosmic::font::bold()))
             .width(Length::Fixed(18.0))
             .height(Length::Fixed(18.0))
             .center_x(Length::Fixed(18.0))
@@ -427,11 +509,8 @@ pub fn backend_mark<'a>(backend: &str) -> Element<'a, Message> {
                 text_color: Some(readable_on(theme, base)),
                 border: Border { radius: 4.0.into(), width: 1.0, color: Color { a: 0.55, ..base } },
                 ..Default::default()
-            })),
-        widget::text(backend_label(backend)),
-        widget::tooltip::Position::Bottom,
-    )
-    .into()
+            }))
+        .into()
 }
 
 pub fn backend_label(backend: &str) -> &'static str {
@@ -444,194 +523,115 @@ pub fn backend_label(backend: &str) -> &'static str {
 
 // ----- the header bar
 
-/// The header's start: the sidebar's toggle, the view switch, then undo and redo apart from it
+/// The header's start: the sidebar's toggle, then the menu bar
 pub fn header_start(app: &App) -> Vec<Element<'_, Message>> {
-    let mut items: Vec<Element<'_, Message>> = vec![icon_button("sidebar-left", "Show or hide the sidebar", Some(Message::ToggleSidebar))];
-    if app.shell.settings_open {
-        return items;
-    }
-    if let Some(t) = app.workspace.as_ref().and_then(|w| w.theory.as_ref()) {
-        items.push(widget::Space::new().width(Length::Fixed(4.0)).into());
-        // (its chosen part in the muted accent, household rule 6)
-        items.push(widget::segmented_control::horizontal(&app.mode_model)
-            .width(Length::Shrink)
-            .style(super::tones::muted_segmented())
-            .on_activate(Message::SetModeEntity)
-            .into());
-        items.push(widget::Space::new().width(Length::Fixed(sp().space_s as f32)).into());
-        items.push(icon_button("edit-undo-symbolic", "Undo your last edit (Ctrl+Z)", t.can_undo.then_some(Message::Undo)));
-        items.push(icon_button("edit-redo-symbolic", "Redo (Ctrl+Shift+Z)", t.can_redo.then_some(Message::Redo)));
-        if !app.back.is_empty() {
-            items.push(icon_button("go-previous-symbolic", "Back to where Ctrl+click came from (Alt+Left)", Some(Message::Back)));
-        }
-    }
-    items
+    vec![
+        icon_button("sidebar-left", "Show or hide the sidebar (F9)", Some(Message::ToggleSidebar)),
+        super::menubar::bar(app),
+    ]
 }
 
-/// A segment of a switch or a tab: filled with the muted accent when it is the current one, its
-/// icon in the fill's on colour, hovered with COSMIC's wash over the fill (household-ui RULES.md
-/// rule 6: the chosen tab of a row does not catch the eye as a Primary button does)
-pub fn segment_style(on: bool) -> theme::Button {
-    fn style(theme: &cosmic::Theme, on: bool, hover: bool) -> button::Style {
-        let c = theme.cosmic();
-        let text: Color = c.on_bg_color().into();
-        let mut s = button::Style::new();
-        s.border_radius = 14.0.into();
-        if on {
-            let (fill, label) = super::tones::muted(theme);
-            s.background = Some(if hover { super::tones::muted_washed(theme, c.icon_button.hover) } else { fill }.into());
-            s.text_color = Some(label);
-            s.icon_color = Some(label);
+/// Cerea's views bar for Literate and Source: two icon parts joined, rounded at the ends only, the
+/// chosen one in the muted accent; the same two parts with no document open, dimmed, saying why
+pub fn views_bar(app: &App) -> Element<'_, Message> {
+    let t = app.workspace.as_ref().and_then(|w| w.theory.as_ref()).filter(|_| !app.shell.settings_open);
+    let [tl, tr, br, bl] = theme::active().cosmic().corner_radii.radius_xl;
+    let parts = [
+        (Mode::Literate, "paper-mode-symbolic", "Literate: the document as a page of text and proofs"),
+        (Mode::Source, "source-view-symbolic", "Source: the document's own text"),
+    ];
+    let last = parts.len() - 1;
+    let space = sp();
+    let row: Vec<Element<'_, Message>> = parts
+        .into_iter()
+        .enumerate()
+        .map(|(n, (mode, icon, tip))| {
+            let radius = [if n == 0 { tl } else { 0.0 }, if n == last { tr } else { 0.0 }, if n == last { br } else { 0.0 }, if n == 0 { bl } else { 0.0 }];
+            let b = button::custom(widget::icon(icon_handle(icon)).size(16))
+                .class(super::tones::toggled_rounded(t.is_some_and(|t| t.mode == mode), radius))
+                .padding([space.space_xxs, space.space_xs])
+                .on_press_maybe(t.map(|_| Message::SetMode(mode)));
+            let tip = if t.is_some() { tip.to_string() } else { "Open a document to choose how it is shown".to_string() };
+            widget::tooltip(b, widget::text(tip), widget::tooltip::Position::Bottom).into()
+        })
+        .collect();
+    widget::container(widget::Row::with_children(row).align_y(Alignment::Center))
+        .class(theme::Container::custom(|t| {
+            let c = t.cosmic();
+            iced::widget::container::Style {
+                background: Some(Color::from(c.background(t.transparent).component.base).into()),
+                border: Border { radius: c.corner_radii.radius_xl.into(), width: 1.0, color: c.bg_divider().into() },
+                ..Default::default()
+            }
+        }))
+        .into()
+}
+
+/// The Open in button (Windows': there is no agent session there): a menu of the session's folder in Files, in Zed, or in a terminal
+#[cfg_attr(not(windows), allow(dead_code))]
+pub fn open_in(app: &App) -> Element<'static, Message> {
+    let folder = app.workspace.as_ref().and_then(|w| w.info.as_ref()).is_some_and(|i| i["folder"].as_str().is_some());
+    let row = |label: &str, opener: link::Opener| {
+        if folder {
+            super::menubar::Row::Item { label: label.into(), keys: "", message: Message::OpenFolder(opener), bold: false }
         } else {
-            s.background = hover.then(|| Color { a: 0.08, ..text }.into());
-            s.text_color = Some(text);
-            s.icon_color = Some(text);
+            super::menubar::Row::Off { label: label.into(), keys: "", why: "Open a session first".into() }
         }
-        s
-    }
-    theme::Button::Custom {
-        active: Box::new(move |_, t| style(t, on, false)),
-        disabled: Box::new(move |t| {
-            let mut s = style(t, on, false);
-            s.text_color = s.text_color.map(|c| Color { a: 0.4, ..c });
-            s.icon_color = s.icon_color.map(|c| Color { a: 0.4, ..c });
-            s
-        }),
-        hovered: Box::new(move |_, t| style(t, on, true)),
-        pressed: Box::new(move |_, t| style(t, on, true)),
-    }
-}
-
-/// The header's end: the session's lifecycle, its folder in other apps, the goal's place, the
-/// settings and the right sidebar
-pub fn header_end(app: &App) -> Vec<Element<'_, Message>> {
-    let mut items: Vec<Element<'_, Message>> = Vec::new();
-    let settings = icon_button("preferences-system-symbolic", "Settings (Ctrl+,)", Some(Message::Shell(Msg::ToggleSettings)));
-    let Some(ws) = &app.workspace else {
-        if app.new_session.is_none() && !app.shell.settings_open {
-            items.push(widget::button::suggested("New session").on_press(Message::NewSession(true)).into());
-        }
-        items.push(settings);
-        return items;
     };
-    if !app.shell.settings_open {
-        let summary = app.sessions.get(&(ws.machine.clone(), ws.sid.clone()));
-        let lifecycle = summary.and_then(|s| s["lifecycle"].as_str()).unwrap_or("?").to_string();
-        match lifecycle.as_str() {
-            "Running" => {
-                items.push(icon_button("media-playback-pause-symbolic", "Pause: keep the prover loaded, stop checking", Some(Message::Lifecycle("pause"))));
-                items.push(icon_button("system-shutdown-symbolic", "Stop the prover (buffers are kept)", Some(Message::Lifecycle("stop"))));
-            }
-            "Paused" => {
-                items.push(icon_button("media-playback-start-symbolic", "Resume checking", Some(Message::Lifecycle("resume"))));
-                items.push(icon_button("system-shutdown-symbolic", "Stop the prover (buffers are kept)", Some(Message::Lifecycle("stop"))));
-            }
-            "Stopped" | "Failed" => {
-                items.push(widget::button::suggested("Resume").on_press(Message::Lifecycle("resume")).into());
-                items.push(icon_button("user-trash-symbolic", "Forget this session (documents are saved; an agent's unmerged work is refused)", Some(Message::Lifecycle("discard"))));
-            }
-            _ => {}
-        }
-        // (a narrow window keeps its room for the document's own controls)
-        if ws.info.is_some() && app.window_width >= 1250.0 {
-            items.push(widget::Space::new().width(Length::Fixed(sp().space_xxs as f32)).into());
-            items.push(icon_button("folder-open-symbolic", "Open the session's folder in Files", Some(Message::OpenFolder(link::Opener::Files))));
-            items.push(icon_button("accessories-text-editor-symbolic", "Open the session's folder in Zed", Some(Message::OpenFolder(link::Opener::Zed))));
-            items.push(icon_button("utilities-terminal-symbolic", "Open a terminal in the session's folder", Some(Message::OpenFolder(link::Opener::Terminal))));
-        }
-        items.push(widget::Space::new().width(Length::Fixed(sp().space_xxs as f32)).into());
-        // The goal beside the text when there is room (off: under the construct, the page centred)
-        let beside = super::view::goal_beside_on();
-        items.push(
-            widget::tooltip(
-                // (a toggle: on, filled with the muted accent, household rule 6)
-                widget::button::icon(widget::icon::from_name(if beside { "view-dual-symbolic" } else { "view-paged-symbolic" }))
-                    .class(if beside { super::tones::muted_button(theme::Button::Icon) } else { theme::Button::Icon })
-                    .on_press(Message::ToggleGoalBeside),
-                widget::text(if beside {
-                    "The goal beside the text when there is room: click to keep it under the proof, the page centred"
-                } else {
-                    "The goal under the proof, the page centred: click to put it beside the text when there is room"
-                }),
-                widget::tooltip::Position::Bottom,
-            )
-            .into(),
-        );
-    }
-    items.push(settings);
-    if !app.shell.settings_open {
-        items.push(icon_button("sidebar-right", "Show or hide proof output and tools", Some(Message::ToggleRight)));
-    }
-    items
+    let rows = vec![row("Open in Files", link::Opener::Files), row("Open in Zed", link::Opener::Zed), row("Open a terminal here", link::Opener::Terminal)];
+    let root = widget::tooltip(
+        button::custom(
+            widget::row::with_capacity(2)
+                .spacing(2)
+                .align_y(Alignment::Center)
+                .push(widget::icon(icon_handle("folder-open-symbolic")).size(16))
+                .push(widget::icon(icon_handle("pan-down-symbolic")).size(12)),
+        )
+        .class(theme::Button::MenuRoot)
+        .padding([4, 8]),
+        widget::text("Open the session's folder in Files, Zed or a terminal"),
+        widget::tooltip::Position::Bottom,
+    );
+    super::menubar::dropdown(root.into(), rows)
 }
 
-/// The prover's state in the header bar, as COSMIC apps show work in progress: never an idle-looking
-/// editor while the prover is busy. Its parts are apart (the toolchain, the state, what fails,
-/// what it uses), a running tool has its own Stop, and Interrupt shows when the session can
-pub fn header_center(app: &App) -> Vec<Element<'_, Message>> {
-    let Some(ws) = &app.workspace else { return Vec::new() };
-    if app.shell.settings_open {
-        return Vec::new();
-    }
-    let summary = app.sessions.get(&(ws.machine.clone(), ws.sid.clone()));
-    let lifecycle = summary.and_then(|s| s["lifecycle"].as_str()).unwrap_or("").to_string();
-    let toolchain = summary.and_then(|s| s["toolchain"]["label"].as_str()).filter(|l| !l.is_empty()).map(str::to_string);
-    let backend = summary.and_then(|s| s["backend"].as_str()).unwrap_or("isabelle").to_string();
-    match (&ws.theory, lifecycle.as_str()) {
-        (Some(t), "Running") => prover_status(ws, t, &backend, toolchain, app.window_width < 1250.0, app.window_width < 1100.0, app.window_width < 900.0).into_iter().collect(),
-        (_, "") => Vec::new(),
-        (_, lc) => {
-            let (icon_name, tint): (&'static str, fn(&cosmic::Theme) -> Color) = match lc {
-                "Paused" => ("media-playback-pause-symbolic", warning),
-                "Failed" => ("dialog-error-symbolic", destructive),
-                "Stopped" => ("media-playback-stop-symbolic", |t: &cosmic::Theme| Color::from(t.cosmic().on_bg_color())),
-                _ => ("media-playback-start-symbolic", success),
-            };
-            let mut row = widget::row::with_capacity(5).spacing(sp().space_xs).align_y(Alignment::Center);
-            row = row.push(backend_mark(&backend));
-            if let Some(tc) = toolchain {
-                row = row.push(widget::text::caption(tc)).push(divider(14.0));
-            }
-            row = row.push(tinted_icon(icon_name, 16, tint)).push(widget::text::body(match lc {
-                "Paused" => "Paused".to_string(),
-                "Stopped" => "Stopped".to_string(),
-                "Failed" => "Failed".to_string(),
-                other => other.to_string(),
-            }));
-            vec![chip(row.into(), "Prover activity and log", Some(Message::Panel(Panel::Log)))]
-        }
-    }
-}
-
-/// A rounded chip in the header, pressable, with a tooltip
-fn chip<'a>(content: Element<'a, Message>, tip: impl Into<String>, press: Option<Message>) -> Element<'a, Message> {
+/// The goal beside the text when there is room (off: under the construct, the page centred)
+pub fn goal_beside_button<'a>() -> Element<'a, Message> {
+    let beside = super::view::goal_beside_on();
     widget::tooltip(
-        button::custom(content).padding([3, 12]).class(chip_style()).on_press_maybe(press),
-        widget::text(tip.into()),
+        // (a toggle: on, filled with the muted accent, household rule 6)
+        widget::button::icon(icon_handle(if beside { "view-dual-symbolic" } else { "view-paged-symbolic" }))
+            .class(if beside { super::tones::muted_button(theme::Button::Icon) } else { theme::Button::Icon })
+            .on_press(Message::ToggleGoalBeside),
+        widget::text(if beside {
+            "The goal beside the text when there is room: click to keep it under the proof, the page centred"
+        } else {
+            "The goal under the proof, the page centred: click to put it beside the text when there is room"
+        }),
         widget::tooltip::Position::Bottom,
     )
     .into()
 }
 
-fn chip_style() -> theme::Button {
-    fn style(theme: &cosmic::Theme, hover: bool) -> button::Style {
-        let c = theme.cosmic();
-        let text: Color = c.on_bg_color().into();
-        let mut s = button::Style::new();
-        s.border_radius = 16.0.into();
-        s.background = Some(blend(Color::from(c.bg_component_color()), text, if hover { 0.08 } else { 0.0 }).into());
-        s.border_width = 1.0;
-        s.border_color = Color { a: 0.10, ..text };
-        s.text_color = Some(text);
-        s.icon_color = Some(text);
-        s
-    }
-    theme::Button::Custom {
-        active: Box::new(|_, t| style(t, false)),
-        disabled: Box::new(|t| style(t, false)),
-        hovered: Box::new(|_, t| style(t, true)),
-        pressed: Box::new(|_, t| style(t, true)),
-    }
+/// The header's end: Open in, the views bar, the goal's place and the right sidebar. All of them
+/// are there with no session or the settings page open (the views dimmed), so that nothing moves
+pub fn header_end(app: &App) -> Vec<Element<'_, Message>> {
+    #[cfg(not(windows))]
+    let open = super::agent_session::split(app);
+    // (on Windows the button holds only the folder in Files, Zed or a terminal, as far as each works there)
+    #[cfg(windows)]
+    let open = open_in(app);
+    let mut items: Vec<Element<'_, Message>> = vec![open, views_bar(app)];
+    items.push(goal_beside_button());
+    items.push(icon_button("sidebar-right", "Show or hide proof output and tools", Some(Message::ToggleRight)));
+    items
+}
+
+/// The prover's state in the header: the status chip, then pause and stop (see `chip`)
+pub fn header_center(app: &App) -> Vec<Element<'_, Message>> {
+    let mut items = vec![super::chip::chip(app)];
+    items.extend(super::chip::controls(app));
+    items
 }
 
 /// The theory's imports, transitively, that the prover has not finished checking: each one's
@@ -661,136 +661,6 @@ pub fn pending_imports(ws: &Workspace, t: &super::editor::Theory) -> Vec<(String
         }
     }
     waiting
-}
-
-/// (`compact`, in a narrow window: the state and what fails only)
-/// (`narrow`, narrower still: no backend mark, and a running tool without its time)
-fn prover_status<'a>(ws: &'a Workspace, t: &'a super::editor::Theory, backend: &str, toolchain: Option<String>, compact: bool, narrow: bool, icon_only: bool) -> Option<Element<'a, Message>> {
-    let act = ws.activity.as_ref()?;
-    let theories = act["theories"].as_array()?;
-    let waiting = pending_imports(ws, t);
-    let running = act["running"].as_array().cloned().unwrap_or_default();
-    let busy_theories = theories.iter().filter(|th| th["running"].as_u64().unwrap_or(0) > 0).count();
-    let (finished, unprocessed, run_here, failed, consolidated) = t.status();
-    let total = (finished + unprocessed + run_here + failed).max(1);
-    let prover = &act["prover"];
-    let busy = !running.is_empty() || busy_theories > 0;
-    let s = sp();
-    // The state, in words
-    let state = if !waiting.is_empty() {
-        let blocked = waiting.iter().filter(|w| w.2).count();
-        if blocked > 0 {
-            format!("{blocked} import{} cannot load", if blocked == 1 { "" } else { "s" })
-        } else {
-            format!("Waiting for {} import{}", waiting.len(), if waiting.len() == 1 { "" } else { "s" })
-        }
-    } else if busy || (!consolidated && !t.prover.status.is_null()) {
-        format!("Checking {}%", (finished + failed) * 100 / total)
-    } else if !t.prover.status.is_null() {
-        "Checked".to_string()
-    } else {
-        "Starting".to_string()
-    };
-    let mut row = widget::row::with_capacity(10).spacing(s.space_xs).align_y(Alignment::Center);
-    if !narrow {
-        row = row.push(backend_mark(backend));
-    }
-    if let Some(tc) = toolchain.filter(|_| !compact) {
-        row = row.push(widget::text::caption(tc).wrapping(iced::widget::text::Wrapping::None)).push(divider(14.0));
-    }
-    if busy {
-        row = row.push(spinner(14.0));
-    } else if waiting.is_empty() && !t.prover.status.is_null() && failed == 0 {
-        row = row.push(tinted_icon("emblem-ok-symbolic", 14, success));
-    } else if icon_only {
-        row = row.push(tinted_icon(if failed > 0 { "dialog-error-symbolic" } else { "dialog-information-symbolic" }, 14, if failed > 0 { destructive } else { muted }));
-    }
-    if !icon_only {
-        row = row.push(widget::text::body(state.clone()).wrapping(iced::widget::text::Wrapping::None));
-    }
-    if failed > 0 && !icon_only {
-        row = row.push(badge(format!("{failed} failing"), destructive));
-    }
-    let is_tool = |r: &Value| r["name"].as_str().is_some_and(|n| ws.caps.typed_tool(n).is_some());
-    // The command that has run longest, by its name as typed
-    if let Some(longest) = running.iter().find(|r| !is_tool(r))
-        && longest["seconds"].as_u64().unwrap_or(0) >= 5
-        && !compact
-    {
-        row = row
-            .push(widget::text(longest["name"].as_str().unwrap_or("").to_string()).size(12.0).font(cosmic::font::mono()).wrapping(iced::widget::text::Wrapping::None))
-            .push(widget::text::caption(format!("{} s", longest["seconds"])).wrapping(iced::widget::text::Wrapping::None));
-    }
-    let mut resources = Vec::new();
-    if let Some(cpu) = prover["cpu"].as_u64().filter(|c| *c >= 5) {
-        resources.push(format!("CPU {cpu}%"));
-    }
-    if let Some(mb) = prover["rss_mb"].as_u64() {
-        resources.push(format!("{:.1} GB", mb as f64 / 1000.0));
-    }
-    if !resources.is_empty() && !compact {
-        row = row.push(divider(14.0));
-        for r in resources {
-            row = row.push(widget::text::caption(r).wrapping(iced::widget::text::Wrapping::None));
-        }
-    }
-    let detail = if failed > 0 { format!("{state}; {failed} failing") } else { state };
-    let tip = if waiting.is_empty() {
-        format!("{detail} — prover activity and log")
-    } else {
-        let mut w = waiting.clone();
-        w.sort_by_key(|w| (!w.2, w.1));
-        format!(
-            "{detail} — waiting for: {}",
-            w.iter().take(8).map(|(n, p, f)| if *f { format!("{n} (cannot load)") } else { format!("{n} {p}%") }).collect::<Vec<_>>().join(", ")
-        )
-    };
-    let mut out = widget::row::with_capacity(4).spacing(s.space_xxs).align_y(Alignment::Center).push(chip(row.into(), tip, Some(Message::Panel(Panel::Log))));
-    // A proof tool typed in the text, running: its own chip, its Stop inside it where it has one
-    if let Some(tool) = running.iter().find(|r| is_tool(r)) {
-        let name = tool["name"].as_str().unwrap_or("").to_string();
-        let seconds = tool["seconds"].as_u64().unwrap_or(0);
-        let mut trow = widget::row::with_capacity(3).spacing(s.space_xs).align_y(Alignment::Center).push(spinner(14.0));
-        if ws.tools_stopping {
-            trow = trow.push(widget::text::body(format!("{name}: stopping…")));
-        } else {
-            trow = trow.push(widget::text(name.clone()).size(13.0).font(cosmic::font::mono()));
-            if !narrow {
-                trow = trow.push(widget::text::body(format!("{seconds} s")));
-            }
-            if ws.caps.typed_tool(&name).is_some_and(|t| t.stop) {
-                trow = trow.push(
-                    widget::tooltip(
-                        button::text("Stop").on_press(Message::StopTools),
-                        widget::text(format!("Stop {name} (as if its time ran out)")),
-                        widget::tooltip::Position::Bottom,
-                    ),
-                );
-            }
-        }
-        out = out.push(
-            widget::container(trow)
-                .padding(Padding { left: 12.0, right: 4.0, top: 2.0, bottom: 2.0 })
-                .height(Length::Fixed(30.0))
-                .center_y(Length::Fixed(30.0))
-                .class(theme::Container::custom(|theme| {
-                    let c = theme.cosmic();
-                    let text: Color = c.on_bg_color().into();
-                    iced::widget::container::Style {
-                        background: Some(blend(Color::from(c.bg_component_color()), Color::from(c.accent_color()), 0.12).into()),
-                        border: Border { radius: 16.0.into(), width: 1.0, color: Color { a: 0.10, ..text } },
-                        text_color: Some(text),
-                        ..Default::default()
-                    }
-                })),
-        );
-    }
-    // Interrupt: for proofs other than the tools, where the session's prover can
-    let others = running.iter().any(|r| !is_tool(r));
-    if busy && others && ws.caps.interrupt {
-        out = out.push(icon_button("process-stop-symbolic", "Interrupt the running proofs (the prover keeps going with the rest)", Some(Message::Lifecycle("cancel"))));
-    }
-    Some(out.into())
 }
 
 // ----- a machine's connection, as every part of the window says it
@@ -862,8 +732,103 @@ impl Conn {
 /// The status bar's height: fixed, so that the page above never moves for it
 pub const STATUS_BAR_HEIGHT: f32 = 28.0;
 
+/// The name a cell is known by (`lemma add_zero: …` is "add_zero"), when it is a statement
+pub fn block_name(t: &super::editor::Theory, block: &super::theory::Block) -> Option<String> {
+    if block.kind != super::theory::Kind::Formal {
+        return None;
+    }
+    let first: String = t.local.chars().skip(block.start).take(block.end.saturating_sub(block.start).min(200)).collect();
+    first
+        .lines()
+        .next()
+        .unwrap_or("")
+        .split_whitespace()
+        .nth(1)
+        .map(|w| w.trim_matches(|c| c == ':' || c == '"' || c == '[').to_string())
+        .filter(|n| !n.is_empty())
+}
+
+/// The name of the place Back goes to: the cell's name (`lemma add_zero` is "add_zero"), else the
+/// file's
+pub fn back_name(app: &App) -> Option<String> {
+    let (path, at) = app.back.last()?;
+    let t = app.workspace.as_ref()?.theory.as_ref()?;
+    if *path == t.path {
+        let local = App::local_offset_pub(t, *at);
+        if let Some(n) = t.blocks.iter().find(|b| b.start <= local && local < b.end.max(b.start + 1)).and_then(|b| block_name(t, b)) {
+            return Some(n);
+        }
+    }
+    Some(file_name(path).to_string())
+}
+
+/// A link in the status bar: a caption pressed like a link, in a colour of its own
+fn bar_link<'a>(label: String, tip: String, red: bool, message: Message) -> Element<'a, Message> {
+    let tone: fn(&cosmic::Theme) -> iced::widget::text::Style = if red {
+        |t| iced::widget::text::Style { color: Some(super::sidebar::muted_red(t)), ..Default::default() }
+    } else {
+        |t| iced::widget::text::Style { color: Some(super::sidebar::muted_amber(t)), ..Default::default() }
+    };
+    widget::tooltip(
+        button::custom(widget::text::caption(label).wrapping(iced::widget::text::Wrapping::None).class(theme::Text::Custom(tone)))
+            .padding(0)
+            .class(theme::Button::Link)
+            .on_press(message),
+        widget::text(tip),
+        widget::tooltip::Position::Top,
+    )
+    .into()
+}
+
+/// What the status bar's left says: Back after a jump, then the cells that fail and those left
+/// unfinished, each a link to the next of its kind
+pub fn status_links(app: &App) -> Vec<Element<'_, Message>> {
+    let mut out: Vec<Element<'_, Message>> = Vec::new();
+    let Some(t) = app.workspace.as_ref().and_then(|w| w.theory.as_ref()).filter(|_| !app.shell.settings_open) else { return out };
+    if let Some(name) = back_name(app) {
+        out.push(
+            widget::tooltip(
+                button::custom(
+                    widget::row::with_capacity(2)
+                        .spacing(4)
+                        .align_y(Alignment::Center)
+                        .push(widget::icon::from_name("go-previous-symbolic").size(12).icon())
+                        .push(widget::text::caption(format!("Back to {name}")).wrapping(iced::widget::text::Wrapping::None)),
+                )
+                .padding(0)
+                .class(theme::Button::Link)
+                .on_press(Message::Back),
+                widget::text("Back to where Ctrl+click came from (Alt+Left)"),
+                widget::tooltip::Position::Top,
+            )
+            .into(),
+        );
+    }
+    let (failed, unfinished) = super::attention::counts(t);
+    let mut problems: Vec<Element<'_, Message>> = Vec::new();
+    if failed > 0 {
+        problems.push(bar_link(format!("{failed} failed"), "Go to the next failed cell (F8)".into(), true, Message::Shell(Msg::NextProblem(super::attention::Problem::Failed))));
+    }
+    if unfinished > 0 {
+        problems.push(bar_link(format!("{unfinished} unfinished"), "Go to the next unfinished cell (Shift+F8)".into(), false, Message::Shell(Msg::NextProblem(super::attention::Problem::Unfinished))));
+    }
+    let n = problems.len();
+    if n > 0 && !out.is_empty() {
+        out.push(divider(14.0));
+    }
+    for (i, p) in problems.into_iter().enumerate() {
+        if i > 0 && i < n {
+            out.push(widget::text::caption("\u{b7}").into());
+        }
+        out.push(p);
+    }
+    out
+}
+
 /// The bar at the window's foot, always there with a document open: vim's mode as a badge (with
-/// vim keys on), what editing the open block means, then the app's last word and the connection
+/// vim keys on), at the left Back and the links to what fails, at the right the app's last word
+/// (what went wrong), the connection and the key hint for what has the focus. What passed is a
+/// toast, and the prover's state is the header's chip
 pub fn status_bar(app: &App) -> Option<Element<'_, Message>> {
     let theory = app.workspace.as_ref().and_then(|w| w.theory.as_ref()).filter(|_| !app.shell.settings_open);
     // (the open session's machine, when it is not connected; connected, it goes unsaid)
@@ -872,42 +837,50 @@ pub fn status_bar(app: &App) -> Option<Element<'_, Message>> {
         return None;
     }
     let s = sp();
-    let mut fields: Vec<Element<'_, Message>> = Vec::new();
+    let mut left = widget::row::with_capacity(8).spacing(s.space_s).align_y(Alignment::Center);
     if app.vim_enabled && theory.is_some() {
-        fields.push(vim_badge(app.vim.mode));
+        left = left.push(vim_badge(app.vim.mode));
     }
+    for item in status_links(app) {
+        left = left.push(item);
+    }
+    // The key hint of what has the focus
+    let mut hints: Vec<Element<'_, Message>> = Vec::new();
     if let Some(t) = theory
         && let Some(be) = t.block_editor.as_ref().filter(|_| t.mode == Mode::Literate)
     {
-        if be.wrap.is_none()
-            && let Some(st) = t.status_in(be.start, be.end)
-        {
-            fields.push(block_status(st));
-        }
         if be.preview.is_some() {
-            fields.push(widget::text::caption("The preview follows your typing").into());
+            hints.push(widget::text::caption("The preview follows your typing").into());
         }
-        // (what the keys do for the tool at the caret, when there is one: Esc stops it, Alt+Enter
-        // takes what it found)
-        let hint = app.workspace.as_ref().and_then(super::flow::key_hint).unwrap_or_else(|| "Esc or a click outside finishes".into());
-        fields.push(widget::text::caption(hint).into());
+        let hint = app.workspace.as_ref().and_then(super::flow::key_hint).unwrap_or_else(|| "Esc or a click outside finishes editing".into());
+        hints.push(widget::text::caption(hint).into());
     } else if let Some(hint) = theory.and(app.workspace.as_ref()).and_then(super::flow::key_hint) {
-        fields.push(widget::text::caption(hint).into());
+        hints.push(widget::text::caption(hint).into());
     }
-    let mut row = fields_row(fields).push(widget::Space::new().width(Length::Fill));
+    let mut row = widget::row::with_capacity(6).spacing(s.space_s).align_y(Alignment::Center).push(left).push(widget::Space::new().width(Length::Fill));
+    let mut first = true;
     if let Some(status) = &app.status {
         row = row.push(widget::text::caption(status.clone()).wrapping(iced::widget::text::Wrapping::None));
+        first = false;
     }
     if let Some((l, conn)) = disconnected {
-        if app.status.is_some() {
+        if !first {
             row = row.push(divider(14.0));
         }
+        first = false;
         let text = format!("{} {}", l.name, conn.word());
         let mut field = widget::row::with_capacity(2).spacing(6).align_y(Alignment::Center).push(conn.dot(8.0)).push(widget::text::caption(text).wrapping(iced::widget::text::Wrapping::None));
         if let Some(why) = conn.detail() {
             field = field.push(widget::text::caption(format!("({why})")).wrapping(iced::widget::text::Wrapping::None));
         }
         row = row.push(field);
+    }
+    for h in hints {
+        if !first {
+            row = row.push(divider(14.0));
+        }
+        first = false;
+        row = row.push(h);
     }
     Some(
         widget::container(row)

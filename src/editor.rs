@@ -25,12 +25,17 @@ use super::prover::isabelle::symbols::Table;
 use super::theory::{self, Block, Command, Status};
 use prose_render::markdown::{self, Affinity, Doc, SourceMap};
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct ProverMessage {
     pub start: usize,
     pub end: usize,
     pub kind: String,
     pub text: String,
+    /// The message in the prover's own encoding, which its markup `spans` count code points of
+    /// (empty when the prover sent none)
+    pub raw: String,
+    /// The prover's markup colours over `raw`: (start, end, class)
+    pub spans: Vec<(usize, usize, Sem)>,
 }
 
 /// What the prover last said about the theory, in confirmed-text offsets
@@ -70,6 +75,13 @@ impl Prover {
                             end: m["end"].as_u64()? as usize,
                             kind: m["kind"].as_str()?.to_string(),
                             text: m["text"].as_str().unwrap_or("").to_string(),
+                            raw: m["raw"].as_str().unwrap_or("").to_string(),
+                            spans: m["spans"]
+                                .as_array()
+                                .into_iter()
+                                .flatten()
+                                .filter_map(|c| Some((c[0].as_u64()? as usize, c[1].as_u64()? as usize, Sem::parse(c[2].as_str()?)?)))
+                                .collect(),
                         })
                     })
                     .collect()
@@ -165,7 +177,7 @@ impl BlockEditor {
             position: new.position(&shown, position),
             selection: selection.map(|anchor| new.position(&shown, anchor)),
         };
-        self.content = text_editor::Content::with_text(&shown);
+        self.content = super::wrap::editor_content(&shown, self.wrap.is_some());
         self.layout_revision = self.layout_revision.wrapping_add(1);
         self.shown_text = shown;
         self.content.move_to(cursor);
@@ -235,6 +247,13 @@ pub fn shown_text(text: &str, prose: bool) -> String {
 }
 
 /// The rendered prose of a block's source, if it is prose
+/// The heading level the rendered view sets a heading in: Markdown headings stop at four. The
+/// prose editor uses the same level, so that opening a heading changes neither its size nor its
+/// line height
+pub(crate) fn rendered_heading_level(level: u8) -> u8 {
+    level.min(4)
+}
+
 fn preview_of(profile: &dyn Profile, source: &str, kinds: &HashMap<String, String>, table: &dyn Symbols) -> (theory::Kind, Option<Arc<Doc>>) {
     let blocks = profile.blocks(source, &[], kinds);
     let Some(block) = blocks.first() else { return (theory::Kind::Formal, None) };
@@ -242,7 +261,7 @@ fn preview_of(profile: &dyn Profile, source: &str, kinds: &HashMap<String, Strin
     let md = match (block.kind, block.body) {
         (theory::Kind::Heading(level), Some((s, e))) if e <= chars.len() => Some(format!(
             "{} {}",
-            "#".repeat(level.min(4) as usize),
+            "#".repeat(rendered_heading_level(level) as usize),
             profile.prose(&chars[s..e].iter().collect::<String>(), table).replace('\n', " ")
         )),
         (theory::Kind::Text, Some((s, e))) if e <= chars.len() => Some(profile.prose(&chars[s..e].iter().collect::<String>(), table)),
@@ -425,9 +444,13 @@ impl highlighter::Highlighter for Highlighter {
     }
 }
 
-/// The syntax colours, after the human's Zed theme (COSMIC Dark Tritanopia: keywords
-/// purple, names yellow, types teal, strings mint, constants orange, comments grey
-/// italic) and, on a light theme, the same hues made deep enough to read
+/// The colours of Isabelle's token classes, from the household's code palette
+/// (`household_highlight`, rule 25b; Q3(a), Juliet 8 Nov) with Isabelle's classes mapped onto
+/// its own: keywords (and quasi-keywords and antiquotations) are Keyword; free variables and
+/// names Function; bound and inner syntax String; fixed (skolem) and schematic variables
+/// Constant; type variables, dynamic facts and class parameters Type; comments the muted text,
+/// darker on a light theme. Improper input is Tag, the palette's red. Every colour is the
+/// palette's, as it is for every household app: none is Deductum's own
 struct Scheme {
     keyword: Color,
     name: Color,
@@ -435,36 +458,27 @@ struct Scheme {
     string: Color,
     constant: Color,
     comment: Color,
-    operator: Color,
     error: Color,
 }
 
-fn scheme(dark: bool) -> Scheme {
-    let rgb = |hex: u32| Color::from_rgb8((hex >> 16) as u8, (hex >> 8) as u8, hex as u8);
-    if dark {
-        Scheme {
-            keyword: rgb(0xdf94f6),
-            name: rgb(0xf4dd60),
-            kind: rgb(0x34aab8),
-            string: rgb(0xadecb7),
-            constant: rgb(0xd78b00),
-            comment: rgb(0x909090),
-            operator: rgb(0xbebebe),
-            error: rgb(0xffa3a2),
+fn scheme(theme: &cosmic::Theme) -> Scheme {
+    use household_highlight::{Class, Colour, colour};
+    let dark = theme.cosmic().is_dark;
+    let of = |class: Class| match colour(class) {
+        Colour::Fixed { light, dark: on_dark } => {
+            let hex = if dark { on_dark } else { light };
+            Color::from_rgb8((hex >> 16) as u8, (hex >> 8) as u8, hex as u8)
         }
-    } else {
-        // The dark scheme's hues, deep enough to read on COSMIC's light backgrounds: at least
-        // 4.5:1 against the page (#d6d6d6) and more on the code cards
-        Scheme {
-            keyword: rgb(0x7a1fa2),
-            name: rgb(0x7a5200),
-            kind: rgb(0x00606e),
-            string: rgb(0x1f6324),
-            constant: rgb(0x9a3f00),
-            comment: rgb(0x55555f),
-            operator: rgb(0x4a4a52),
-            error: rgb(0xb0201f),
-        }
+        _ => super::tones::code_muted(theme),
+    };
+    Scheme {
+        keyword: of(Class::Keyword),
+        name: of(Class::Function),
+        kind: of(Class::Type),
+        string: of(Class::String),
+        constant: of(Class::Constant),
+        comment: super::tones::code_muted(theme),
+        error: of(Class::Tag),
     }
 }
 
@@ -472,7 +486,7 @@ fn scheme(dark: bool) -> Scheme {
 pub fn highlight_format(hl: &Hl, theme: &cosmic::Theme) -> highlighter::Format<cosmic::iced::Font> {
     let cosmic = theme.cosmic();
     let text: Color = cosmic.on_bg_color().into();
-    let k = scheme(cosmic.is_dark);
+    let k = scheme(theme);
     if let Hl::Script(sem) = hl {
         let base = sem.map_or(highlighter::Format { color: Some(text), font: None }, |s| highlight_format(&Hl::Sem(s), theme));
         return highlighter::Format { color: base.color, font: Some(cosmic::iced::Font::with_name("Isabellum Scripts")) };
@@ -497,7 +511,7 @@ pub fn highlight_format(hl: &Hl, theme: &cosmic::Theme) -> highlighter::Format<c
             Sem::ClassParameter => (k.kind, false, false),
             Sem::Antiquote => (k.keyword, true, false),
             Sem::Comment => (k.comment, false, true),
-            Sem::Raw => (k.operator, false, false),
+            Sem::Raw => (text, false, false),
         },
         Hl::Bold => (text, true, false),
         Hl::Emph => (text, false, true),
@@ -510,11 +524,7 @@ pub fn highlight_format(hl: &Hl, theme: &cosmic::Theme) -> highlighter::Format<c
         Hl::Running => (Color { a: 0.75, ..Color::from(cosmic.accent_text_color()) }, false, false),
         Hl::Comment => (k.comment, false, true),
     };
-    let font = (weight || italic).then(|| cosmic::iced::Font {
-        weight: if weight { cosmic::iced::font::Weight::Bold } else { cosmic::iced::font::Weight::Normal },
-        style: if italic { cosmic::iced::font::Style::Italic } else { cosmic::iced::font::Style::Normal },
-        ..cosmic::font::mono()
-    });
+    let font = (weight || italic).then(|| super::view::code_font_in(weight, italic));
     highlighter::Format { color: Some(color), font }
 }
 
@@ -603,7 +613,7 @@ impl CodeView {
             .filter_map(|t| Some((d.to_decoded(t[0].as_u64()? as usize), d.to_decoded(t[1].as_u64()? as usize), t[2].as_str()?.to_string())))
             .collect();
         Self {
-            content: text_editor::Content::with_text(&d.text),
+            content: super::wrap::editor_content(&d.text, false),
             highlight: HighlightSettings(Arc::new(HighlightData { generation, lines: line_spans(&d.text, &class) }), false),
             tips,
         }
@@ -676,6 +686,8 @@ pub struct Theory {
     pub docs: Vec<Option<Arc<Doc>>>,
     pub page_rows: Arc<Vec<super::viewport::Row>>,
     pub page_scope: u64,
+    /// The messages (by where they start) shown whole in their cell; the page's own state, never saved
+    pub open_messages: std::collections::HashSet<usize>,
     pub page_viewport: std::cell::Cell<(f32, f32)>,
     /// Each prose block's Markdown offsets mapped to the source, where the profile can say
     pub prose_maps: Vec<Option<crate::prover::ProseMap>>,
@@ -715,7 +727,7 @@ pub struct Theory {
     pub selected: Option<usize>,
     /// The formal blocks' views, by block index (None for other kinds)
     pub block_views: Vec<Option<BlockView>>,
-    /// The widest formal block's columns: every block is drawn this wide, so they line up
+    /// The widest formal block's columns, which the Source view's column is reckoned from
     pub code_columns: usize,
 }
 
@@ -998,7 +1010,7 @@ impl Theory {
             vim_session: false,
             queued: Default::default(),
             lines: LineIndex::new(&decoded.text),
-            source: text_editor::Content::with_text(&decoded.text),
+            source: super::wrap::editor_content(&decoded.text, false),
             decoded,
             prover: Prover::from_json(&doc["prover"]),
             local_prover: Arc::new(Prover::default()),
@@ -1009,6 +1021,7 @@ impl Theory {
             docs: Vec::new(),
             page_rows: Arc::new(Vec::new()),
             page_scope: { static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1); NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed) },
+            open_messages: std::collections::HashSet::new(),
             page_viewport: std::cell::Cell::new((0.0, 800.0)),
             prose_maps: Vec::new(),
             rendered_sources: Vec::new(),
@@ -1112,7 +1125,7 @@ impl Theory {
         let caret_after = (start + c.text.chars().count()).saturating_sub(c.back);
         if in_block {
             let be = self.block_editor.as_mut().unwrap();
-            be.content = text_editor::Content::with_text(&new);
+            be.content = super::wrap::editor_content(&new, be.wrap.is_some());
             be.layout_revision = be.layout_revision.wrapping_add(1);
             let li2 = LineIndex::new(&new);
             place(&mut be.content, li2.position(&new, caret_after));
@@ -1136,7 +1149,7 @@ impl Theory {
                 let shown = shown_with_markup(self.profile, &be.decoded, be.wrap.is_some(), Some(caret_after), table);
                 if shown != new {
                     let li = LineIndex::new(&shown);
-                    be.content = text_editor::Content::with_text(&shown);
+                    be.content = super::wrap::editor_content(&shown, be.wrap.is_some());
                     be.layout_revision = be.layout_revision.wrapping_add(1);
                     place(&mut be.content, li.position(&shown, caret_after));
                 }
@@ -1144,13 +1157,13 @@ impl Theory {
             }
             self.decoded = table.decode(&self.local);
             self.lines = LineIndex::new(&self.decoded.text);
-            self.source = text_editor::Content::with_text(&self.decoded.text);
+            self.source = super::wrap::editor_content(&self.decoded.text, false);
         } else {
             let change = self.decoded.source_change(table, &new);
             self.apply_local(&change, table);
             self.decoded = table.decode(&self.local);
             self.lines = LineIndex::new(&self.decoded.text);
-            self.source = text_editor::Content::with_text(&self.decoded.text);
+            self.source = super::wrap::editor_content(&self.decoded.text, false);
             let pos = self.lines.position(&self.decoded.text, caret_after);
             place(&mut self.source, pos);
             self.cursor = self.decoded.to_source(caret_after);
@@ -1399,7 +1412,7 @@ impl Theory {
                     if s <= e && e <= chars.len() =>
                 {
                     let src: String = chars[s..e].iter().collect();
-                    let md = format!("{} {}", "#".repeat(level.min(4) as usize), self.profile.prose(&src, table).replace('\n', " "));
+                    let md = format!("{} {}", "#".repeat(rendered_heading_level(level) as usize), self.profile.prose(&src, table).replace('\n', " "));
                     Some(md)
                 }
                 (theory::Kind::Text, Some((s, e))) if s <= e && e <= chars.len() => {
@@ -1463,7 +1476,7 @@ impl Theory {
                     let generation = VIEW_GENERATION.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                     BlockView {
                         columns: text.lines().map(|l| l.chars().count()).max().unwrap_or(0),
-                        content: text_editor::Content::with_text(&text),
+                        content: super::wrap::editor_content(&text, false),
                         highlight: HighlightSettings(Arc::new(HighlightData { generation, lines }), false),
                         text_hash,
                     }
@@ -1776,7 +1789,7 @@ impl Theory {
         if self.decoded.text != shown {
             let caret = self.decoded.to_decoded(self.cursor);
             let _ = caret_dec;
-            self.source = text_editor::Content::with_text(&self.decoded.text);
+            self.source = super::wrap::editor_content(&self.decoded.text, false);
             let pos = self.lines.position(&self.decoded.text, caret);
             place(&mut self.source, pos);
         }
@@ -1853,7 +1866,7 @@ impl Theory {
             let shown = shown_with_markup(self.profile, &dec, be.wrap.is_some(), Some(caret), table);
             if shown != new {
                 let li = LineIndex::new(&shown);
-                be.content = text_editor::Content::with_text(&shown);
+                be.content = super::wrap::editor_content(&shown, be.wrap.is_some());
                 be.layout_revision = be.layout_revision.wrapping_add(1);
                 place(&mut be.content, li.position(&shown, caret));
             }
@@ -1872,7 +1885,7 @@ impl Theory {
         self.decoded = table.decode(&self.local);
         self.lines = LineIndex::new(&self.decoded.text);
         if self.decoded.text != shown {
-            self.source = text_editor::Content::with_text(&self.decoded.text);
+            self.source = super::wrap::editor_content(&self.decoded.text, false);
         }
         self.refresh(table);
         true
@@ -1895,7 +1908,7 @@ impl Theory {
         let src = self.source_text(start, end);
         let decoded = table.decode(&src);
         let shown_text = shown_with_markup(self.profile, &decoded, wrap.is_some(), Some(decoded.text.chars().count()), table);
-        let content = text_editor::Content::with_text(&shown_text);
+        let content = super::wrap::editor_content(&shown_text, wrap.is_some());
         self.cursor = end;
         self.block_editor = Some(BlockEditor { layout_revision: 0, start, end, decoded, content, preview, kind, wrap, shown_text });
         self.compute_block_highlight();
@@ -1952,7 +1965,7 @@ impl Theory {
         let decoded = table.decode(&self.source_text(s, e));
         let caret = decoded.to_decoded(at.clamp(s, e) - s);
         let shown = shown_with_markup(self.profile, &decoded, true, Some(caret), table);
-        let mut content = text_editor::Content::with_text(&shown);
+        let mut content = super::wrap::editor_content(&shown, true);
         let pos = LineIndex::new(&shown).position(&shown, caret);
         place(&mut content, pos);
         self.cursor = at.clamp(s, e);
@@ -2200,6 +2213,22 @@ mod tests {
 #[cfg(test)]
 mod preview_tests {
     use super::*;
+
+    #[test]
+    fn deep_isabelle_heading_previews_and_edits_at_one_level() {
+        let table = Table::fallback();
+        let src = "paragraph \\<open>Deep title\\<close>";
+        let (kind, doc) = preview_of(crate::prover::profile(None), src, &HashMap::new(), &table);
+        let theory::Kind::Heading(level) = kind else { panic!("a heading: {kind:?}") };
+        assert_eq!(level, 5, "Isabelle paragraph is level 5");
+        let doc = doc.expect("a preview");
+        let rendered = format!("{doc:?}");
+        assert!(rendered.contains("Heading(4)"), "rendered at level 4: {rendered}");
+        let edited = crate::view::prose_heading_style(rendered_heading_level(level), 1.5);
+        let as_four = crate::view::prose_heading_style(4, 1.5);
+        assert_eq!(edited, as_four, "the editor sets level 5 as the rendered view does");
+        assert_ne!(edited, crate::view::prose_heading_style(level, 1.5), "unclamped it differed");
+    }
 
     #[test]
     fn previews_prose() {

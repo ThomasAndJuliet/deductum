@@ -57,7 +57,11 @@ impl CellMap {
             previous.display.end += len;
             previous.source.end = source.end;
         } else {
-            self.spans.push(Span { display: self.len..self.len + len, source, literal });
+            self.spans.push(Span {
+                display: self.len..self.len + len,
+                source,
+                literal,
+            });
         }
         self.len += len;
     }
@@ -65,12 +69,22 @@ impl CellMap {
     fn literal(&mut self, shown: &str, range: Range<usize>, source: &str, code: bool) {
         let mut range = range;
         if code && source[range.clone()].starts_with('`') {
-            let ticks = source[range.clone()].bytes().take_while(|&c| c == b'`').count();
-            if range.len() >= ticks * 2 && source[range.end - ticks..range.end].bytes().all(|c| c == b'`') {
+            let ticks = source[range.clone()]
+                .bytes()
+                .take_while(|&c| c == b'`')
+                .count();
+            if range.len() >= ticks * 2
+                && source[range.end - ticks..range.end]
+                    .bytes()
+                    .all(|c| c == b'`')
+            {
                 range.start += ticks;
                 range.end -= ticks;
                 let content = &source[range.clone()];
-                if content.starts_with(' ') && content.ends_with(' ') && content.bytes().any(|c| c != b' ') {
+                if content.starts_with(' ')
+                    && content.ends_with(' ')
+                    && content.bytes().any(|c| c != b' ')
+                {
                     range.start += 1;
                     range.end -= 1;
                 }
@@ -117,18 +131,29 @@ impl CellMap {
                         continue;
                     }
                 }
-                if !code && raw_c == '\\' && raw_rest[1..].starts_with(c) && c.is_ascii_punctuation() {
+                if !code
+                    && raw_c == '\\'
+                    && raw_rest[1..].starts_with(c)
+                    && c.is_ascii_punctuation()
+                {
                     self.push(c.len_utf8(), at..at + 1 + c.len_utf8(), false);
                     at += 1 + c.len_utf8();
                 } else if raw_c == c {
                     self.push(c.len_utf8(), at..at + c.len_utf8(), true);
                     at += c.len_utf8();
                 } else if code && c == ' ' && matches!(raw_c, '\n' | '\r') {
-                    let len = if raw_rest.starts_with("\r\n") { 2 } else { raw_c.len_utf8() };
+                    let len = if raw_rest.starts_with("\r\n") {
+                        2
+                    } else {
+                        raw_c.len_utf8()
+                    };
                     self.push(1, at..at + len, false);
                     at += len;
                 } else if (raw_c.is_whitespace() || raw_c == '>')
-                    && raw_rest.lines().next().is_some_and(|line| line.ends_with(rest.lines().next().unwrap_or(rest)))
+                    && raw_rest
+                        .lines()
+                        .next()
+                        .is_some_and(|line| line.ends_with(rest.lines().next().unwrap_or(rest)))
                 {
                     // Container prefixes/indentation removed from code by cmark.
                     at += raw_c.len_utf8();
@@ -144,7 +169,11 @@ impl CellMap {
         }
         self.trailing_breaks = if shown.ends_with('\n') {
             let n = shown.bytes().rev().take_while(|&c| c == b'\n').count();
-            if n == shown.len() { self.trailing_breaks + n } else { n }
+            if n == shown.len() {
+                self.trailing_breaks + n
+            } else {
+                n
+            }
         } else {
             0
         };
@@ -191,15 +220,23 @@ impl CellMap {
 
     fn source(&self, offset: usize, affinity: Affinity) -> usize {
         let offset = offset.min(self.len);
-        let next = self.spans.partition_point(|span| span.display.end <= offset);
+        let next = self
+            .spans
+            .partition_point(|span| span.display.end <= offset);
         if affinity == Affinity::Before && next > 0 && self.spans[next - 1].display.end == offset {
             return self.spans[next - 1].source.end;
         }
         let Some(span) = self.spans.get(next) else {
-            return self.spans.last().map_or(self.anchor, |span| span.source.end);
+            return self
+                .spans
+                .last()
+                .map_or(self.anchor, |span| span.source.end);
         };
         if span.literal {
-            span.source.start + offset.saturating_sub(span.display.start).min(span.source.len())
+            span.source.start
+                + offset
+                    .saturating_sub(span.display.start)
+                    .min(span.source.len())
         } else if offset > span.display.start && affinity == Affinity::After {
             span.source.end
         } else {
@@ -246,7 +283,9 @@ impl SourceMap {
                 }
             }
         };
-        let mut at = OffsetMap::new(&self.rewrites).source(normalized).min(self.source.len());
+        let mut at = OffsetMap::new(&self.rewrites)
+            .source(normalized)
+            .min(self.source.len());
         match affinity {
             Affinity::Before => {
                 while !self.source.is_char_boundary(at) {
@@ -272,6 +311,7 @@ pub(crate) struct SourceTracker {
     image_range: Range<usize>,
     table: Option<Vec<Vec<CellMap>>>,
     blocks: Vec<BlockMap>,
+    generated: bool,
 }
 
 impl SourceTracker {
@@ -285,10 +325,30 @@ impl SourceTracker {
             image_range: 0..0,
             table: None,
             blocks: Vec::new(),
+            generated: false,
         }
     }
 
+    /// The next `push` is generated text with no source (e.g. a footnote
+    /// label): record it as non-literal with an empty range at the start of
+    /// the current event, so following text keeps mapping into its own source.
+    pub fn generated_next(&mut self) {
+        self.generated = true;
+    }
+
     pub fn push(&mut self, text: &str, math: bool, code: bool) {
+        if std::mem::take(&mut self.generated) {
+            let at = self.range.start;
+            let cell = self
+                .table
+                .as_mut()
+                .and_then(|rows| rows.last_mut())
+                .and_then(|row| row.last_mut())
+                .unwrap_or(&mut self.text);
+            cell.push(text.len(), at..at, false);
+            cell.trailing_breaks = 0;
+            return;
+        }
         let cell = self
             .table
             .as_mut()
@@ -318,13 +378,18 @@ impl SourceTracker {
     pub fn code_text(&mut self, text: &str) {
         // Code-block events already exclude fences and indentation. Only an
         // inline Code event includes backtick delimiters in its source range.
-        self.code.literal(text, self.range.clone(), &self.source, false);
+        self.code
+            .literal(text, self.range.clone(), &self.source, false);
     }
 
     pub fn end_code(&mut self, len: usize, figure: bool) {
         let mut code = std::mem::take(&mut self.code);
         code.truncate(len);
-        self.blocks.push(if figure { BlockMap::Object(self.code_range.clone()) } else { BlockMap::Text(code) });
+        self.blocks.push(if figure {
+            BlockMap::Object(self.code_range.clone())
+        } else {
+            BlockMap::Text(code)
+        });
     }
 
     pub fn begin_image(&mut self) {
@@ -349,16 +414,28 @@ impl SourceTracker {
     }
     pub fn cell(&mut self) {
         if let Some(row) = self.table.as_mut().and_then(|rows| rows.last_mut()) {
-            row.push(CellMap { anchor: self.range.start, ..CellMap::default() });
+            row.push(CellMap {
+                anchor: self.range.start,
+                ..CellMap::default()
+            });
         }
     }
     pub fn end_table(&mut self) {
         let mut table = CellMap::default();
-        for (r, row) in self.table.take().unwrap_or_default().into_iter().enumerate() {
+        for (r, row) in self
+            .table
+            .take()
+            .unwrap_or_default()
+            .into_iter()
+            .enumerate()
+        {
             for (c, mut cell) in row.into_iter().enumerate() {
                 cell.trim_breaks();
                 if r > 0 && c == 0 || c > 0 {
-                    let before = table.spans.last().map_or(cell.anchor, |span| span.source.end);
+                    let before = table
+                        .spans
+                        .last()
+                        .map_or(cell.anchor, |span| span.source.end);
                     table.push(1, before..cell.anchor.max(before), false);
                 }
                 table.append(cell);
@@ -368,7 +445,11 @@ impl SourceTracker {
     }
 
     pub fn finish(self, source: &str, rewrites: Vec<Rewrite>) -> SourceMap {
-        SourceMap { source: source.into(), rewrites: rewrites.into(), blocks: self.blocks.into() }
+        SourceMap {
+            source: source.into(),
+            rewrites: rewrites.into(),
+            blocks: self.blocks.into(),
+        }
     }
 }
 
@@ -383,7 +464,10 @@ mod tests {
         let mapped = parse_mapped(source);
         assert_eq!(mapped.map.len(), mapped.doc.blocks.len());
         for (display, original) in [(0, 0), (5, 7), (10, 15), (15, 29)] {
-            assert_eq!(mapped.map.source_byte(0, display, Affinity::After), Some(original));
+            assert_eq!(
+                mapped.map.source_byte(0, display, Affinity::After),
+                Some(original)
+            );
         }
         assert_eq!(mapped.map.source_byte(0, 9, Affinity::Before), Some(11));
         assert_eq!(mapped.map.source_byte(0, 9, Affinity::After), Some(13));
@@ -394,7 +478,11 @@ mod tests {
         let source = "é &amp; \\*界 [é](elsewhere)";
         let mapped = parse_mapped(source);
         for (display, original) in [(0, 0), (3, 3), (4, 8), (5, 10), (6, 11), (10, 16)] {
-            assert_eq!(mapped.map.source_byte(0, display, Affinity::After), Some(original), "display {display}");
+            assert_eq!(
+                mapped.map.source_byte(0, display, Affinity::After),
+                Some(original),
+                "display {display}"
+            );
         }
         assert_eq!(mapped.map.source_byte(0, 1, Affinity::Before), Some(0));
         assert_eq!(mapped.map.source_byte(0, 1, Affinity::After), Some(2));
@@ -418,12 +506,27 @@ mod tests {
         assert_eq!(mapped.map.len(), mapped.doc.blocks.len());
         assert_eq!(mapped.map.len(), 5);
         for (offset, needle) in [(0, "α"), (3, "β"), (6, "γ"), (9, "δ")] {
-            assert_eq!(mapped.map.source_byte(0, offset, Affinity::After), source.find(needle));
+            assert_eq!(
+                mapped.map.source_byte(0, offset, Affinity::After),
+                source.find(needle)
+            );
         }
-        assert_eq!(mapped.map.source_byte(1, 0, Affinity::After), source.find("let x"));
-        assert_eq!(mapped.map.source_byte(1, 4, Affinity::After), source.find("x ="));
-        assert_eq!(mapped.map.source_byte(2, 0, Affinity::After), source.find("!["));
-        assert_eq!(mapped.map.source_byte(3, 1, Affinity::Before), source.find("$$x$$").map(|i| i + 5));
+        assert_eq!(
+            mapped.map.source_byte(1, 0, Affinity::After),
+            source.find("let x")
+        );
+        assert_eq!(
+            mapped.map.source_byte(1, 4, Affinity::After),
+            source.find("x =")
+        );
+        assert_eq!(
+            mapped.map.source_byte(2, 0, Affinity::After),
+            source.find("![")
+        );
+        assert_eq!(
+            mapped.map.source_byte(3, 1, Affinity::Before),
+            source.find("$$x$$").map(|i| i + 5)
+        );
     }
 
     #[test]
@@ -431,11 +534,52 @@ mod tests {
         let source = "` a\nb `\n\n```\n`literal`\n```";
         let mapped = parse_mapped(source);
         for (offset, original) in [(0, 2), (1, 3), (2, 4), (3, 5)] {
-            assert_eq!(mapped.map.source_byte(0, offset, Affinity::After), Some(original));
+            assert_eq!(
+                mapped.map.source_byte(0, offset, Affinity::After),
+                Some(original)
+            );
         }
         let start = source.find("`literal`").unwrap();
         for offset in 0..=9 {
-            assert_eq!(mapped.map.source_byte(1, offset, Affinity::After), Some(start + offset));
+            assert_eq!(
+                mapped.map.source_byte(1, offset, Affinity::After),
+                Some(start + offset)
+            );
+        }
+    }
+
+    #[test]
+    fn footnote_label_is_generated_and_note_text_maps_into_the_text() {
+        let source = "Body[^1].\n\n[^1]: Note text.\n";
+        let mapped = parse_mapped(source);
+        let block = mapped
+            .doc
+            .blocks
+            .iter()
+            .enumerate()
+            .skip(1)
+            .map(|(i, _)| i)
+            .next()
+            .expect("note block");
+        let start = source.find("Note").unwrap();
+        let label = "\u{b9} ".len();
+        for affinity in [Affinity::Before, Affinity::After] {
+            assert_eq!(mapped.map.source_byte(block, 0, affinity), Some(start));
+            assert_eq!(
+                mapped.map.source_byte(block, label, affinity),
+                Some(start),
+                "{affinity:?}"
+            );
+            assert_eq!(
+                mapped.map.source_byte(block, label + 5, affinity),
+                Some(start + 5),
+                "{affinity:?}"
+            );
+            assert_eq!(
+                mapped.map.source_byte(block, label + 10, affinity),
+                Some(start + 10),
+                "{affinity:?}"
+            );
         }
     }
 }

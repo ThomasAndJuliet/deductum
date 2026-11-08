@@ -6,6 +6,7 @@ import os
 import sys
 import tempfile
 import threading
+import subprocess
 import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
@@ -17,6 +18,33 @@ from test_responsiveness import Backend, Writer
 
 
 class OrderedWork(unittest.IsolatedAsyncioTestCase):
+    async def test_flush_allows_completed_task_removal_callbacks_to_run(self):
+        # A completed operation may still be in the broker's pending set until
+        # its scheduled callback executes. Exercise flush in that exact window.
+        code = '''
+import asyncio, sys
+sys.path.insert(0, sys.argv[1])
+from background import OrderedIO
+async def check():
+    io = OrderedIO("flush-callback", workers=1)
+    loop = asyncio.get_running_loop()
+    completed = loop.create_future()
+    completed.set_result("persisted")
+    io.tasks.add(completed)
+    loop.call_soon(io.tasks.discard, completed)
+    try:
+        await io.flush()
+        assert not io.tasks, "flush returned before callbacks drained"
+    finally:
+        io.close()
+asyncio.run(check())
+'''
+        # The broken implementation blocks the event loop itself, so its
+        # watchdog must live outside that loop.
+        result = await asyncio.to_thread(subprocess.run, [sys.executable, "-c", code, str(Path(H.__file__).parent)],
+                                         capture_output=True, text=True, timeout=5)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     async def test_deadline_keeps_write_order_and_other_mount_progress(self):
         io = OrderedIO("test", workers=2)
         entered, release = asyncio.Event(), threading.Event()

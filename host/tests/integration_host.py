@@ -17,11 +17,13 @@ import tempfile
 import time
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent.parent
+HERE = Path(os.environ.get("DEDUCTUM_TEST_HOST_ROOT") or Path(__file__).resolve().parent.parent).resolve()
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(HERE))
 os.environ.setdefault("DEDUCTUM_STATE_DIR", tempfile.mkdtemp(prefix="deductum-it-"))
 
 import deductum_host as H  # noqa: E402
+from fixture_helpers import json_agent
 
 THY = """theory Demo
   imports Main
@@ -48,13 +50,30 @@ def check(cond, what):
         FAILURES.append(what)
 
 
-def wait_for(client, pred, timeout=240, what="condition", on_wait=None):
+def wait_for(client, pred, timeout=240, what="condition", on_wait=None, running_session=None):
     deadline = time.monotonic() + timeout
+    diagnostics = []
+
+    def failure(reason):
+        detail = "\n".join(json.dumps(ev, ensure_ascii=False) for ev in diagnostics)
+        raise SystemExit(reason + ("\nRecent session diagnostics:\n" + detail if detail else ""))
+
     while time.monotonic() < deadline:
         for i, ev in enumerate(client.events):
             if pred(ev):
                 del client.events[:i + 1]
                 return ev
+            if ev.get("event") == "session":
+                session = ev.get("session") or {}
+                diagnostics.append({"event": "session", "id": session.get("id"),
+                                    "lifecycle": session.get("lifecycle"),
+                                    "message": str(session.get("message") or "")[-4000:]})
+                del diagnostics[:-20]
+                if running_session is not None and session.get("id") == running_session and session.get("lifecycle") == "Failed":
+                    failure(f"session failed while waiting for {what}")
+            elif ev.get("event") == "session_log":
+                diagnostics.append({"event": "session_log", "session": ev.get("session"), "text": str(ev.get("text", ""))[-4000:]})
+                del diagnostics[:-20]
         client.events.clear()
         if on_wait is not None:
             on_wait()
@@ -66,16 +85,13 @@ def wait_for(client, pred, timeout=240, what="condition", on_wait=None):
             pass
         finally:
             client.sock.settimeout(None)
-    raise SystemExit(f"timed out waiting for {what}")
+    failure(f"timed out waiting for {what}")
 
 
 def main():
     # A stand-in for the claude CLI, for the typed-keyword fill
     fake = Path(tempfile.mkdtemp(prefix="deductum-bin-"))
-    (fake / "claude").write_text('#!/bin/sh\necho \'{"proofs": ["by simp", "by blast"], '
-                                 '"using": ["mult_1_right", "no_such_fact_xyz"]}\'\n')
-    (fake / "claude").chmod(0o755)
-    os.environ["PATH"] = f"{fake}:{os.environ.get('PATH', '')}"
+    json_agent(fake, {"proofs": ["by simp", "by blast"], "using": ["mult_1_right", "no_such_fact_xyz"]})
     folder = Path(tempfile.mkdtemp(prefix="deductum-thy-"))
     thy = folder / "Demo.thy"
     thy.write_text(THY)
@@ -95,7 +111,7 @@ def main():
     doc = app.request("read", session=sid, path=str(thy))["doc"]
     rev0 = doc["revision"]
     wait_for(app, lambda e: e.get("event") == "session" and e["session"]["id"] == sid
-             and e["session"]["lifecycle"] == "Running", what="Running")
+             and e["session"]["lifecycle"] == "Running", what="Running", running_session=sid)
     ev = wait_for(app, lambda e: e.get("event") == "doc_prover" and e["prover"]["status"]
                   and e["prover"]["status"].get("consolidated"), what="checked theory")
     names = [c[2] for c in ev["prover"]["commands"]]
@@ -287,7 +303,7 @@ def main():
         check(e.code == "forbidden", "agents cannot resume the human's session")
     app.request("resume", session=sid)
     wait_for(app, lambda e: e.get("event") == "session" and e["session"]["id"] == sid
-             and e["session"]["lifecycle"] == "Running", what="Running again")
+             and e["session"]["lifecycle"] == "Running", what="Running again", running_session=sid)
     info = app.request("session_info", session=sid)["session"]
     check(info["epoch"] == epoch + 1, "resume starts a new epoch")
 

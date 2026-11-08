@@ -18,6 +18,15 @@
 //! font sets are kept separately; the drawn editor must exactly match one of them.
 //! The `-warm` frames are not kept. When a later change to how the editor draws is
 //! meant, make them again the same way from the commit before it, and say so in the commit.
+//! The cells redesign (square cards on the page, the band at 10 %) and the household code colours
+//! were such changes: the Neo
+//! set was made again for the frames it changed, from that commit. The original and SDK sets of
+//! those frames (made with other fonts) still show the old look and need making again the same
+//! way in the SDK build. Paper (the 80 character cells at 14 px, with the 0.75 em gap) is such a
+//! change for the block frames: the Neo set was made again for them, the others still show the old look.
+//! The responsive page (the margins and the goal's width follow the page's width, and a narrow window's
+//! cell is a full 80 characters) moves the block frames' editors: the Neo set was made again for
+//! those frames, from that commit; only their place and the narrow frame's width changed.
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -38,9 +47,9 @@ const NARROW: Size = Size::new(760.0, 900.0);
 
 /// A theory with a proof, the caret in its `have` step, so that the construct the caret is in
 /// is tinted
-const PROOF: &str = "theory Pop imports Main begin\n\n(* a line before the proof *)\n\nlemma pop: \"(a::nat) + b + c = c + b + a\"\nproof -\n  have one: \"a + b = b + a\"\n    by simp\n  show ?thesis\n    using one\n    by simp\nqed\n\nend\n";
+pub(super) const PROOF: &str = "theory Pop imports Main begin\n\n(* a line before the proof *)\n\nlemma pop: \"(a::nat) + b + c = c + b + a\"\nproof -\n  have one: \"a + b = b + a\"\n    by simp\n  show ?thesis\n    using one\n    by simp\nqed\n\nend\n";
 
-fn proof_app(mode: Mode) -> App {
+pub(super) fn proof_app(mode: Mode) -> App {
     let commands: Vec<serde_json::Value> =
         super::prover::isabelle::blocks::lexical_commands(PROOF, &HashMap::new()).iter().map(|c| serde_json::json!([c.start, c.end, c.name, "finished"])).collect();
     let prover = serde_json::json!({
@@ -117,7 +126,7 @@ fn frame(scene: Scene, dark: bool) -> (Vec<u8>, Compared) {
     let mode = if matches!(scene, Scene::Source) { Mode::Source } else { Mode::Literate };
     let mut app = proof_app(mode);
     let mut h = Harness::new(if matches!(scene, Scene::BlockNarrow) { NARROW } else { WIDE });
-    cosmic::theme::set_active(if dark { cosmic::theme::ThemeType::Dark } else { cosmic::theme::ThemeType::Light });
+    cosmic::theme::set_active(if dark { cosmic::theme::ThemeType::Dark } else { crate::tones::light_surfaces_only_type_for_tests() });
     let id = if matches!(scene, Scene::Source) {
         super::view::source_editor_id()
     } else {
@@ -160,7 +169,10 @@ fn difference(now: &[u8], before: &[u8], width: u32, compared: &Compared) -> Opt
 /// of the source view and of the block being edited, wide and narrow, in both themes
 #[test]
 fn an_unselected_construct_is_drawn_as_before() {
-    let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+    let root = std::env::var_os("DEDUCTUM_TEST_ROOT")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")).to_owned());
+    let fixtures = root.join("tests/fixtures");
     let dirs = ["highlight-unselected-main", "highlight-unselected-main-neo", "highlight-unselected-main-sdk"];
 
     let mut problems = Vec::new();
