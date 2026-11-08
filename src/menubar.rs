@@ -77,20 +77,37 @@ pub fn find<'a>(rows: &'a [Row], label: &str) -> Option<&'a Row> {
     })
 }
 
-/// File's items for agent sessions: not on Windows (Tom, 8 Nov), where there are none
-pub fn agent_file_rows(windows: bool) -> Vec<Row> {
+/// File's items for agent sessions: not on Windows (Tom, 8 Nov), where there are none. `ready`:
+/// a session is open to attach the agent to
+pub fn agent_file_rows(windows: bool, ready: bool) -> Vec<Row> {
     if windows {
         return Vec::new();
     }
-    Vec::new()
+    #[cfg(not(windows))]
+    {
+        vec![act_or("New agent session\u{2026}", "", if ready { Ok(Message::Shell(Msg::AgentOpen(true))) } else { Err("Open a session first") })]
+    }
+    #[cfg(windows)]
+    {
+        let _ = ready;
+        Vec::new()
+    }
 }
 
 /// Prover's item for the agents' rights: not on Windows
-pub fn agent_prover_rows(windows: bool) -> Vec<Row> {
+pub fn agent_prover_rows(windows: bool, ready: bool) -> Vec<Row> {
     if windows {
         return Vec::new();
     }
-    Vec::new()
+    #[cfg(not(windows))]
+    {
+        vec![Row::Divider, act_or("Agents and their rights\u{2026}", "", if ready { Ok(Message::Panel(Panel::Agents)) } else { Err("Open a session first") })]
+    }
+    #[cfg(windows)]
+    {
+        let _ = ready;
+        Vec::new()
+    }
 }
 
 /// The menus, as the open session lets them be used
@@ -131,7 +148,7 @@ pub fn menus(app: &App) -> Vec<(&'static str, Vec<Row>)> {
             rows: vec![open_in("Files", link::Opener::Files), open_in("Zed", link::Opener::Zed), open_in("A terminal", link::Opener::Terminal)],
         },
     ];
-    file.extend(agent_file_rows(cfg!(windows)));
+    file.extend(agent_file_rows(cfg!(windows), ws.is_some()));
     file.extend([
         Row::Divider,
         act_or("Close session", "", if ws.is_some() { Ok(Message::CloseWorkspace) } else { Err("No session is open") }),
@@ -235,7 +252,7 @@ pub fn menus(app: &App) -> Vec<(&'static str, Vec<Row>)> {
         },
         act_or("Search theorems\u{2026}", "", if ws.is_some() { Ok(Message::Panel(Panel::Search)) } else { Err("No session is open") }),
     ];
-    prover.extend(agent_prover_rows(cfg!(windows)));
+    prover.extend(agent_prover_rows(cfg!(windows), ws.is_some()));
 
     // ----- Help
     let help = vec![

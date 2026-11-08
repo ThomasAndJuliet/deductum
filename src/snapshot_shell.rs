@@ -1232,3 +1232,215 @@ fn each_menu_opens_under_its_word() {
         }
     }
 }
+
+// ----- the agent-session button and its popover
+
+#[cfg(not(windows))]
+mod agent {
+    use super::*;
+    use super::super::agent_session::{self as ag, Context, Tool};
+    use super::super::settings::Rights;
+
+    const PROMPT: &str = "You are attached.\nDeductum session: Demo (id s1), on neo.\nLemma: add_zero, at line 11.\nA \"quote\", 'another', `tick`, $HOME and \\n.";
+
+    fn ctx(host: Option<&str>) -> Context {
+        Context {
+            session_id: "s1".into(),
+            session_name: "Demo".into(),
+            folder: "/home/twright/Proofs/Timed Circus".into(),
+            machine: host.map_or("au-laptop".into(), |_| "neo".into()),
+            host: host.map(str::to_string),
+            theory_path: Some("/home/twright/Proofs/Timed Circus/Stop.thy".into()),
+            lemma: Some("map_tock_length".into()),
+            line: Some(17),
+        }
+    }
+
+    #[test]
+    fn the_command_for_this_computer_and_for_another_machine() {
+        // this computer: no --host
+        assert_eq!(
+            ag::command(&ctx(None), Tool::Claude, "deductum-s1-7", PROMPT),
+            ["cosmic-term", "--new-thread", "/home/twright/Proofs/Timed Circus", "--agent", "claude", "--prompt", PROMPT, "--env", "DEDUCTUM_AGENT_ID=deductum-s1-7"]
+        );
+        // neo, by its alias, with Codex
+        assert_eq!(
+            ag::command(&ctx(Some("twright@neo")), Tool::Codex, "deductum-s1-8", PROMPT),
+            ["cosmic-term", "--new-thread", "/home/twright/Proofs/Timed Circus", "--host", "twright@neo", "--agent", "codex", "--prompt", PROMPT, "--env", "DEDUCTUM_AGENT_ID=deductum-s1-8"]
+        );
+        // the prompt stays one argument, whole, through the host's shell
+        let args = ag::launch_args(&ag::command(&ctx(None), Tool::Claude, "i", PROMPT));
+        assert_eq!(&args[..3], ["-c", args[1].as_str(), "sh"]);
+        assert_eq!(args.iter().filter(|a| a.as_str() == PROMPT).count(), 1);
+        assert_eq!(ag::agent_id("s1", 7), "deductum-s1-7");
+        assert_eq!(ag::agent_key("deductum-s1-7"), "deductum-s1-7:deductum-s1-7", "the key the host gives that id");
+        // a tailnet name is not the alias: the machine's own name stands in for it
+        let target = |d: Option<&str>| super::super::link::Target { key: "neo".into(), destination: d.map(str::to_string) };
+        assert_eq!(ag::host_arg(&target(None)), None);
+        assert_eq!(ag::host_arg(&target(Some("twright@neo"))).as_deref(), Some("twright@neo"));
+        assert_eq!(ag::host_arg(&target(Some("twright@neo.tail57c02a.ts.net"))).as_deref(), Some("neo"));
+    }
+
+    /// The host-side script, run for real with a stand-in `cosmic-term` that records its arguments
+    #[test]
+    fn the_host_script_passes_the_arguments_whole_and_says_plainly_what_is_missing() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = std::env::temp_dir().join(format!("deductum-launch-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        for tool in ["grep", "setsid", "cat", "tr"] {
+            let found = ["/usr/bin", "/bin"].iter().map(|d| std::path::Path::new(d).join(tool)).find(|p| p.exists()).unwrap();
+            std::os::unix::fs::symlink(found, dir.join(tool)).unwrap();
+        }
+        let run = |args: &[String]| {
+            std::process::Command::new("/bin/sh").args(super::super::agent_session::launch_args(args)).env("PATH", &dir).output().unwrap()
+        };
+        let command = ag::command(&ctx(Some("twright@neo")), Tool::Claude, "deductum-s1-7", PROMPT);
+        // not installed: a plain sentence
+        let out = run(&command);
+        assert_eq!(out.status.code(), Some(127));
+        assert!(String::from_utf8_lossy(&out.stderr).contains("is not installed"), "{}", String::from_utf8_lossy(&out.stderr));
+        // installed, but it does not know --new-thread
+        let fake = dir.join("cosmic-term");
+        std::fs::write(&fake, "#!/bin/sh\necho 'Usage: cosmic-term [--thread DIR]'\n").unwrap();
+        std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let out = run(&command);
+        assert_eq!(out.status.code(), Some(126));
+        assert!(String::from_utf8_lossy(&out.stderr).contains("--new-thread"), "{}", String::from_utf8_lossy(&out.stderr));
+        // one that does: it is started with the arguments as given, the prompt intact
+        let record = dir.join("args");
+        std::fs::write(&fake, format!("#!/bin/sh\nif [ \"$1\" = --help ]; then echo '--new-thread DIR'; exit 0; fi\nfor a in \"$@\"; do printf '%s\\0' \"$a\"; done > {}\n", record.display())).unwrap();
+        let out = run(&command);
+        assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+        for _ in 0..100 {
+            if record.exists() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(30));
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        let got: Vec<String> = std::fs::read(&record).unwrap().split(|b| *b == 0).filter(|a| !a.is_empty()).map(|a| String::from_utf8_lossy(a).to_string()).collect();
+        assert_eq!(got, command[1..], "cosmic-term got exactly its arguments");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_popover_opens_with_the_default_rights_and_claude_and_closes_on_esc_or_cancel() {
+        let mut app = demo_app(Mode::Literate);
+        assert!(!app.shell.agent.open);
+        let _ = cosmic::Application::update(&mut app, Message::Shell(Msg::AgentOpen(true)));
+        assert!(app.shell.agent.open);
+        assert_eq!((app.shell.agent.rights, app.shell.agent.tool), (Rights::Theory, Tool::Claude), "This theory, Claude");
+        // the default is Settings > Agents'
+        let _ = cosmic::Application::update(&mut app, Message::Shell(Msg::AgentOpen(false)));
+        let _ = cosmic::Application::update(&mut app, Message::Shell(Msg::Setting(super::super::settings::Change::DefaultRights(Rights::Folder))));
+        let _ = cosmic::Application::update(&mut app, Message::Shell(Msg::AgentOpen(true)));
+        assert_eq!(app.shell.agent.rights, Rights::Folder);
+        let _ = cosmic::Application::update(&mut app, Message::Shell(Msg::Setting(super::super::settings::Change::DefaultRights(Rights::Theory))));
+        // what it says it is attached to
+        let c = ag::context(&app).unwrap();
+        assert_eq!(c.theory_name(), Some("Demo.thy"));
+        assert_eq!(c.lemma.as_deref(), Some("add_zero"));
+        let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+        assert_eq!(c.line, Some(t.local.chars().take(t.cursor).filter(|c| *c == '\n').count() + 1));
+        assert_eq!(c.summary(), "In Demo on au-laptop \u{b7} attached to Demo.thy, lemma add_zero");
+        assert_eq!(c.host, None, "this computer: no --host");
+        // Esc closes it
+        let _ = cosmic::Application::update(&mut app, Message::Escape);
+        assert!(!app.shell.agent.open);
+        // the buttons: four rights, two tools, Open agent session and Cancel
+        let _ = cosmic::Application::update(&mut app, Message::Shell(Msg::AgentOpen(true)));
+        fn body(app: &App) -> Element<'_, Message> {
+            ag::popover_body(app, &ag::context(app).unwrap())
+        }
+        let hits: Vec<Message> = (0..580).step_by(10).flat_map(|x| (0..300).step_by(12).map(move |y| (x, y))).flat_map(|(x, y)| clicks(body(&app), Point::new(x as f32, y as f32), Size::new(580.0, 300.0))).collect();
+        let has = |f: &dyn Fn(&Msg) -> bool| hits.iter().any(|m| matches!(m, Message::Shell(msg) if f(msg)));
+        for r in Rights::ALL {
+            assert!(has(&|m| matches!(m, Msg::AgentRights(x) if *x == r)), "{r:?}");
+        }
+        assert!(has(&|m| matches!(m, Msg::AgentTool(Tool::Claude))) && has(&|m| matches!(m, Msg::AgentTool(Tool::Codex))));
+        assert!(has(&|m| matches!(m, Msg::AgentStart)) && has(&|m| matches!(m, Msg::AgentOpen(false))));
+        draw_in(false, || body(&app), "agent-popover-body-dark", Size::new(580.0, 300.0));
+        draw_in(true, || body(&app), "agent-popover-body-light", Size::new(580.0, 300.0));
+        // Cancel closes
+        let _ = cosmic::Application::update(&mut app, Message::Shell(Msg::AgentOpen(false)));
+        assert!(!app.shell.agent.open);
+    }
+
+    #[test]
+    fn open_agent_session_grants_the_chosen_scope_to_its_id_unless_ask_first() {
+        for (rights, scope) in [(Rights::Ask, None), (Rights::Proof, Some("proof")), (Rights::Theory, Some("theory")), (Rights::Folder, Some("folder"))] {
+            let mut app = demo_app(Mode::Literate);
+            let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+            app.links[0].sender = Some(tx);
+            let _ = cosmic::Application::update(&mut app, Message::Shell(Msg::AgentOpen(true)));
+            let n = app.shell.agent.n;
+            let _ = cosmic::Application::update(&mut app, Message::Shell(Msg::AgentRights(rights)));
+            let _ = cosmic::Application::update(&mut app, Message::Shell(Msg::AgentTool(Tool::Codex)));
+            let _task = cosmic::Application::update(&mut app, Message::Shell(Msg::AgentStart));
+            assert!(!app.shell.agent.open, "the popover closes");
+            let mut sent = Vec::new();
+            while let Ok(line) = rx.try_recv() {
+                sent.push(serde_json::from_str::<Value>(&line).unwrap());
+            }
+            let grants: Vec<&Value> = sent.iter().filter(|v| v["op"] == "grant").collect();
+            match scope {
+                None => assert!(grants.is_empty(), "Ask first grants nothing: {sent:?}"),
+                Some(scope) => {
+                    assert_eq!(grants.len(), 1, "{sent:?}");
+                    let id = format!("deductum-s1-{n}");
+                    assert_eq!((grants[0]["agent"].as_str(), grants[0]["scope"].as_str(), grants[0]["label"].as_str()), (Some(format!("{id}:{id}").as_str()), Some(scope), Some("Codex")));
+                    assert_eq!(grants[0]["session"], "s1");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn the_prompt_names_the_session_theory_file_lemma_and_line_and_the_deductum_tools() {
+        let p = ag::prompt(&ctx(Some("twright@neo")), Rights::Theory);
+        for needle in ["Demo (id s1)", "on neo", "Stop.thy", "/home/twright/Proofs/Timed Circus/Stop.thy", "map_tock_length", "line 17", "deductum MCP tools", "edit this theory"] {
+            assert!(p.contains(needle), "{needle}: {p}");
+        }
+        assert!(p.lines().count() >= 5, "several lines: {p}");
+        assert!(ag::prompt(&ctx(None), Rights::Ask).contains("proof_request_access"));
+    }
+
+    #[test]
+    fn the_split_button_is_the_icon_and_an_arrow_and_the_arrow_menu_has_four_items() {
+        let app = demo_app(Mode::Literate);
+        for (light, theme) in [(true, "light"), (false, "dark")] {
+            draw_in(light, || widget::container(ag::split(&app)).padding(20).into(), &format!("agent-split-{theme}"), Size::new(300.0, 80.0));
+            // the icon opens the popover; the arrow's menu has the session first, in bold
+            let hits: Vec<Message> = (0..300).step_by(2).flat_map(|x| clicks(widget::container(ag::split(&app)).padding(20).into(), Point::new(x as f32, 40.0), Size::new(300.0, 80.0))).collect();
+            assert!(hits.iter().any(|m| matches!(m, Message::Shell(Msg::AgentOpen(true)))), "{hits:?}");
+            // the menu, opened: its picture differs from the closed one
+            let closed = draw_in(light, || widget::container(ag::split(&app)).padding(20).into(), "agent-split-closed", Size::new(300.0, 260.0));
+            let menu = draw_clicked(light, || widget::container(ag::split(&app)).padding(20).into(), &[Point::new(70.0, 38.0)], &format!("agent-menu-{theme}"), Size::new(300.0, 260.0));
+            assert_ne!(closed, menu, "the arrow opens a menu ({theme})");
+        }
+    }
+
+    #[test]
+    fn the_popover_hangs_under_the_button_in_the_header() {
+        let mut app = chip_scene(|_| {});
+        let _ = cosmic::Application::update(&mut app, Message::Shell(Msg::AgentOpen(true)));
+        for (light, theme) in [(true, "light"), (false, "dark")] {
+            draw_in(light, || window(&app), &format!("agent-popover-{theme}"), Size::new(1400.0, 600.0));
+        }
+    }
+}
+#[test]
+fn agent_items_are_not_in_the_windows_build() {
+    use super::menubar::{agent_file_rows, agent_prover_rows};
+    assert!(agent_file_rows(true, true).is_empty() && agent_prover_rows(true, true).is_empty(), "no agent items on Windows");
+    // (the rest is cfg: the agent session's module, messages and button are compiled out there)
+    let main = include_str!("main.rs");
+    assert!(main.contains("#[cfg(not(windows))]\nmod agent_session;"), "the agent session module is not built on Windows");
+    #[cfg(not(windows))]
+    {
+        assert!(!agent_file_rows(false, true).is_empty());
+        assert!(!agent_prover_rows(false, true).is_empty());
+    }
+}
+

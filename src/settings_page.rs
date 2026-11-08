@@ -838,7 +838,10 @@ fn shortcuts_page(_app: &App) -> Element<'_, Message> {
         .title("Everywhere")
         .add(key("Ctrl+,", "Settings"))
         .add(key("Ctrl+=  ·  Ctrl+−  ·  Ctrl+0", "Larger, smaller and default content size"))
-        .add(key("Alt+Left", "Back to where Ctrl+click came from"));
+        .add(key("Alt+Left", "Back to where Ctrl+click came from"))
+        .add(key("Ctrl+1  \u{b7}  Ctrl+2", "The document as Literate, as Source"))
+        .add(key("F9", "Show or hide the sidebar"))
+        .add(key("F8  \u{b7}  Shift+F8", "The next failed cell, the next unfinished one"));
     sub_page(back_head("Keyboard shortcuts"), section)
 }
 
