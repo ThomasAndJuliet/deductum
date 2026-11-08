@@ -155,6 +155,17 @@ pub fn chrome_color(theme: &cosmic::Theme) -> Color {
     if c.is_dark { c.primary_container_color().into() } else { c.bg_color().into() }
 }
 
+/// The surface of the left sidebar and the side panel: [`chrome_color`], as the header's, the
+/// plan's lightish (#d7d7d7 light, #272727 dark), edge to edge with square corners, so that
+/// nothing of the window behind shows at the corners and the panels sit flush with the header
+pub fn chrome_panel() -> theme::Container<'static> {
+    theme::Container::custom(|theme| iced::widget::container::Style {
+        background: Some(chrome_color(theme).into()),
+        text_color: Some(theme.cosmic().on_bg_color().into()),
+        ..Default::default()
+    })
+}
+
 /// A cell (code, goals, notes) on the page: one layer up, lighter than the page in both themes,
 /// as COSMIC's layers are
 fn cell_color(theme: &cosmic::Theme) -> Color {
@@ -3394,7 +3405,7 @@ fn side_panel<'a>(app: &'a App, ws: &'a Workspace) -> Element<'a, Message> {
         .padding(sp.space_s)
         .width(Length::Fixed(app.right_width))
         .height(Length::Fill)
-        .class(theme::Container::Card)
+        .class(chrome_panel())
         .into()
 }
 

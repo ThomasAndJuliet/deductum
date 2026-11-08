@@ -1005,6 +1005,107 @@ fn the_chip_has_even_padding_at_both_ends() {
     }
 }
 
+// ----- the sidebar and the side panel's surface
+
+/// The sidebar and the side panel are the plan's lightish, as the header is: COSMIC's background
+/// colour in light (#d7d7d7), `chrome_color` (#272727) in dark; edge to edge, square, with nothing
+/// of the window behind showing at their corners. Rows, the chosen tab and the disabled tabs still
+/// read on it
+#[test]
+fn the_sidebar_and_the_side_panel_are_the_lightish_surface() {
+    use cosmic::iced::Color;
+    let lum = |c: Color| {
+        let f = |v: f32| if v <= 0.03928 { v / 12.92 } else { ((v + 0.055) / 1.055).powf(2.4) };
+        0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b)
+    };
+    let contrast = |a: Color, b: Color| {
+        let (x, y) = (lum(a), lum(b));
+        (x.max(y) + 0.05) / (x.min(y) + 0.05)
+    };
+    let over = |top: Color, under: Color| Color {
+        r: top.r * top.a + under.r * (1.0 - top.a),
+        g: top.g * top.a + under.g * (1.0 - top.a),
+        b: top.b * top.a + under.b * (1.0 - top.a),
+        a: 1.0,
+    };
+    for (light, theme_name) in [(true, "light"), (false, "dark")] {
+        let theme = if light { cosmic::Theme::light() } else { cosmic::Theme::dark() };
+        let chrome = super::view::chrome_color(&theme);
+        assert_eq!(super::view::chrome_color(&theme).into_rgba8()[..3], if light { [0xd7, 0xd7, 0xd7] } else { [0x27, 0x27, 0x27] });
+        let mut app = mixed_app();
+        app.window_width = 1000.0;
+        app.left_width = 240.0;
+        app.right_width = 300.0;
+        app.show_right = true;
+        let i = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.name == "lemma").unwrap();
+        let _ = cosmic::Application::update(&mut app, Message::EditBlock(i));
+        let size = Size::new(1000.0, 760.0);
+        let frame = draw_in(light, || window(&app), &format!("surface-{theme_name}"), size);
+        let px = |x: u32, y: u32| {
+            let i = ((y * 1000 + x) * 4) as usize;
+            [frame[i], frame[i + 1], frame[i + 2]]
+        };
+        let same = |p: [u8; 3]| p.iter().zip(chrome.into_rgba8()).all(|(a, b)| a.abs_diff(b) <= 1);
+        // the sidebar's and the panel's corners and edges:
+        // under the header, at the window's edge, and above the status bar
+        // (the header is COSMIC's background colour: the same in light, #1b1b1b and not #272727 in dark)
+        assert!(!light || same(px(500, 3)), "{theme_name}: the header is not chrome: {:?}", px(500, 3));
+        for (what, x, y) in [
+            ("the sidebar's top left corner", 0, 49),
+            ("the sidebar's bottom left corner", 0, 726),
+            ("the sidebar's top right corner", 239, 49),
+            ("the sidebar's bottom right corner", 239, 726),
+            ("the side panel's top left corner", 706, 49),
+            ("the side panel's bottom left corner", 706, 726),
+            ("the side panel's top right corner", 999, 49),
+            ("the side panel's bottom right corner", 999, 726),
+        ] {
+            assert!(same(px(x, y)), "{theme_name}: {what} is {:?}, not the lightish surface", px(x, y));
+        }
+        // (an empty stretch of each, below its content)
+        assert!(same(px(120, 722)) || same(px(120, 700)), "{theme_name}: the sidebar's body: {:?}", px(120, 700));
+        assert!(same(px(850, 722)), "{theme_name}: the side panel's body: {:?}", px(850, 722));
+
+        // the selected row's wash (COSMIC's hover wash) shows on it
+        let wash = over(theme.cosmic().icon_button.hover.into(), chrome);
+        assert!(contrast(wash, chrome) >= 1.08, "{theme_name}: the selected row's wash is {:?} on {:?}: contrast {:.2}", wash, chrome, contrast(wash, chrome));
+        let text: Color = theme.cosmic().on_bg_color().into();
+        assert!(contrast(text, wash) >= 7.0, "{theme_name}: text on the wash: {:.2}", contrast(text, wash));
+        let accent: Color = theme.cosmic().accent_color().into();
+        assert!(contrast(accent, wash) >= 3.0, "{theme_name}: the current row's accent text on the wash: {:.2}", contrast(accent, wash));
+
+        // the tab bar is a pill of COSMIC's component fill on the surface; the chosen tab is the
+        // muted accent on it; a disabled tab's icon is the text, faded to 35 %, on it
+        let bar: Color = theme.cosmic().bg_component_color().into();
+        assert!(contrast(bar, chrome) >= 1.05, "{theme_name}: the tab bar {:?} does not stand out from {:?}", bar, chrome);
+        let (chosen, label) = super::tones::muted(&theme);
+        assert!(contrast(chosen, bar) >= 1.3, "{theme_name}: the chosen tab {:?} on the bar {:?}: {:.2}", chosen, bar, contrast(chosen, bar));
+        assert!(contrast(label, chosen) >= 4.5, "{theme_name}: the chosen tab's icon: {:.2}", contrast(label, chosen));
+        let dim = over(shell::dimmed(&theme), bar);
+        assert!(contrast(dim, bar) >= 1.8, "{theme_name}: a disabled tab's icon {:?} on the bar {:?}: {:.2}", dim, bar, contrast(dim, bar));
+    }
+}
+
+/// What menus, dropdowns and tooltips are now (the plan's lightest is #f5f5f5 light and #343434
+/// dark): recorded, with the frame
+#[test]
+fn menus_and_tooltips_are_recorded_against_the_lightest() {
+    for (light, name, lightest) in [(true, "light", 0xf5f5f5u32), (false, "dark", 0x343434)] {
+        let theme = if light { cosmic::Theme::light() } else { cosmic::Theme::dark() };
+        let hex = |c: cosmic::iced::Color| {
+            let [r, g, b, _] = c.into_rgba8();
+            format!("#{r:02x}{g:02x}{b:02x}")
+        };
+        // (a menu is COSMIC's component colour of its layer; a tooltip is the palette's neutral_2)
+        let menu = hex(theme.cosmic().bg_component_color().into());
+        let tooltip = hex(theme.cosmic().palette.neutral_2.into());
+        eprintln!("{name}: menus {menu}, tooltips {tooltip}; the plan's lightest #{lightest:06x}");
+        if light {
+            assert_eq!(menu, "#f5f5f5", "light menus are the lightest already");
+        }
+    }
+}
+
 // ----- the status bar and toasts
 
 /// The status bar on the page, as the window draws it
