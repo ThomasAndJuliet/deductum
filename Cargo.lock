@@ -1529,6 +1529,7 @@ dependencies = [
  "cosmic-text",
  "household-highlight",
  "household-tones",
+ "household-widgets",
  "image",
  "libcosmic",
  "log",
@@ -2570,6 +2571,15 @@ source = "git+https://github.com/ThomasAndJuliet/household-kit.git#bef3a9e943f33
 name = "household-tones"
 version = "0.1.0"
 source = "git+https://github.com/ThomasAndJuliet/household-kit.git#bef3a9e943f33f8a1b8745386e66c930613e7ba7"
+
+[[package]]
+name = "household-widgets"
+version = "0.1.0"
+source = "git+https://github.com/ThomasAndJuliet/household-widgets.git?rev=2ea538ff26b26398d5509523860cafad084aae41#2ea538ff26b26398d5509523860cafad084aae41"
+dependencies = [
+ "household-tones",
+ "libcosmic",
+]
 
 [[package]]
 name = "htmlize"

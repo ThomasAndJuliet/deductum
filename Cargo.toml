@@ -28,6 +28,11 @@ household-tones = { git = "https://github.com/ThomasAndJuliet/household-kit.git"
 # The household's code colours by token class (rule 25b): the colours of the editors' Isabelle
 # token classes, mapped in editor.rs; the same household-kit revision as household-tones
 household-highlight = { git = "https://github.com/ThomasAndJuliet/household-kit.git" }
+# The household's shared libcosmic widgets (the muted switch, tooltips, menu rows, buttons and the
+# settings rows' alignment). It builds with this libcosmic, through the patch below
+# (pinned to the commit of household-widgets#8, which fetches its own dependencies over https;
+# drop the rev once that is merged)
+household-widgets = { git = "https://github.com/ThomasAndJuliet/household-widgets.git", rev = "2ea538ff26b26398d5509523860cafad084aae41" }
 
 [dependencies.cosmic-text]
 version = "0.19"
