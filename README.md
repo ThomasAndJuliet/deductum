@@ -265,6 +265,7 @@ cargo --offline --locked test --workspace --all-targets --all-features
 python3 -m unittest discover -s host/tests -p "test_*.py"
 python3 scripts/test-ci-trust.py
 python3 scripts/test-publish-release.py
+python3 scripts/test-submit-home-apps.py
 python3 scripts/test-release-policy.py
 python3 scripts/test-package-flatpak-bundle.py
 python3 scripts/test-package-windows.py
@@ -302,7 +303,13 @@ successful `main` push run of CI. To retry a run whose artifacts are retained:
 gh workflow run release-binaries.yml --ref main -f run_id=CI_RUN_ID
 ```
 
-In a public repository it publishes only after a person records the signing
-identity as `"public_signing": "github-attestation"` in `release-config.json`.
+In a public repository it publishes only if `release-config.json` records a signing
+identity; `"public_signing": "github-attestation"` is the one implemented.
 `release-config.json` is also the only place the scripts and workflows name this
 repository.
+
+`.github/workflows/release.yml` separately submits every successful `main` build to
+the private `home-apps` Flatpak repository, using `scripts/submit-home-apps.py` on a
+GitHub-hosted runner. It joins the tailnet with a short-lived identity limited to
+Neo's CI ingress, and uses no stored secret. Neo checks the build and signs it; the
+signing key never leaves Neo.

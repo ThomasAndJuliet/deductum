@@ -1,31 +1,56 @@
 name: Publish private Flatpak
+# Submits tested builds to the private home-apps repository on Neo, which signs
+# them. Only main's copy of this file can hold the identity Neo and Tailscale
+# accept: both pin this workflow on refs/heads/main, and a fork's pull request
+# neither triggers it nor receives an identity token.
 on:
   workflow_run:
     workflows: [CI]
     types: [completed]
     branches: [main]
   schedule:
-    # Hourly recovery on Neo; publish-flatpak.yml skips the second
-    # schedule on GitHub-hosted runners.
     - cron: '17 */12 * * *'
-    - cron: '17 1-11,13-23 * * *'
   workflow_dispatch:
 permissions:
   contents: read
-  actions: write
-  id-token: write
 jobs:
   publish:
     if: >-
       github.event.repository.fork == false &&
+      github.ref == 'refs/heads/main' &&
       (github.event_name != 'workflow_run' ||
        (github.event.workflow_run.event == 'push' &&
         github.event.workflow_run.head_branch == 'main' &&
         github.event.workflow_run.conclusion == 'success' &&
         github.event.workflow_run.head_repository.full_name == github.repository))
-    uses: ThomasAndJuliet/neo-infrastructure/.github/workflows/publish-flatpak.yml@main
-    with:
-      app_id: dev.twright.Deductum
-      minimum_run_number: ${{ vars.NEO_CI_MINIMUM_RUN_NUMBER || '1' }}
-      artifact_name: home-apps-x86_64
-      run_id: ${{ github.event_name == 'workflow_run' && format('{0}', github.event.workflow_run.id) || '' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: write
+      id-token: write
+    env:
+      NEO_CI_RUN_ID: ${{ github.event.workflow_run.id }}
+      NEO_CI_MINIMUM_RUN_NUMBER: ${{ vars.NEO_CI_MINIMUM_RUN_NUMBER || '1' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Look for eligible builds before joining the publishing network
+        id: discover
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 scripts/submit-home-apps.py discover
+      - name: Join the publishing network with a short-lived identity
+        if: steps.discover.outputs.has_work == 'true'
+        uses: tailscale/github-action@d1b6cd204f8dceda5b3eaad7f1f767be390056cd # v4
+        with:
+          oauth-client-id: ${{ vars.NEO_CI_TAILSCALE_CLIENT_ID }}
+          audience: ${{ vars.NEO_CI_TAILSCALE_AUDIENCE }}
+          tags: tag:home-apps-ci
+          version: '1.94.2'
+      - name: Submit this exact tested build and wait for its signature
+        if: steps.discover.outputs.has_work == 'true'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 scripts/submit-home-apps.py submit

@@ -154,6 +154,7 @@ Deductum's headless UI/unit tests, and runs all Python host unit-test modules:
 cargo --offline --locked test --workspace --all-targets --all-features
 python3 -m unittest discover -s host/tests -p "test_*.py"
 python3 scripts/test-publish-release.py
+python3 scripts/test-submit-home-apps.py
 python3 scripts/test-release-policy.py
 python3 scripts/test-package-flatpak-bundle.py
 ```
@@ -237,8 +238,11 @@ libcosmic and household-tones are fetched from private household repositories
 using read-only deploy keys. No sibling checkout is needed.
 The successful default-branch push preserves its artifact for seven days.
 The release workflow waits for the entire CI workflow, including both prover
-integrations, to succeed before submitting to Neo's trusted reusable publisher.
-Other branches and pull requests do not publish stable.
+integrations, to succeed before submitting to Neo with
+`scripts/submit-home-apps.py`. A public repository cannot call the household's
+private reusable workflow, so Neo's policy pins this repository's own
+`release.yml` on `main` instead. Other branches and pull requests do not publish
+stable.
 
 CI cancels superseded runs for the same pull request or feature branch to save
 hosted runner minutes. Each push to `main` uses its own concurrency group and
