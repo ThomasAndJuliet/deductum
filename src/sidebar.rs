@@ -109,7 +109,7 @@ pub fn sidebar(app: &App) -> Element<'_, Message> {
     )
     .width(Length::Fixed(app.left_width))
     .height(Length::Fill)
-    .class(theme::Container::Card)
+    .class(super::view::chrome_panel())
     .into()
 }
 
