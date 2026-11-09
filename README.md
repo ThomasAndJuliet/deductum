@@ -112,8 +112,9 @@ to connect to remote sessions does not need a local prover.
   project's `lean-toolchain`; elan downloads that toolchain if needed. Prepare
   the project's dependencies as you would for any other Lean editor.
 - **Isabelle:** install [Isabelle2025](https://isabelle.in.tum.de/website-Isabelle2025/).
-  On Windows, use the official Windows distribution. Other Isabelle versions
-  are not supported yet.
+  On Windows, use the official Windows distribution. On macOS, move
+  `Isabelle2025.app` to `/Applications` or `~/Applications`, where Deductum
+  finds it. Other Isabelle versions are not supported yet.
 
 If Deductum cannot find Isabelle, add its `bin/isabelle` path to `host.json`
 in the [configuration directory](#settings-and-data) on the prover machine:
@@ -122,7 +123,8 @@ in the [configuration directory](#settings-and-data) on the prover machine:
 {"isabelle": [{"path": "/opt/Isabelle2025/bin/isabelle"}]}
 ```
 
-On Windows, an equivalent path is `C:/Isabelle2025/bin/isabelle`. If a folder
+On Windows, an equivalent path is `C:/Isabelle2025/bin/isabelle`; on macOS,
+`/Applications/Isabelle2025.app/bin/isabelle`. If a folder
 path causes a problem, the error message says what to do.
 
 ## Open your first project

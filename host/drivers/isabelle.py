@@ -181,6 +181,12 @@ def runtime_identifier(isabelle: Path) -> Optional[str]:
         return None
 
 
+# macOS: Isabelle's app bundle in /Applications or ~/Applications. Isabelle2025.app is itself the
+# Isabelle home; later releases keep the home in Contents/Resources and link bin/ beside it.
+APPLICATION_DIRS = ("/Applications",)
+APP_BUNDLE_PATTERNS = ("Isabelle*.app/bin/isabelle", "Isabelle*.app/Contents/Resources/bin/isabelle")
+
+
 def find_runtimes() -> List[Dict[str, Any]]:
     candidates: List[Path] = []
     config = read_config()
@@ -196,6 +202,9 @@ def find_runtimes() -> List[Dict[str, Any]]:
         candidates.extend(sorted(Path.home().glob(pattern)))
     for root in ("/opt", "/usr/local"):
         candidates.extend(sorted(Path(root).glob("Isabelle*/bin/isabelle")))
+    for root in (*APPLICATION_DIRS, Path.home() / "Applications"):
+        for pattern in APP_BUNDLE_PATTERNS:
+            candidates.extend(sorted(Path(root).glob(pattern)))
     if platform.WINDOWS:
         for root in (os.environ.get("ProgramFiles"), os.environ.get("ProgramFiles(x86)"), Path.home().anchor):
             if root:
