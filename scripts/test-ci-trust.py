@@ -154,21 +154,12 @@ class WorkflowShapeTests(unittest.TestCase):
             runner = job["runs-on"]
             with self.subTest(job=name):
                 # A literal is hosted, or is the one household job its trust decision selects.
-                allowed = {"ubuntu-24.04", "windows-2025", "macos-15", "${{ needs.trust.outputs.runner }}"}
+                allowed = {"ubuntu-24.04", "windows-2025", "${{ needs.trust.outputs.runner }}"}
                 if name == "flatpak-neo":
                     self.assertEqual(runner, ["self-hosted", "neo"])
                     self.assertIn("needs.trust.outputs.flatpak == 'neo'", job["if"])
                 else:
                     self.assertIn(runner, allowed)
-
-    def test_macos_package_builds_on_a_hosted_mac_without_secrets_for_every_run(self):
-        job = self.ci["macos-build"]
-        self.assertEqual(job["runs-on"], "macos-15")
-        self.assertNotIn("if", job)
-        self.assertNotIn("secrets.", json.dumps(job))
-        upload = next(step for step in job["steps"] if step.get("with", {}).get("name") == "macos-universal")
-        self.assertNotIn("if", upload)
-        self.assertEqual(upload["with"]["if-no-files-found"], "error")
 
     def test_home_apps_artifact_comes_only_from_main_pushes(self):
         steps = self.ci["flatpak-neo"]["steps"]
