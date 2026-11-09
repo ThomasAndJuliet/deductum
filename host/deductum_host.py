@@ -1856,7 +1856,7 @@ class Session:
         if self.cpu_sample:
             dt = t - self.cpu_sample[0]
             if dt > 0:
-                cpu = round(100 * (cpu_s - self.cpu_sample[1]) / dt)
+                cpu = max(0, round(100 * (cpu_s - self.cpu_sample[1]) / dt))
         self.cpu_sample = (t, cpu_s)
         return {"cpu": cpu, "rss_mb": round(rss_pages * platform.page_size() / 1e6)}
 

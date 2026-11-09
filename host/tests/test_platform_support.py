@@ -4,6 +4,7 @@ import contextlib
 import json
 import os
 from pathlib import Path
+import signal
 import socket
 import subprocess
 import sys
@@ -815,6 +816,33 @@ asyncio.run(main())
         self.assertTrue(error, "launcher hid the backend startup failure")
         self.assertFalse(list(self.root.glob("*.json")), "failed startup created fixture descendants")
 
+
+
+@unittest.skipIf(os.name == "nt", "Windows counts a job, not a process group")
+class ProverUsageTests(unittest.TestCase):
+    def test_a_child_in_a_session_of_its_own_is_counted(self):
+        # Isabelle's ML process runs outside the JVM's group, and that is where the proofs happen
+        child = ("import time; b = bytearray(64 * 1024 * 1024); "
+                 "[b.__setitem__(i, 1) for i in range(0, len(b), 4096)]; print('up', flush=True); time.sleep(60)")
+        parent = ("import subprocess, sys, time; "
+                  f"subprocess.Popen([sys.executable, '-c', {child!r}], start_new_session=True); time.sleep(60)")
+        proc = subprocess.Popen([sys.executable, "-c", parent], start_new_session=True, stdout=subprocess.PIPE)
+        descendants = []
+        try:
+            self.assertEqual(proc.stdout.readline().strip(), b"up")
+            with open(f"/proc/{proc.pid}/task/{proc.pid}/children") as f:
+                descendants = [int(p) for p in f.read().split()]
+            self.assertTrue(descendants)
+            with open(f"/proc/{descendants[0]}/stat") as f:
+                self.assertNotEqual(int(f.read().rsplit(")", 1)[1].split()[2]), proc.pid, "the child has its own group")
+            _, pages = P.process_group_usage(proc.pid)
+            self.assertGreater(pages * P.page_size(), 64 * 1024 * 1024)
+        finally:
+            for pid in descendants:
+                os.kill(pid, signal.SIGKILL)
+            proc.kill()
+            proc.wait()
+            proc.stdout.close()
 
 if __name__ == "__main__":
     unittest.main()
