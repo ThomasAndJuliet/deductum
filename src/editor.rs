@@ -130,6 +130,18 @@ pub enum Mode {
     Source,
 }
 
+/// A cell opened empty: where it will go in the source once it has text
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PendingCell {
+    /// The block it follows (None: at the end, before the theory's `end`)
+    pub after: Option<usize>,
+    /// Where the separating blank lines go in the source
+    at: usize,
+    /// The blank lines before and after the cell's text, as `+ Lemma` and the others set them
+    before: &'static str,
+    after_nl: &'static str,
+}
+
 /// A block of the literate view being edited in place
 pub struct BlockEditor {
     /// Changes whenever the editor's shaping/layout is discarded.
@@ -694,6 +706,9 @@ pub struct Theory {
     rendered_sources: Vec<Option<Arc<SourceMap>>>,
     doc_cache: HashMap<String, (Arc<Doc>, Arc<SourceMap>)>,
     pub block_editor: Option<BlockEditor>,
+    /// A cell added with `+ Cell` that has no text yet: its editor is open (empty), but nothing
+    /// of it is in the source until something is typed
+    pending_cell: Option<PendingCell>,
     /// Desired visual x during a run of vertical moves, including across cells.
     pub vertical_x: Option<f32>,
     /// Place the caret on the new cell's edge row after its first layout.
@@ -1027,6 +1042,7 @@ impl Theory {
             rendered_sources: Vec::new(),
             doc_cache: HashMap::new(),
             block_editor: None,
+            pending_cell: None,
             vertical_x: None,
             vertical_entry: None,
             mode,
@@ -1814,8 +1830,81 @@ impl Theory {
         self.cursor = be.start + be.decoded.to_source(li.offset(&shown, be.content.cursor().position));
     }
 
+    /// Where a block added after block `after` goes, and the blank lines it needs either side
+    pub fn insertion_point(&self, after: Option<usize>) -> (usize, &'static str, &'static str) {
+        // After the block, else before the theory's `end`
+        let at = match after.and_then(|i| self.blocks.get(i)) {
+            Some(b) => b.end,
+            None => self.blocks.iter().rev().find(|b| b.kind == theory::Kind::End).map_or(ot::char_len(&self.local), |b| b.start),
+        };
+        let chars: Vec<char> = self.local.chars().collect();
+        let at = at.min(chars.len());
+        let before = match (at.checked_sub(1).map(|i| chars[i]), at.checked_sub(2).map(|i| chars[i])) {
+            (Some('\n'), Some('\n')) | (None, _) => "",
+            (Some('\n'), _) => "\n",
+            _ => "\n\n",
+        };
+        let after_nl = if chars.get(at) == Some(&'\n') { "\n" } else { "\n\n" };
+        (at, before, after_nl)
+    }
+
+    /// The cell `+ Cell` opened, while it has no text
+    pub fn pending_cell(&self) -> Option<&PendingCell> {
+        self.pending_cell.as_ref().filter(|_| self.block_editor.is_some())
+    }
+
+    /// Open an empty cell after block `after`, with the caret in it. The source is not touched
+    pub fn open_pending_cell(&mut self, after: Option<usize>, table: &dyn Symbols) {
+        let (at, before, after_nl) = self.insertion_point(after);
+        self.open_range_empty(at, table);
+                self.pending_cell = Some(PendingCell { after, at, before, after_nl });
+        // (what follows it is not selected, and the caret is in the blank lines between blocks,
+        // so that no block shows its goal as the new cell's)
+        self.selected = None;
+        self.cursor = (at + 1).min(ot::char_len(&self.local));
+    }
+
+    fn open_range_empty(&mut self, at: usize, table: &dyn Symbols) {
+        self.vertical_x = None;
+        self.vertical_entry = None;
+        let decoded = table.decode("");
+        let content = super::wrap::editor_content("", false);
+        self.cursor = at;
+        self.block_editor = Some(BlockEditor { layout_revision: 0, start: at, end: at, decoded, content, preview: None, kind: theory::Kind::Formal, wrap: None, shown_text: String::new() });
+        self.pending_cell = None;
+        self.compute_block_highlight();
+    }
+
+    /// Put the pending cell into the source (its blank lines), ready for its first text. The
+    /// blank lines and what is typed are one step of the history
+    fn materialize_cell(&mut self, table: &dyn Symbols) {
+        let Some(p) = self.pending_cell.take() else { return };
+        self.begin_group();
+        let sep = format!("{}{}", p.before, p.after_nl);
+        self.apply_local(&vec![(p.at, p.at, sep)], table);
+        let start = p.at + p.before.chars().count();
+        if let Some(be) = &mut self.block_editor {
+            be.start = start;
+            be.end = start;
+        }
+        self.cursor = start;
+    }
+
     /// The block editor's edit or motion
     pub fn block_action(&mut self, action: Action, table: &dyn Symbols) -> bool {
+        let materialized = self.pending_cell().is_some() && action.is_edit();
+        if materialized {
+            self.materialize_cell(table);
+        }
+        let done = self.block_action_inner(action, table);
+        if materialized {
+            // (typing goes on in the same step, as typing does)
+            self.group = false;
+        }
+        done
+    }
+
+    fn block_action_inner(&mut self, action: Action, table: &dyn Symbols) -> bool {
         let Some(be) = &mut self.block_editor else { return false };
         let edit = action.is_edit();
         let vertical = matches!(action, Action::Move(text_editor::Motion::Up | text_editor::Motion::Down));
@@ -1895,6 +1984,7 @@ impl Theory {
         self.vertical_x = None;
         self.vertical_entry = None;
         let Some(block) = self.blocks.get(index) else { return };
+        self.pending_cell = None;
         let full = self.source_text(block.start, block.end);
         let (kind, preview) = preview_of(self.profile, &full, &self.kinds, table);
         // A heading or text is edited as its text alone, set like the text it is
@@ -1959,6 +2049,7 @@ impl Theory {
     /// Edit `s..e` of a block (a paragraph of its text) as its prose editor, the caret at `at`
     fn open_range(&mut self, block: &theory::Block, s: usize, e: usize, at: usize, table: &dyn Symbols) {
         let (s, e) = self.prose_range(s, e);
+        self.pending_cell = None;
         let full = self.source_text(block.start, block.end);
         let (kind, preview) = preview_of(self.profile, &full, &self.kinds, table);
         let wrap = Some((self.source_text(block.start, s), self.source_text(e, block.end)));

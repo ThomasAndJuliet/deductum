@@ -614,6 +614,121 @@ fn inserts_a_definition_with_the_caret_on_its_name() {
     }
 }
 
+/// An app on a short theory (Isabelle or Lean) in the literate view, with blocks to add between
+fn cell_app(lean: bool) -> App {
+    if lean {
+        super::snapshot_lean::lean_app_with(Mode::Literate, "import Mathlib\n\ndef x := 0\n\ndef y := 1\n")
+    } else {
+        let text = "theory G imports Main begin\n\nlemma one: \"True\" by simp\n\nlemma two: \"True\" by simp\n\nend\n";
+        let mut app = demo_app(Mode::Literate);
+        let doc = json!({"text": text, "revision": 1, "prover": prover_json(text)});
+        app.workspace.as_mut().unwrap().theory = Some(Theory::new("/tmp/G.thy".into(), &doc, &Table::fallback(), Arc::new(HashMap::new()), Mode::Literate, crate::prover::profile(None)));
+        app
+    }
+}
+
+fn the_theory(app: &App) -> &Theory {
+    app.workspace.as_ref().unwrap().theory.as_ref().unwrap()
+}
+
+/// `+ Cell` opens an empty cell with the caret in it and puts nothing in the source; the first
+/// character typed puts the cell there (first, middle and last position), as one step of
+/// the history, in either prover
+#[test]
+fn a_new_cell_is_in_the_source_once_something_is_typed() {
+    use cosmic::widget::text_editor::{Action as A, Edit as E};
+    for lean in [false, true] {
+        // after the first block, after the next, and at the end
+        for place in [Some(0usize), Some(1), None] {
+            let mut app = cell_app(lean);
+            let before = the_theory(&app).local.clone();
+            let _ = cosmic::Application::update(&mut app, super::Message::InsertBlock(place, "cell"));
+            let t = the_theory(&app);
+            let pre = t.insertion_point(place);
+            assert!(t.pending_cell().is_some(), "opens an empty cell");
+            assert_eq!(t.block_editor.as_ref().unwrap().content.text().trim(), "", "no text");
+            assert_eq!(t.local, before, "nothing in the source yet");
+            assert!(t.settled(), "nothing for the host or the history");
+            assert!(!t.dirty || !before.is_empty());
+            for c in "ab".chars() {
+                let _ = cosmic::Application::update(&mut app, super::Message::BlockAction(A::Edit(E::Insert(c))));
+            }
+            let t = the_theory(&app);
+            assert!(t.pending_cell().is_none(), "a cell of the source now");
+            assert!(t.local.contains("\n\nab\n\n") || t.local.ends_with("\n\nab\n"), "{:?}", t.local);
+            // (placed after the block asked for: its text, then the cell)
+            let b = |i: usize| t.source_text(t.blocks[i].start, t.blocks[i].end);
+            let mine = t.blocks.iter().position(|b| t.source_text(b.start, b.end) == "ab");
+            if let Some(m) = mine {
+                match place {
+                    Some(i) => assert_eq!(m, i + 1, "after block {i}"),
+                    None => assert!(t.blocks[m + 1..].iter().all(|b| b.kind == super::theory::Kind::End), "last, before any end"),
+                }
+                let _ = b;
+            }
+            // one step of the history so far, from the file as it was
+            assert!(t.steps.is_empty(), "the blank lines and the text are one step");
+            // the cell is where `+ Text` and the rest put a block: the same blank lines
+            let mut expected: Vec<char> = before.chars().collect();
+            let sep = format!("{}ab{}", pre.1, pre.2);
+            expected.splice(pre.0..pre.0, sep.chars());
+            assert_eq!(t.local, expected.into_iter().collect::<String>());
+        }
+    }
+}
+
+/// An empty cell, left (a click elsewhere, Esc, another cell), is gone with no change to the
+/// source, the history or the host
+#[test]
+fn an_empty_cell_left_empty_goes_without_a_trace() {
+    for lean in [false, true] {
+        for how in ["close", "escape", "another"] {
+            let mut app = cell_app(lean);
+            let before = the_theory(&app).local.clone();
+            let _ = cosmic::Application::update(&mut app, super::Message::InsertBlock(Some(1), "cell"));
+            assert!(the_theory(&app).pending_cell().is_some());
+            let _ = match how {
+                "close" => cosmic::Application::update(&mut app, super::Message::CloseBlock),
+                "escape" => cosmic::Application::update(&mut app, super::Message::Escape),
+                _ => cosmic::Application::update(&mut app, super::Message::EditBlock(1)),
+            };
+            let t = the_theory(&app);
+            assert!(t.pending_cell().is_none(), "{how}: the cell is gone");
+            assert_eq!(t.local, before, "{how}: the source is as it was");
+            assert!(t.settled(), "{how}: no step, nothing to send");
+            assert!(t.queued.is_empty(), "{how}: no undo asked for");
+            if how == "another" {
+                assert!(t.block_editor.is_some(), "the other cell opened");
+            }
+        }
+    }
+}
+
+/// An empty cell is drawn as an open cell on the page (light and dark, both provers)
+#[test]
+fn an_empty_cell_is_drawn_open() {
+    for lean in [false, true] {
+        let mut app = cell_app(lean);
+        let _ = cosmic::Application::update(&mut app, super::Message::InsertBlock(Some(1), "cell"));
+        let tag = if lean { "lean" } else { "isabelle" };
+        let turn = ui_turn();
+        for dark in [false, true] {
+            cosmic::theme::set_active(if dark { cosmic::theme::ThemeType::Dark } else { crate::tones::light_type_for_tests() });
+            render(super::view::view(&app), &format!("add-cell-{tag}-{}-empty", if dark { "dark" } else { "light" }), Size::new(1400.0, 900.0));
+        }
+        drop(turn);
+        for c in "def z := 2".chars() {
+            let _ = cosmic::Application::update(&mut app, super::Message::BlockAction(cosmic::widget::text_editor::Action::Edit(cosmic::widget::text_editor::Edit::Insert(c))));
+        }
+        let turn = ui_turn();
+        for dark in [false, true] {
+            cosmic::theme::set_active(if dark { cosmic::theme::ThemeType::Dark } else { crate::tones::light_type_for_tests() });
+            render(super::view::view(&app), &format!("add-cell-{tag}-{}-typed", if dark { "dark" } else { "light" }), Size::new(1400.0, 900.0));
+        }
+        drop(turn);
+    }
+}
+
 #[test]
 fn inserts_and_deletes_blocks() {
     let mut app = demo_app(Mode::Literate);
