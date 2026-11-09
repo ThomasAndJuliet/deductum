@@ -543,6 +543,19 @@ fn clicking_prose_puts_the_caret_there() {
 
 /// `+ Definition` adds a definition skeleton with the caret on its name, in either prover, and
 /// Undo takes it back; left untouched, the skeleton stays (it is source, unlike an empty block)
+/// For review, with `CT_SNAPSHOTS` set: the page in light and dark. The theme is process-wide, so
+/// it changes only on this test's turn, and goes back before the turn ends
+fn add_blocks_frames(app: &App, prover: &str, what: &str) {
+    if std::env::var("CT_SNAPSHOTS").is_err() {
+        return;
+    }
+    let _turn = ui_turn();
+    for (tone, theme) in [("light", crate::tones::light_type_for_tests()), ("dark", cosmic::theme::ThemeType::Dark)] {
+        cosmic::theme::set_active(theme);
+        render(super::view::view(app), &format!("add-blocks-{prover}-{tone}-{what}"), Size::new(1400.0, 900.0));
+    }
+}
+
 #[test]
 fn inserts_a_definition_with_the_caret_on_its_name() {
     for lean in [false, true] {
@@ -558,17 +571,9 @@ fn inserts_a_definition_with_the_caret_on_its_name() {
         let before = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().local.clone();
         // (for review: the row of add buttons, then the definition added, light and dark)
         let prover = if lean { "lean" } else { "isabelle" };
-        for dark in [false, true] {
-            let tone = if dark { "dark" } else { "light" };
-            cosmic::theme::set_active(if dark { cosmic::theme::ThemeType::Dark } else { crate::tones::light_type_for_tests() });
-            draw(&app, &format!("add-blocks-{prover}-{tone}-buttons"), Size::new(1400.0, 900.0));
-        }
+        add_blocks_frames(&app, prover, "buttons");
         let _ = cosmic::Application::update(&mut app, super::Message::InsertBlock(None, "definition"));
-        for dark in [false, true] {
-            let tone = if dark { "dark" } else { "light" };
-            cosmic::theme::set_active(if dark { cosmic::theme::ThemeType::Dark } else { crate::tones::light_type_for_tests() });
-            draw(&app, &format!("add-blocks-{prover}-{tone}-definition"), Size::new(1400.0, 900.0));
-        }
+        add_blocks_frames(&app, prover, "definition");
         let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
         let skeleton = if lean { "def name : _ := _" } else { "definition name where\n  \"name = undefined\"" };
         assert!(t.local.contains(skeleton), "{}", t.local);
