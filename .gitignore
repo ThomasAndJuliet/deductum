@@ -11,6 +11,5 @@ __pycache__/
 **/.lake/
 /ci-artifact/
 /dist/macos/
-/dist/macos/
 /dist/windows/
 /packaging/flatpak/*.ci.yml
