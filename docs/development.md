@@ -56,15 +56,21 @@ covers visible GUI use, second-user isolation and Windows-to-Linux SSH.
 ## Build the macOS package
 
 The macOS package is built on a Mac, from both architectures, and joined into
-one universal binary with `lipo`:
+one universal binary with `lipo`. The commands use the same feature set as CI
+(`wayland` and `dbus-config` are Linux desktop features):
 
 ```sh
 rustup target add aarch64-apple-darwin x86_64-apple-darwin
-cargo build --locked --release --bin deductum --target aarch64-apple-darwin
-cargo build --locked --release --bin deductum --target x86_64-apple-darwin
+cargo build --locked --release --bin deductum --no-default-features \
+  --features wgpu --target aarch64-apple-darwin
+cargo build --locked --release --bin deductum --no-default-features \
+  --features wgpu --target x86_64-apple-darwin
 python3 scripts/test-package-macos.py
 python3 scripts/package-macos.py
 ```
+
+The packaging script needs Python 3.11 or later. The stock macOS `python3` is
+3.9, so use a newer one, for example from Homebrew or python.org.
 
 The packaging script downloads and verifies the pinned Python 3.12 runtimes of
 `packaging/macos/python-runtime.json` (python-build-standalone, one per
@@ -78,8 +84,16 @@ Finder gets no shell `PATH`. The binary needs macOS 11 or later.
 
 The binary has an ad-hoc signature only. Without signing and notarisation with
 an Apple Developer ID, Gatekeeper blocks the downloaded package until its
-quarantine attribute is removed, as `packaging/macos/README.txt` explains. No
-CI job builds the macOS package yet.
+quarantine attribute is removed, as `packaging/macos/README.txt` explains.
+
+The `macos-build` CI job runs on a GitHub-hosted `macos-15` runner for every run,
+including forks' pull requests, and uses no secret. It builds both targets,
+runs `scripts/test-package-macos.py`, packages the exact revision and smoke-tests
+the ZIP: it extracts it with `ditto`, checks both architectures with `lipo`,
+runs `--build-info` to confirm the clean source revision, and starts each
+bundled Python. The x86_64 binary and Python run under Rosetta when the runner
+has it; otherwise the job emits a notice instead. It uploads the `macos-universal`
+artifact. The job does not run the app's GUI or real provers on a Mac.
 
 ## Automated versioned downloads
 
