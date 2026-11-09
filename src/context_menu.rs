@@ -82,6 +82,25 @@ struct Area<'a> {
     target: Target,
 }
 
+/// Whether `at` is over one of `content`'s text fields (each has its text menu)
+fn over_text_field(content: &mut Element<'_, Message>, tree: &mut Tree, layout: Layout<'_>, renderer: &cosmic::Renderer, at: Point) -> bool {
+    struct Fields {
+        at: Point,
+        over: bool,
+    }
+    impl Operation for Fields {
+        fn traverse(&mut self, operate: &mut dyn FnMut(&mut dyn Operation)) {
+            operate(self);
+        }
+        fn text_input(&mut self, _id: Option<&cosmic::widget::Id>, bounds: Rectangle, _state: &mut dyn cosmic::iced::advanced::widget::operation::TextInput) {
+            self.over |= bounds.contains(self.at);
+        }
+    }
+    let mut fields = Fields { at, over: false };
+    content.as_widget_mut().operate(tree, layout, renderer, &mut fields);
+    fields.over
+}
+
 impl Widget<Message, cosmic::Theme, cosmic::Renderer> for Area<'_> {
     fn children(&self) -> Vec<Tree> {
         match &self.popup {
@@ -120,10 +139,12 @@ impl Widget<Message, cosmic::Theme, cosmic::Renderer> for Area<'_> {
         shell: &mut Shell<'_, Message>,
         viewport: &Rectangle,
     ) {
-        // Before the content sees it: an editor takes a right press for itself
+        // Before the content sees it: an editor takes a right press for itself. A text field's
+        // own menu (Cut, Copy, Paste, Undo) is the field's, though: the content has it
         if let Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Right)) = event
             && !shell.is_event_captured()
             && let Some(p) = cursor.position_over(layout.bounds())
+            && !over_text_field(&mut self.content, &mut tree.children[0], layout, renderer, p)
         {
             let b = layout.bounds();
             shell.publish(Message::Shell(Msg::ContextOpen(self.target.clone(), Point::new(p.x - b.x, p.y - b.y))));
