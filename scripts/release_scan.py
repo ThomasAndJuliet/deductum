@@ -11,7 +11,9 @@ import zipfile
 
 PACKAGE_RULES = {
     "tailnet name": re.compile(rb"\.tail[0-9a-f]{4,}\.ts\.net"),
-    "tailnet address": re.compile(rb"(?<![\d.])100\.(?:6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.\d{1,3}\.\d{1,3}(?![\d.])"),
+    # One machine's address, also as a /32 or in a URL. A wider CIDR range names no machine:
+    # every tailnet shares 100.64.0.0/10, which Python's ipaddress module (macOS package) mentions.
+    "tailnet address": re.compile(rb"(?<![\d.])100\.(?:6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.\d{1,3}\.\d{1,3}(?![\d.]|/(?:[0-9]|[12]\d|3[01])(?!\d))"),
     "household service": re.compile(rb"\bneo:\d{2,5}\b"),
     "household path": re.compile(rb"/mnt/disk-array|/var/lib/neo-infrastructure|/(?:var/)?home/twright\b"),
 }

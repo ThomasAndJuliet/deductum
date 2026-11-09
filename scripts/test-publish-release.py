@@ -475,13 +475,16 @@ class ScanTests(unittest.TestCase):
 
     def test_package_rules_find_household_names_but_not_ordinary_text(self):
         for data in (b"x.tail57c02a.ts.net", b"100.64.0.1", b"100.127.255.2", b"http://neo:8101/",
+                     b"http://100.101.2.3/", b"100.101.2.3/32", b"100.101.2.3:22", b"[100.101.2.3]",
                      b"/mnt/disk-array/x", b"/home/twright/x", b"/var/home/twright/x",
                      b"/var/lib/neo-infrastructure/x"):
             with self.subTest(data=data):
                 self.assertTrue(self.scan.findings(data))
         # The app recognises tailnet names, ships a neo-dark theme and has an app ID.
         for data in (b'host.ends_with(".ts.net")', b"neo-dark", b"dev.twright.Deductum",
-                     b"100.63.0.1", b"100.128.0.1", b"1.100.64.0.1"):
+                     b"100.63.0.1", b"100.128.0.1", b"1.100.64.0.1",
+                     # CPython's ipaddress module, bundled in the macOS package, names the range
+                     b"IPv4Network('100.64.0.0/10')", b"``100.64.0.0/10``"):
             with self.subTest(data=data):
                 self.assertEqual(self.scan.findings(data), [])
 
