@@ -100,12 +100,17 @@ previous reachable final `vMAJOR.MINOR.PATCH` tag determines one bump:
 | --- | --- |
 | `fix(editor): preserve the caret`, `perf: reduce allocations` | Patch |
 | `feat: add a proof tool` | Minor |
-| `feat!: change the protocol`, or a `BREAKING CHANGE:` / `BREAKING-CHANGE:` footer | Major |
+| `feat!: change the protocol`, or a `BREAKING CHANGE:` / `BREAKING-CHANGE:` footer | Major (minor before 1.0) |
+| A `Release-As: 1.0.0` footer | That version, if it is above the previous one and the automatic bump |
 | Only `docs`, `test`, `chore`, and other changes without a breaking marker | No versioned release |
 
 Use these subjects for commits and for a PR's title when squash-merging it.
 
-This also applies before 1.0: breaking changes advance to the next major.
+Before 1.0, breaking changes advance the minor version, so Deductum never
+reaches 1.0.0 by itself. To release 1.0.0, merge a commit whose message ends with
+the footer `Release-As: 1.0.0` (for example
+`chore: declare the stable release`); from then on breaking changes advance the
+major version.
 `release-config.json` starts the distribution version at `0.1.0` and excludes
 history at or before the adoption commit. Older tags such as
 `epoch-*`, prereleases and unrelated branches do not set the version. The
