@@ -155,6 +155,34 @@ class DriverTests(unittest.IsolatedAsyncioTestCase):
             with unittest.mock.patch("drivers.isabelle.find_runtimes", return_value=runtimes):
                 self.assertEqual([t["label"] for t in IsabelleDriver.toolchains()], ["Isabelle2025"])
 
+    def test_an_isabelle_app_in_applications_is_found_in_either_bundle_layout(self):
+        def install(home, identifier):
+            (home / "bin").mkdir(parents=True)
+            (home / "bin" / "isabelle").touch()
+            (home / "etc").mkdir()
+            (home / "etc" / "ISABELLE_IDENTIFIER").write_text(identifier + "\n", encoding="utf-8")
+
+        with tempfile.TemporaryDirectory() as d:
+            system, user = Path(d) / "Applications", Path(d) / "home"
+            # Isabelle2025.app is the Isabelle home itself
+            install(system / "Isabelle2025.app", "Isabelle2025")
+            # a later release keeps it in Contents/Resources, with bin/ linked beside it
+            later = user / "Applications" / "Isabelle2026.app"
+            install(later / "Contents" / "Resources", "Isabelle2026")
+            (later / "bin").symlink_to(Path("Contents/Resources/bin"))
+            with unittest.mock.patch("drivers.isabelle.APPLICATION_DIRS", (str(system),)), \
+                    unittest.mock.patch("drivers.isabelle.Path.home", return_value=user), \
+                    unittest.mock.patch("drivers.isabelle.read_config", return_value={}), \
+                    unittest.mock.patch("drivers.isabelle.shutil.which", return_value=None), \
+                    unittest.mock.patch.dict(os.environ, {"DEDUCTUM_ISABELLE": ""}):
+                runtimes = drivers.isabelle.find_runtimes()
+        found = {r["identifier"]: r for r in runtimes}
+        self.assertEqual(len(runtimes), 2, runtimes)
+        self.assertEqual(set(found), {"Isabelle2025", "Isabelle2026"})
+        self.assertEqual(Path(found["Isabelle2025"]["home"]).name, "Isabelle2025.app")
+        # one runtime, found by its link and its real path alike
+        self.assertEqual(Path(found["Isabelle2026"]["home"]).parts[-3:], ("Isabelle2026.app", "Contents", "Resources"))
+
     def test_an_old_isabelle_record_loads_as_isabelle(self):
         s = H.Session(self.host, "old1", json.loads(json.dumps(OLD_META)))
         m = s.meta

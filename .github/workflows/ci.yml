@@ -258,6 +258,76 @@ jobs:
           retention-days: 1
           compression-level: 0
 
+  macos-build:
+    name: Native macOS universal package
+    # Always GitHub-hosted: the household has no Mac, and the job uses no secret.
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Rust with both macOS targets
+        env:
+          CARGO_HOME: ${{ runner.temp }}/deductum-macos-cargo
+          RUSTUP_HOME: ${{ runner.temp }}/deductum-macos-rustup
+        run: |
+          curl --proto '=https' --tlsv1.2 --fail --location https://sh.rustup.rs --output "$RUNNER_TEMP/rustup-init.sh"
+          sh "$RUNNER_TEMP/rustup-init.sh" -y --no-modify-path --profile minimal --default-toolchain 1.99.0 --target aarch64-apple-darwin --target x86_64-apple-darwin
+          printf '%s\n' "$CARGO_HOME/bin" >> "$GITHUB_PATH"
+          printf 'CARGO_HOME=%s\nRUSTUP_HOME=%s\n' "$CARGO_HOME" "$RUSTUP_HOME" >> "$GITHUB_ENV"
+      - name: Build the app for both architectures
+        run: |
+          cargo +1.99.0 build --locked --release --bin deductum --no-default-features --features wgpu --target aarch64-apple-darwin
+          cargo +1.99.0 build --locked --release --bin deductum --no-default-features --features wgpu --target x86_64-apple-darwin
+      - name: Check packaging and assemble the exact source revision
+        run: |
+          python3 -c 'import sys; assert sys.version_info >= (3, 11), sys.version'
+          python3 scripts/test-package-macos.py
+          python3 scripts/package-macos.py
+      - name: Smoke-test the finished package
+        run: |
+          set -eu
+          zips=(dist/macos/*.zip)
+          [ "${#zips[@]}" -eq 1 ] || { echo "Expected exactly one macOS package"; exit 1; }
+          # The publisher refuses a public package naming household systems: find that here
+          python3 -c 'import sys; sys.path.insert(0, "scripts"); import release_scan; found = release_scan.scan_zip(sys.argv[1]); assert not found, found' "${zips[0]}"
+          extracted="$(mktemp -d "$RUNNER_TEMP/macos-package.XXXXXX")"
+          ditto -x -k "${zips[0]}" "$extracted"
+          [ "$(ls "$extracted" | sort | tr '\n' ' ')" = "Deductum.app README.txt " ] || { echo "Unexpected package contents"; ls "$extracted"; exit 1; }
+          app="$extracted/Deductum.app"
+          codesign --verify --deep --strict --verbose=2 "$app"
+          plutil -lint "$app/Contents/Info.plist"
+          binary="$app/Contents/MacOS/deductum"
+          lipo -info "$binary"
+          lipo "$binary" -verify_arch arm64 x86_64
+          expected="$(git rev-parse HEAD)"
+          check_build_info() {
+            "$@" --build-info | python3 -c 'import json,sys; info=json.load(sys.stdin); print(info); assert info["source_sha"]==sys.argv[1] and info["source_dirty"] is False, info' "$expected"
+          }
+          check_build_info "$binary"
+          rosetta=false
+          if arch -x86_64 /usr/bin/true 2>/dev/null; then rosetta=true; fi
+          if [ "$rosetta" = true ]; then
+            check_build_info arch -x86_64 "$binary"
+          else
+            echo "::notice::Rosetta is not available on this runner, so the x86_64 slice and runtime were not run."
+          fi
+          python="$app/Contents/Resources/python"
+          "$python/arm64/bin/python3" -c 'import sys; print(sys.version)'
+          if [ "$rosetta" = true ]; then
+            arch -x86_64 "$python/x86_64/bin/python3" -c 'import platform,sys; print(platform.machine(), sys.version)'
+          fi
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: macos-universal
+          path: |
+            dist/macos/*.zip
+            dist/macos/*.json
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+
   windows-native:
     name: Windows native host, app and real provers
     needs: [windows-build]

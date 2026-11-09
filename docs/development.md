@@ -56,36 +56,69 @@ covers visible GUI use, second-user isolation and Windows-to-Linux SSH.
 ## Build the macOS package
 
 The macOS package is built on a Mac, from both architectures, and joined into
-one universal binary with `lipo`:
+one universal binary with `lipo`. The commands use the same feature set as CI
+(`wayland` and `dbus-config` are Linux desktop features):
 
 ```sh
 rustup target add aarch64-apple-darwin x86_64-apple-darwin
-cargo build --locked --release --bin deductum --target aarch64-apple-darwin
-cargo build --locked --release --bin deductum --target x86_64-apple-darwin
+cargo build --locked --release --bin deductum --no-default-features \
+  --features wgpu --target aarch64-apple-darwin
+cargo build --locked --release --bin deductum --no-default-features \
+  --features wgpu --target x86_64-apple-darwin
 python3 scripts/test-package-macos.py
 python3 scripts/package-macos.py
 ```
+
+The packaging script needs Python 3.11 or later. The stock macOS `python3` is
+3.9, so use a newer one, for example from Homebrew or python.org.
 
 The packaging script downloads and verifies the pinned Python 3.12 runtimes of
 `packaging/macos/python-runtime.json` (python-build-standalone, one per
 architecture) and writes the ZIP and its provenance JSON under `dist/macos`.
 As for Windows, release packaging requires a clean checkout and binaries built
 from that exact revision, and `--allow-dirty` marks a development package.
-The package holds `deductum`, `share/deductum`, `python/arm64`,
-`python/x86_64`, the `Deductum.command` launcher and `README.txt`. The launcher
-puts the bundled Python and `~/.elan/bin` on `PATH`, because an app opened from
-Finder gets no shell `PATH`. The binary needs macOS 11 or later.
+The ZIP holds `Deductum.app` and `README.txt`. In the bundle, `Contents/Info.plist`
+(written with `plistlib`, version from `Cargo.toml`) describes the app,
+`Contents/MacOS/deductum` is the universal binary, and `Contents/Resources` holds
+`share/deductum` (host, backend and `RELEASE.json`), `python/arm64`,
+`python/x86_64`, `Deductum.icns`, `LICENSE` and `licenses`. The whole bundle is
+then signed ad hoc with `codesign --force --deep --sign -`, which seals the plist
+and resources into the binary's signature; `binary_sha256` in the receipt is
+therefore that of the joined binary before that signature. The binary needs
+macOS 11 or later.
 
-The binary has an ad-hoc signature only. Without signing and notarisation with
-an Apple Developer ID, Gatekeeper blocks the downloaded package until its
-quarantine attribute is removed, as `packaging/macos/README.txt` explains. No
-CI job builds the macOS package yet.
+Finder gives apps no shell `PATH`. On macOS, `main` therefore prepends the
+bundled Python (`Contents/Resources/python/<arch>/bin` for the running slice),
+`~/.elan/bin`, `/opt/homebrew/bin` and `/usr/local/bin` to `PATH` before any thread
+starts, when the executable is inside `*.app/Contents/MacOS` (`platform::bundle_path`).
+The session host is started as `python3` from that `PATH`.
+
+The app has an ad-hoc signature only. Without signing and notarisation with
+an Apple Developer ID, Gatekeeper blocks the downloaded app until its
+quarantine attribute is removed, as `packaging/macos/README.txt` explains.
+
+`packaging/macos/Deductum.icns` is committed. To regenerate it from
+`res/dev.twright.Deductum.svg` (needs `rsvg-convert`, from librsvg):
+
+```sh
+python3 scripts/make-macos-icon.py
+```
+
+The `macos-build` CI job runs on a GitHub-hosted `macos-15` runner for every run,
+including forks' pull requests, and uses no secret. It builds both targets,
+runs `scripts/test-package-macos.py`, packages the exact revision and smoke-tests
+the ZIP: it extracts it with `ditto`, runs `codesign --verify --deep --strict`
+on `Deductum.app`, lints `Info.plist` with `plutil`, checks both architectures of
+`Contents/MacOS/deductum` with `lipo`, runs `--build-info` to confirm the clean
+source revision, and starts each bundled Python. The x86_64 binary and Python run under Rosetta when the runner
+has it; otherwise the job emits a notice instead. It uploads the `macos-universal`
+artifact. The job does not run the app's GUI or real provers on a Mac.
 
 ## Automated versioned downloads
 
 `.github/workflows/release-binaries.yml` runs after the **entire** main-branch
 CI run succeeds, including native Windows and Linux prover tests. It publishes
-the tested Windows ZIP and Linux `.flatpak`, their source/checksum receipts,
+the tested Windows ZIP, Linux `.flatpak` and macOS universal ZIP, their source/checksum receipts,
 `SHA256SUMS` and generated release notes to a permanent GitHub Release, which
 has the repository's visibility.
 It downloads CI artifacts instead of recompiling either app. Download filenames
@@ -100,12 +133,17 @@ previous reachable final `vMAJOR.MINOR.PATCH` tag determines one bump:
 | --- | --- |
 | `fix(editor): preserve the caret`, `perf: reduce allocations` | Patch |
 | `feat: add a proof tool` | Minor |
-| `feat!: change the protocol`, or a `BREAKING CHANGE:` / `BREAKING-CHANGE:` footer | Major |
+| `feat!: change the protocol`, or a `BREAKING CHANGE:` / `BREAKING-CHANGE:` footer | Major (minor before 1.0) |
+| A `Release-As: 1.0.0` footer | That version, if it is above the previous one and the automatic bump |
 | Only `docs`, `test`, `chore`, and other changes without a breaking marker | No versioned release |
 
 Use these subjects for commits and for a PR's title when squash-merging it.
 
-This also applies before 1.0: breaking changes advance to the next major.
+Before 1.0, breaking changes advance the minor version, so Deductum never
+reaches 1.0.0 by itself. To release 1.0.0, merge a commit whose message ends with
+the footer `Release-As: 1.0.0` (for example
+`chore: declare the stable release`); from then on breaking changes advance the
+major version.
 `release-config.json` starts the distribution version at `0.1.0` and excludes
 history at or before the adoption commit. Older tags such as
 `epoch-*`, prereleases and unrelated branches do not set the version. The
@@ -126,7 +164,7 @@ A public repository adds three rules. `public_signing` in `release-config.json`
 must record the signing decision (`github-attestation` is the one implemented);
 until then CI runs normally and nothing is released, and the next release covers
 the waiting commits. `scripts/release_scan.py` must find no household network
-names in the Windows package, the Linux payload (scanned when CI bundles it and
+names in the Windows and macOS packages, the Linux payload (scanned when CI bundles it and
 recorded in the receipt) or the receipts, and generated notes omit any commit
 subject naming household systems. And `publish-release.py stage` uploads to a
 draft, the workflow attests every file with `actions/attest`, and
@@ -145,8 +183,8 @@ its Actions artifacts are still retained (seven days):
 gh workflow run release-binaries.yml --ref main -f run_id=CI_RUN_ID
 ```
 
-The `linux-x86_64` and `windows-x86_64` Actions artifacts are also available
-for direct downloads during that retention window. The Windows package jobs
+The `linux-x86_64`, `windows-x86_64` and `macos-universal` Actions artifacts are
+also available for direct downloads during that retention window. The Windows package jobs
 come from the Windows support change; merge that support before this publisher.
 
 The standalone Linux bundle comes from `ci-artifact/build.tar.gz`, including

@@ -112,6 +112,105 @@ class Codex(Home):
         self.assertFalse((self.home / ".codex").exists())
 
 
+def _stale_entry(command, args=None):
+    return {"type": "stdio", "command": command, "args": args or ["/opt/deductum/host/deductum_host.py", "mcp"], "env": {}}
+
+
+class Command(Home):
+    def test_macos_uses_the_hosts_own_python(self):
+        with mock.patch.object(sys, "platform", "darwin"), mock.patch.object(sys, "executable", "/App/python/arm64/bin/python3"):
+            self.assertEqual(R.command_for(ROOT), ["/App/python/arm64/bin/python3", "/opt/deductum/host/deductum_host.py", "mcp"])
+            (self.home / ".claude").mkdir()
+            self.assertEqual(R.register_claude(self.home, ROOT), "added")
+            self.assertEqual(self.claude()["mcpServers"]["deductum"]["command"], "/App/python/arm64/bin/python3")
+
+    def test_linux_stays_python3(self):
+        with mock.patch.object(sys, "platform", "linux"), mock.patch.object(sys, "executable", "/usr/bin/python3.12"):
+            self.assertEqual(R.command_for(ROOT)[0], "python3")
+
+    def _mac(self):
+        for p in (mock.patch.object(sys, "platform", "darwin"), mock.patch.object(sys, "executable", sys.executable)):
+            p.start()
+            self.addCleanup(p.stop)
+
+
+class ClaudeRepair(Command):
+    def write(self, entry, extra=None):
+        data = {"numStartups": 1, "mcpServers": {"other": {"command": "o"}, "deductum": entry}}
+        (self.home / ".claude.json").write_text(json.dumps(data, indent=2))
+        return data
+
+    def test_a_stale_absolute_path_is_replaced_in_command_only(self):
+        self._mac()
+        entry = _stale_entry("/gone/python3")
+        entry["env"] = {"K": "v"}
+        before = self.write(entry)
+        self.assertEqual(R.register_claude(self.home, ROOT), "updated")
+        after = self.claude()
+        before["mcpServers"]["deductum"]["command"] = sys.executable
+        self.assertEqual(after, before)
+
+    def test_a_bare_name_that_is_not_on_path_is_replaced(self):
+        self._mac()
+        self.write(_stale_entry("python3"))
+        with mock.patch("shutil.which", return_value=None):
+            self.assertEqual(R.register_claude(self.home, ROOT), "updated")
+        self.assertEqual(self.claude()["mcpServers"]["deductum"]["command"], sys.executable)
+
+    def test_a_working_command_is_left_alone(self):
+        for cmd in (sys.executable, "python3"):
+            self.write(_stale_entry(cmd))
+            text = (self.home / ".claude.json").read_text()
+            with mock.patch("shutil.which", return_value="/usr/bin/python3"):
+                self.assertEqual(R.register_claude(self.home, ROOT), "present")
+            self.assertEqual((self.home / ".claude.json").read_text(), text)
+
+    def test_someone_elses_entry_or_other_args_are_left_alone(self):
+        for entry in (_stale_entry("/gone/python3", ["/home/me/dev/deductum_host.py", "mcp"]), _stale_entry("/gone/python3", ["/opt/deductum/host/deductum_host.py"]), {"command": "/gone/x"}, "odd"):
+            self.write(entry)
+            text = (self.home / ".claude.json").read_text()
+            self.assertEqual(R.register_claude(self.home, ROOT), "present")
+            self.assertEqual((self.home / ".claude.json").read_text(), text)
+
+
+class CodexRepair(Command):
+    def put(self, text):
+        (self.home / ".codex").mkdir(exist_ok=True)
+        (self.home / ".codex" / "config.toml").write_text(text)
+
+    def toml(self):
+        return (self.home / ".codex" / "config.toml").read_text()
+
+    def test_only_the_command_line_of_our_table_changes(self):
+        self._mac()
+        before = 'model = "x"\ncommand = "keep"\n\n[mcp_servers.deductum]\ncommand = "/gone/python3"  # mine\nargs = ["/opt/deductum/host/deductum_host.py", "mcp"]\n\n[mcp_servers.deductum.env]\nA = "1"\n\n[other]\ncommand = "/gone/z"\n'
+        self.put(before)
+        self.assertEqual(R.register_codex(self.home, ROOT), "updated")
+        self.assertEqual(self.toml(), before.replace('"/gone/python3"', json.dumps(sys.executable)))
+        self.assertEqual(R.register_codex(self.home, ROOT), "present")
+
+    def test_bare_python3_missing_is_replaced_and_crlf_kept(self):
+        self._mac()
+        self.put('[mcp_servers.deductum]\r\ncommand = "python3"\r\nargs = ["/opt/deductum/host/deductum_host.py", "mcp"]\r\n')
+        with mock.patch("shutil.which", return_value=None):
+            self.assertEqual(R.register_codex(self.home, ROOT), "updated")
+        with open(self.home / ".codex" / "config.toml", newline="") as f:
+            self.assertEqual(f.read(), '[mcp_servers.deductum]\r\ncommand = %s\r\nargs = ["/opt/deductum/host/deductum_host.py", "mcp"]\r\n' % json.dumps(sys.executable))
+
+    def test_working_foreign_or_odd_tables_are_left_alone(self):
+        self._mac()
+        for text in (
+            '[mcp_servers.deductum]\ncommand = "%s"\nargs = ["/opt/deductum/host/deductum_host.py", "mcp"]\n' % sys.executable,
+            '[mcp_servers.deductum]\ncommand = "/gone/p"\nargs = ["/home/me/deductum_host.py", "mcp"]\n',
+            '[mcp_servers.deductum]\ncommand = "/gone/p"\nargs = [\n  "/opt/deductum/host/deductum_host.py", "mcp"]\n',
+            '[mcp_servers.deductum]\ncommand = \'/gone/p\'\nargs = ["/opt/deductum/host/deductum_host.py", "mcp"]\n',
+            '[mcp_servers.deductum]\ncommand = "/gone/p"\n',
+        ):
+            self.put(text)
+            self.assertEqual(R.register_codex(self.home, ROOT), "present")
+            self.assertEqual(self.toml(), text)
+
+
 class Both(Home):
     def test_register_reports_each_and_the_home_is_the_given_one(self):
         (self.home / ".claude").mkdir()
@@ -121,7 +220,8 @@ class Both(Home):
         self.assertEqual(R.register(None, ROOT)["claude"], "present")
 
     def test_the_command_is_the_installed_hosts_mcp(self):
-        self.assertEqual(R.command_for(Path("/home/me/.local/share/deductum")), ["python3", "/home/me/.local/share/deductum/host/deductum_host.py", "mcp"])
+        with mock.patch.object(sys, "platform", "linux"):
+            self.assertEqual(R.command_for(Path("/home/me/.local/share/deductum")), ["python3", "/home/me/.local/share/deductum/host/deductum_host.py", "mcp"])
 
 
 class AgentIds(unittest.TestCase):
