@@ -77,6 +77,10 @@ mod snapshot_cells;
 #[cfg(test)]
 mod snapshot_context;
 #[cfg(test)]
+mod snapshot_sheet;
+#[cfg(test)]
+mod snapshot_shrink;
+#[cfg(test)]
 mod snapshot_code;
 #[cfg(test)]
 #[path = "../vendor/cosmic-text/tests/hanging_indent.rs"]
@@ -712,6 +716,8 @@ pub struct App {
     pub show_sidebar: bool,
     pub status: Option<String>,
     state_gen: u64,
+    /// The goal's columns (in parts, as text) the prover was last asked to break its lines at
+    goal_columns_asked: (usize, usize),
     nav_serial: u64,
     nav_latest: HashMap<Option<cosmic::iced::window::Id>, u64>,
     request: Option<cli::OpenRequest>,
@@ -2737,6 +2743,7 @@ impl cosmic::Application for App {
             show_sidebar: false,
             status: None,
             state_gen: 0,
+            goal_columns_asked: (0, 0),
             nav_serial: 0,
             nav_latest: HashMap::new(),
             request: flags.request,
@@ -2850,6 +2857,26 @@ impl cosmic::Application for App {
     }
 
     fn update(&mut self, message: Self::Message) -> Task<Self::Message> {
+        let task = self.update_message(message);
+        // The prover breaks the goal's lines at the width the panel has: a meaningful change in it
+        // (the window, a sidebar, the zoom or a setting) has the state asked for again, once the
+        // change has settled
+        let columns = (view::goal_columns(self, true), view::goal_columns(self, false));
+        if self.goal_columns_asked == (0, 0) {
+            // (nothing has been asked yet: the first request is made at what the panel has)
+            self.goal_columns_asked = columns;
+        } else if columns != self.goal_columns_asked && self.workspace.as_ref().is_some_and(|w| w.theory.is_some()) {
+            // (noted as asked now: one change schedules one request, and the messages that come
+            // before it is made do not schedule it again, which would leave it stale for ever)
+            self.goal_columns_asked = columns;
+            return Task::batch([task, self.schedule_state_after(Duration::from_millis(600))]);
+        }
+        task
+    }
+}
+
+impl App {
+    fn update_message(&mut self, message: Message) -> Task<Message> {
         // Esc closes the agent-session popover (a click outside does too: the popover's own)
         #[cfg(not(windows))]
         if self.shell.agent.open
@@ -3342,7 +3369,8 @@ impl cosmic::Application for App {
                 let (machine, sid, path, rev) = (ws.machine.clone(), ws.sid.clone(), t.path.clone(), t.confirmed_rev);
                 // The state in parts, printed as wide as the panel, and the state before the
                 // caret's command, to say what the command changed
-                let margin = ((self.right_width - 120.0) / (view::z(13.0) * 0.6)).clamp(40.0, 160.0) as usize;
+                let (margin, text_margin) = (view::goal_columns(self, true), view::goal_columns(self, false));
+                self.goal_columns_asked = (margin, text_margin);
                 let types = if ws.show_types { "true" } else { "false" };
                 // (the state before only to say what the step changed, when that is shown)
                 let prev = t.prover.commands.iter().position(|c| c.start <= offset && offset < c.end).and_then(|i| i.checked_sub(1)).map(|i| t.prover.commands[i].end.saturating_sub(1)).filter(|_| self.shell.settings.proof_state.show_changes);
@@ -3352,7 +3380,7 @@ impl cosmic::Application for App {
                     .filter_map(|(q, tag)| Some((q.id.clone()?, tag)))
                     .collect();
                 let request = StateRequest { generation, session: sid.clone(), path: path.clone(), revision: rev };
-                self.send(&machine, "state", json!({"session": sid, "path": path, "offset": offset, "revision": rev, "margin": 90}), Pending::State(request));
+                self.send(&machine, "state", json!({"session": sid, "path": path, "offset": offset, "revision": rev, "margin": text_margin}), Pending::State(request));
                 // Where the human is, for agents asked about "this"
                 let selection = self.workspace.as_ref().and_then(|w| w.theory.as_ref()).and_then(|t| match &t.block_editor {
                     Some(be) if t.mode == Mode::Literate => be.content.selection(),

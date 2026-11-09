@@ -404,6 +404,9 @@ pub fn rows(app: &App) -> Vec<Row> {
     add("cell_width", Code, "Cell width", "In characters; longer lines wrap",
         seg_u32(&[72, 80, 100, 0], u32::from(st.code.cell_width), |v| Msg::Setting(Change::CellWidth(v as u16))),
         st.code.cell_width != def.code.cell_width, Some(Msg::Setting(Change::CellWidth(def.code.cell_width))));
+    add("goal_width", Code, "Goal width", "In characters; the goal panel's widest",
+        seg_u32(&[48, 63, 72, 80], u32::from(st.code.goal_width), |v| Msg::Setting(Change::GoalWidth(v as u16))),
+        st.code.goal_width != def.code.goal_width, Some(Msg::Setting(Change::GoalWidth(def.code.goal_width))));
     add("indent_width", Code, "Indent width", "Spaces that Tab inserts and Shift+Tab takes away",
         seg_u32(&[2, 4], u32::from(st.editing.indent_width), |v| Msg::IndentWidth(v as u8)),
         st.editing.indent_width != def.editing.indent_width, Some(Msg::IndentWidth(def.editing.indent_width)));
@@ -919,6 +922,7 @@ mod tests {
         assert_eq!(chosen(get("code_font")), "Noto Sans Mono");
         assert_eq!(chosen(get("code_size")), "14");
         assert_eq!(chosen(get("cell_width")), "80");
+        assert_eq!(chosen(get("goal_width")), "63");
         assert_eq!(chosen(get("maths_size")), "× 1.05", "Juliet approved x1.05 (household-kit#3)");
         #[cfg(not(windows))]
         assert_eq!(chosen(get("default_rights")), "This theory");

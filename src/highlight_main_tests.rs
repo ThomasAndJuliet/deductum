@@ -27,6 +27,11 @@
 //! The responsive page (the margins and the goal's width follow the page's width, and a narrow window's
 //! cell is a full 80 characters) moves the block frames' editors: the Neo set was made again for
 //! those frames, from that commit; only their place and the narrow frame's width changed.
+//! The goal's room and the single column (the goal grows to the cell's width, the Source view's code is a
+//! cell wide, and a cell under the goal is as wide as the text) moved all six frames again: the Neo
+//! set was made again for them, from that commit; only the editors' places and widths changed.
+//! Goal width (63 characters) moved the source frames' page again: the Neo set was made again for
+//! those two; only their place changed.
 
 use std::collections::HashMap;
 use std::path::Path;

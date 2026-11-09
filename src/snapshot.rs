@@ -199,6 +199,7 @@ pub fn demo_app(mode: Mode) -> App {
         show_sidebar: true,
         status: None,
         state_gen: 0,
+        goal_columns_asked: (0, 0),
         request: None,
         kinds: Arc::new(HashMap::new()),
         popout: None,
@@ -227,8 +228,32 @@ pub fn draw(app: &App, name: &str, size: Size) -> Vec<u8> {
 /// drive the widgets take turns, so that one test's view does not change another's keys
 static UI: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
-pub fn ui_turn() -> std::sync::MutexGuard<'static, ()> {
-    UI.lock().unwrap_or_else(|e| e.into_inner())
+pub fn ui_turn() -> Turn {
+    let guard = UI.lock().unwrap_or_else(|e| e.into_inner());
+    TURNS_HELD.with(|n| n.set(n.get() + 1));
+    Turn { _guard: guard }
+}
+
+/// The UI's turn, held until dropped
+pub struct Turn {
+    _guard: std::sync::MutexGuard<'static, ()>,
+}
+
+impl Drop for Turn {
+    fn drop(&mut self) {
+        TURNS_HELD.with(|n| n.set(n.get() - 1));
+    }
+}
+
+thread_local! {
+    static TURNS_HELD: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// Called where a test changes process-wide state that the views read (the published settings,
+/// the zoom): a test that does so outside the turn would change what a drawing test reads. This
+/// turns that race into a failure of the test at fault
+pub fn assert_turn_held(what: &str) {
+    assert!(TURNS_HELD.with(|n| n.get()) > 0, "{what} outside the UI's turn (`snapshot::ui_turn()`): it would change what other tests read");
 }
 
 pub fn draw_element(element: cosmic::Element<'_, super::Message>, name: &str, size: Size) -> Vec<u8> {
@@ -237,7 +262,7 @@ pub fn draw_element(element: cosmic::Element<'_, super::Message>, name: &str, si
 
 /// As [`draw_element`], with the UI's turn already taken (before the element was built, which
 /// may publish process-wide state too)
-fn draw_locked(element: cosmic::Element<'_, super::Message>, name: &str, size: Size, _turn: std::sync::MutexGuard<'static, ()>) -> Vec<u8> {
+fn draw_locked(element: cosmic::Element<'_, super::Message>, name: &str, size: Size, _turn: Turn) -> Vec<u8> {
     render(element, name, size)
 }
 
@@ -687,7 +712,7 @@ impl clipboard::Clipboard for TestClipboard {
 }
 
 pub struct Harness {
-    _turn: std::sync::MutexGuard<'static, ()>,
+    _turn: Turn,
     renderer: cosmic::Renderer,
     cache: Option<Cache>,
     pub size: Size,
@@ -1442,7 +1467,7 @@ fn the_source_view_pops_out_its_proof_with_the_construct_tinted() {
     // Click about where the button is drawn (at the right of the proof's first line)
     let mut popped = false;
     'find: for y in (70..96).step_by(4) {
-        for x in (630..672).step_by(6) {
+        for x in (660..730).step_by(6) {
             if h.click(&app, cosmic::iced::Point::new(x as f32, y as f32)).iter().any(|m| matches!(m, super::Message::PopOut)) {
                 popped = true;
                 break 'find;
@@ -1670,23 +1695,24 @@ fn nothing_on_the_page_runs_into_the_goal_beside_it() {
         let mut hh = Harness::new(Size::new(w as f32, h as f32));
         hh.focus(&app, super::view::block_editor_id());
         let png = hh.draw(&app, &format!("fit-{name}"));
+        // (where the goal's panel is: its layout, and how far the page moved it)
+        let moved = super::gap::goal_moved();
+        let mut all = super::snapshot_cells::Bounds(Vec::new());
+        hh.operate(&app, &mut all);
+        let panel = all.0.iter().find(|(id, _)| *id == super::view::test_panel_id("panel")).map(|(_, r)| *r).expect("the goal's panel");
         drop(hh);
         let img = image::RgbaImage::from_raw(w, h, png).unwrap();
         let bg = *img.get_pixel(w - 30, h - 5);
-        // the goal card: left of its accent "Goals" button (the leftmost accent pixel in the
-        // right half), less its padding
-        let accent = |p: &image::Rgba<u8>| p[2] > 170 && p[1] > 150 && p[0] < 150;
-        // (the pill filled with the accent, not accent-coloured text such as a note's Resolve)
-        let pill = |x: u32, y: u32| (x..x + 20).all(|xx| accent(img.get_pixel(xx, y)));
-        let button = (w * 2 / 3..w - 40).find(|&x| (0..h).any(|y| pill(x, y))).expect("the goal beside");
-        let by = (0..h).find(|&y| pill(button, y)).unwrap();
-        // (left from the button, to where the card's background ends)
-        let card = (0..button).rev().find(|&x| img.get_pixel(x, by) == &bg).map_or(button, |x| x + 1);
+        // the goal card's left edge
+        let card = (panel.x + moved.x) as u32;
         // the gap before it: background on every row
         // (from one pixel in: Paper's justified prose ends exactly at the column's edge, and its last
         // glyph may be anti-aliased over it)
         let strip = card - super::view::GOAL_GAP_PUB as u32 + 2..card - 1;
-        let crossing: Vec<(u32, u32)> = strip.clone().flat_map(|x| (0..h).map(move |y| (x, y))).filter(|&(x, y)| img.get_pixel(x, y) != &bg).take(5).collect();
+        // (on the rows of the panel: in the gap between wider paragraphs it is beside a cell, with
+        // paragraphs above and below it that reach past it)
+        let rows = (panel.y + moved.y) as u32..((panel.y + moved.y + panel.height) as u32).min(h);
+        let crossing: Vec<(u32, u32)> = strip.clone().flat_map(|x| rows.clone().map(move |y| (x, y))).filter(|&(x, y)| img.get_pixel(x, y) != &bg).take(5).collect();
         eprintln!("{name}: goal card at x = {card}; strip {strip:?}; crossing {crossing:?}");
         assert!(crossing.is_empty(), "{name}: something on the page reaches into the goal's gap at {crossing:?}");
     }
@@ -2388,18 +2414,18 @@ fn the_goal_is_beside_the_selected_block_with_none_open() {
         t.cursor = t.blocks[i].start + 2;
     }
     let mut h = Harness::new(Size::new(1320.0, 800.0));
-    let has_goal_beside = |png: Vec<u8>| {
+    let has_goal_beside = |png: Vec<u8>, from: u32| {
         let img = image::RgbaImage::from_raw(1320, 800, png).unwrap();
         let bg = *img.get_pixel(12, 400);
         // (right of the cells, which end well before it, and under the prose above them: the panel is
         // just past the cell, no longer at the prose column's edge)
-        (1000..1290).any(|x| (250..780).step_by(4).any(|y| img.get_pixel(x, y) != &bg))
+        (from..1290).any(|x| (250..780).step_by(4).any(|y| img.get_pixel(x, y) != &bg))
     };
-    assert!(has_goal_beside(h.draw(&app, "selected-beside")), "the goal beside the selected proof");
+    assert!(has_goal_beside(h.draw(&app, "selected-beside"), 1000), "the goal beside the selected proof");
     let _ = cosmic::Application::update(&mut app, super::Message::ToggleGoalBeside);
-    let off = has_goal_beside(h.draw(&app, "selected-off"));
+    let off = has_goal_beside(h.draw(&app, "selected-off"), 1150);
     let _ = cosmic::Application::update(&mut app, super::Message::ToggleGoalBeside);
-    let again = has_goal_beside(h.draw(&app, "selected-again"));
+    let again = has_goal_beside(h.draw(&app, "selected-again"), 1000);
     assert!(!off, "nothing beside when turned off");
     assert!(again, "beside again when turned back on");
 }
@@ -3181,8 +3207,9 @@ pub fn scroll_to_open_block(h: &mut Harness, app: &App) -> Vec<super::Message> {
 /// how to use it, while the block is only selected, and is filled when it opens
 #[test]
 fn opening_a_selected_block_keeps_the_goal_where_it_was() {
+    // (one harness, so that the turn is held while the goal's place is put back)
+    let mut harness = Harness::new(Size::new(1400.0, 900.0));
     for beside in [true, false] {
-        let mut harness = Harness::new(Size::new(1400.0, 900.0));
         super::view::set_goal_beside(beside);
         let mut app = demo_app(Mode::Literate);
         app.show_right = false;

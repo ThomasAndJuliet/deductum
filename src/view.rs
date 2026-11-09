@@ -264,6 +264,8 @@ pub fn goal_beside_on() -> bool {
 
 pub fn set_goal_beside(on: bool) {
     #[cfg(test)]
+    super::snapshot::assert_turn_held("setting the goal beside");
+    #[cfg(test)]
     GOAL_BESIDE_HERE.with(|g| g.set(on));
     GOAL_BESIDE.store(on, std::sync::atomic::Ordering::Relaxed);
 }
@@ -594,9 +596,7 @@ fn workspace<'a>(app: &'a App, ws: &'a Workspace, right: bool, main_width: f32) 
             // The proof state (and what the tools typed in the text say) goes beside the block it
             // belongs to when there is room for both, else under it; what room there is follows
             // from the page's width alone ([`page_layout`])
-            let preferred_goal = (main_width * 0.38).clamp(z(320.0), z(560.0));
-            let display = super::settings::display();
-            let page = page_layout(main_width, super::settings::cell_width(), (display.measure > 0.0).then(|| z(display.measure * display.text_size)), goal_beside_on());
+            let Geometry { page, .. } = geometry(main_width, t.mode);
             let beside = page.goal.is_some();
             let goal_width = page.goal.unwrap_or(0.0);
             let text_width = page.column;
@@ -605,7 +605,6 @@ fn workspace<'a>(app: &'a App, ws: &'a Workspace, right: bool, main_width: f32) 
             CELL_CAP.store(page.cell.to_bits(), std::sync::atomic::Ordering::Relaxed);
             WIDE.store(beside, std::sync::atomic::Ordering::Relaxed);
             WINDOW_HEIGHT.store(app.window_height.to_bits(), std::sync::atomic::Ordering::Relaxed);
-            GOAL_HEADING_STACKED.store(t.mode == Mode::Literate && beside && goal_width < z(GOAL_HEADING_ROOM), std::sync::atomic::Ordering::Relaxed);
             let inline = if beside { None } else { Some(ws) };
             let _ = right;
             let mut body: Element<'_, Message> = match t.mode {
@@ -623,21 +622,14 @@ fn workspace<'a>(app: &'a App, ws: &'a Workspace, right: bool, main_width: f32) 
                 }
                 Mode::Literate => literate(app, t, inline, beside.then_some((ws, goal_width, text_width)), text_width),
                 Mode::Source => {
-                    // The source as wide as its lines (up to a readable measure), the goal beside the
-                    // caret's line when there is room for both
-                    let columns = t.decoded.text.lines().map(|l| l.chars().count()).max().unwrap_or(0);
-                    let source_width = source_width(columns);
-                    // (the goal column narrows to the room there is, down to a readable width;
-                    // it is placed against the source's own column, not the prose's measure)
-                    let source_room = main_width - SCROLLBAR_ROOM - source_column(t.code_columns) - GOAL_GAP;
-                    let source_goal = preferred_goal.min(source_room - 2.0 * z(PAGE_MARGIN)).max(z(320.0));
-                    let room = (main_width - source_width - z(70.0)).min(source_goal);
+                    // The code as wide as a cell is (the Cell width setting), the goal beside the
+                    // caret's line when there is room for both, grown and narrowed as the page's
+                    // is ([`page_layout`])
                     // (whether or not there is a goal at the moment: a click elsewhere clears the
                     // goal until the prover's state there comes, and the layout must not change
                     // with it)
-                    let fits = room >= z(320.0) && goal_beside_on();
-                    SOURCE_BESIDE.store(fits, std::sync::atomic::Ordering::Relaxed);
-                    source(ws, t, if fits { None } else { Some(ws) }, &*app.table(&ws.machine), fits.then_some((room, source_width)), source_width.min(main_width - z(24.0)))
+                    SOURCE_BESIDE.store(beside, std::sync::atomic::Ordering::Relaxed);
+                    source(ws, t, inline, &*app.table(&ws.machine), beside.then_some(goal_width), page.cell)
                 }
             };
             let _ = &mut body;
@@ -653,13 +645,6 @@ fn workspace<'a>(app: &'a App, ws: &'a Workspace, right: bool, main_width: f32) 
         outer = outer.push(body);
     }
     widget::container(outer).width(Length::Fill).height(Length::Fill).into()
-}
-
-/// The column the Source view's goal is placed against: as wide as the theory's longest lines
-/// need, between 440 and 680 px. (The Source view is laid out as it was before the Paper defaults
-/// gave the Literate view its 48 em column: the goal's width does not depend on that measure)
-fn source_column(columns: usize) -> f32 {
-    ((columns.max(30) as f32 + 4.0) * z(13.0) * 0.6 + code_padding().left + code_padding().right + CARD_CHROME).clamp(z(440.0), z(680.0))
 }
 
 /// What an agent's request (or grant) covers, in words
@@ -1136,8 +1121,10 @@ pub struct PageLayout {
     pub gutter: f32,
 }
 
-/// The goal beside its cell at its widest and its narrowest
-pub const GOAL_WIDEST: f32 = 360.0;
+/// The goal beside its cell at its narrowest, and as wide as it is while the prose column has its
+/// measure (it grows past that only into room the prose does not use, up to the Goal width), in
+/// px at zoom 1
+pub const GOAL_PREFERRED: f32 = 360.0;
 pub const GOAL_NARROWEST: f32 = 300.0;
 
 /// The narrowest a cell becomes to keep the goal beside it, in characters of code; a Cell width set
@@ -1151,28 +1138,44 @@ const UNMEASURED_COLUMN: f32 = 880.0;
 /// column's whole width), the prose measure `measure` px (none: as wide as the cells), with
 /// the goal allowed beside its cell or not. Sizes scale with the zoom.
 ///
-/// As the page narrows, the margins come in to [`PAGE_MARGIN`]; then, with the cell at its full
-/// width, the goal narrows from [`GOAL_WIDEST`] to [`GOAL_NARROWEST`]; then the cell narrows, a
-/// character at a time, to [`CELL_NARROWEST`]; then the goal goes under the cell, where the cell has
-/// its full width again if the column has room.
+/// The goal is [`GOAL_PREFERRED`] wide, and grows past it into the room the prose column does not
+/// use, up to the Goal width setting (63 characters, 560 px, by default; a setting under 360 px
+/// wins, none is under [`GOAL_NARROWEST`]); only past that do the margins take the rest. As the page narrows, the margins come in to [`PAGE_MARGIN`]; then the
+/// goal narrows back to [`GOAL_PREFERRED`]; the prose column gives way to it, down to the cell's
+/// width; then the goal narrows to [`GOAL_NARROWEST`]; then the cell narrows, a character at a
+/// time, to [`CELL_NARROWEST`]; then the goal goes under the cell. So the goal's growth never
+/// narrows the prose. Under the cell (a single column), there is no goal to leave room for: the
+/// cell is as wide as the column, whatever the Cell width setting, which is only the cell's width
+/// beside the goal and its limit for sharing the room with it.
 ///
 /// The prose column keeps its measure while the column, the gap and the goal all fit, and then
 /// gives way, not below the cell: the goal goes past prose level with it, and it must stay in the
 /// window there too. Under the cell, the column keeps its measure while it fits the page
 pub fn page_layout(page: f32, cell_setting: u16, measure: Option<f32>, goal_allowed: bool) -> PageLayout {
+    page_layout_with(page, cell_setting, super::settings::DEFAULT_GOAL_WIDTH, measure, goal_allowed)
+}
+
+/// [`page_layout`] with the goal's widest, `goal_setting` characters of code
+pub fn page_layout_with(page: f32, cell_setting: u16, goal_setting: u16, measure: Option<f32>, goal_allowed: bool) -> PageLayout {
     let margin = z(PAGE_MARGIN);
     let fill = cell_setting == 0;
     let setting = cell_card_width(f32::from(cell_setting));
     // (at its widest a cell never leaves the column; Fill is the column)
     let whole = if fill { measure.unwrap_or(z(UNMEASURED_COLUMN)) } else { measure.map_or(setting, |m| setting.min(m)) };
     let narrowest = whole.min(cell_card_width(f32::from(CELL_NARROWEST)));
-    let (goal_widest, goal_narrowest) = (z(GOAL_WIDEST), z(GOAL_NARROWEST));
+    let (goal_preferred, goal_narrowest) = (z(GOAL_PREFERRED), z(GOAL_NARROWEST));
     let room = page - 2.0 * margin - GOAL_GAP;
     // (the margin is in zoomed px and the theme's spacing is not, so the least can pass the most)
     let gutter_for = |taken: f32| ((page - taken) / 2.0).clamp(margin, margin.max(spacing().space_l as f32));
     if goal_allowed && room >= narrowest + goal_narrowest {
         let (goal, cell) = if room >= whole + goal_narrowest {
-            (goal_widest.min(room - whole), whole)
+            // (at least its preferred width, which the prose gives way to; wider only with room left
+            // after the prose at its measure, and never wider than the cell)
+            // (a goal setting under that wins, and nothing is narrower than the narrowest)
+            let widest = cell_card_width(f32::from(goal_setting)).max(goal_narrowest);
+            let base = goal_preferred.min(room - whole).min(widest);
+            let full = measure.map_or(whole, |m| m.max(whole));
+            ((room - full).clamp(base, widest), whole)
         } else {
             let left = room - goal_narrowest;
             (goal_narrowest, if fill { left } else { cell_card_width(cell_characters(left)).max(narrowest) })
@@ -1182,8 +1185,9 @@ pub fn page_layout(page: f32, cell_setting: u16, measure: Option<f32>, goal_allo
     } else {
         let fits = (page - 2.0 * margin).max(z(240.0));
         let column = measure.unwrap_or(if fill { z(UNMEASURED_COLUMN) } else { setting }).min(fits);
-        let cell = if fill { column } else { setting.min(column) };
-        PageLayout { goal: None, cell, column, gutter: gutter_for(column) }
+        // (with no goal to leave room for, a cell is as wide as the column, both edges lining up
+        // with the text: Cell width is for the goal beside)
+        PageLayout { goal: None, cell: column, column, gutter: gutter_for(column) }
     }
 }
 
@@ -1200,12 +1204,45 @@ static COLUMN_CAP: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::
 /// Every cell's width, its card with its strip and border, as the layout last chose it
 static CELL_CAP: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 
-/// A goal beside its cell narrower than this has its heading on two rows: the count, then Goals |
-/// Text and Types. They need about 321 px on one row, and more for a longer count
-const GOAL_HEADING_ROOM: f32 = 340.0;
+/// The page for a theory in `mode`, in a main area `main_width` wide, and how wide the goal panel
+/// is on it: the Literate view's cells and prose, or the Source view's code as wide as a cell
+pub(crate) struct Geometry {
+    pub page: PageLayout,
+    pub panel: f32,
+}
 
-/// Whether the goal beside, as last laid out, has its heading on two rows
-static GOAL_HEADING_STACKED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+pub(crate) fn geometry(main_width: f32, mode: Mode) -> Geometry {
+    let display = super::settings::display();
+    let beside_on = goal_beside_on();
+    match mode {
+        Mode::Literate => {
+            let page = page_layout_with(main_width, super::settings::cell_width(), super::settings::goal_width(), (display.measure > 0.0).then(|| z(display.measure * display.text_size)), beside_on);
+            Geometry { panel: page.goal.unwrap_or(page.cell), page }
+        }
+        Mode::Source => {
+            let page = page_layout_with(main_width - SCROLLBAR_ROOM, super::settings::cell_width(), super::settings::goal_width(), None, beside_on);
+            // (under the code, the goal is as wide as the window less its padding)
+            Geometry { panel: page.goal.unwrap_or(main_width - 3.0 * z(12.0)), page }
+        }
+    }
+}
+
+/// The columns of code a goal's terms have in the goal panel as the layout has it, for the prover to
+/// break its lines at: the panel less its outline and padding, a subgoal's inset and, if `labelled`,
+/// its label's column. Rounded down to steps of four, so that a window being dragged asks again
+/// only for a meaningful change
+pub fn goal_columns(app: &App, labelled: bool) -> usize {
+    let Some(t) = app.workspace.as_ref().and_then(|w| w.theory.as_ref()) else { return 76 };
+    let width = app.window_width;
+    let left = app.show_sidebar && width >= 640.0;
+    let right = right_shown(app, width);
+    let main_width = width - if left { app.left_width + super::sidebar::INSET_SPAN + 6.0 } else { 0.0 } - if right { app.right_width + super::sidebar::INSET_SPAN + 6.0 } else { 0.0 };
+    let panel = geometry(main_width, t.mode).panel;
+    let sp = spacing();
+    let overhead = 4.0 + 2.0 * sp.space_s as f32 + 2.0 * sp.space_xs as f32 + 10.0 + if labelled { z(52.0) + sp.space_xs as f32 } else { 0.0 };
+    let columns = ((panel - overhead) / (code_size().max(1.0) * CODE_ADVANCE)).floor().max(0.0) as usize;
+    (columns / 4 * 4).clamp(20, 200)
+}
 
 /// The text column's width in the last layout
 pub fn last_column() -> f32 {
@@ -1595,6 +1632,8 @@ fn highlighted_block<'a>(t: &Theory, block: &Block) -> Element<'a, Message> {
 static ZOOM: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0x3f80_0000);
 
 pub fn set_zoom(z: f32) {
+    #[cfg(test)]
+    super::snapshot::assert_turn_held("setting the zoom");
     ZOOM.store(z.clamp(0.5, 3.0).to_bits(), std::sync::atomic::Ordering::Relaxed);
 }
 
@@ -2345,6 +2384,7 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
         }
         _ => None,
     };
+    let palette_is_none = palette.is_none();
     let goal: Element<'a, Message> = match (beside, anchor) {
         _ if palette.is_some() => palette.unwrap_or_else(|| widget::Space::new().into()),
         (Some((ws, width, _)), Some(_)) => match goal_beside(ws, &*table) {
@@ -2360,7 +2400,13 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
         },
         _ => widget::Space::new().width(Length::Fixed(0.0)).height(Length::Fixed(0.0)).into(),
     };
-    let laid = super::gap::GoalLayer::new(col, goal, anchor, GOAL_GAP).indices(indices);
+    let mut laid = super::gap::GoalLayer::new(col, goal, anchor, GOAL_GAP).indices(indices);
+    if let (Some((ws, width, _)), Some(_)) = (beside, anchor)
+        && palette_is_none
+        && let Some((probe, kept)) = goal_beside_probe(ws, &*table, width)
+    {
+        laid = laid.shrinks(probe, kept, GOAL_SIDE_MARGIN_LINES as f32 * code_line_height());
+    }
     let page = widget::container(widget::container(laid).padding(Padding { top: PAGE_TOP_ROOM, ..Padding::ZERO }).max_width(page_width).width(Length::Fill));
     let page = if super::settings::display().centred { page.center_x(Length::Fill) } else { page.width(Length::Fill) };
     widget::mouse_area(thin(page).id(literate_scroll_id()).height(Length::Fill).on_scroll(move |v| Message::LiterateScrolled(scope, v.absolute_offset().y, v.bounds().height))).on_press(Message::CloseBlock).into()
@@ -3178,11 +3224,6 @@ fn completion_bar(t: &Theory) -> Option<Element<'_, Message>> {
     Some(widget::scrollable::horizontal(row).into())
 }
 
-/// The source view's width for lines this long: their measure, within limits (longer lines wrap)
-pub fn source_width(columns: usize) -> f32 {
-    (columns.clamp(60, 100) as f32 + 4.0) * code_size() * CODE_ADVANCE + 2.0 * spacing().space_s as f32
-}
-
 /// Where the proof state goes relative to the proof it belongs to
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GoalPlacement {
@@ -3303,13 +3344,13 @@ pub fn source_scroll_id() -> widget::Id {
     widget::Id::new("deductum-source-scroll")
 }
 
-fn source<'a>(ws: &'a Workspace, t: &'a Theory, inline: Option<&'a Workspace>, table: &dyn super::codec::Symbols, beside: Option<(f32, f32)>, width: f32) -> Element<'a, Message> {
+fn source<'a>(ws: &'a Workspace, t: &'a Theory, inline: Option<&'a Workspace>, table: &dyn super::codec::Symbols, beside: Option<f32>, width: f32) -> Element<'a, Message> {
     let mut col = widget::column::with_capacity(4).spacing(2).height(Length::Fill);
     let pad = Padding::from(spacing().space_s as f32);
     // The editor at its full height in a scroll view (shared with the goal when that is beside
     // it), so that where its lines are drawn is known: the construct the caret is in (the
     // statement around it, or the step if that is long) is tinted, and the goal sits level with it
-    let source_width = beside.map_or(width, |(_, w)| w);
+    let source_width = width;
     let construct = t
         .blocks
         .iter()
@@ -3337,7 +3378,7 @@ fn source<'a>(ws: &'a Workspace, t: &'a Theory, inline: Option<&'a Workspace>, t
     // The goal level with the construct, over its reserved column (moving only as far as it
     // must to stay in sight)
     let formal = formal_at_caret(t);
-    let (goal_width, goal): (f32, Element<'a, Message>) = match beside.filter(|_| formal).and_then(|(w, _)| Some((w, goal_beside(ws, table)?))) {
+    let (goal_width, goal): (f32, Element<'a, Message>) = match beside.filter(|_| formal).and_then(|w| Some((w, goal_beside(ws, table)?))) {
         Some((w, g)) => (w, widget::container(g).width(Length::Fixed(w)).class(theme::Container::custom(|theme| iced::widget::container::Style {
             background: Some(page_color(theme).into()),
             border: Border { radius: 6.0.into(), ..Default::default() },
@@ -3346,16 +3387,16 @@ fn source<'a>(ws: &'a Workspace, t: &'a Theory, inline: Option<&'a Workspace>, t
         // No goal: in prose (a module doc, a text block), what can be inserted there, as the
         // literate view has it; beside a proof, nothing while its state comes
         None => match beside {
-            Some((w, _)) if !formal && super::insert::insert_context(t).is_some() => {
+            Some(w) if !formal && super::insert::insert_context(t).is_some() => {
                 (w, super::insert::insert_palette(ws, t, table, w))
             }
-            _ => (beside.map_or(0.0, |(w, _)| w), widget::Space::new().width(Length::Fixed(0.0)).height(Length::Fixed(0.0)).into()),
+            _ => (beside.unwrap_or(0.0), widget::Space::new().width(Length::Fixed(0.0)).height(Length::Fixed(0.0)).into()),
         },
     };
     // (the goal's column and the space before it only when the goal is beside: an empty column
     // would put the page off centre)
-    let row = widget::row::with_capacity(2).spacing(if beside.is_some() { spacing().space_m } else { 0 }).push(editor).push(widget::Space::new().width(Length::Fixed(goal_width)));
-    let at = iced::Vector::new(source_width + spacing().space_m as f32, top);
+    let row = widget::row::with_capacity(2).spacing(if beside.is_some() { GOAL_GAP } else { 0.0 }).push(editor).push(widget::Space::new().width(Length::Fixed(goal_width)));
+    let at = iced::Vector::new(source_width + GOAL_GAP, top);
     // Pop out: a small button floating at the top right of the proof the caret is in
     let proof = t.blocks.iter().find(|b| b.start <= t.cursor && t.cursor <= b.end && b.kind == Kind::Formal);
     let (pop, pop_at): (Element<'a, Message>, iced::Vector) = match proof {
@@ -3385,6 +3426,19 @@ fn source<'a>(ws: &'a Workspace, t: &'a Theory, inline: Option<&'a Workspace>, t
         col = col.push(widget::container(thin(widget::container(g).padding(Padding { right: z(12.0), ..Padding::ZERO }))).max_height(z(240.0)).padding([z(8.0), z(12.0)]));
     }
     col.into()
+}
+
+/// How many rows the Source view draws before line `line`, its code `width` wide (a long line takes
+/// several)
+#[cfg(test)]
+pub(crate) fn source_rows_before(t: &Theory, width: f32, line: usize) -> usize {
+    let pad = Padding::from(spacing().space_s as f32);
+    super::wrap::rows(&t.decoded.text, width - pad.left - pad.right, code_font(), code_size(), code_size() * CODE_ADVANCE).iter().take(line).sum()
+}
+
+#[cfg(test)]
+pub(crate) fn source_code_width(window: f32) -> f32 {
+    geometry(window, Mode::Source).page.cell
 }
 
 fn source_editor(t: &Theory, height: Length) -> Element<'_, Message> {
@@ -3665,6 +3719,39 @@ fn goal_beside<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Opti
     Some(goal_panel(super::insert::insert_bar(ws, table), state_body(ws, table, &on_page(), true), Some(goal_max_height())))
 }
 
+/// The fewest and the most lines of the first subgoal that the goal beside its cell keeps when the
+/// gap it is in is too short for all of it: it shrinks, scrolling inside, to what the gap holds,
+/// if that is at least its heading, controls and this much of the first subgoal
+pub const SUBGOAL_MIN_LINES: usize = 5;
+pub const SUBGOAL_MAX_LINES: usize = 10;
+
+/// How many lines more than its least a gap must hold before a goal on the far side comes back
+/// next to its cell
+pub const GOAL_SIDE_MARGIN_LINES: usize = 2;
+
+/// How many lines of the first subgoal the goal keeps at its least: those it has, between
+/// [`SUBGOAL_MIN_LINES`] and [`SUBGOAL_MAX_LINES`]
+pub fn kept_lines(lines: usize) -> usize {
+    lines.clamp(SUBGOAL_MIN_LINES, SUBGOAL_MAX_LINES)
+}
+
+/// The goal's own heading and controls, without the goals under them, for the panel's least height,
+/// and the height of the first subgoal's kept lines
+fn goal_beside_probe<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols, width: f32) -> Option<(Element<'a, Message>, f32)> {
+    if ws.output.is_none() && !fill_here(ws) {
+        return None;
+    }
+    let g = super::goals::Goals::parse(&ws.goals.messages);
+    let lines = g.subgoals.first().map_or(0, |sg| {
+        let text = |m: &Value| m["text"].as_str().or(m["raw"].as_str()).map_or(1, |t| t.lines().count().max(1));
+        1 + sg.case.iter().map(text).sum::<usize>() + sg.params.iter().map(text).sum::<usize>() + sg.prems.iter().map(text).sum::<usize>() + sg.concl.iter().map(text).sum::<usize>()
+    });
+    let sp = spacing();
+    let kept = kept_lines(lines) as f32 * code_line_height() + 2.0 * sp.space_xxs as f32;
+    let probe = goal_panel(super::insert::insert_bar(ws, table), state_body_of(ws, table, &on_page(), true, true), None);
+    Some((widget::container(probe).width(Length::Fixed(width)).into(), kept))
+}
+
 /// The share of the page a goal beside its cell may fill, and the least it may be
 const GOAL_MAX_SHARE: f32 = 0.75;
 const GOAL_MIN_MAX_HEIGHT: f32 = 240.0;
@@ -3730,6 +3817,12 @@ fn goal_view_menu<'a>(ws: &Workspace) -> Element<'a, Message> {
 /// The proof state: as parts (the chained facts, then each subgoal as fix, assume and show,
 /// with what the command changed), or as Isabelle prints it; then any other output
 fn state_body<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols, on: &Beneath, scrolls: bool) -> Element<'a, Message> {
+    state_body_of(ws, table, on, scrolls, false)
+}
+
+/// [`state_body`], or with `head_only` just the heading and its controls: the part of the panel
+/// that does not scroll, to measure it
+fn state_body_of<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols, on: &Beneath, scrolls: bool, head_only: bool) -> Element<'a, Message> {
     let sp = spacing();
     // While Isabelle has yet to check what changed at the caret, output about another command
     // (the one that was there before the edit) is not shown as if it were this one's
@@ -3778,17 +3871,21 @@ fn state_body<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols, on: &Ben
     } else {
         format!("{n} {}{}", ws.profile.goal_noun(), if n == 1 { "" } else { "s" })
     };
-    // The heading line: "N goals" in bold, and at its right Goals | Text (sized to its parts) and
-    // Types, which stays a checkbox; or, where those do not fit beside the count, one dropdown
-    // holding all three
-    let stacked = GOAL_HEADING_STACKED.load(std::sync::atomic::Ordering::Relaxed);
-    let heading = have_parts.then(|| widget::text::heading(headline).font(cosmic::font::bold()));
-    let mut notes = widget::row::with_capacity(2).spacing(sp.space_s).align_y(Alignment::Center);
-    let mut has_notes = false;
+    // The heading line: what the panel holds ("N goals", or, with no goal in parts, the command's
+    // output it is for) in bold at the left, and at its right Goals | Text (sized to its parts) and
+    // Types, which stays a checkbox; or, where those do not fit in the panel's width, one dropdown
+    // holding all three. The heading takes what room the controls leave and wraps in it; what the
+    // step did goes on a line of its own under, so that the controls never lose room to it.
+    let heading_text = if have_parts { headline } else { state_caption(ws).unwrap_or_else(|| "Proof state".to_string()) };
+    let heading = |width: Length| widget::container(widget::text::heading(heading_text.clone()).font(cosmic::font::bold())).width(width);
+    #[cfg(test)]
+    let heading_of = |width: Length| heading(width).id(test_panel_id("heading-text"));
+    #[cfg(not(test))]
+    let heading_of = |width: Length| heading(width);
+    let mut notes: Vec<String> = Vec::new();
     if have_parts {
         if matches!(ws.goals.status.as_str(), "waiting" | "running") {
-            notes = notes.push(widget::text::caption("updating…"));
-            has_notes = true;
+            notes.push("updating…".to_string());
         }
         if compared && (solved > 0 || added > 0) {
             let mut parts = Vec::new();
@@ -3798,32 +3895,30 @@ fn state_body<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols, on: &Ben
             if added > 0 {
                 parts.push(format!("{added} new"));
             }
-            notes = notes.push(widget::text::caption(format!("by this step: {}", parts.join(", "))));
-            has_notes = true;
+            notes.push(format!("by this step: {}", parts.join(", ")));
         }
     }
-    let controls: Element<'a, Message> = if stacked {
-        // (what the step did goes under, so that the count and the dropdown stay on one line)
-        let line = widget::row::with_capacity(3)
-            .spacing(sp.space_s)
-            .align_y(Alignment::Center)
-            .push_maybe(heading)
-            .push(widget::Space::new().width(Length::Fill))
-            .push(goal_view_menu(ws));
-        widget::column::with_capacity(2).spacing(sp.space_xxs).push(line).push_maybe(has_notes.then_some(notes)).into()
-    } else {
-        widget::row::with_capacity(5)
-            .spacing(sp.space_s)
-            .align_y(Alignment::Center)
-            .push_maybe(heading)
-            .push_maybe(has_notes.then_some(notes))
-            .push(widget::Space::new().width(Length::Fill))
-            .push(switch)
-            .push_maybe(ws.profile.goal_types_option().then(|| widget::checkbox(ws.show_types).label("Types").on_toggle(Message::ShowTypes)))
-            .into()
-    };
+    let whole = widget::row::with_capacity(2)
+        .spacing(sp.space_s)
+        .align_y(Alignment::Center)
+        .push(switch)
+        .push_maybe(ws.profile.goal_types_option().then(|| widget::checkbox(ws.show_types).label("Types").on_toggle(Message::ShowTypes)));
+    #[cfg(test)]
+    let whole = widget::container(whole).id(test_panel_id("switches"));
+    #[cfg(test)]
+    let compact = widget::container(goal_view_menu(ws)).id(test_panel_id("switches"));
+    #[cfg(not(test))]
+    let compact = goal_view_menu(ws);
+    let line: Element<'a, Message> = super::gap::HeadingLine::new(heading_of(Length::Shrink).into(), whole.into(), heading_of(Length::Shrink).into(), compact.into(), sp.space_s as f32).into();
+    let notes = (!notes.is_empty()).then(|| widget::container(widget::text::caption(notes.join(" · "))).width(Length::Fill));
+    #[cfg(test)]
+    let notes = notes.map(|n| n.id(test_panel_id("heading-notes")));
+    let controls: Element<'a, Message> = widget::column::with_capacity(2).spacing(sp.space_xxs).push(line).push_maybe(notes).into();
     #[cfg(test)]
     let controls = widget::container(controls).id(test_panel_id("heading"));
+    if head_only {
+        return controls.into();
+    }
     // On a proof tool typed in the text (sledgehammer, nitpick, …): what it is doing and what it
     // found, as they come, above the goal it works on, with its settings
     let tool = ws.output.as_ref().and_then(|o| o["command"]["name"].as_str()).and_then(|n| ws.caps.typed_tool(n));
@@ -3853,7 +3948,7 @@ fn state_body<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols, on: &Ben
     // (with room at its right for the scrollbar)
     let done = |col: Element<'a, Message>| -> Element<'a, Message> {
         // (the dropdown is taller than Goals | Text, and leaves most of the room by itself)
-        let all = widget::column::with_capacity(2).spacing(if stacked { sp.space_xxs } else { sp.space_xs }).push(controls);
+        let all = widget::column::with_capacity(2).spacing(sp.space_xxs).push(controls);
         if scrolls {
             all.push(thin(widget::container(col).padding(Padding { right: 10.0, ..Padding::ZERO }).width(Length::Fill)).id(goal_scroll_id())).into()
         } else {
@@ -3877,7 +3972,7 @@ fn state_body<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols, on: &Ben
         // (Text shows the command's output as it is; with no goal in parts, the tool's section
         // has said it already)
         if ws.state_text || !in_tool {
-            col = col.push(state_text(ws, table, on));
+            col = col.push(state_text(ws, table, on, !have_parts));
         }
         if fill_here(ws) {
             col = col.push(fill_results(ws, table));
@@ -4361,21 +4456,34 @@ fn hairline<'a>(#[allow(unused)] i: usize) -> Element<'a, Message> {
     line.into()
 }
 
+/// What the command's output is after: "After by (finished)", and that the prover is catching up
+fn state_caption(ws: &Workspace) -> Option<String> {
+    let out = ws.output.as_ref().filter(|o| o.get("error").is_none() && !super::flow::stale_tool_output(ws))?;
+    let c = out.get("command").filter(|c| c.is_object())?;
+    Some(format!(
+        "After {} ({}){}",
+        c["name"].as_str().unwrap_or(""),
+        c["status"].as_str().unwrap_or(""),
+        if out["outdated"].as_bool() == Some(true) { " — prover catching up" } else { "" }
+    ))
+}
+
+#[cfg(test)]
+pub fn state_caption_for_tests(ws: &Workspace) -> Option<String> {
+    state_caption(ws)
+}
+
 /// The state as Isabelle prints it, with the command's other output
-fn state_text<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols, on: &Beneath) -> Element<'a, Message> {
+fn state_text<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols, on: &Beneath, captioned: bool) -> Element<'a, Message> {
     let mut col = widget::column::with_capacity(8).spacing(6);
     match &ws.output {
         None => col = col.push(widget::text::caption("Move the caret into a proof to see its state.")),
         Some(out) if out.get("error").is_some() => col = col.push(widget::text::body(out["error"].as_str().unwrap_or("").to_string())),
         Some(_) if super::flow::stale_tool_output(ws) => col = col.push(widget::text::caption("Checking…")),
         Some(out) => {
-            if let Some(c) = out.get("command").filter(|c| c.is_object()) {
-                col = col.push(widget::text::caption(format!(
-                    "After {} ({}){}",
-                    c["name"].as_str().unwrap_or(""),
-                    c["status"].as_str().unwrap_or(""),
-                    if out["outdated"].as_bool() == Some(true) { " — prover catching up" } else { "" }
-                )));
+            // (said by the panel's heading, when it is the heading)
+            if !captioned && let Some(caption) = state_caption(ws) {
+                col = col.push(widget::text::caption(caption));
             }
             let msgs = out["messages"].as_array().cloned().unwrap_or_default();
             if msgs.is_empty() {

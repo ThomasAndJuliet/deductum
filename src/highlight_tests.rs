@@ -1053,7 +1053,10 @@ fn the_goal_beside_toggle_is_the_muted_accent_when_on() {
     use cosmic::widget;
     for dark in [true, false] {
         let mut app = demo_app(Mode::Literate);
-        assert!(super::view::goal_beside_on(), "the goal beside the text is on by default");
+        {
+            let _turn = super::snapshot::ui_turn();
+            assert!(super::view::goal_beside_on(), "the goal beside the text is on by default");
+        }
         for on in [true, false] {
             let turn = super::snapshot::ui_turn();
             let theme = Themed::set(dark);
@@ -1069,9 +1072,11 @@ fn the_goal_beside_toggle_is_the_muted_accent_when_on() {
                 assert!(muted_area(&f, muted).is_none_or(|(_, n)| n < 20), "the goal-beside toggle, off ({}): filled with the muted accent", theme.name());
             }
             drop(theme);
-            drop(turn);
+            // (toggling publishes the settings and the goal's place: still in the turn)
             let _ = cosmic::Application::update(&mut app, super::Message::ToggleGoalBeside);
+            drop(turn);
         }
+        let _turn = super::snapshot::ui_turn();
         assert!(super::view::goal_beside_on(), "put back on");
     }
 }

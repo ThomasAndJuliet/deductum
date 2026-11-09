@@ -401,3 +401,40 @@ fn old_page_scroll_messages_do_not_affect_the_new_theory() {
         "the current page can still scroll"
     );
 }
+
+/// A change in the width the goal's lines are broken at asks for the state once: the messages that
+/// follow it do not schedule it again (each would make the pending request stale, for ever), a
+/// stale tick sends nothing, and the current one sends the `state` request
+#[test]
+fn a_change_in_the_goals_columns_schedules_one_state_request_that_is_sent() {
+    let mut app = super::snapshot::demo_app(Mode::Literate);
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<String>();
+    app.links[0].sender = Some(tx);
+    app.show_sidebar = false;
+    app.show_right = false;
+    // (the first message notes what the panel has)
+    let _ = cosmic::Application::update(&mut app, Message::WindowResized(1500.0, 900.0));
+    let before = app.state_gen;
+    // a window of another width: one request scheduled
+    let _ = cosmic::Application::update(&mut app, Message::WindowResized(1000.0, 900.0));
+    assert_eq!(app.state_gen, before + 1, "scheduled once");
+    let asked = app.state_gen;
+    // other messages with the width unchanged do not schedule it again
+    for _ in 0..3 {
+        let _ = cosmic::Application::update(&mut app, Message::WindowResized(1000.0, 900.0));
+    }
+    assert_eq!(app.state_gen, asked, "no further scheduling while the request is pending");
+    // a stale tick sends nothing
+    let _ = cosmic::Application::update(&mut app, Message::StateTick(before));
+    assert!(rx.try_recv().is_err(), "a stale tick sends nothing");
+    // the current tick asks for the state
+    let _ = cosmic::Application::update(&mut app, Message::StateTick(asked));
+    let mut ops = Vec::new();
+    while let Ok(m) = rx.try_recv() {
+        ops.push(m);
+    }
+    assert!(ops.iter().any(|m| m.contains("\"op\":\"state\"")), "the state is asked for: {ops:?}");
+    // and after it the columns are noted: another message schedules nothing
+    let _ = cosmic::Application::update(&mut app, Message::WindowResized(1000.0, 900.0));
+    assert_eq!(app.state_gen, asked);
+}
