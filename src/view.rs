@@ -264,6 +264,8 @@ pub fn goal_beside_on() -> bool {
 
 pub fn set_goal_beside(on: bool) {
     #[cfg(test)]
+    super::snapshot::assert_turn_held("setting the goal beside");
+    #[cfg(test)]
     GOAL_BESIDE_HERE.with(|g| g.set(on));
     GOAL_BESIDE.store(on, std::sync::atomic::Ordering::Relaxed);
 }
@@ -1630,6 +1632,8 @@ fn highlighted_block<'a>(t: &Theory, block: &Block) -> Element<'a, Message> {
 static ZOOM: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0x3f80_0000);
 
 pub fn set_zoom(z: f32) {
+    #[cfg(test)]
+    super::snapshot::assert_turn_held("setting the zoom");
     ZOOM.store(z.clamp(0.5, 3.0).to_bits(), std::sync::atomic::Ordering::Relaxed);
 }
 

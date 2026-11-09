@@ -228,8 +228,32 @@ pub fn draw(app: &App, name: &str, size: Size) -> Vec<u8> {
 /// drive the widgets take turns, so that one test's view does not change another's keys
 static UI: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
-pub fn ui_turn() -> std::sync::MutexGuard<'static, ()> {
-    UI.lock().unwrap_or_else(|e| e.into_inner())
+pub fn ui_turn() -> Turn {
+    let guard = UI.lock().unwrap_or_else(|e| e.into_inner());
+    TURNS_HELD.with(|n| n.set(n.get() + 1));
+    Turn { _guard: guard }
+}
+
+/// The UI's turn, held until dropped
+pub struct Turn {
+    _guard: std::sync::MutexGuard<'static, ()>,
+}
+
+impl Drop for Turn {
+    fn drop(&mut self) {
+        TURNS_HELD.with(|n| n.set(n.get() - 1));
+    }
+}
+
+thread_local! {
+    static TURNS_HELD: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// Called where a test changes process-wide state that the views read (the published settings,
+/// the zoom): a test that does so outside the turn would change what a drawing test reads. This
+/// turns that race into a failure of the test at fault
+pub fn assert_turn_held(what: &str) {
+    assert!(TURNS_HELD.with(|n| n.get()) > 0, "{what} outside the UI's turn (`snapshot::ui_turn()`): it would change what other tests read");
 }
 
 pub fn draw_element(element: cosmic::Element<'_, super::Message>, name: &str, size: Size) -> Vec<u8> {
@@ -238,7 +262,7 @@ pub fn draw_element(element: cosmic::Element<'_, super::Message>, name: &str, si
 
 /// As [`draw_element`], with the UI's turn already taken (before the element was built, which
 /// may publish process-wide state too)
-fn draw_locked(element: cosmic::Element<'_, super::Message>, name: &str, size: Size, _turn: std::sync::MutexGuard<'static, ()>) -> Vec<u8> {
+fn draw_locked(element: cosmic::Element<'_, super::Message>, name: &str, size: Size, _turn: Turn) -> Vec<u8> {
     render(element, name, size)
 }
 
@@ -688,7 +712,7 @@ impl clipboard::Clipboard for TestClipboard {
 }
 
 pub struct Harness {
-    _turn: std::sync::MutexGuard<'static, ()>,
+    _turn: Turn,
     renderer: cosmic::Renderer,
     cache: Option<Cache>,
     pub size: Size,
@@ -3183,8 +3207,9 @@ pub fn scroll_to_open_block(h: &mut Harness, app: &App) -> Vec<super::Message> {
 /// how to use it, while the block is only selected, and is filled when it opens
 #[test]
 fn opening_a_selected_block_keeps_the_goal_where_it_was() {
+    // (one harness, so that the turn is held while the goal's place is put back)
+    let mut harness = Harness::new(Size::new(1400.0, 900.0));
     for beside in [true, false] {
-        let mut harness = Harness::new(Size::new(1400.0, 900.0));
         super::view::set_goal_beside(beside);
         let mut app = demo_app(Mode::Literate);
         app.show_right = false;
