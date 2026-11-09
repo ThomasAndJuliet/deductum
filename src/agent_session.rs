@@ -199,14 +199,27 @@ pub fn command(ctx: &Context, tool: Tool, id: &str, prompt: &str) -> Vec<String>
     args
 }
 
-/// What runs on the host to start `command`'s program: Terminal Agents' `cosmic-term`, else its
-/// Flatpak, and a plain error if neither is there or this one does not know `--new-thread`
-const LAUNCH: &str = r#"if command -v cosmic-term >/dev/null 2>&1; then t="cosmic-term"
-elif flatpak info dev.twright.CosmicTermAgents >/dev/null 2>&1; then t="flatpak run dev.twright.CosmicTermAgents"
-else echo "Terminal Agents (cosmic-term) is not installed on this computer" >&2; exit 127; fi
-shift
-if ! $t --help 2>&1 | grep -q -e --new-thread; then echo "This Terminal Agents does not know --new-thread yet: update it" >&2; exit 126; fi
-exec setsid -f $t "$@""#;
+/// What runs on the host to start `command`'s program: Terminal Agents' Flatpak, else a
+/// `cosmic-term` on the path that knows `--new-thread` (a stock COSMIC Terminal has that name too
+/// and does not), and a plain error if there is neither. It asks `flatpak list` and leaves the
+/// branch to `flatpak run`, as `flatpak info` refuses an app with several branches installed
+const LAUNCH: &str = r#"shift
+found=
+if flatpak list --app --columns=application 2>/dev/null | grep -qx dev.twright.CosmicTermAgents; then
+  found=1
+  if flatpak run dev.twright.CosmicTermAgents --help 2>&1 | grep -q -e --new-thread; then
+    exec setsid -f flatpak run dev.twright.CosmicTermAgents "$@"
+  fi
+fi
+if command -v cosmic-term >/dev/null 2>&1; then
+  found=1
+  if cosmic-term --help 2>&1 | grep -q -e --new-thread; then
+    exec setsid -f cosmic-term "$@"
+  fi
+fi
+if [ -n "$found" ]; then echo "No Terminal Agents on this computer knows --new-thread: install or update dev.twright.CosmicTermAgents" >&2; exit 126; fi
+echo "Terminal Agents (dev.twright.CosmicTermAgents) is not installed on this computer" >&2
+exit 127"#;
 
 /// The arguments the host's shell is given: the script, then the command's arguments as they are
 pub fn launch_args(command: &[String]) -> Vec<String> {
