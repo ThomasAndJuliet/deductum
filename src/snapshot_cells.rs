@@ -144,7 +144,7 @@ fn line_strength(frame: &[u8], width: u32, x: f32, y: f32, vertical: bool, line:
 }
 
 /// The containers of a frame with ids, with their bounds
-struct Bounds(Vec<(cosmic::widget::Id, Rectangle)>);
+pub(super) struct Bounds(pub(super) Vec<(cosmic::widget::Id, Rectangle)>);
 
 impl cosmic::iced::advanced::widget::Operation<()> for Bounds {
     fn traverse(&mut self, f: &mut dyn FnMut(&mut dyn cosmic::iced::advanced::widget::Operation<()>)) {

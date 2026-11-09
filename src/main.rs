@@ -79,6 +79,8 @@ mod snapshot_context;
 #[cfg(test)]
 mod snapshot_sheet;
 #[cfg(test)]
+mod snapshot_shrink;
+#[cfg(test)]
 mod snapshot_code;
 #[cfg(test)]
 #[path = "../vendor/cosmic-text/tests/hanging_indent.rs"]

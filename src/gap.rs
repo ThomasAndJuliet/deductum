@@ -404,6 +404,9 @@ where
 pub struct GoalLayer<'a, Message, Theme, Renderer> {
     page: Element<'a, Message, Theme, Renderer>,
     goal: Element<'a, Message, Theme, Renderer>,
+    /// The goal's heading and controls alone, to measure how short it may be, and the height of the
+    /// first subgoal's lines it keeps at least (see [`shrink_to`])
+    probe: Option<(Element<'a, Message, Theme, Renderer>, f32)>,
     /// The item the goal is for, and how far below its top
     anchor: Option<(usize, f32)>,
     gap: f32,
@@ -427,13 +430,34 @@ const GOAL_ROOM: f32 = 16.0;
 
 impl<'a, Message, Theme, Renderer> GoalLayer<'a, Message, Theme, Renderer> {
     pub fn new(page: impl Into<Element<'a, Message, Theme, Renderer>>, goal: impl Into<Element<'a, Message, Theme, Renderer>>, anchor: Option<(usize, f32)>, gap: f32) -> Self {
-        Self { page: page.into(), goal: goal.into(), anchor, gap, indices: None }
+        Self { page: page.into(), goal: goal.into(), probe: None, anchor, gap, indices: None }
+    }
+
+    /// The goal may shrink, scrolling inside, to the gap it is in (the room beside its cell and the
+    /// items no wider, between the wider ones), if the gap holds at least the `probe` (its heading
+    /// and controls) and `kept` of the first subgoal
+    pub fn shrinks(mut self, probe: impl Into<Element<'a, Message, Theme, Renderer>>, kept: f32) -> Self {
+        self.probe = Some((probe.into(), kept));
+        self
     }
 }
 
 impl<Message, Theme, Renderer> GoalLayer<'_, Message, Theme, Renderer> {
     pub fn indices(mut self, indices: super::viewport::Indices) -> Self { self.indices = Some(indices); self }
+
 }
+
+/// The height a goal `normal` tall takes in a gap `gap` tall: unchanged (none) when it fits, or
+/// when the gap is under `least` (it then goes to the far side, past the wider items); else the
+/// gap, the goal scrolling inside. A goal whose contents are shorter than `least` has no least but
+/// its own height
+pub fn shrink_to(gap: f32, normal: f32, least: f32) -> Option<f32> {
+    (gap < normal && gap >= least.min(normal)).then_some(gap)
+}
+
+/// The goal's last layout: the gap it was in, its normal height, its least, the height it took
+#[cfg(test)]
+pub static GOAL_FIT: std::sync::Mutex<Option<(f32, f32, f32, f32)>> = std::sync::Mutex::new(None);
 
 /// How far right an item's content reaches: the widest element its rows show
 fn item_right(item: Layout<'_>) -> f32 {
@@ -488,11 +512,18 @@ struct Extent {
 /// items that are no wider, between the wider items above and below. Only a goal taller than
 /// the whole gap goes where it was wanted, past the wider items level with it. `from` is where
 /// the page's items begin on the left
-fn settle(items: &[Extent], slot: usize, wanted: f32, height: f32, from: f32) -> (f32, f32) {
+/// Where the gap the item `slot` is in begins and ends: under the nearest wider item above, and
+/// above the nearest wider one below (unbounded where there is none)
+fn gap_around(items: &[Extent], slot: usize) -> (f32, f32) {
     let base = items[slot].right;
     let wider = |it: &Extent| it.right != f32::MIN && it.right > base + 0.5;
     let above = items[..slot].iter().rev().find(|it| wider(it)).map_or(f32::NEG_INFINITY, |it| it.bottom);
     let below = items[slot + 1..].iter().find(|it| wider(it)).map_or(f32::INFINITY, |it| it.top);
+    (above, below)
+}
+
+fn settle(items: &[Extent], slot: usize, wanted: f32, height: f32, from: f32) -> (f32, f32) {
+    let (above, below) = gap_around(items, slot);
     let slid = wanted.min(below - height).max(above);
     // (a gap that holds the goal: it stays in it, and its items are all no wider than the item's)
     let y = if slid + height <= below + 0.01 { slid } else { wanted };
@@ -565,11 +596,16 @@ where
     Renderer: renderer::Renderer,
 {
     fn children(&self) -> Vec<Tree> {
-        vec![Tree::new(&self.page), Tree::new(&self.goal)]
+        let mut trees = vec![Tree::new(&self.page), Tree::new(&self.goal)];
+        trees.extend(self.probe.as_ref().map(|(p, _)| Tree::new(p)));
+        trees
     }
 
     fn diff(&mut self, tree: &mut Tree) {
-        tree.diff_children(&mut [&mut self.page, &mut self.goal]);
+        match &mut self.probe {
+            Some((probe, _)) => tree.diff_children(&mut [&mut self.page, &mut self.goal, probe]),
+            None => tree.diff_children(&mut [&mut self.page, &mut self.goal]),
+        }
     }
 
     fn size(&self) -> Size<Length> {
@@ -578,7 +614,39 @@ where
 
     fn layout(&mut self, tree: &mut Tree, renderer: &Renderer, limits: &layout::Limits) -> layout::Node {
         let page = self.page.as_widget_mut().layout(&mut tree.children[0], renderer, limits);
-        let goal = self.goal.as_widget_mut().layout(&mut tree.children[1], renderer, &layout::Limits::new(Size::ZERO, Size::new(f32::INFINITY, f32::INFINITY)));
+        let free = layout::Limits::new(Size::ZERO, Size::new(f32::INFINITY, f32::INFINITY));
+        let mut goal = self.goal.as_widget_mut().layout(&mut tree.children[1], renderer, &free);
+        // The goal in a gap too short for it, but not for its least: as tall as the gap, its goals
+        // scrolling inside. What it depends on is the page's items alone, not where the page is
+        // scrolled
+        if let (Some((index, _)), Some((probe, kept))) = (self.anchor, self.probe.as_mut()) {
+            let slot = match &self.indices {
+                Some(indices) => indices.lock().unwrap_or_else(|e| e.into_inner()).binary_search(&index).ok(),
+                None => Some(index),
+            };
+            let items: Vec<Extent> = Layout::new(&page).children().map(|it| Extent { top: it.bounds().y, bottom: it.bounds().y + it.bounds().height, right: item_right(it) }).collect();
+            if let Some(slot) = slot.filter(|s| *s < items.len()) {
+                let (above, below) = gap_around(&items, slot);
+                let gap = below - above.max(0.0);
+                let normal = goal.size().height;
+                if gap < normal {
+                    let head = probe.as_widget_mut().layout(&mut tree.children[2], renderer, &free).size().height;
+                    let least = head + *kept;
+                    #[cfg(test)]
+                    if let Ok(mut last) = GOAL_FIT.lock() {
+                        *last = Some((gap, normal, least.min(normal), shrink_to(gap, normal, least).unwrap_or(normal)));
+                    }
+                    if let Some(height) = shrink_to(gap, normal, least) {
+                        goal = self.goal.as_widget_mut().layout(&mut tree.children[1], renderer, &layout::Limits::new(Size::ZERO, Size::new(f32::INFINITY, height)));
+                    }
+                } else {
+                    #[cfg(test)]
+                    if let Ok(mut last) = GOAL_FIT.lock() {
+                        *last = Some((gap, normal, normal, normal));
+                    }
+                }
+            }
+        }
         // The page goes on far enough to show all of the goal: under the theory's last cell, there
         // may be less page than there is goal
         let reach = self.anchor.and_then(|(index, top)| {

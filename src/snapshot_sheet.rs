@@ -17,7 +17,7 @@ use super::App;
 
 /// The goal's cases
 #[derive(Clone, Copy)]
-enum Case {
+pub(super) enum Case {
     Short,
     Long,
     None,
@@ -27,6 +27,8 @@ enum Case {
     Tall,
     /// "No subgoals left", with the step's note
     NoneLeft,
+    /// The slide's cell with `.0` of its lines removed, and a goal of `.1` subgoals
+    Trim(usize, usize),
 }
 
 const TERM: &str = "timed_assign_sequence (st\\<^sub>v := f (st\\<^sub>v a)) (a :: ('s, 'e) timed_vars) (b :: ('s, 'e) timed_vars) (cond_srea_apply (?P \\<triangleleft> ?c \\<triangleright>\\<^sub>R ?Q) (?a, ?b)) = (if ?c (st\\<^sub>v ?a) then ?P (?a, ?b) else ?Q (?a, ?b))";
@@ -51,13 +53,23 @@ fn parts(raw: &[String]) -> Vec<serde_json::Value> {
     raw.iter().map(|r| json!({"kind": "writeln", "raw": r, "text": r, "spans": []})).collect()
 }
 
-fn app_for(text: &str, mode: Mode, width: f32, sidebar: bool, case: Case, columns: usize) -> App {
+pub(super) fn app_for(text: &str, mode: Mode, width: f32, sidebar: bool, case: Case, columns: usize) -> App {
     // (for the slide, the cell has a wide paragraph above it as well as below)
     let para = "We now relate the raw forward equations to the refusal traces of patient deadlock, one lemma at a time, and then state what they do not show. The first of them is about the tick refusal before a tock, which deterministic tockify leaves out, and it is stated for any action, with its alternatives named in the discussion that follows the proof.";
-    let text = &if matches!(case, Case::Slide | Case::Tall) {
+    let text = &if matches!(case, Case::Slide | Case::Tall | Case::Trim(..)) {
         // (a short theory: the header, a paragraph, the cell, and the paragraph after it)
         let head = &text[..text.find("lemma raw_execution_stop_iff").expect("the first lemma")];
         let cell = &text[text.find("lemma raw_FE_stop:").expect("a long lemma")..text.find("lemma raw_FR_stop").expect("the next lemma")];
+        // (a cell with some of its proof's lines left out, to make its gap shorter)
+        let trimmed;
+        let cell = if let Case::Trim(k, _) = case {
+            let mut lines: Vec<&str> = cell.lines().collect();
+            lines.drain(4..4 + k.min(lines.len().saturating_sub(8)));
+            trimmed = format!("{}\n", lines.join("\n"));
+            trimmed.as_str()
+        } else {
+            cell
+        };
         let after = &text[text.find("text \\<open>These").expect("the closing paragraph")..];
         format!("{head}text \\<open>{para}\\<close>\n\n{cell}{after}")
     } else {
@@ -75,7 +87,7 @@ fn app_for(text: &str, mode: Mode, width: f32, sidebar: bool, case: Case, column
         _ => "raw_FE_stop:",
     };
     let at = match case {
-        Case::Slide | Case::Tall => text.find("qed\n\ntext \\<open>These").expect("the cell's last qed") + 1,
+        Case::Slide | Case::Tall | Case::Trim(..) => text.find("qed\n\ntext \\<open>These").expect("the cell's last qed") + 1,
         _ => text.find("lemma raw_execution_stop_iff").expect("a lemma") + 20,
     };
     let _ = needle;
@@ -98,6 +110,7 @@ fn app_for(text: &str, mode: Mode, width: f32, sidebar: bool, case: Case, column
         Case::Short => parts(&["#deductum:count 1".to_string(), "#deductum:concl 1\n?a = ?b".to_string()]),
         Case::Long => parts(&goal(3, TERM)),
         Case::Slide => parts(&goal(1, "ttWF t")),
+        Case::Trim(_, n) => parts(&goal(n, TERM)),
         Case::Tall => parts(&goal(6, TERM)),
         Case::None => {
             output = json!({"command": {"name": "by", "status": "finished"}, "messages": [{"kind": "writeln", "raw": broken("show timed_assign f is TC1", columns), "text": broken("show timed_assign f is TC1", columns), "spans": []}]});
@@ -150,8 +163,15 @@ fn goal_layout_sheet_frames() {
         frames.push((format!("single-off-1344-open-{view}"), 1344.0, true, mode, Case::Long));
     }
     frames.push(("single-off-none-1920-literate".into(), 1920.0, false, Mode::Literate, Case::None));
-    for light in [true, false] {
+    // (`CT_SHEET_ONLY`: only the frames whose names begin with one of these, comma separated;
+    // `CT_SHEET_LIGHT`: only the light theme)
+    let only: Vec<String> = std::env::var("CT_SHEET_ONLY").map(|o| o.split(',').map(str::to_string).collect()).unwrap_or_default();
+    let themes: &[bool] = if std::env::var_os("CT_SHEET_LIGHT").is_some() { &[true] } else { &[true, false] };
+    for &light in themes {
         for (name, width, sidebar, mode, case) in &frames {
+            if !only.is_empty() && !only.iter().any(|o| name.starts_with(o.as_str())) {
+                continue;
+            }
             super::view::set_goal_beside(!name.starts_with("single-off"));
             let columns = fixed.unwrap_or_else(|| {
                 let app = app_for(&text, *mode, *width, *sidebar, *case, 40);

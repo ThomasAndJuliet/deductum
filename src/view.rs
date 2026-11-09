@@ -2373,6 +2373,7 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
         }
         _ => None,
     };
+    let palette_is_none = palette.is_none();
     let goal: Element<'a, Message> = match (beside, anchor) {
         _ if palette.is_some() => palette.unwrap_or_else(|| widget::Space::new().into()),
         (Some((ws, width, _)), Some(_)) => match goal_beside(ws, &*table) {
@@ -2388,7 +2389,13 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
         },
         _ => widget::Space::new().width(Length::Fixed(0.0)).height(Length::Fixed(0.0)).into(),
     };
-    let laid = super::gap::GoalLayer::new(col, goal, anchor, GOAL_GAP).indices(indices);
+    let mut laid = super::gap::GoalLayer::new(col, goal, anchor, GOAL_GAP).indices(indices);
+    if let (Some((ws, width, _)), Some(_)) = (beside, anchor)
+        && palette_is_none
+        && let Some((probe, kept)) = goal_beside_probe(ws, &*table, width)
+    {
+        laid = laid.shrinks(probe, kept);
+    }
     let page = widget::container(widget::container(laid).padding(Padding { top: PAGE_TOP_ROOM, ..Padding::ZERO }).max_width(page_width).width(Length::Fill));
     let page = if super::settings::display().centred { page.center_x(Length::Fill) } else { page.width(Length::Fill) };
     widget::mouse_area(thin(page).id(literate_scroll_id()).height(Length::Fill).on_scroll(move |v| Message::LiterateScrolled(scope, v.absolute_offset().y, v.bounds().height))).on_press(Message::CloseBlock).into()
@@ -3701,6 +3708,35 @@ fn goal_beside<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Opti
     Some(goal_panel(super::insert::insert_bar(ws, table), state_body(ws, table, &on_page(), true), Some(goal_max_height())))
 }
 
+/// The fewest and the most lines of the first subgoal that the goal beside its cell keeps when the
+/// gap it is in is too short for all of it: it shrinks, scrolling inside, to what the gap holds,
+/// if that is at least its heading, controls and this much of the first subgoal
+pub const SUBGOAL_MIN_LINES: usize = 5;
+pub const SUBGOAL_MAX_LINES: usize = 10;
+
+/// How many lines of the first subgoal the goal keeps at its least: those it has, between
+/// [`SUBGOAL_MIN_LINES`] and [`SUBGOAL_MAX_LINES`]
+pub fn kept_lines(lines: usize) -> usize {
+    lines.clamp(SUBGOAL_MIN_LINES, SUBGOAL_MAX_LINES)
+}
+
+/// The goal's own heading and controls, without the goals under them, for the panel's least height,
+/// and the height of the first subgoal's kept lines
+fn goal_beside_probe<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols, width: f32) -> Option<(Element<'a, Message>, f32)> {
+    if ws.output.is_none() && !fill_here(ws) {
+        return None;
+    }
+    let g = super::goals::Goals::parse(&ws.goals.messages);
+    let lines = g.subgoals.first().map_or(0, |sg| {
+        let text = |m: &Value| m["text"].as_str().or(m["raw"].as_str()).map_or(1, |t| t.lines().count().max(1));
+        1 + sg.case.iter().map(text).sum::<usize>() + sg.params.iter().map(text).sum::<usize>() + sg.prems.iter().map(text).sum::<usize>() + sg.concl.iter().map(text).sum::<usize>()
+    });
+    let sp = spacing();
+    let kept = kept_lines(lines) as f32 * code_line_height() + 2.0 * sp.space_xxs as f32;
+    let probe = goal_panel(super::insert::insert_bar(ws, table), state_body_of(ws, table, &on_page(), true, true), None);
+    Some((widget::container(probe).width(Length::Fixed(width)).into(), kept))
+}
+
 /// The share of the page a goal beside its cell may fill, and the least it may be
 const GOAL_MAX_SHARE: f32 = 0.75;
 const GOAL_MIN_MAX_HEIGHT: f32 = 240.0;
@@ -3766,6 +3802,12 @@ fn goal_view_menu<'a>(ws: &Workspace) -> Element<'a, Message> {
 /// The proof state: as parts (the chained facts, then each subgoal as fix, assume and show,
 /// with what the command changed), or as Isabelle prints it; then any other output
 fn state_body<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols, on: &Beneath, scrolls: bool) -> Element<'a, Message> {
+    state_body_of(ws, table, on, scrolls, false)
+}
+
+/// [`state_body`], or with `head_only` just the heading and its controls: the part of the panel
+/// that does not scroll, to measure it
+fn state_body_of<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols, on: &Beneath, scrolls: bool, head_only: bool) -> Element<'a, Message> {
     let sp = spacing();
     // While Isabelle has yet to check what changed at the caret, output about another command
     // (the one that was there before the edit) is not shown as if it were this one's
@@ -3859,6 +3901,9 @@ fn state_body<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols, on: &Ben
     let controls: Element<'a, Message> = widget::column::with_capacity(2).spacing(sp.space_xxs).push(line).push_maybe(notes).into();
     #[cfg(test)]
     let controls = widget::container(controls).id(test_panel_id("heading"));
+    if head_only {
+        return controls.into();
+    }
     // On a proof tool typed in the text (sledgehammer, nitpick, …): what it is doing and what it
     // found, as they come, above the goal it works on, with its settings
     let tool = ws.output.as_ref().and_then(|o| o["command"]["name"].as_str()).and_then(|n| ws.caps.typed_tool(n));
