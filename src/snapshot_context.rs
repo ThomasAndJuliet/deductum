@@ -149,6 +149,19 @@ fn a_right_press_on_a_cell_opens_its_menu_under_the_pointer() {
     }
 }
 
+/// A menu's rows as the design has them: Windows has no Ask an agent row, nor a separator left
+/// at the end by its going
+fn designed<'a>(rows: &[&'a str]) -> Vec<&'a str> {
+    let mut rows = rows.to_vec();
+    if cfg!(windows) {
+        rows.retain(|r| *r != "Ask an agent about it\u{2026}");
+        if rows.last() == Some(&"\u{2014}") {
+            rows.pop();
+        }
+    }
+    rows
+}
+
 #[test]
 fn the_cell_menu_is_the_designs_in_its_order_and_each_item_sends_what_it_should() {
     let app = page_app();
@@ -157,10 +170,10 @@ fn the_cell_menu_is_the_designs_in_its_order_and_each_item_sends_what_it_should(
     let rows = context_menu::cell_rows(ws(&app), &*table, i);
     assert_eq!(
         rows_of(&rows),
-        [
+        designed(&[
             "Edit", "Show its goals", "Open in its own window", "\u{2014}", "Run sledgehammer", "Proof tools \u{25b8}", "Ask an agent about it\u{2026}", "\u{2014}", "Copy", "Copy as Markdown", "\u{2014}",
             "Insert text above", "Insert lemma below", "Move up", "Move down", "\u{2014}", "!Delete",
-        ]
+        ])
     );
     let msg = |label: &str| match find(&rows, label) {
         Some(Row::Item { message, .. } | Row::Danger { message, .. }) => message.clone(),
@@ -373,7 +386,7 @@ fn the_selection_menu_is_the_designs_and_each_item_sends_what_it_should() {
     let rows = context_menu::editor_rows(ws(&app), EditorTarget::Block);
     assert_eq!(
         rows_of(&rows),
-        ["Copy", "Copy as Markdown", "Cut", "Paste", "\u{2014}", "Go to definition", "Find uses", "Search theorems for it\u{2026}", "\u{2014}", "Ask an agent about it\u{2026}"]
+        designed(&["Copy", "Copy as Markdown", "Cut", "Paste", "\u{2014}", "Go to definition", "Find uses", "Search theorems for it\u{2026}", "\u{2014}", "Ask an agent about it\u{2026}"])
     );
     let msg = |label: &str| match find(&rows, label) {
         Some(Row::Item { message, .. }) => message.clone(),
