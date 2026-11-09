@@ -1734,10 +1734,15 @@ mod agent {
         assert_eq!((app.shell.agent.rights, app.shell.agent.tool), (Rights::Theory, Tool::Claude), "This theory, Claude");
         // the default is Settings > Agents'
         let _ = cosmic::Application::update(&mut app, Message::Shell(Msg::AgentOpen(false)));
+        // (a changed setting is published, which takes the turn; the drawings below take theirs)
+        let turn = super::super::snapshot::ui_turn();
         let _ = cosmic::Application::update(&mut app, Message::Shell(Msg::Setting(super::super::settings::Change::DefaultRights(Rights::Folder))));
+        drop(turn);
         let _ = cosmic::Application::update(&mut app, Message::Shell(Msg::AgentOpen(true)));
         assert_eq!(app.shell.agent.rights, Rights::Folder);
+        let turn = super::super::snapshot::ui_turn();
         let _ = cosmic::Application::update(&mut app, Message::Shell(Msg::Setting(super::super::settings::Change::DefaultRights(Rights::Theory))));
+        drop(turn);
         // what it says it is attached to
         let c = ag::context(&app).unwrap();
         assert_eq!(c.theory_name(), Some("Demo.thy"));
@@ -2008,6 +2013,8 @@ fn with_no_session_the_header_has_no_chip_pause_or_stop() {
 
 #[test]
 fn the_sidebar_starts_closed_at_launch() {
+    // (applying settings publishes them, and the zoom and the goal's place)
+    let _turn = ui_turn();
     let mut app = start_app();
     let mut settings = super::settings::Settings::default();
     settings.layout.show_left = true;

@@ -608,6 +608,8 @@ static CURRENT: LazyLock<RwLock<Settings>> = LazyLock::new(|| RwLock::new(Settin
 
 /// Make these the settings that code away from the app reads
 pub fn publish(settings: &Settings) {
+    #[cfg(test)]
+    super::snapshot::assert_turn_held("publishing the settings");
     if let Ok(mut current) = CURRENT.write() {
         *current = settings.clone();
     }
