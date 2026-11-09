@@ -30,6 +30,8 @@
 //! The goal's room and the single column (the goal grows to the cell's width, the Source view's code is a
 //! cell wide, and a cell under the goal is as wide as the text) moved all six frames again: the Neo
 //! set was made again for them, from that commit; only the editors' places and widths changed.
+//! Goal width (63 characters) moved the source frames' page again: the Neo set was made again for
+//! those two; only their place changed.
 
 use std::collections::HashMap;
 use std::path::Path;
