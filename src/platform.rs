@@ -93,7 +93,8 @@ pub fn prepare_bundle_environment() {
     }
 }
 
-#[cfg(test)]
+// The bundle path is built only on macOS; the tests use Unix paths and `:`, so they run on Unix
+#[cfg(all(test, unix))]
 mod bundle_tests {
     use super::*;
     use std::ffi::OsString;
