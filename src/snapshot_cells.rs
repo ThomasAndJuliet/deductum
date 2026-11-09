@@ -2581,6 +2581,9 @@ fn with_none_left(mut app: App) -> App {
 /// The window that gives the goal beside its cell `panel` px (the page: the cell, the gap, the
 /// margins, with no sidebar)
 fn window_for_panel(panel: f32) -> f32 {
+    // (on the UI's turn: the width depends on the zoom and the code size, which another test may
+    // have changed for its own turn)
+    let _turn = super::snapshot::ui_turn();
     let card = super::view::page_layout(5000.0, 80, Some(960.0), true).cell;
     // (up to 360 px the prose gives way to the goal, down to the cell; past that the goal has only
     // the room the prose column leaves at its 48 em)
