@@ -290,6 +290,8 @@ jobs:
           set -eu
           zips=(dist/macos/*.zip)
           [ "${#zips[@]}" -eq 1 ] || { echo "Expected exactly one macOS package"; exit 1; }
+          # The publisher refuses a public package naming household systems: find that here
+          python3 -c 'import sys; sys.path.insert(0, "scripts"); import release_scan; found = release_scan.scan_zip(sys.argv[1]); assert not found, found' "${zips[0]}"
           extracted="$(mktemp -d "$RUNNER_TEMP/macos-package.XXXXXX")"
           ditto -x -k "${zips[0]}" "$extracted"
           package="$(echo "$extracted"/deductum-*-macos-universal)"
