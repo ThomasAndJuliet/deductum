@@ -306,7 +306,8 @@ async fn install(target: &Target) -> Result<(), String> {
         return Err(format!("installing the host failed: {}", String::from_utf8_lossy(&out.stderr)));
     }
     // The deductum MCP server for Claude and Codex there, where it is missing. Agents that the app
-    // starts on that machine find the proof tools; a failure here does not stop the host's use
+    // starts on that machine find the proof tools (the result, per tool: added, updated, present, skipped,
+    // unreadable, or failed, is only logged); a failure here does not stop the host's use
     #[cfg(not(windows))]
     {
         let script = register_mcp_script(&root, &env);
