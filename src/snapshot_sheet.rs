@@ -149,7 +149,7 @@ fn goal_layout_sheet_frames() {
         frames.push((format!("single-965-{view}"), 965.0, false, mode, Case::Long));
         frames.push((format!("single-off-1344-open-{view}"), 1344.0, true, mode, Case::Long));
     }
-    frames.push(("single-none-1920-literate".into(), 1920.0, false, Mode::Literate, Case::None));
+    frames.push(("single-off-none-1920-literate".into(), 1920.0, false, Mode::Literate, Case::None));
     for light in [true, false] {
         for (name, width, sidebar, mode, case) in &frames {
             super::view::set_goal_beside(!name.starts_with("single-off"));

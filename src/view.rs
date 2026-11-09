@@ -1119,8 +1119,10 @@ pub struct PageLayout {
     pub gutter: f32,
 }
 
-/// The goal beside its cell at its widest and its narrowest, in px at zoom 1
-pub const GOAL_WIDEST: f32 = 720.0;
+/// The goal beside its cell at its narrowest, and as wide as it is while the prose column has its
+/// measure (it grows past that only into room the prose does not use, up to the cell's width), in
+/// px at zoom 1
+pub const GOAL_PREFERRED: f32 = 360.0;
 pub const GOAL_NARROWEST: f32 = 300.0;
 
 /// The narrowest a cell becomes to keep the goal beside it, in characters of code; a Cell width set
@@ -1134,18 +1136,19 @@ const UNMEASURED_COLUMN: f32 = 880.0;
 /// column's whole width), the prose measure `measure` px (none: as wide as the cells), with
 /// the goal allowed beside its cell or not. Sizes scale with the zoom.
 ///
-/// The goal takes the page's width left after the cell's full width, up to [`GOAL_WIDEST`]; only
-/// past that do the margins take the rest. As the page narrows, the margins come in to
-/// [`PAGE_MARGIN`]; then, with the cell at its full width, the goal narrows from [`GOAL_WIDEST`]
-/// to [`GOAL_NARROWEST`]; then the cell narrows, a character at a time, to [`CELL_NARROWEST`];
-/// then the goal goes under the cell. Under the cell (a single column), there is no goal to leave
-/// room for: the cell is as wide as the column, whatever the Cell width setting, which is only the
-/// cell's width beside the goal and its limit for sharing the room with it.
+/// The goal is [`GOAL_PREFERRED`] wide, and grows past it into the room the prose column does not
+/// use, up to the cell's own width (so it follows the Cell width setting); only past that do the
+/// margins take the rest. As the page narrows, the margins come in to [`PAGE_MARGIN`]; then the
+/// goal narrows back to [`GOAL_PREFERRED`]; the prose column gives way to it, down to the cell's
+/// width; then the goal narrows to [`GOAL_NARROWEST`]; then the cell narrows, a character at a
+/// time, to [`CELL_NARROWEST`]; then the goal goes under the cell. So the goal's growth never
+/// narrows the prose. Under the cell (a single column), there is no goal to leave room for: the
+/// cell is as wide as the column, whatever the Cell width setting, which is only the cell's width
+/// beside the goal and its limit for sharing the room with it.
 ///
 /// The prose column keeps its measure while the column, the gap and the goal all fit, and then
-/// gives way (the goal is chosen first, so it is the goal that grows into the room the prose
-/// would have), not below the cell: the goal goes past prose level with it, and it must stay in
-/// the window there too. Under the cell, the column keeps its measure while it fits the page
+/// gives way, not below the cell: the goal goes past prose level with it, and it must stay in the
+/// window there too. Under the cell, the column keeps its measure while it fits the page
 pub fn page_layout(page: f32, cell_setting: u16, measure: Option<f32>, goal_allowed: bool) -> PageLayout {
     let margin = z(PAGE_MARGIN);
     let fill = cell_setting == 0;
@@ -1153,13 +1156,17 @@ pub fn page_layout(page: f32, cell_setting: u16, measure: Option<f32>, goal_allo
     // (at its widest a cell never leaves the column; Fill is the column)
     let whole = if fill { measure.unwrap_or(z(UNMEASURED_COLUMN)) } else { measure.map_or(setting, |m| setting.min(m)) };
     let narrowest = whole.min(cell_card_width(f32::from(CELL_NARROWEST)));
-    let (goal_widest, goal_narrowest) = (z(GOAL_WIDEST), z(GOAL_NARROWEST));
+    let (goal_preferred, goal_narrowest) = (z(GOAL_PREFERRED), z(GOAL_NARROWEST));
     let room = page - 2.0 * margin - GOAL_GAP;
     // (the margin is in zoomed px and the theme's spacing is not, so the least can pass the most)
     let gutter_for = |taken: f32| ((page - taken) / 2.0).clamp(margin, margin.max(spacing().space_l as f32));
     if goal_allowed && room >= narrowest + goal_narrowest {
         let (goal, cell) = if room >= whole + goal_narrowest {
-            (goal_widest.min(room - whole), whole)
+            // (at least its preferred width, which the prose gives way to; wider only with room left
+            // after the prose at its measure, and never wider than the cell)
+            let base = goal_preferred.min(room - whole);
+            let full = measure.map_or(whole, |m| m.max(whole));
+            ((room - full).clamp(base, whole.max(base)), whole)
         } else {
             let left = room - goal_narrowest;
             (goal_narrowest, if fill { left } else { cell_card_width(cell_characters(left)).max(narrowest) })

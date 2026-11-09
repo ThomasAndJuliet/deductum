@@ -2389,18 +2389,18 @@ fn the_goal_is_beside_the_selected_block_with_none_open() {
         t.cursor = t.blocks[i].start + 2;
     }
     let mut h = Harness::new(Size::new(1320.0, 800.0));
-    let has_goal_beside = |png: Vec<u8>| {
+    let has_goal_beside = |png: Vec<u8>, from: u32| {
         let img = image::RgbaImage::from_raw(1320, 800, png).unwrap();
         let bg = *img.get_pixel(12, 400);
         // (right of the cells, which end well before it, and under the prose above them: the panel is
         // just past the cell, no longer at the prose column's edge)
-        (1000..1290).any(|x| (250..780).step_by(4).any(|y| img.get_pixel(x, y) != &bg))
+        (from..1290).any(|x| (250..780).step_by(4).any(|y| img.get_pixel(x, y) != &bg))
     };
-    assert!(has_goal_beside(h.draw(&app, "selected-beside")), "the goal beside the selected proof");
+    assert!(has_goal_beside(h.draw(&app, "selected-beside"), 1000), "the goal beside the selected proof");
     let _ = cosmic::Application::update(&mut app, super::Message::ToggleGoalBeside);
-    let off = has_goal_beside(h.draw(&app, "selected-off"));
+    let off = has_goal_beside(h.draw(&app, "selected-off"), 1150);
     let _ = cosmic::Application::update(&mut app, super::Message::ToggleGoalBeside);
-    let again = has_goal_beside(h.draw(&app, "selected-again"));
+    let again = has_goal_beside(h.draw(&app, "selected-again"), 1000);
     assert!(!off, "nothing beside when turned off");
     assert!(again, "beside again when turned back on");
 }

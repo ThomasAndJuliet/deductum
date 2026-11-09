@@ -1100,13 +1100,14 @@ fn characters(card: f32) -> f32 {
     super::view::cell_characters(card)
 }
 
-/// As the page narrows: the goal from 720 to 300 px with the cell at 80 characters, then the cell
-/// to 60 characters with the goal at 300 px, then the goal under the cell, where the cell is as
-/// wide as the column (the characters in those rows are the Cell width's, not drawn). The goal takes what is left after the cell (and so the prose column gives way to it, down
-/// to the cell's width, before the goal stops growing); the column has its 48 em (960 px) only
-/// where it, the gap and a goal at its widest fit; under the cell it keeps 48 em while it fits the
-/// page. The thresholds come from an 80 character card of 703.2 px, a 60 character one of 535.2 px,
-/// margins of 24 px and the gap of 10 px
+/// As the page narrows: the goal from the cell's width (703.2 px at 80 characters) to its
+/// preferred 360 px while the prose column keeps its 48 em, then, as before, the prose gives way to
+/// the goal at 360 px down to the cell, the goal narrows to 300 px with the cell at 80 characters,
+/// then the cell to 60 characters with the goal at 300 px, then the goal under the cell, where the
+/// cell is as wide as the column (the characters in those rows are the Cell width's, not drawn).
+/// The goal's growth takes room only from what the prose column leaves: the prose is at its 48 em
+/// wherever the goal is wider than 360 px. The thresholds come from an 80 character card of
+/// 703.2 px, a 60 character one of 535.2 px, margins of 24 px and the gap of 10 px
 #[test]
 fn the_page_at_a_table_of_widths() {
     let _turn = super::snapshot::ui_turn();
@@ -1114,14 +1115,17 @@ fn the_page_at_a_table_of_widths() {
     let near = |a: f32, b: f32| (a - b).abs() < 0.11;
     // page, the goal (none: under), the cell in characters, the column
     let table: &[(f32, Option<f32>, f32, f32)] = &[
-        (2600.0, Some(720.0), 80.0, 960.0),
-        (1738.0, Some(720.0), 80.0, 960.0),  // the column, the gap and the widest goal just fit
-        (1737.0, Some(720.0), 80.0, 959.0),  // and the column begins to give way
-        (1600.0, Some(720.0), 80.0, 822.0),
-        (1481.2, Some(720.0), 80.0, 703.2),  // the goal still at its widest, the column down to the cell
-        (1481.0, Some(719.8), 80.0, 703.2),  // and it begins to narrow
-        (1400.0, Some(638.8), 80.0, 703.2),
-        (1200.0, Some(438.8), 80.0, 703.2),
+        (2600.0, Some(703.2), 80.0, 960.0),
+        (1721.2, Some(703.2), 80.0, 960.0),  // the goal as wide as the cell
+        (1721.0, Some(703.0), 80.0, 960.0),  // and it begins to narrow, the prose at its measure
+        (1700.0, Some(682.0), 80.0, 960.0),
+        (1500.0, Some(482.0), 80.0, 960.0),
+        (1400.0, Some(382.0), 80.0, 960.0),
+        (1378.0, Some(360.0), 80.0, 960.0),  // the column, the gap and the goal at 360 px just fit
+        (1377.0, Some(360.0), 80.0, 959.0),  // and the column begins to give way
+        (1200.0, Some(360.0), 80.0, 782.0),
+        (1121.3, Some(360.0), 80.0, 703.3),  // the goal still at 360
+        (1121.0, Some(359.8), 80.0, 703.2),  // and it begins to narrow
         (1100.0, Some(338.8), 80.0, 703.2),
         (1061.3, Some(300.1), 80.0, 703.2),
         (1061.2, Some(300.0), 80.0, 703.2),  // the goal at its narrowest, the cell still 80
@@ -1129,7 +1133,7 @@ fn the_page_at_a_table_of_widths() {
         (1000.0, Some(300.0), 72.0, 642.0),
         (950.0, Some(300.0), 66.0, 592.0),
         (893.3, Some(300.0), 60.0, 535.3),   // the narrowest beside
-        (893.0, None, 80.0, 845.0),          // under, the cell back at 80, the column filling the page
+        (893.0, None, 80.0, 845.0),          // under, the cell the column, filling the page
         (800.0, None, 80.0, 752.0),
         (760.0, None, 80.0, 712.0),
         (700.0, None, 73.0, 652.0),          // under, the cell narrows with the column
@@ -1171,7 +1175,7 @@ fn the_page_layout_under_the_settings_and_the_zoom() {
     let near = |a: f32, b: f32| (a - b).abs() < 0.11;
     // 100: full width while it fits
     let l = super::view::page_layout(1700.0, 100, Some(960.0), true);
-    assert_eq!((characters(l.cell), l.goal), (100.0, Some(720.0)));
+    assert!(characters(l.cell) == 100.0 && near(l.goal.unwrap(), 682.0), "{l:?}");
     // and narrowing to 60 like 80 does
     let l = super::view::page_layout(900.0, 100, Some(960.0), true);
     assert_eq!((characters(l.cell), l.goal), (60.0, Some(300.0)));
@@ -1214,10 +1218,10 @@ fn the_page_layout_under_the_settings_and_the_zoom() {
     let l = super::view::page_layout(1700.0, 80, Some(1440.0), true);
     assert!(near(l.cell, card(80.0)), "{l:?}");
     assert_eq!(characters(l.cell), 80.0);
-    assert!(near(l.goal.unwrap(), 1700.0 - 72.0 - 10.0 - card(80.0)), "the goal takes what is left after the cell: {l:?}");
-    // and at its widest, 720 px at zoom 1, is 1,080
+    assert!(near(l.goal.unwrap(), 540.0), "the goal's preferred width, 360 px at zoom 1: {l:?}");
+    // and at its widest it is as wide as the cell
     let l = super::view::page_layout(3000.0, 80, Some(1440.0), true);
-    assert!(near(l.goal.unwrap(), 1080.0), "{l:?}");
+    assert!(near(l.goal.unwrap(), card(80.0)), "{l:?}");
     let l = super::view::page_layout(36.0 * 2.0 + 10.0 + 450.0 + card(60.0), 80, Some(1440.0), true);
     assert_eq!((characters(l.cell), l.goal), (60.0, Some(450.0)));
     let l = super::view::page_layout(36.0 * 2.0 + 10.0 + 450.0 + card(60.0) - 1.0, 80, Some(1440.0), true);
@@ -1231,10 +1235,10 @@ fn the_page_layout_under_the_settings_and_the_zoom() {
 fn the_page_on_screen_with_the_sidebar_open_and_closed() {
     // window, sidebar, the goal, characters
     let table: &[(f32, bool, Option<f32>, f32)] = &[
-        (2600.0, true, Some(720.0), 80.0),
-        (1800.0, true, Some(720.0), 80.0),  // the goal at its widest, from a page 1,481 px wide
-        (1700.0, true, Some(632.8), 80.0),
-        (1500.0, true, Some(432.8), 80.0),
+        (2600.0, true, Some(703.2), 80.0),
+        (1800.0, true, Some(476.1), 80.0),  // the prose at its measure, the goal wider than 360
+        (1700.0, true, Some(376.1), 80.0),
+        (1500.0, true, Some(360.0), 80.0),
         (1400.0, true, Some(332.8), 80.0),
         (1344.0, true, Some(300.0), 77.0),
         (1280.0, true, Some(300.0), 69.0),
@@ -1242,10 +1246,10 @@ fn the_page_on_screen_with_the_sidebar_open_and_closed() {
         (1200.0, true, Some(300.0), 60.0),
         (1190.0, true, None, 80.0),
         (1100.0, true, None, 80.0),
-        (2600.0, false, Some(720.0), 80.0),
-        (1700.0, false, Some(720.0), 80.0),
-        (1500.0, false, Some(720.0), 80.0),
-        (1400.0, false, Some(638.8), 80.0),
+        (2600.0, false, Some(703.2), 80.0),
+        (1700.0, false, Some(682.0), 80.0),
+        (1500.0, false, Some(482.0), 80.0),
+        (1400.0, false, Some(382.0), 80.0),
         (1100.0, false, Some(338.8), 80.0),
         (1000.0, false, Some(300.0), 72.0),
         (900.0, false, Some(300.0), 60.0),
@@ -1844,7 +1848,7 @@ fn cells_share_the_cell_width_whatever_their_lines_and_fill_means_the_column() {
     let eighty = (80.5 * 8.4) + 2.0 * 10.5 + CHROME;
     let (widths, _) = cell_widths(&widths_app(30), &settings, 1700.0);
     assert!(widths.iter().all(|w| near(*w, eighty)), "every cell is 80 characters wide whatever its lines: {widths:?} (wanted {eighty})");
-    // (with the goal at its widest, 720 px, the column keeps its 48 em from a window 2,100 px wide)
+    // (the column keeps its 48 em where the goal is wider than 360 px: from a window 1,400 px wide)
     let (_, column) = cell_widths(&widths_app(30), &settings, 2100.0);
     assert!(near(column, 960.0), "the column ({column}) keeps its 48 em, wider than the cells, with room for the goal");
 
