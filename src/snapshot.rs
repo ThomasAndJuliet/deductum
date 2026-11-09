@@ -2016,6 +2016,97 @@ fn cursor_navigation_keeps_x_through_wrapped_prose_and_paragraphs() {
     assert!(reached, "one Down per visual row must reach the next proof");
 }
 
+const WRAPPED_CODE_CELL: &str = "theory Cursor imports Main begin\n\nlemma cond_srea_apply:\n  \"(P ◃ c ▹R Q) (a, b) = (if c (stᵥ a) then P (a, b) else Q (a, b))\"\n  by pred_auto\n\nlemma RHS_cond_srea [closure]:\n  assumes \"P is RHS\"\n  shows \"True\"\n  by simp\n\nend\n";
+
+/// Caret (line, column) or the cell it is in, after each of `keys`, starting at `from`.
+fn wrapped_code_walk(vim: bool, width: f32, from: (usize, usize), keys: &[cosmic::iced::keyboard::key::Named]) -> Vec<(String, usize, usize)> {
+    use cosmic::widget::text_editor::Position;
+    let mut app = cursor_navigation_app_with(WRAPPED_CODE_CELL);
+    if vim { app.vim_enabled = true; app.vim.mode = super::vim::Mode::Normal; }
+    let i = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().blocks.iter().position(|b| b.name == "lemma").unwrap();
+    let _ = cosmic::Application::update(&mut app, super::Message::EditBlock(i));
+    let mut h = Harness::new(Size::new(width, 900.0));
+    h.focus(&app, super::view::block_editor_id());
+    super::editor::place(&mut app.workspace.as_mut().unwrap().theory.as_mut().unwrap().block_editor.as_mut().unwrap().content, Position { line: from.0, column: from.1 });
+    let mut out = vec![];
+    for key in keys {
+        cursor_navigation_key(&mut h, &mut app, key.clone());
+        let be = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().block_editor.as_ref().unwrap();
+        let p = be.content.cursor().position;
+        out.push((be.shown_text.lines().next().unwrap_or("").to_string(), p.line, p.column));
+    }
+    out
+}
+
+#[test]
+fn cursor_navigation_down_walks_through_a_wrapped_line_of_code() {
+    use cosmic::iced::keyboard::key::Named::ArrowDown as D;
+    // From the first line, every Down must advance: into the wrapped line, to its continuation row,
+    // to the last line, and then into the next cell.
+    let walk = wrapped_code_walk(false, 560.0, (0, 5), &[D, D, D, D, D]);
+    assert_eq!((walk[0].1, walk[0].2 > 0), (1, true), "line before into the wrapped line: {walk:?}");
+    assert_eq!(walk[1].1, 1, "to the continuation row (same line, later column): {walk:?}");
+    assert!(walk[1].2 > walk[0].2 + 10, "the continuation row is further along the line: {walk:?}");
+    assert_eq!(walk[2].1, 2, "to by pred_auto: {walk:?}");
+    assert!(walk[3].0.starts_with("lemma RHS_cond_srea"), "out of the cell: {walk:?}");
+}
+
+#[test]
+fn cursor_navigation_up_walks_back_through_a_wrapped_line_of_code() {
+    use cosmic::iced::keyboard::key::Named::ArrowUp as U;
+    let walk = wrapped_code_walk(false, 560.0, (2, 6), &[U, U, U, U]);
+    assert_eq!(walk[0].1, 1, "from by pred_auto to the continuation row: {walk:?}");
+    assert!(walk[0].2 > 40, "on the continuation row: {walk:?}");
+    assert_eq!(walk[1].1, 1, "to the first row of the wrapped line: {walk:?}");
+    assert!(walk[1].2 < walk[0].2 - 10, "{walk:?}");
+    assert_eq!(walk[2].1, 0, "to the line before: {walk:?}");
+}
+
+#[test]
+fn cursor_navigation_down_walks_through_a_wrapped_line_of_code_in_vim_normal_mode() {
+    use cosmic::iced::keyboard::key::Named::ArrowDown as D;
+    // From the first line, every Down must advance: into the wrapped line, to its continuation row,
+    // to the last line, and then into the next cell.
+    let walk = wrapped_code_walk(true, 560.0, (0, 5), &[D, D, D, D, D]);
+    assert_eq!((walk[0].1, walk[0].2 > 0), (1, true), "line before into the wrapped line: {walk:?}");
+    assert_eq!(walk[1].1, 1, "to the continuation row (same line, later column): {walk:?}");
+    assert!(walk[1].2 > walk[0].2 + 10, "the continuation row is further along the line: {walk:?}");
+    assert_eq!(walk[2].1, 2, "to by pred_auto: {walk:?}");
+    assert!(walk[3].0.starts_with("lemma RHS_cond_srea"), "out of the cell: {walk:?}");
+}
+
+#[test]
+fn cursor_navigation_up_walks_back_through_a_wrapped_line_of_code_in_vim_normal_mode() {
+    use cosmic::iced::keyboard::key::Named::ArrowUp as U;
+    let walk = wrapped_code_walk(true, 560.0, (2, 6), &[U, U, U, U]);
+    assert_eq!(walk[0].1, 1, "from by pred_auto to the continuation row: {walk:?}");
+    assert!(walk[0].2 > 40, "on the continuation row: {walk:?}");
+    assert_eq!(walk[1].1, 1, "to the first row of the wrapped line: {walk:?}");
+    assert!(walk[1].2 < walk[0].2 - 10, "{walk:?}");
+    assert_eq!(walk[2].1, 0, "to the line before: {walk:?}");
+}
+
+#[test]
+fn cursor_navigation_vim_down_leaves_a_wrapped_row_boundary_of_code() {
+    use cosmic::iced::keyboard::key::Named::ArrowDown as D;
+    // From the first row's start, Down reaches the continuation row's first glyph (a row boundary
+    // position), and the next Down must leave it for `by pred_auto`, not stay.
+    let walk = wrapped_code_walk(true, 560.0, (1, 2), &[D, D, D]);
+    assert_eq!(walk[0].1, 1, "onto the continuation row: {walk:?}");
+    assert_eq!(walk[1].1, 2, "from the continuation row's first glyph to by pred_auto: {walk:?}");
+    assert!(walk[2].0.starts_with("lemma RHS_cond_srea"), "out of the cell: {walk:?}");
+}
+
+#[test]
+fn cursor_navigation_vim_down_leaves_a_cell_from_the_last_character_of_code() {
+    use cosmic::iced::keyboard::key::Named::ArrowDown as D;
+    // From the wrapped line's end the remembered x lies beyond `by pred_auto`: the caret rests on
+    // its last character, and the next Down leaves the cell.
+    let walk = wrapped_code_walk(true, 560.0, (1, 40), &[D, D, D]);
+    assert_eq!(walk[1].1, 2, "to by pred_auto: {walk:?}");
+    assert!(walk[2].0.starts_with("lemma RHS_cond_srea"), "out of the cell from its last character: {walk:?}");
+}
+
 fn cursor_navigation_key(h: &mut Harness, app: &mut App, key: cosmic::iced::keyboard::key::Named) {
     for message in h.key(app, cosmic::iced::keyboard::Key::Named(key), None) {
         let task = cosmic::Application::update(app, message);
@@ -3496,3 +3587,4 @@ fn cancelled_definition_read_releases_only_its_own_loading_state() {
         assert!(app.back.is_empty());
     }
 }
+

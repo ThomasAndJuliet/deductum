@@ -776,17 +776,36 @@ impl App {
                 let maybe_edge = (m == M::Down && last_line) || (m == M::Up && before.line == 0);
                 if !maybe_edge {
                     tasks.push(self.update(act(A::Move(m))));
+                    if self.nav_waiting.is_some() {
+                        let rest: Vec<_> = remaining.collect();
+                        if !rest.is_empty() { self.nav_queue.push_back(Message::NavOps(self.nav_target.unwrap_or(EditorTarget::Block), rest)); }
+                        return Task::batch(tasks);
+                    }
+                    // Off the first and last lines a vertical move always goes somewhere. A caret
+                    // that stays is at a wrapped row's first glyph, which Vim's block cursor (put
+                    // back with `move_to`) records as the end of the row above: step into the
+                    // row and move again.
+                    let stuck = in_block
+                        && self.workspace.as_ref().and_then(|w| w.theory.as_ref()).and_then(|t| t.block_editor.as_ref()).is_some_and(|be| {
+                            be.content.cursor().position == before && be.content.line(before.line).is_some_and(|line| before.column < line.text.len())
+                        });
+                    if stuck {
+                        tasks.push(self.update(Message::BlockAction(A::Move(M::Right))));
+                        tasks.push(self.update(Message::BlockAction(A::Move(m))));
+                    }
                     continue;
                 }
                 // On the first (last) row as laid out, the block is left at once: the editor's
                 // remembered column would otherwise move the caret sideways there first, which
                 // looks like no edge and takes another press
+                // (Vim's normal mode rests on a line's last character, not past it)
+                let block_rests = self.vim_enabled && self.vim.mode == vim::Mode::Normal;
                 let on_edge_row = self
                     .workspace
                     .as_mut()
                     .and_then(|w| w.theory.as_mut())
                     .and_then(|t| t.block_editor.as_mut())
-                    .is_some_and(|be| editor::on_edge_row(&mut be.content, m == M::Down));
+                    .is_some_and(|be| editor::on_edge_row(&mut be.content, m == M::Down, block_rests));
                 if !on_edge_row {
                     tasks.push(self.update(Message::BlockAction(A::Move(m))));
                     if self.nav_waiting.is_some() {

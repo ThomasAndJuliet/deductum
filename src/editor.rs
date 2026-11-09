@@ -887,7 +887,7 @@ enum EditKind {
 /// Whether the caret is on the editor's first row as laid out (`last`: its last row): what a
 /// click at that row's far end (start) lands on says where the row ends (starts). False when
 /// the editor has not been laid out
-pub fn on_edge_row(content: &mut text_editor::Content, last: bool) -> bool {
+pub fn on_edge_row(content: &mut text_editor::Content, last: bool, rests_on_last_char: bool) -> bool {
     let saved = content.cursor();
     let pos = saved.position;
     let lines = content.line_count();
@@ -902,7 +902,13 @@ pub fn on_edge_row(content: &mut text_editor::Content, last: bool) -> bool {
     if edge.line == 0 && edge.column == 0 && !(lines == 1 && pos.column == 0) {
         return false;
     }
-    if last { pos.line == edge.line && pos.column >= edge.column } else { pos.line == 0 && edge.line == 0 && pos.column <= edge.column }
+    // (Vim's normal mode cannot rest past the end: the last character is the end)
+    let rest = if last && rests_on_last_char && pos.line == edge.line {
+        content.line(pos.line).and_then(|l| l.text[pos.column.min(l.text.len())..].chars().next()).map_or(0, char::len_utf8)
+    } else {
+        0
+    };
+    if last { pos.line == edge.line && pos.column + rest >= edge.column } else { pos.line == 0 && edge.line == 0 && pos.column <= edge.column }
 }
 
 /// Where the selection is (code point offsets in the editor's text, start before end): from the
