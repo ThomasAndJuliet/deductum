@@ -1053,6 +1053,8 @@ fn block_actions<'a>(t: &Theory, after: Option<usize>, delete: bool, width: Opti
     for template in t.profile.block_templates() {
         row = row.push(tertiary(template.label, Message::InsertBlock(after, template.kind)));
     }
+    // (a cell with no text: it is in the file once something is typed in it)
+    row = row.push(tertiary("+ Cell", Message::InsertBlock(after, "cell")));
     let Some(i) = after.filter(|_| delete) else { return row.into() };
     // (a space_m of room before Delete however narrow the cell, and the rest of the cell's width)
     row.push(widget::Space::new().width(Length::Fixed(sp.space_m as f32)))
@@ -2177,7 +2179,9 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
                 .into(),
         }
     };
-    let editing = t.block_editor.as_ref().map(|b| b.start);
+    // (an empty `+ Cell` is not a block of the source: it is shown after the block it follows)
+    let pending = t.pending_cell().map(|p| p.after);
+    let editing = t.block_editor.as_ref().filter(|_| pending.is_none()).map(|b| b.start);
     let opened = editing.and_then(|start| t.blocks.iter().position(|b| b.start <= start && start <= b.end));
     let open_item = opened.filter(|_| app.popout.is_none());
     let open_top = t.block_editor.as_ref().map_or(0.0, |be| match goal_placement(true, be.content.line_count()) {
@@ -2199,7 +2203,7 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
     let last_selected = editing.is_none() && last.is_some() && t.selected == last && last.is_some_and(|i| t.blocks[i].kind != Kind::Header);
     let indices = super::viewport::Indices::default();
     let build_table = table.clone();
-    let build = move |i: usize| -> Element<'a, Message> {
+    let build_block = move |i: usize| -> Element<'a, Message> {
         let table = build_table.clone();
         if i == t.blocks.len() { return if last_selected { side(widget::Space::new().into(), false) } else { side(block_actions(t, None, false, None), false) }; }
         if i > t.blocks.len() { return widget::Space::new().height(Length::Fixed(if beside.is_some() { view_height() * 0.5 } else { 0.0 })).into(); }
@@ -2340,6 +2344,19 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
             item = item.push(widget::Space::new().height(Length::Fixed(z(BLOCK_GAP) - z(8.0))));
         }
         item.into()
+    };
+    let pending_table = table.clone();
+    let build = move |i: usize| -> Element<'a, Message> {
+        let Some(after) = pending else { return build_block(i) };
+        let slot = after.unwrap_or(t.blocks.len());
+        // (the last slot's add buttons give way to the cell; else the cell follows its block)
+        if i != slot { return build_block(i); }
+        let editor = side_at(widget::container(block_editor_in(app.workspace.as_ref(), t, false, inline, &*pending_table)).id(selected_block_id()).into(), true, 0.0);
+        let space = side(widget::Space::new().height(Length::Fixed(z(BLOCK_GAP))).into(), false);
+        match after {
+            Some(_) => widget::column::with_capacity(3).push(build_block(i)).push(editor).push(space).into(),
+            None => widget::column::with_capacity(2).push(editor).push(space).into(),
+        }
     };
     let source = t.page_rows.clone();
     let estimate = move |i: usize, width: f32| {

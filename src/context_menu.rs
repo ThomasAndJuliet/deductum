@@ -449,6 +449,7 @@ pub fn cell_rows(ws: &Workspace, table: &dyn Symbols, i: usize) -> Vec<Row> {
     rows.push(act_or("Insert text above", "", if i == 0 { Err("Text goes after the theory's header") } else { Ok(Message::InsertBlock(Some(i - 1), "text")) }));
     rows.push(item("Insert lemma below", "", Message::InsertBlock(Some(i), "lemma")));
     rows.push(item("Insert definition below", "", Message::InsertBlock(Some(i), "definition")));
+    rows.push(item("Insert cell below", "", Message::InsertBlock(Some(i), "cell")));
     let movable = |k: Kind| !matches!(k, Kind::Header | Kind::End);
     let up = i.checked_sub(1).and_then(|j| t.blocks.get(j));
     let down = t.blocks.get(i + 1);

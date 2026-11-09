@@ -2469,6 +2469,11 @@ impl App {
         let Some(machine) = self.workspace.as_ref().map(|w| w.machine.clone()) else { return Task::none() };
         let table = self.table(&machine);
         let Some(t) = self.workspace.as_mut().and_then(|w| w.theory.as_mut()) else { return Task::none() };
+        // (a cell with no text yet is not in the source: nothing to take out, and no step)
+        if t.pending_cell().is_some() {
+            t.block_editor = None;
+            return Task::none();
+        }
         let Some(be) = t.block_editor.as_ref() else { return Task::none() };
         let (start, end) = (be.start, be.end);
         let empty = be.content.text().trim().is_empty();
@@ -3299,7 +3304,7 @@ impl App {
                 if self.popout.is_some() {
                     return Task::none();
                 }
-                // (an empty block, left, goes)
+                // (an empty block, left, goes; an empty `+ Cell` was never in the source)
                 let removed = if self.open_block_empty() { self.remove_open_block(false) } else { Task::none() };
                 if let Some(t) = self.workspace.as_mut().and_then(|w| w.theory.as_mut()) {
                     t.break_step();
@@ -4062,6 +4067,15 @@ impl App {
                     },
                     |g| cosmic::Action::App(Message::HoverTick(g)),
                 );
+            }
+            Message::InsertBlock(after, "cell") => {
+                // (an empty cell, open and with no source until something is typed)
+                let Some(machine) = self.workspace.as_ref().map(|w| w.machine.clone()) else { return Task::none() };
+                let table = self.table(&machine);
+                let closed = self.update(Message::CloseBlock);
+                let Some(t) = self.workspace.as_mut().and_then(|w| w.theory.as_mut()) else { return closed };
+                t.open_pending_cell(after, &*table);
+                return Task::batch([closed, widget::text_input::focus(view::block_editor_id()), view::centre_selected()]);
             }
             Message::InsertBlock(after, kind) => {
                 let Some(machine) = self.workspace.as_ref().map(|w| w.machine.clone()) else { return Task::none() };
