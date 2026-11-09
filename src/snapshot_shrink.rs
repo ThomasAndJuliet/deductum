@@ -10,6 +10,7 @@ use cosmic::iced::{Rectangle, Size};
 
 use super::editor::Mode;
 use super::snapshot::Harness;
+use super::gap::GOAL_SIDE;
 use super::snapshot_sheet::{Case, app_for};
 
 /// A theory with the cells and paragraphs the sheet's cases use, of its own words
@@ -65,12 +66,18 @@ struct Fit {
 }
 
 fn fit(text: &str, k: usize, n: usize, draw: Option<&str>) -> Fit {
+    fit_in(&mut Harness::new(Size::new(1920.0, 900.0)), text, k, n, draw).0
+}
+
+/// [`fit`] in a harness that has drawn before (the goal's side is remembered between frames), and
+/// whether the goal was on the far side
+fn fit_in(h: &mut Harness, text: &str, k: usize, n: usize, draw: Option<&str>) -> (Fit, bool) {
     let app = app_for(text, Mode::Literate, 1920.0, false, Case::Trim(k, n), 76);
-    let mut h = Harness::new(Size::new(1920.0, 900.0));
     cosmic::theme::set_active(crate::tones::light_type_for_tests());
     super::view::set_goal_beside(true);
     let _ = h.draw(&app, "shrink-warm");
     let _ = h.draw(&app, draw.unwrap_or("shrink"));
+    let far = GOAL_SIDE.lock().unwrap().unwrap_or(false);
     let moved = super::gap::goal_moved();
     let mut all = super::snapshot_cells::Bounds(Vec::new());
     h.operate(&app, &mut all);
@@ -78,7 +85,7 @@ fn fit(text: &str, k: usize, n: usize, draw: Option<&str>) -> Fit {
     let find = |id: cosmic::widget::Id| all.0.iter().find(|(x, _)| *x == id).map(|(_, r)| *r).expect("on the page");
     let panel = find(super::view::test_panel_id("panel"));
     let (gap, normal, least, taken) = super::gap::GOAL_FIT.lock().unwrap().expect("a goal laid out");
-    Fit { gap, normal, least, taken, panel: Rectangle { x: panel.x + moved.x, y: panel.y + moved.y, ..panel }, cell: find(super::view::selected_block_id()) }
+    (Fit { gap, normal, least, taken, panel: Rectangle { x: panel.x + moved.x, y: panel.y + moved.y, ..panel }, cell: find(super::view::selected_block_id()) }, far)
 }
 
 /// The three ways a goal meets its gap, and where it goes in each
@@ -144,5 +151,57 @@ fn goal_shrink_frames() {
     labels.push_str(&format!("fits: gap {:.1} px, normal {:.1} px, least {:.1} px\n", short.gap, short.normal, short.least));
     if let Some(file) = std::env::var_os("CT_SHEET_LABELS") {
         std::fs::write(file, labels).expect("the labels");
+    }
+}
+
+/// The goal on the far side stays there while the gap rises through the margin band, and returns
+/// at its least plus the margin; next to the cell it stays while the gap falls through the band;
+/// whatever the scroll
+#[test]
+fn the_side_a_goal_is_on_is_kept_through_the_margin_band() {
+    let margin = super::view::GOAL_SIDE_MARGIN_LINES as f32 * super::view::code_line_height();
+    // the first k (lines out of the cell) with a gap under the least
+    let b = (0..16).find(|&k| { let f = fit(THEORY, k, 3, None); f.gap < f.least }).expect("a far gap");
+    // falling: next to the cell until the gap is under the least
+    let mut h = Harness::new(Size::new(1920.0, 900.0));
+    for k in 0..b {
+        let (f, far) = fit_in(&mut h, THEORY, k, 3, None);
+        assert!(!far && f.gap >= f.least, "k {k}, falling: next to the cell with the gap {} against {}", f.gap, f.least);
+    }
+    let (f, far) = fit_in(&mut h, THEORY, b, 3, None);
+    assert!(far && f.gap < f.least, "just below the least: the far side ({f:?})");
+    // rising again: the far side through the band, back at the least plus the margin
+    let mut back = None;
+    for k in (0..b).rev() {
+        let (f, far) = fit_in(&mut h, THEORY, k, 3, None);
+        if f.gap < f.least + margin - 0.01 {
+            assert!(far, "k {k}, rising: the gap {} is inside the band (least {} + {margin}) and the goal stays on the far side", f.gap, f.least);
+        } else {
+            assert!(!far, "k {k}, rising: the gap {} holds the least and the margin: back next to the cell", f.gap);
+            back = Some(k);
+            break;
+        }
+    }
+    assert!(back.is_some(), "the gap rose through the band");
+    drop(h);
+    // a cell opened in the band is decided from the least alone: next to the cell
+    let (f, far) = fit_in(&mut Harness::new(Size::new(1920.0, 900.0)), THEORY, b - 1, 3, None);
+    assert!(!far && f.gap >= f.least && f.gap < f.least + margin, "a fresh cell in the band is next to it ({f:?})");
+}
+
+/// Scrolling the page changes nothing about the goal's height or side
+#[test]
+fn scrolling_does_not_change_the_goals_height_or_side() {
+    let app = app_for(THEORY, Mode::Literate, 1920.0, false, Case::Trim(8, 3), 76);
+    let mut h = Harness::new(Size::new(1920.0, 500.0));
+    super::view::set_goal_beside(true);
+    let _ = h.draw(&app, "scroll-warm");
+    let _ = h.draw(&app, "scroll-0");
+    let before = (*super::gap::GOAL_FIT.lock().unwrap(), *GOAL_SIDE.lock().unwrap());
+    for by in [60.0, 140.0, 40.0] {
+        h.move_to(&app, cosmic::iced::Point::new(300.0, 250.0));
+        h.events(&app, &[cosmic::iced::Event::Mouse(cosmic::iced::mouse::Event::WheelScrolled { delta: cosmic::iced::mouse::ScrollDelta::Pixels { x: 0.0, y: -by } })]);
+        let _ = h.draw(&app, "scroll-n");
+        assert_eq!((*super::gap::GOAL_FIT.lock().unwrap(), *GOAL_SIDE.lock().unwrap()), before, "scrolled by {by}");
     }
 }

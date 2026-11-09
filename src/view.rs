@@ -1120,7 +1120,7 @@ pub struct PageLayout {
 }
 
 /// The goal beside its cell at its narrowest, and as wide as it is while the prose column has its
-/// measure (it grows past that only into room the prose does not use, up to the cell's width), in
+/// measure (it grows past that only into room the prose does not use, up to the Goal width), in
 /// px at zoom 1
 pub const GOAL_PREFERRED: f32 = 360.0;
 pub const GOAL_NARROWEST: f32 = 300.0;
@@ -1137,8 +1137,8 @@ const UNMEASURED_COLUMN: f32 = 880.0;
 /// the goal allowed beside its cell or not. Sizes scale with the zoom.
 ///
 /// The goal is [`GOAL_PREFERRED`] wide, and grows past it into the room the prose column does not
-/// use, up to the cell's own width (so it follows the Cell width setting); only past that do the
-/// margins take the rest. As the page narrows, the margins come in to [`PAGE_MARGIN`]; then the
+/// use, up to the Goal width setting (63 characters, 560 px, by default; a setting under 360 px
+/// wins, none is under [`GOAL_NARROWEST`]); only past that do the margins take the rest. As the page narrows, the margins come in to [`PAGE_MARGIN`]; then the
 /// goal narrows back to [`GOAL_PREFERRED`]; the prose column gives way to it, down to the cell's
 /// width; then the goal narrows to [`GOAL_NARROWEST`]; then the cell narrows, a character at a
 /// time, to [`CELL_NARROWEST`]; then the goal goes under the cell. So the goal's growth never
@@ -1150,6 +1150,11 @@ const UNMEASURED_COLUMN: f32 = 880.0;
 /// gives way, not below the cell: the goal goes past prose level with it, and it must stay in the
 /// window there too. Under the cell, the column keeps its measure while it fits the page
 pub fn page_layout(page: f32, cell_setting: u16, measure: Option<f32>, goal_allowed: bool) -> PageLayout {
+    page_layout_with(page, cell_setting, super::settings::DEFAULT_GOAL_WIDTH, measure, goal_allowed)
+}
+
+/// [`page_layout`] with the goal's widest, `goal_setting` characters of code
+pub fn page_layout_with(page: f32, cell_setting: u16, goal_setting: u16, measure: Option<f32>, goal_allowed: bool) -> PageLayout {
     let margin = z(PAGE_MARGIN);
     let fill = cell_setting == 0;
     let setting = cell_card_width(f32::from(cell_setting));
@@ -1164,9 +1169,11 @@ pub fn page_layout(page: f32, cell_setting: u16, measure: Option<f32>, goal_allo
         let (goal, cell) = if room >= whole + goal_narrowest {
             // (at least its preferred width, which the prose gives way to; wider only with room left
             // after the prose at its measure, and never wider than the cell)
-            let base = goal_preferred.min(room - whole);
+            // (a goal setting under that wins, and nothing is narrower than the narrowest)
+            let widest = cell_card_width(f32::from(goal_setting)).max(goal_narrowest);
+            let base = goal_preferred.min(room - whole).min(widest);
             let full = measure.map_or(whole, |m| m.max(whole));
-            ((room - full).clamp(base, whole.max(base)), whole)
+            ((room - full).clamp(base, widest), whole)
         } else {
             let left = room - goal_narrowest;
             (goal_narrowest, if fill { left } else { cell_card_width(cell_characters(left)).max(narrowest) })
@@ -1207,11 +1214,11 @@ pub(crate) fn geometry(main_width: f32, mode: Mode) -> Geometry {
     let beside_on = goal_beside_on();
     match mode {
         Mode::Literate => {
-            let page = page_layout(main_width, super::settings::cell_width(), (display.measure > 0.0).then(|| z(display.measure * display.text_size)), beside_on);
+            let page = page_layout_with(main_width, super::settings::cell_width(), super::settings::goal_width(), (display.measure > 0.0).then(|| z(display.measure * display.text_size)), beside_on);
             Geometry { panel: page.goal.unwrap_or(page.cell), page }
         }
         Mode::Source => {
-            let page = page_layout(main_width - SCROLLBAR_ROOM, super::settings::cell_width(), None, beside_on);
+            let page = page_layout_with(main_width - SCROLLBAR_ROOM, super::settings::cell_width(), super::settings::goal_width(), None, beside_on);
             // (under the code, the goal is as wide as the window less its padding)
             Geometry { panel: page.goal.unwrap_or(main_width - 3.0 * z(12.0)), page }
         }
@@ -2394,7 +2401,7 @@ fn literate<'a>(app: &'a App, t: &'a Theory, inline: Option<&'a Workspace>, besi
         && palette_is_none
         && let Some((probe, kept)) = goal_beside_probe(ws, &*table, width)
     {
-        laid = laid.shrinks(probe, kept);
+        laid = laid.shrinks(probe, kept, GOAL_SIDE_MARGIN_LINES as f32 * code_line_height());
     }
     let page = widget::container(widget::container(laid).padding(Padding { top: PAGE_TOP_ROOM, ..Padding::ZERO }).max_width(page_width).width(Length::Fill));
     let page = if super::settings::display().centred { page.center_x(Length::Fill) } else { page.width(Length::Fill) };
@@ -3713,6 +3720,10 @@ fn goal_beside<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Opti
 /// if that is at least its heading, controls and this much of the first subgoal
 pub const SUBGOAL_MIN_LINES: usize = 5;
 pub const SUBGOAL_MAX_LINES: usize = 10;
+
+/// How many lines more than its least a gap must hold before a goal on the far side comes back
+/// next to its cell
+pub const GOAL_SIDE_MARGIN_LINES: usize = 2;
 
 /// How many lines of the first subgoal the goal keeps at its least: those it has, between
 /// [`SUBGOAL_MIN_LINES`] and [`SUBGOAL_MAX_LINES`]

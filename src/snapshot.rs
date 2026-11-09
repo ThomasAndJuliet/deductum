@@ -1671,23 +1671,24 @@ fn nothing_on_the_page_runs_into_the_goal_beside_it() {
         let mut hh = Harness::new(Size::new(w as f32, h as f32));
         hh.focus(&app, super::view::block_editor_id());
         let png = hh.draw(&app, &format!("fit-{name}"));
+        // (where the goal's panel is: its layout, and how far the page moved it)
+        let moved = super::gap::goal_moved();
+        let mut all = super::snapshot_cells::Bounds(Vec::new());
+        hh.operate(&app, &mut all);
+        let panel = all.0.iter().find(|(id, _)| *id == super::view::test_panel_id("panel")).map(|(_, r)| *r).expect("the goal's panel");
         drop(hh);
         let img = image::RgbaImage::from_raw(w, h, png).unwrap();
         let bg = *img.get_pixel(w - 30, h - 5);
-        // the goal card: left of its accent "Goals" button (the leftmost accent pixel in the
-        // right half), less its padding
-        let accent = |p: &image::Rgba<u8>| p[2] > 170 && p[1] > 150 && p[0] < 150;
-        // (the pill filled with the accent, not accent-coloured text such as a note's Resolve)
-        let pill = |x: u32, y: u32| (x..x + 20).all(|xx| accent(img.get_pixel(xx, y)));
-        let button = (w * 2 / 3..w - 40).find(|&x| (0..h).any(|y| pill(x, y))).expect("the goal beside");
-        let by = (0..h).find(|&y| pill(button, y)).unwrap();
-        // (left from the button, to where the card's background ends)
-        let card = (0..button).rev().find(|&x| img.get_pixel(x, by) == &bg).map_or(button, |x| x + 1);
+        // the goal card's left edge
+        let card = (panel.x + moved.x) as u32;
         // the gap before it: background on every row
         // (from one pixel in: Paper's justified prose ends exactly at the column's edge, and its last
         // glyph may be anti-aliased over it)
         let strip = card - super::view::GOAL_GAP_PUB as u32 + 2..card - 1;
-        let crossing: Vec<(u32, u32)> = strip.clone().flat_map(|x| (0..h).map(move |y| (x, y))).filter(|&(x, y)| img.get_pixel(x, y) != &bg).take(5).collect();
+        // (on the rows of the panel: in the gap between wider paragraphs it is beside a cell, with
+        // paragraphs above and below it that reach past it)
+        let rows = (panel.y + moved.y) as u32..((panel.y + moved.y + panel.height) as u32).min(h);
+        let crossing: Vec<(u32, u32)> = strip.clone().flat_map(|x| rows.clone().map(move |y| (x, y))).filter(|&(x, y)| img.get_pixel(x, y) != &bg).take(5).collect();
         eprintln!("{name}: goal card at x = {card}; strip {strip:?}; crossing {crossing:?}");
         assert!(crossing.is_empty(), "{name}: something on the page reaches into the goal's gap at {crossing:?}");
     }

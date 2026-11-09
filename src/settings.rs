@@ -74,6 +74,9 @@ pub const CODE_SIZES: [u8; 4] = [13, 14, 15, 16];
 /// The code font before the human chooses one
 pub const DEFAULT_CODE_FONT: &str = "Noto Sans Mono";
 
+/// The goal panel's widest in characters: 560 px at the default code size
+pub const DEFAULT_GOAL_WIDTH: u16 = 63;
+
 /// Where code is set. Stored and shown; the document view applies them as it learns to
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -84,11 +87,13 @@ pub struct Code {
     pub size: u8,
     /// A cell's width in characters of code; zero is the page's whole column (Fill)
     pub cell_width: u16,
+    /// The goal panel's widest, in characters of code (as a cell's width is reckoned)
+    pub goal_width: u16,
 }
 
 impl Default for Code {
     fn default() -> Self {
-        Self { font: DEFAULT_CODE_FONT.to_string(), size: 14, cell_width: 80 }
+        Self { font: DEFAULT_CODE_FONT.to_string(), size: 14, cell_width: 80, goal_width: DEFAULT_GOAL_WIDTH }
     }
 }
 
@@ -434,6 +439,8 @@ pub enum Change {
     CodeSize(u8),
     /// Characters of code across a cell; zero is Fill
     CellWidth(u16),
+    /// Characters of code across the goal panel at its widest
+    GoalWidth(u16),
     DefaultRights(Rights),
 }
 
@@ -446,6 +453,7 @@ impl Settings {
             Change::CodeFont(v) => self.code.font = v,
             Change::CodeSize(v) => self.code.size = v,
             Change::CellWidth(v) => self.code.cell_width = v,
+            Change::GoalWidth(v) => self.code.goal_width = v,
             Change::DefaultRights(v) => self.agents.default_rights = v,
         }
         self.clamp();
@@ -498,6 +506,7 @@ impl Settings {
         self.appearance.interface_size = self.appearance.interface_size.clamp(10, 24);
         self.code.size = self.code.size.clamp(8, 36);
         self.code.cell_width = if self.code.cell_width == 0 { 0 } else { self.code.cell_width.clamp(40, 240) };
+        self.code.goal_width = self.code.goal_width.clamp(30, 240);
         if self.code.font.trim().is_empty() {
             self.code.font = DEFAULT_CODE_FONT.to_string();
         }
@@ -665,6 +674,11 @@ pub fn cell_width() -> u16 {
     read(|s| s.code.cell_width)
 }
 
+/// The goal panel's widest, in characters of code
+pub fn goal_width() -> u16 {
+    read(|s| s.code.goal_width)
+}
+
 /// iced's family as cosmic-text's
 pub fn cosmic_family(family: cosmic::iced::font::Family) -> cosmic_text::Family<'static> {
     use cosmic::iced::font::Family;
@@ -773,6 +787,16 @@ mod tests {
         assert_eq!(future.appearance.zoom, 1.2);
     }
 
+    /// A settings file written before Goal width existed loads with the default and keeps the rest
+    /// of its code section
+    #[test]
+    fn a_file_without_goal_width_loads_with_the_default_and_keeps_its_other_values() {
+        let s = Settings::from_json(&json!({"version": VERSION, "code": {"font": "Source Code Pro", "size": 16, "cell_width": 100}}));
+        assert_eq!((s.code.font.as_str(), s.code.size, s.code.cell_width, s.code.goal_width), ("Source Code Pro", 16, 100, 63));
+        let with = Settings::from_json(&json!({"version": VERSION, "code": {"goal_width": 72}}));
+        assert_eq!((with.code.goal_width, with.code.cell_width), (72, 80));
+    }
+
     #[test]
     fn settings_files_from_before_the_settings_page_load_with_the_new_fields_at_their_defaults() {
         let d = Settings::default();
@@ -780,7 +804,7 @@ mod tests {
             assert_eq!(s.appearance.interface_size, 14);
             assert!(!s.appearance.thicken_text);
             assert!(s.editing.spelling);
-            assert_eq!((s.code.font.as_str(), s.code.size, s.code.cell_width), ("Noto Sans Mono", 14, 80));
+            assert_eq!((s.code.font.as_str(), s.code.size, s.code.cell_width, s.code.goal_width), ("Noto Sans Mono", 14, 80, 63));
             assert_eq!(s.agents.default_rights, Rights::Theory);
             assert_eq!((s.appearance.interface_size, s.code.clone(), s.agents.clone()), (d.appearance.interface_size, d.code.clone(), d.agents.clone()));
         };
@@ -821,7 +845,7 @@ mod tests {
         let mut s = Settings::default();
         for change in [
             Change::InterfaceSize(16), Change::ThickenText(true), Change::Spelling(false),
-            Change::CodeFont("Source Code Pro".into()), Change::CodeSize(15), Change::CellWidth(0),
+            Change::CodeFont("Source Code Pro".into()), Change::CodeSize(15), Change::CellWidth(0), Change::GoalWidth(72),
             Change::DefaultRights(Rights::Folder),
         ] {
             s.change(change);
@@ -834,6 +858,10 @@ mod tests {
         s.change(Change::CodeSize(200));
         s.change(Change::InterfaceSize(1));
         s.change(Change::CellWidth(5));
+        s.change(Change::GoalWidth(5));
+        assert_eq!(s.code.goal_width, 30, "Goal width stays in range");
+        s.change(Change::GoalWidth(500));
+        assert_eq!(s.code.goal_width, 240);
         s.change(Change::CodeFont("  ".into()));
         assert_eq!((s.code.size, s.appearance.interface_size, s.code.cell_width, s.code.font.as_str()), (36, 10, 40, "Noto Sans Mono"));
         let future = Settings::from_json(&json!({"version": 1, "agents": {"default_rights": "everything"}}));

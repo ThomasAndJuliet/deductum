@@ -406,7 +406,7 @@ pub struct GoalLayer<'a, Message, Theme, Renderer> {
     goal: Element<'a, Message, Theme, Renderer>,
     /// The goal's heading and controls alone, to measure how short it may be, and the height of the
     /// first subgoal's lines it keeps at least (see [`shrink_to`])
-    probe: Option<(Element<'a, Message, Theme, Renderer>, f32)>,
+    probe: Option<(Element<'a, Message, Theme, Renderer>, f32, f32)>,
     /// The item the goal is for, and how far below its top
     anchor: Option<(usize, f32)>,
     gap: f32,
@@ -436,8 +436,8 @@ impl<'a, Message, Theme, Renderer> GoalLayer<'a, Message, Theme, Renderer> {
     /// The goal may shrink, scrolling inside, to the gap it is in (the room beside its cell and the
     /// items no wider, between the wider ones), if the gap holds at least the `probe` (its heading
     /// and controls) and `kept` of the first subgoal
-    pub fn shrinks(mut self, probe: impl Into<Element<'a, Message, Theme, Renderer>>, kept: f32) -> Self {
-        self.probe = Some((probe.into(), kept));
+    pub fn shrinks(mut self, probe: impl Into<Element<'a, Message, Theme, Renderer>>, kept: f32, margin: f32) -> Self {
+        self.probe = Some((probe.into(), kept, margin));
         self
     }
 }
@@ -454,6 +454,51 @@ impl<Message, Theme, Renderer> GoalLayer<'_, Message, Theme, Renderer> {
 pub fn shrink_to(gap: f32, normal: f32, least: f32) -> Option<f32> {
     (gap < normal && gap >= least.min(normal)).then_some(gap)
 }
+
+/// Which side of its cell's gap the goal is on, for the cell the caret is in: a goal on the far
+/// side stays there until the gap holds its least and a margin more, so that one line more or
+/// less in the cell does not move it from one side to the other
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Side {
+    cell: Option<usize>,
+    far: bool,
+}
+
+impl Side {
+    /// The goal has gone, or the caret is elsewhere
+    pub fn forget(&mut self) {
+        *self = Side::default();
+    }
+
+    /// The height the goal takes (none: its own) in a gap `gap` tall, for `cell`, given the side it
+    /// was on: next to the cell while the gap holds `least`, and once on the far side only when it
+    /// holds `least` and `margin`. A cell the goal was not for is decided afresh from `least` alone
+    pub fn decide(&mut self, cell: usize, gap: f32, normal: f32, least: f32, margin: f32) -> Option<f32> {
+        if self.cell != Some(cell) {
+            *self = Side { cell: Some(cell), far: false };
+        }
+        if gap >= normal {
+            self.far = false;
+            return None;
+        }
+        let needed = least.min(normal) + if self.far { margin } else { 0.0 };
+        if gap >= needed {
+            self.far = false;
+            Some(gap)
+        } else {
+            self.far = true;
+            None
+        }
+    }
+
+    pub fn far(&self) -> bool {
+        self.far
+    }
+}
+
+/// The side the goal was last put on, in a test
+#[cfg(test)]
+pub static GOAL_SIDE: std::sync::Mutex<Option<bool>> = std::sync::Mutex::new(None);
 
 /// The goal's last layout: the gap it was in, its normal height, its least, the height it took
 #[cfg(test)]
@@ -533,6 +578,80 @@ fn settle(items: &[Extent], slot: usize, wanted: f32, height: f32, from: f32) ->
 }
 
 #[cfg(test)]
+mod side_tests {
+    use super::Side;
+
+    // (normal 600, least 270, margin 39)
+    fn decide(side: &mut Side, cell: usize, gap: f32) -> Option<f32> {
+        side.decide(cell, gap, 600.0, 270.0, 39.0)
+    }
+
+    /// Just below the least: the far side; rising through the band: still there; at least plus margin:
+    /// back next to the cell, as tall as the gap
+    #[test]
+    fn the_far_side_is_kept_until_the_gap_holds_the_least_and_the_margin() {
+        let mut side = Side::default();
+        assert_eq!(decide(&mut side, 1, 269.9), None);
+        assert!(side.far());
+        for gap in [270.0, 290.0, 308.9] {
+            assert_eq!(decide(&mut side, 1, gap), None, "{gap}: inside the band, still on the far side");
+            assert!(side.far());
+        }
+        assert_eq!(decide(&mut side, 1, 309.0), Some(309.0));
+        assert!(!side.far());
+    }
+
+    /// Next to the cell it stays while the gap falls through the band, down to the least
+    #[test]
+    fn next_to_the_cell_it_stays_through_the_band() {
+        let mut side = Side::default();
+        assert_eq!(decide(&mut side, 1, 400.0), Some(400.0));
+        for gap in [320.0, 309.0, 290.0, 270.0] {
+            assert_eq!(decide(&mut side, 1, gap), Some(gap), "{gap}");
+            assert!(!side.far());
+        }
+        assert_eq!(decide(&mut side, 1, 269.9), None);
+        assert!(side.far());
+    }
+
+    /// A gap that holds the goal whole is next to the cell at its own height, and forgets the far side
+    #[test]
+    fn a_gap_that_holds_it_whole_leaves_the_far_side() {
+        let mut side = Side::default();
+        assert_eq!(decide(&mut side, 1, 100.0), None);
+        assert!(side.far());
+        assert_eq!(decide(&mut side, 1, 600.0), None);
+        assert!(!side.far());
+        assert_eq!(decide(&mut side, 1, 280.0), Some(280.0), "fresh from the least");
+    }
+
+    /// Another cell, or the goal gone, decides afresh from the least alone
+    #[test]
+    fn another_cell_or_no_goal_forgets_the_side() {
+        let mut side = Side::default();
+        assert_eq!(decide(&mut side, 1, 260.0), None);
+        assert!(side.far());
+        // the caret in another cell, in a gap inside the band: next to the cell
+        assert_eq!(decide(&mut side, 2, 280.0), Some(280.0));
+        assert!(!side.far());
+        decide(&mut side, 2, 260.0);
+        side.forget();
+        assert_eq!(decide(&mut side, 2, 280.0), Some(280.0));
+    }
+
+    /// A goal shorter than the least has its own height as its least: no gap shorter than it holds
+    /// it, and one that holds it whole leaves it as it is
+    #[test]
+    fn a_short_goal_needs_only_its_own_height() {
+        let mut side = Side::default();
+        assert_eq!(side.decide(1, 150.0, 200.0, 270.0, 39.0), None);
+        assert!(side.far());
+        assert_eq!(side.decide(1, 200.0, 200.0, 270.0, 39.0), None);
+        assert!(!side.far());
+    }
+}
+
+#[cfg(test)]
 mod settle_tests {
     use super::{Extent, settle};
 
@@ -595,15 +714,23 @@ impl<Message, Theme, Renderer> Widget<Message, Theme, Renderer> for GoalLayer<'_
 where
     Renderer: renderer::Renderer,
 {
+    fn tag(&self) -> widget::tree::Tag {
+        widget::tree::Tag::of::<Side>()
+    }
+
+    fn state(&self) -> widget::tree::State {
+        widget::tree::State::new(Side::default())
+    }
+
     fn children(&self) -> Vec<Tree> {
         let mut trees = vec![Tree::new(&self.page), Tree::new(&self.goal)];
-        trees.extend(self.probe.as_ref().map(|(p, _)| Tree::new(p)));
+        trees.extend(self.probe.as_ref().map(|(p, _, _)| Tree::new(p)));
         trees
     }
 
     fn diff(&mut self, tree: &mut Tree) {
         match &mut self.probe {
-            Some((probe, _)) => tree.diff_children(&mut [&mut self.page, &mut self.goal, probe]),
+            Some((probe, _, _)) => tree.diff_children(&mut [&mut self.page, &mut self.goal, probe]),
             None => tree.diff_children(&mut [&mut self.page, &mut self.goal]),
         }
     }
@@ -619,7 +746,11 @@ where
         // The goal in a gap too short for it, but not for its least: as tall as the gap, its goals
         // scrolling inside. What it depends on is the page's items alone, not where the page is
         // scrolled
-        if let (Some((index, _)), Some((probe, kept))) = (self.anchor, self.probe.as_mut()) {
+        let side = tree.state.downcast_mut::<Side>();
+        if self.anchor.is_none() {
+            side.forget();
+        }
+        if let (Some((index, _)), Some((probe, kept, margin))) = (self.anchor, self.probe.as_mut()) {
             let slot = match &self.indices {
                 Some(indices) => indices.lock().unwrap_or_else(|e| e.into_inner()).binary_search(&index).ok(),
                 None => Some(index),
@@ -629,20 +760,27 @@ where
                 let (above, below) = gap_around(&items, slot);
                 let gap = below - above.max(0.0);
                 let normal = goal.size().height;
+                let (kept, margin) = (*kept, *margin);
                 if gap < normal {
                     let head = probe.as_widget_mut().layout(&mut tree.children[2], renderer, &free).size().height;
-                    let least = head + *kept;
+                    let least = head + kept;
+                    let side = tree.state.downcast_mut::<Side>();
+                    let shrunk = side.decide(index, gap, normal, least, margin);
                     #[cfg(test)]
-                    if let Ok(mut last) = GOAL_FIT.lock() {
-                        *last = Some((gap, normal, least.min(normal), shrink_to(gap, normal, least).unwrap_or(normal)));
+                    {
+                        *GOAL_FIT.lock().unwrap() = Some((gap, normal, least.min(normal), shrunk.unwrap_or(normal)));
+                        *GOAL_SIDE.lock().unwrap() = Some(side.far());
                     }
-                    if let Some(height) = shrink_to(gap, normal, least) {
+                    if let Some(height) = shrunk {
                         goal = self.goal.as_widget_mut().layout(&mut tree.children[1], renderer, &layout::Limits::new(Size::ZERO, Size::new(f32::INFINITY, height)));
                     }
                 } else {
+                    let side = tree.state.downcast_mut::<Side>();
+                    side.decide(index, gap, normal, normal, margin);
                     #[cfg(test)]
-                    if let Ok(mut last) = GOAL_FIT.lock() {
-                        *last = Some((gap, normal, normal, normal));
+                    {
+                        *GOAL_FIT.lock().unwrap() = Some((gap, normal, normal, normal));
+                        *GOAL_SIDE.lock().unwrap() = Some(false);
                     }
                 }
             }

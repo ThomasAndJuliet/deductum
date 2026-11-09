@@ -1100,7 +1100,7 @@ fn characters(card: f32) -> f32 {
     super::view::cell_characters(card)
 }
 
-/// As the page narrows: the goal from the cell's width (703.2 px at 80 characters) to its
+/// As the page narrows: the goal from its setting (63 characters, 560.4 px) to its
 /// preferred 360 px while the prose column keeps its 48 em, then, as before, the prose gives way to
 /// the goal at 360 px down to the cell, the goal narrows to 300 px with the cell at 80 characters,
 /// then the cell to 60 characters with the goal at 300 px, then the goal under the cell, where the
@@ -1115,10 +1115,9 @@ fn the_page_at_a_table_of_widths() {
     let near = |a: f32, b: f32| (a - b).abs() < 0.11;
     // page, the goal (none: under), the cell in characters, the column
     let table: &[(f32, Option<f32>, f32, f32)] = &[
-        (2600.0, Some(703.2), 80.0, 960.0),
-        (1721.2, Some(703.2), 80.0, 960.0),  // the goal as wide as the cell
-        (1721.0, Some(703.0), 80.0, 960.0),  // and it begins to narrow, the prose at its measure
-        (1700.0, Some(682.0), 80.0, 960.0),
+        (2600.0, Some(560.4), 80.0, 960.0),
+        (1578.4, Some(560.4), 80.0, 960.0),  // the goal as wide as its setting (63 characters)
+        (1578.0, Some(560.0), 80.0, 960.0),  // and it begins to narrow, the prose at its measure
         (1500.0, Some(482.0), 80.0, 960.0),
         (1400.0, Some(382.0), 80.0, 960.0),
         (1378.0, Some(360.0), 80.0, 960.0),  // the column, the gap and the goal at 360 px just fit
@@ -1175,7 +1174,7 @@ fn the_page_layout_under_the_settings_and_the_zoom() {
     let near = |a: f32, b: f32| (a - b).abs() < 0.11;
     // 100: full width while it fits
     let l = super::view::page_layout(1700.0, 100, Some(960.0), true);
-    assert!(characters(l.cell) == 100.0 && near(l.goal.unwrap(), 682.0), "{l:?}");
+    assert!(characters(l.cell) == 100.0 && near(l.goal.unwrap(), 560.4), "{l:?}");
     // and narrowing to 60 like 80 does
     let l = super::view::page_layout(900.0, 100, Some(960.0), true);
     assert_eq!((characters(l.cell), l.goal), (60.0, Some(300.0)));
@@ -1211,6 +1210,10 @@ fn the_page_layout_under_the_settings_and_the_zoom() {
     assert!(near(super::view::page_layout(1700.0, 80, Some(600.0), true).cell, 600.0));
     let l = super::view::page_layout(1700.0, 80, None, true);
     assert!(near(l.column, l.cell) && characters(l.cell) == 80.0, "{l:?}");
+    // a Goal width whose px are under the 360 the goal holds while the prose gives way wins: 35
+    // characters are 325.2 px
+    let l = super::view::page_layout_with(1700.0, 80, 35, Some(960.0), true);
+    assert!(near(l.goal.unwrap(), 325.2), "{l:?}");
     // at 150 %, everything is half as large again: the same layout at a page half as large again
     let _zoomed = Zoomed::new(1.5);
     let code = (14.0f32 * 1.5).round();
@@ -1219,9 +1222,15 @@ fn the_page_layout_under_the_settings_and_the_zoom() {
     assert!(near(l.cell, card(80.0)), "{l:?}");
     assert_eq!(characters(l.cell), 80.0);
     assert!(near(l.goal.unwrap(), 540.0), "the goal's preferred width, 360 px at zoom 1: {l:?}");
-    // and at its widest it is as wide as the cell
+    // and at its widest it is as wide as 63 characters
     let l = super::view::page_layout(3000.0, 80, Some(1440.0), true);
+    assert!(near(l.goal.unwrap(), card(63.0)), "{l:?}");
+    // a Goal width of 80 is as wide as the cell, one of 40 is under the 360 px it holds while the
+    // prose gives way (the setting wins), and none is narrower than 300 px
+    let l = super::view::page_layout_with(3000.0, 80, 80, Some(1440.0), true);
     assert!(near(l.goal.unwrap(), card(80.0)), "{l:?}");
+    let l = super::view::page_layout_with(3000.0, 80, 30, Some(1440.0), true);
+    assert!(near(l.goal.unwrap(), 450.0), "never under the narrowest: {l:?}");
     let l = super::view::page_layout(36.0 * 2.0 + 10.0 + 450.0 + card(60.0), 80, Some(1440.0), true);
     assert_eq!((characters(l.cell), l.goal), (60.0, Some(450.0)));
     let l = super::view::page_layout(36.0 * 2.0 + 10.0 + 450.0 + card(60.0) - 1.0, 80, Some(1440.0), true);
@@ -1235,7 +1244,7 @@ fn the_page_layout_under_the_settings_and_the_zoom() {
 fn the_page_on_screen_with_the_sidebar_open_and_closed() {
     // window, sidebar, the goal, characters
     let table: &[(f32, bool, Option<f32>, f32)] = &[
-        (2600.0, true, Some(703.2), 80.0),
+        (2600.0, true, Some(560.4), 80.0),
         (1800.0, true, Some(476.1), 80.0),  // the prose at its measure, the goal wider than 360
         (1700.0, true, Some(376.1), 80.0),
         (1500.0, true, Some(360.0), 80.0),
@@ -1246,8 +1255,8 @@ fn the_page_on_screen_with_the_sidebar_open_and_closed() {
         (1200.0, true, Some(300.0), 60.0),
         (1190.0, true, None, 80.0),
         (1100.0, true, None, 80.0),
-        (2600.0, false, Some(703.2), 80.0),
-        (1700.0, false, Some(682.0), 80.0),
+        (2600.0, false, Some(560.4), 80.0),
+        (1700.0, false, Some(560.4), 80.0),
         (1500.0, false, Some(482.0), 80.0),
         (1400.0, false, Some(382.0), 80.0),
         (1100.0, false, Some(338.8), 80.0),
@@ -2573,7 +2582,9 @@ fn with_none_left(mut app: App) -> App {
 /// margins, with no sidebar)
 fn window_for_panel(panel: f32) -> f32 {
     let card = super::view::page_layout(5000.0, 80, Some(960.0), true).cell;
-    card + panel + 10.0 + 2.0 * 24.0
+    // (up to 360 px the prose gives way to the goal, down to the cell; past that the goal has only
+    // the room the prose column leaves at its 48 em)
+    card.max(if panel > 360.0 { 960.0 } else { 0.0 }) + panel + 10.0 + 2.0 * 24.0
 }
 
 /// Nothing in the heading is cut off at the panel's edge: the controls are whole inside it, the
@@ -2699,7 +2710,7 @@ fn goal_layout_frames() {
 /// together, else one dropdown
 #[test]
 fn with_no_subgoals_the_controls_share_the_captions_line_whole_at_every_width() {
-    for panel in [300.0, 339.0, 341.0, 400.0, 720.0] {
+    for panel in [300.0, 339.0, 341.0, 400.0, 560.4] {
         for (text, types) in [(false, false), (false, true), (true, false), (true, true)] {
             let mut app = without_parts(goal_app());
             let ws = app.workspace.as_mut().unwrap();
@@ -2719,7 +2730,7 @@ fn with_no_subgoals_the_controls_share_the_captions_line_whole_at_every_width() 
             if panel <= 300.0 {
                 assert!(dropdown, "{name}: the controls are {} px wide, not the dropdown", switches.width);
             }
-            if panel >= 720.0 {
+            if panel >= 560.0 {
                 assert!(!dropdown, "{name}: the controls are the dropdown in a wide panel");
             }
             // and whole, the caption and the controls were not squeezed
@@ -2735,7 +2746,7 @@ fn with_no_subgoals_the_controls_share_the_captions_line_whole_at_every_width() 
 /// dropdown, by what fits
 #[test]
 fn a_long_heading_with_a_note_leaves_the_controls_whole_beside_and_under() {
-    for width in [window_for_panel(300.0), window_for_panel(400.0), window_for_panel(720.0), 880.0, 700.0] {
+    for width in [window_for_panel(300.0), window_for_panel(400.0), window_for_panel(560.4), 880.0, 700.0] {
         let mut app = with_notes(with_none_left(goal_app()));
         app.workspace.as_mut().unwrap().goals.status = "finished".into();
         let b = beside(&app, width);

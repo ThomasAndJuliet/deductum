@@ -181,7 +181,7 @@ fn goal_layout_sheet_frames() {
             if light && name.starts_with("grid") {
                 let main = width - if *sidebar && *width >= 640.0 { app.left_width + super::sidebar::INSET_SPAN + 6.0 } else { 0.0 };
                 let display = super::settings::display();
-                let l = super::view::page_layout(main, super::settings::cell_width(), (display.measure > 0.0).then(|| super::view::z(display.measure * display.text_size)), true);
+                let l = super::view::page_layout_with(main, super::settings::cell_width(), super::settings::goal_width(), (display.measure > 0.0).then(|| super::view::z(display.measure * display.text_size)), true);
                 table.push_str(&format!("{width} {sidebar} {mode:?} {:.1} {} {:.1} {:.1}\n", l.cell, l.goal.map_or("under".to_string(), |g| format!("{g:.1}")), l.column, l.gutter));
             }
             let height = 900.0;

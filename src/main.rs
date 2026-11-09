@@ -2866,6 +2866,9 @@ impl cosmic::Application for App {
             // (nothing has been asked yet: the first request is made at what the panel has)
             self.goal_columns_asked = columns;
         } else if columns != self.goal_columns_asked && self.workspace.as_ref().is_some_and(|w| w.theory.is_some()) {
+            // (noted as asked now: one change schedules one request, and the messages that come
+            // before it is made do not schedule it again, which would leave it stale for ever)
+            self.goal_columns_asked = columns;
             return Task::batch([task, self.schedule_state_after(Duration::from_millis(600))]);
         }
         task
