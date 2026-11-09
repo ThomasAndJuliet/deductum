@@ -22,6 +22,8 @@ import tomllib
 import urllib.request
 import zipfile
 
+import release_config
+
 ROOT = Path(__file__).resolve().parents[1]
 ARCHES = ("arm64", "x86_64")
 RUNTIME_ORIGIN = "https://github.com/astral-sh/python-build-standalone/releases/download/"
@@ -154,7 +156,8 @@ def package(root: Path, binaries: dict[str, Path], runtimes: dict[str, Path], ou
             shutil.copytree(root / folder, bundle / folder,
                             ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "tests", "lib"))
         metadata = {
-            "source_sha": source_sha, "source_dirty": dirty, "version": version,
+            "repository": release_config.repository(), "source_sha": source_sha,
+            "source_dirty": dirty, "version": version,
             "architecture": "universal", "architectures": list(ARCHES),
             "bundle_sha256": bundle_digest(bundle), "binary_sha256": sha256(binary),
             "thin_binary_sha256": {arch: sha256(binaries[arch]) for arch in ARCHES},

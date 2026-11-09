@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Publish tested Linux/Windows packages as a Conventional Commit SemVer release.
+"""Publish tested Linux, Windows and macOS packages as a Conventional Commit SemVer release.
 
 `stage` validates a successful CI run and uploads its packages to a draft;
 `finish` makes the draft visible. In a public repository the workflow attests
@@ -85,6 +85,28 @@ def validate_package(directory, sha):
     return archive, receipt
 
 
+def validate_macos_package(directory, sha):
+    archives = list(directory.glob("*.zip"))
+    if len(archives) != 1:
+        raise ValueError("Expected exactly one macOS universal ZIP")
+    archive = archives[0]
+    if not re.fullmatch(r"deductum-[\w.-]+-" + sha[:12] + r"-macos-universal\.zip", archive.name):
+        raise ValueError("Unexpected macOS package name or source revision")
+    receipt = archive.with_suffix(".json")
+    metadata = json.loads(receipt.read_text(encoding="utf-8"))
+    if not (
+        metadata.get("repository") == REPOSITORY
+        and metadata.get("source_sha") == sha
+        and metadata.get("source_dirty") is False
+        and metadata.get("architecture") == "universal"
+        and metadata.get("architectures") == ["arm64", "x86_64"]
+        and metadata.get("archive_bytes") == archive.stat().st_size
+        and metadata.get("archive_sha256") == digest(archive)
+    ):
+        raise ValueError("macOS package does not match its tested source/checksum receipt")
+    return archive, receipt
+
+
 def validate_linux_package(directory, sha, run_id):
     archives = list(directory.glob("*.flatpak"))
     if len(archives) != 1:
@@ -161,7 +183,8 @@ def release_notes(plan, tag_assets, run_id, sha, public):
     linux = tag_assets[2].name
     signing = (
         "The packages have no platform signature: the Flatpak bundle has no repository "
-        "signature and Windows may warn about an unknown publisher. "
+        "signature, Windows may warn about an unknown publisher and macOS blocks the "
+        "downloaded app until its quarantine attribute is removed. "
         "SHA256SUMS records the download digests."
     )
     if public:
@@ -172,12 +195,15 @@ def release_notes(plan, tag_assets, run_id, sha, public):
         )
     notes = (
         f"{changes}\n\n"
-        f"Linux and Windows x64 packages, built and tested by [CI run {run_id}]"
+        f"Linux and Windows x64 packages and a macOS universal package (Apple Silicon and Intel), built and tested by [CI run {run_id}]"
         f"(https://github.com/{REPOSITORY}/actions/runs/{run_id}).\n\n"
         f"Source revision: `{sha}`. JSON receipts record the package SHA-256 checksums.\n\n"
         "Windows: extract the app ZIP and run `deductum.exe`. Python is included; "
         "install Lean or Isabelle separately for local proofs. For updates, close the "
         "old app and run its `stop-host.cmd` before opening the new package.\n\n"
+        "macOS: extract the ZIP, run `xattr -dr com.apple.quarantine` on the extracted "
+        "folder, then open `Deductum.command`. Python is included; closing its Terminal "
+        "window quits Deductum. Its `README.txt` has the details.\n\n"
         f"Linux: `flatpak install --user --bundle {linux}` then "
         "`flatpak run dev.twright.Deductum`. Flathub supplies the runtime.\n\n"
         f"{signing}\n"
@@ -188,9 +214,10 @@ def release_notes(plan, tag_assets, run_id, sha, public):
     return notes
 
 
-def require_public_payload(windows_archive, linux_receipt, receipts):
+def require_public_payload(windows_archive, linux_receipt, macos_archive, receipts):
     """A public release shows nothing identifying the household's network."""
     found = set(release_scan.scan_zip(windows_archive))
+    found.update(release_scan.scan_zip(macos_archive))
     scan = json.loads(linux_receipt.read_text(encoding="utf-8")).get("public_scan")
     if not isinstance(scan, list):
         raise ValueError("Linux receipt has no public payload scan; build it with the current packager")
@@ -228,9 +255,13 @@ def stage(run_id, root):
     gh("run", "download", run_id, "--repo", REPOSITORY,
        "--name", "linux-x86_64", "--dir", linux)
     assets.extend(validate_linux_package(linux, sha, run_id))
+    macos = root / "macos"
+    gh("run", "download", run_id, "--repo", REPOSITORY,
+       "--name", "macos-universal", "--dir", macos)
+    assets.extend(validate_macos_package(macos, sha))
     if public:
-        require_public_payload(assets[0], assets[3], (assets[1], assets[3]))
-    # Reserve only after both tested artifacts have been verified.
+        require_public_payload(assets[0], assets[3], assets[4], (assets[1], assets[3], assets[5]))
+    # Reserve only after all three tested artifacts have been verified.
     plan = reserve_version(sha, plan)
     if plan is None:
         print("A newer main push supersedes this versioned release candidate.")
@@ -241,7 +272,8 @@ def stage(run_id, root):
     downloads = root / "downloads"
     downloads.mkdir()
     named_assets = []
-    for platform, pair in (("windows-x86_64", assets[:2]), ("linux-x86_64", assets[2:])):
+    for platform, pair in (("windows-x86_64", assets[:2]), ("linux-x86_64", assets[2:4]),
+                           ("macos-universal", assets[4:])):
         for asset in pair:
             named = downloads / f"deductum-{tag}-{platform}{asset.suffix}"
             shutil.copyfile(asset, named)

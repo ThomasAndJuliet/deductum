@@ -38,6 +38,22 @@ def package(directory, windows_binary=b"immutable tested package"):
     return archive, receipt
 
 
+def macos_package(directory, macos_binary=b"immutable tested macOS package"):
+    directory.mkdir(parents=True, exist_ok=True)
+    archive = directory / f"deductum-1.9.0-{SHA[:12]}-macos-universal.zip"
+    with zipfile.ZipFile(archive, "w") as contents:
+        contents.writestr("deductum/deductum", macos_binary)
+    metadata = {
+        "repository": publisher.REPOSITORY, "source_sha": SHA, "source_dirty": False,
+        "architecture": "universal", "architectures": ["arm64", "x86_64"],
+        "archive_bytes": archive.stat().st_size,
+        "archive_sha256": hashlib.sha256(archive.read_bytes()).hexdigest(),
+    }
+    receipt = archive.with_suffix(".json")
+    receipt.write_text(json.dumps(metadata), encoding="utf-8")
+    return archive, receipt
+
+
 def linux_package(directory, public_scan=[]):
     directory.mkdir(parents=True, exist_ok=True)
     archive = directory / f"deductum-{SHA[:12]}-linux-x86_64.flatpak"
@@ -123,6 +139,47 @@ class PackageTests(unittest.TestCase):
                 publisher.validate_package(root, SHA)
 
 
+class MacosPackageTests(unittest.TestCase):
+    def test_checks_exact_revision_clean_build_architectures_size_and_digest(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            assets = macos_package(root)
+            self.assertEqual(publisher.validate_macos_package(root, SHA), assets)
+            receipt = json.loads(assets[1].read_text())
+            for field, value in [
+                ("repository", "elsewhere/deductum"), ("source_sha", "b" * 40),
+                ("source_dirty", True), ("source_dirty", None), ("architecture", "arm64"),
+                ("architectures", ["arm64"]), ("architectures", ["x86_64", "arm64"]),
+                ("archive_bytes", 0), ("archive_sha256", "0" * 64),
+            ]:
+                with self.subTest(field=field, value=value), self.assertRaises(ValueError):
+                    assets[1].write_text(json.dumps({**receipt, field: value}))
+                    publisher.validate_macos_package(root, SHA)
+            assets[1].write_text(json.dumps(receipt))
+            assets[0].write_bytes(b"tampered tested package")
+            with self.assertRaises(ValueError):
+                publisher.validate_macos_package(root, SHA)
+
+    def test_refuses_missing_ambiguous_or_wrongly_named_packages(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            with self.assertRaises(ValueError):
+                publisher.validate_macos_package(root, SHA)
+            archive, _ = macos_package(root)
+            extra = root / "other.zip"
+            extra.write_bytes(b"ambiguous")
+            with self.assertRaises(ValueError):
+                publisher.validate_macos_package(root, SHA)
+            extra.unlink()
+            for name in (f"deductum-1.9.0-{'b' * 12}-macos-universal.zip",
+                         f"deductum-1.9.0-{SHA[:12]}-windows-x86_64.zip",
+                         f"deductum-1.9.0-{SHA[:12]}-macos-universal-dev.zip"):
+                renamed = archive.rename(root / name)
+                with self.subTest(name=name), self.assertRaises(ValueError):
+                    publisher.validate_macos_package(root, SHA)
+                archive = renamed
+
+
 class PublicationTests(unittest.TestCase):
     def setUp(self):
         self.run = copy.deepcopy(RUN)
@@ -134,6 +191,8 @@ class PublicationTests(unittest.TestCase):
         self.tags = {}
         self.linux_scan = []
         self.windows_binary = b"immutable tested package"
+        self.macos_binary = b"immutable tested macOS package"
+        self.missing_artifact = None
         self.notes = None
         self.enterContext(patch.object(publisher.release_policy, "plan", side_effect=lambda sha, **kwargs: self.plan))
         self.enterContext(patch("builtins.print"))
@@ -153,8 +212,13 @@ class PublicationTests(unittest.TestCase):
             return json.dumps({"object": {"sha": self.head}})
         if args[:2] == ("run", "download"):
             directory = Path(args[args.index("--dir") + 1])
-            if args[args.index("--name") + 1] == "linux-x86_64":
+            name = args[args.index("--name") + 1]
+            if name == self.missing_artifact:
+                raise subprocess.CalledProcessError(1, ["gh", "run", "download"])
+            if name == "linux-x86_64":
                 linux_package(directory, self.linux_scan)
+            elif name == "macos-universal":
+                macos_package(directory, self.macos_binary)
             else:
                 package(directory, self.windows_binary)
         elif args[:3] == ("api", "--method", "POST"):
@@ -186,7 +250,7 @@ class PublicationTests(unittest.TestCase):
             directory.mkdir(parents=True, exist_ok=True)
             (directory / name).write_bytes(self.uploaded[name])
         elif args[:2] == ("release", "edit"):
-            self.assertEqual(len(self.release["assets"]), 5, "publish only after both packages, receipts and checksums exist")
+            self.assertEqual(len(self.release["assets"]), 7, "publish only after all three packages, receipts and checksums exist")
             self.latest = next(arg for arg in args if str(arg).startswith("--latest="))
             self.release["draft"] = False
         else:
@@ -207,7 +271,12 @@ class PublicationTests(unittest.TestCase):
             self.assertFalse(self.release["draft"])
             self.assertEqual(self.release["tag_name"], "v0.2.0")
             self.assertEqual(self.tags, {"v0.2.0": SHA})
-            self.assertEqual(len(self.uploaded), 5)
+            self.assertEqual(len(self.uploaded), 7)
+            self.assertIn("deductum-v0.2.0-macos-universal.zip", self.uploaded)
+            self.assertIn("deductum-v0.2.0-macos-universal.json", self.uploaded)
+            sums = self.uploaded["SHA256SUMS"].decode()
+            for name in ("macos-universal.zip", "macos-universal.json"):
+                self.assertIn(f"deductum-v0.2.0-{name}", sums)
             self.assertIn("deductum-v0.2.0-linux-x86_64.flatpak", self.uploaded)
             self.assertIn("deductum-v0.2.0-windows-x86_64.zip", self.uploaded)
             self.calls.clear()
@@ -228,7 +297,7 @@ class PublicationTests(unittest.TestCase):
         with patch.object(publisher, "gh", self.gh):
             self.publish()
         self.assertFalse(self.release["draft"])
-        self.assertEqual(sum(call[:2] == ("release", "upload") for call in self.calls), 4)
+        self.assertEqual(sum(call[:2] == ("release", "upload") for call in self.calls), 6)
 
     def test_refuses_to_change_a_published_package(self):
         with patch.object(publisher, "gh", self.gh):
@@ -237,6 +306,22 @@ class PublicationTests(unittest.TestCase):
             self.uploaded[name] = b"changed release asset"
             with self.assertRaisesRegex(ValueError, "immutable"):
                 self.publish()
+
+    def test_a_release_needs_all_three_platforms(self):
+        for missing in ("windows-x86_64", "linux-x86_64", "macos-universal"):
+            self.missing_artifact = missing
+            with self.subTest(missing=missing), patch.object(publisher, "gh", self.gh), \
+                    self.assertRaises(subprocess.CalledProcessError):
+                self.publish()
+            self.assertEqual(self.tags, {})
+            self.assertIsNone(self.release)
+
+    def test_release_notes_list_the_macos_package(self):
+        with patch.object(publisher, "gh", self.gh):
+            self.publish()
+        self.assertIn("macOS universal", self.notes)
+        self.assertIn("xattr -dr com.apple.quarantine", self.notes)
+        self.assertEqual(publisher.release_scan.text_findings(self.notes), [])
 
     def test_never_downloads_or_publishes_from_failed_ci(self):
         self.run["conclusion"] = "failure"
@@ -305,7 +390,7 @@ class PublicPublicationTests(PublicationTests):
         self.assertTrue(staged["attest"])
         self.assertFalse(self.release["draft"])
         self.assertEqual({Path(path).name for path in self.attestations()}, set(self.uploaded))
-        self.assertEqual(len(self.uploaded), 5)
+        self.assertEqual(len(self.uploaded), 7)
 
     def test_attestation_identifies_this_repository_and_release_workflow(self):
         with patch.object(publisher, "gh", self.gh):
@@ -347,6 +432,8 @@ class PublicPublicationTests(PublicationTests):
             ("windows_binary", b"ssh machine.tail0a1b2c.ts.net"),
             ("windows_binary", b"http://neo:8099/repo"),
             ("windows_binary", b"/mnt/disk-array/Share"),
+            ("macos_binary", b"ssh machine.tail0a1b2c.ts.net"),
+            ("macos_binary", b"/Users/x/../home/twright/source"),
         ]
         for field, value in cases:
             original = getattr(self, field)

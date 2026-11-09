@@ -14,6 +14,8 @@ import tempfile
 import unittest
 import zipfile
 
+import release_config
+
 spec = importlib.util.spec_from_file_location("package_macos", Path(__file__).with_name("package-macos.py"))
 P = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(P)
@@ -92,6 +94,7 @@ class PackageMacos(unittest.TestCase):
     def test_package_provenance_matches_exact_binaries_runtimes_and_host_bundle(self):
         archive, metadata = self.package()
         self.assertEqual(metadata["source_sha"], self.sha)
+        self.assertEqual(metadata["repository"], release_config.repository())
         self.assertFalse(metadata["source_dirty"])
         for arch in P.ARCHES:
             self.assertEqual(metadata["thin_binary_sha256"][arch], hashlib.sha256(self.binaries[arch].read_bytes()).hexdigest())
