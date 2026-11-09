@@ -1443,7 +1443,7 @@ fn the_source_view_pops_out_its_proof_with_the_construct_tinted() {
     // Click about where the button is drawn (at the right of the proof's first line)
     let mut popped = false;
     'find: for y in (70..96).step_by(4) {
-        for x in (630..672).step_by(6) {
+        for x in (660..730).step_by(6) {
             if h.click(&app, cosmic::iced::Point::new(x as f32, y as f32)).iter().any(|m| matches!(m, super::Message::PopOut)) {
                 popped = true;
                 break 'find;

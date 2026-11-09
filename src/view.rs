@@ -1138,8 +1138,9 @@ const UNMEASURED_COLUMN: f32 = 880.0;
 /// past that do the margins take the rest. As the page narrows, the margins come in to
 /// [`PAGE_MARGIN`]; then, with the cell at its full width, the goal narrows from [`GOAL_WIDEST`]
 /// to [`GOAL_NARROWEST`]; then the cell narrows, a character at a time, to [`CELL_NARROWEST`];
-/// then the goal goes under the cell, where the cell has its full width again if the column has
-/// room.
+/// then the goal goes under the cell. Under the cell (a single column), there is no goal to leave
+/// room for: the cell is as wide as the column, whatever the Cell width setting, which is only the
+/// cell's width beside the goal and its limit for sharing the room with it.
 ///
 /// The prose column keeps its measure while the column, the gap and the goal all fit, and then
 /// gives way (the goal is chosen first, so it is the goal that grows into the room the prose
@@ -1168,8 +1169,9 @@ pub fn page_layout(page: f32, cell_setting: u16, measure: Option<f32>, goal_allo
     } else {
         let fits = (page - 2.0 * margin).max(z(240.0));
         let column = measure.unwrap_or(if fill { z(UNMEASURED_COLUMN) } else { setting }).min(fits);
-        let cell = if fill { column } else { setting.min(column) };
-        PageLayout { goal: None, cell, column, gutter: gutter_for(column) }
+        // (with no goal to leave room for, a cell is as wide as the column, both edges lining up
+        // with the text: Cell width is for the goal beside)
+        PageLayout { goal: None, cell: column, column, gutter: gutter_for(column) }
     }
 }
 
@@ -3399,6 +3401,19 @@ fn source<'a>(ws: &'a Workspace, t: &'a Theory, inline: Option<&'a Workspace>, t
         col = col.push(widget::container(thin(widget::container(g).padding(Padding { right: z(12.0), ..Padding::ZERO }))).max_height(z(240.0)).padding([z(8.0), z(12.0)]));
     }
     col.into()
+}
+
+/// How many rows the Source view draws before line `line`, its code `width` wide (a long line takes
+/// several)
+#[cfg(test)]
+pub(crate) fn source_rows_before(t: &Theory, width: f32, line: usize) -> usize {
+    let pad = Padding::from(spacing().space_s as f32);
+    super::wrap::rows(&t.decoded.text, width - pad.left - pad.right, code_font(), code_size(), code_size() * CODE_ADVANCE).iter().take(line).sum()
+}
+
+#[cfg(test)]
+pub(crate) fn source_code_width(window: f32) -> f32 {
+    geometry(window, Mode::Source).page.cell
 }
 
 fn source_editor(t: &Theory, height: Length) -> Element<'_, Message> {

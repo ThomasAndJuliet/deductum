@@ -143,8 +143,16 @@ fn goal_layout_sheet_frames() {
     // the cases with the goal under the cell too: a window with no room for it beside
     frames.push(("case-noneleft-under-880".into(), 880.0, false, Mode::Literate, Case::NoneLeft));
     frames.push(("case-noneleft-under-700".into(), 700.0, false, Mode::Literate, Case::NoneLeft));
+    // single column: the goal under the cell, whether for lack of room or Goal beside off
+    for (mode, view) in [(Mode::Literate, "literate"), (Mode::Source, "source")] {
+        frames.push((format!("single-off-1920-{view}"), 1920.0, false, mode, Case::Long));
+        frames.push((format!("single-965-{view}"), 965.0, false, mode, Case::Long));
+        frames.push((format!("single-off-1344-open-{view}"), 1344.0, true, mode, Case::Long));
+    }
+    frames.push(("single-none-1920-literate".into(), 1920.0, false, Mode::Literate, Case::None));
     for light in [true, false] {
         for (name, width, sidebar, mode, case) in &frames {
+            super::view::set_goal_beside(!name.starts_with("single-off"));
             let columns = fixed.unwrap_or_else(|| {
                 let app = app_for(&text, *mode, *width, *sidebar, *case, 40);
                 super::view::goal_columns(&app, true)
@@ -159,7 +167,7 @@ fn goal_layout_sheet_frames() {
             let height = 900.0;
             let mut h = Harness::new(Size::new(*width, height));
             cosmic::theme::set_active(if light { crate::tones::light_type_for_tests() } else { cosmic::theme::ThemeType::Dark });
-            super::view::set_goal_beside(true);
+            super::view::set_goal_beside(!name.starts_with("single-off"));
             let _ = h.draw(&app, "sheet-warm");
             let _ = h.draw(&app, &format!("sheet-{}-{name}", if light { "light" } else { "dark" }));
             cosmic::theme::set_active(cosmic::theme::ThemeType::Dark);

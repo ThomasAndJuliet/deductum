@@ -2860,7 +2860,10 @@ impl cosmic::Application for App {
         // (the window, a sidebar, the zoom or a setting) has the state asked for again, once the
         // change has settled
         let columns = (view::goal_columns(self, true), view::goal_columns(self, false));
-        if columns != self.goal_columns_asked && self.workspace.as_ref().is_some_and(|w| w.theory.is_some()) {
+        if self.goal_columns_asked == (0, 0) {
+            // (nothing has been asked yet: the first request is made at what the panel has)
+            self.goal_columns_asked = columns;
+        } else if columns != self.goal_columns_asked && self.workspace.as_ref().is_some_and(|w| w.theory.is_some()) {
             return Task::batch([task, self.schedule_state_after(Duration::from_millis(600))]);
         }
         task

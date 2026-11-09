@@ -590,7 +590,8 @@ fn the_layout_does_not_change_as_clicks_move_the_caret() {
                     }
                     let probed = theory(&app).source.cursor().position.line as f32;
                     let lh = super::view::source_line_height();
-                    let y = probe + (line as f32 - probed) * lh;
+                    let rows = |l: usize| super::view::source_rows_before(theory(&app), super::view::source_code_width(w as f32), l) as f32;
+                    let y = probe + (rows(line) - rows(probed as usize)) * lh;
                     let x = 300.0;
                     for m in harness.click(&app, cosmic::iced::Point::new(x, y)) {
                         update(&mut app, m);
@@ -745,13 +746,15 @@ fn the_pop_out_button_sits_in_the_corner_of_its_proof() {
                         let (right_inset, centre_off) = (right - (pop.x + pop.width), (pop.y + pop.height / 2.0) - (first_top + lh / 2.0));
                         let top_inset = pop.y - if mode == Mode::Literate { cell.y } else { first_top };
                         // The icon drawn inside the button's place: ink there, centred
-                        let bg = *img.get_pixel(drawn.x as u32 - 2, (drawn.y + drawn.height / 2.0) as u32);
+                        let bg = if mode == Mode::Literate { *img.get_pixel(drawn.x as u32 - 2, (drawn.y + drawn.height / 2.0) as u32) } else { *img.get_pixel(drawn.x as u32 + 1, drawn.y as u32 + 1) };
                         let far = |p: &image::Rgba<u8>| (0..3).map(|k| (p[k] as i32 - bg[k] as i32).abs()).sum::<i32>() > 120;
                         let (mut xs, mut ys) = (Vec::new(), Vec::new());
                         // (inside the cell: its own border above is not the icon, and sits within 6 px of the
                         // button where the code's 14 px lines make the button's inset 4.8 px)
-                        for y in (drawn.y as i32 - 6).max((cell.y - place.scrolled.y).ceil() as i32 + 1)..((drawn.y + drawn.height) as i32 + 6).min(h as i32) {
-                            for x in (drawn.x as i32 - 6)..((drawn.x + drawn.width) as i32 + 6).min(w as i32).min(if mode == Mode::Literate { (cell.x + cell.width - place.scrolled.x) as i32 - 1 } else { i32::MAX }) {
+                        // (in the source view the band's own edge, above and at the right, is not the icon either: only the button's own box)
+                        let reach = if mode == Mode::Literate { 6 } else { -2 };
+                        for y in (drawn.y as i32 - reach).max(if mode == Mode::Literate { (cell.y - place.scrolled.y).ceil() as i32 + 1 } else { 0 })..((drawn.y + drawn.height) as i32 + reach).min(h as i32) {
+                            for x in (drawn.x as i32 - reach)..((drawn.x + drawn.width) as i32 + reach).min(w as i32).min((cell.x + cell.width - place.scrolled.x) as i32 - 1) {
                                 if far(img.get_pixel(x as u32, y as u32)) {
                                     xs.push(x as f32);
                                     ys.push(y as f32);

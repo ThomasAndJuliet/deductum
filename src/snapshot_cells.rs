@@ -1101,8 +1101,8 @@ fn characters(card: f32) -> f32 {
 }
 
 /// As the page narrows: the goal from 720 to 300 px with the cell at 80 characters, then the cell
-/// to 60 characters with the goal at 300 px, then the goal under the cell, the cell back at its full
-/// width. The goal takes what is left after the cell (and so the prose column gives way to it, down
+/// to 60 characters with the goal at 300 px, then the goal under the cell, where the cell is as
+/// wide as the column (the characters in those rows are the Cell width's, not drawn). The goal takes what is left after the cell (and so the prose column gives way to it, down
 /// to the cell's width, before the goal stops growing); the column has its 48 em (960 px) only
 /// where it, the gap and a goal at its widest fit; under the cell it keeps 48 em while it fits the
 /// page. The thresholds come from an 80 character card of 703.2 px, a 60 character one of 535.2 px,
@@ -1137,7 +1137,12 @@ fn the_page_at_a_table_of_widths() {
     for &(page, goal, chars, column) in table {
         let l = layout(page);
         assert!(match (l.goal, goal) { (Some(a), Some(b)) => near(a, b), (None, None) => true, _ => false }, "{page}: the goal is {:?}, wanted {goal:?}", l.goal);
-        assert_eq!(characters(l.cell), chars, "{page}: the cell is {} wide", l.cell);
+        if goal.is_some() {
+            assert_eq!(characters(l.cell), chars, "{page}: the cell is {} wide", l.cell);
+        } else {
+            // (under, in a single column, the cell is as wide as the column: its edges line up with the text)
+            assert!(near(l.cell, l.column), "{page}: the cell {} is not as wide as the column {}", l.cell, l.column);
+        }
         assert!(near(l.column, column), "{page}: the column is {}, wanted {column}", l.column);
         assert!(l.column >= l.cell - 0.01, "{page}: no cell leaves the column");
         // everything fits between margins of at least 24 px
@@ -1181,7 +1186,7 @@ fn the_page_layout_under_the_settings_and_the_zoom() {
     }
     // and under when even that does not fit
     let l = super::view::page_layout(725.0, 40, Some(960.0), true);
-    assert_eq!((characters(l.cell), l.goal), (40.0, None));
+    assert!(l.goal.is_none() && near(l.cell, l.column), "under, the cell is the column: {l:?}");
     // Fill is the column, beside or under
     for page in [1700.0, 1400.0, 1200.0, 900.0, 880.0, 700.0] {
         let l = super::view::page_layout(page, 0, Some(960.0), true);
@@ -1190,6 +1195,14 @@ fn the_page_layout_under_the_settings_and_the_zoom() {
     assert!(super::view::page_layout(1700.0, 0, Some(960.0), true).column == 960.0);
     // with the goal not allowed beside, it is under at every width
     assert_eq!(super::view::page_layout(1700.0, 80, Some(960.0), false).goal, None);
+    // and then (a single column) a cell is as wide as the prose column, whatever Cell width says:
+    // Tom's 965 px window had text to 932 and cells to 735
+    for (page, setting) in [(965.0, 80), (1920.0, 80), (1920.0, 40), (1920.0, 120), (1920.0, 0), (700.0, 40)] {
+        let l = super::view::page_layout(page, setting, Some(960.0), false);
+        assert!(l.goal.is_none() && near(l.cell, l.column), "{page} px, Cell width {setting}: the cell {} and the column {}", l.cell, l.column);
+    }
+    assert!(near(super::view::page_layout(1920.0, 40, Some(960.0), false).cell, 960.0));
+    assert!(near(super::view::page_layout(965.0, 80, Some(960.0), false).cell, 965.0 - 48.0));
     // the prose measure caps the cell, and no measure leaves the column as wide as the cell
     assert!(near(super::view::page_layout(1700.0, 80, Some(600.0), true).cell, 600.0));
     let l = super::view::page_layout(1700.0, 80, None, true);
@@ -1208,7 +1221,7 @@ fn the_page_layout_under_the_settings_and_the_zoom() {
     let l = super::view::page_layout(36.0 * 2.0 + 10.0 + 450.0 + card(60.0), 80, Some(1440.0), true);
     assert_eq!((characters(l.cell), l.goal), (60.0, Some(450.0)));
     let l = super::view::page_layout(36.0 * 2.0 + 10.0 + 450.0 + card(60.0) - 1.0, 80, Some(1440.0), true);
-    assert_eq!((characters(l.cell), l.goal), (80.0, None));
+    assert!(l.goal.is_none() && near(l.cell, l.column), "under, a cell is as wide as the column whatever Cell width says: {l:?}");
 }
 
 /// On the page, at the windows of the review, with the sidebar open and closed: the cell and the goal
@@ -1244,7 +1257,9 @@ fn the_page_on_screen_with_the_sidebar_open_and_closed() {
         let b = beside(&app, window);
         let name = format!("{window} px, sidebar {sidebar}");
         assert_eq!(b.wide, goal.is_some(), "{name}");
-        assert_eq!(b.characters, chars, "{name}: the cell is {} wide", b.cell.width);
+        if goal.is_some() {
+            assert_eq!(b.characters, chars, "{name}: the cell is {} wide", b.cell.width);
+        }
         match goal {
             Some(goal) => {
                 assert!((b.panel.width - goal).abs() < 0.2, "{name}: the panel is {} wide, wanted {goal}", b.panel.width);
