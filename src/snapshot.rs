@@ -2107,6 +2107,22 @@ fn cursor_navigation_vim_down_leaves_a_cell_from_the_last_character_of_code() {
     assert!(walk[2].0.starts_with("lemma RHS_cond_srea"), "out of the cell from its last character: {walk:?}");
 }
 
+#[test]
+fn cursor_navigation_vim_down_leaves_an_unwrapped_code_cell_from_its_last_character() {
+    use cosmic::iced::keyboard::key::Named::ArrowDown as D;
+    // A page wide enough for nothing to wrap; x remembered from the long line lies past `by pred_auto`
+    let walk = wrapped_code_walk(true, 1400.0, (1, 40), &[D, D, D]);
+    assert_eq!(walk[0].1, 2, "to by pred_auto: {walk:?}");
+    assert!(walk[1].0.starts_with("lemma RHS_cond_srea"), "out of the cell: {walk:?}");
+}
+
+#[test]
+fn cursor_navigation_vim_up_leaves_an_unwrapped_code_cell_from_its_first_character() {
+    use cosmic::iced::keyboard::key::Named::ArrowUp as U;
+    let walk = wrapped_code_walk(true, 1400.0, (0, 0), &[U]);
+    assert!(!walk[0].0.starts_with("lemma cond_srea_apply"), "out of the cell: {walk:?}");
+}
+
 fn cursor_navigation_key(h: &mut Harness, app: &mut App, key: cosmic::iced::keyboard::key::Named) {
     for message in h.key(app, cosmic::iced::keyboard::Key::Named(key), None) {
         let task = cosmic::Application::update(app, message);
