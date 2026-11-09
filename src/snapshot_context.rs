@@ -172,7 +172,7 @@ fn the_cell_menu_is_the_designs_in_its_order_and_each_item_sends_what_it_should(
         rows_of(&rows),
         designed(&[
             "Edit", "Show its goals", "Open in its own window", "\u{2014}", "Run sledgehammer", "Proof tools \u{25b8}", "Ask an agent about it\u{2026}", "\u{2014}", "Copy", "Copy as Markdown", "\u{2014}",
-            "Insert text above", "Insert lemma below", "Move up", "Move down", "\u{2014}", "!Delete",
+            "Insert text above", "Insert lemma below", "Insert definition below", "Move up", "Move down", "\u{2014}", "!Delete",
         ])
     );
     let msg = |label: &str| match find(&rows, label) {
@@ -183,6 +183,7 @@ fn the_cell_menu_is_the_designs_in_its_order_and_each_item_sends_what_it_should(
     assert!(matches!(msg("Show its goals"), Message::SelectBlock(n) if n == i));
     assert!(matches!(msg("Insert text above"), Message::InsertBlock(Some(n), "text") if n == i - 1));
     assert!(matches!(msg("Insert lemma below"), Message::InsertBlock(Some(n), "lemma") if n == i));
+    assert!(matches!(msg("Insert definition below"), Message::InsertBlock(Some(n), "definition") if n == i));
     assert!(matches!(msg("Move up"), Message::MoveBlock(n, false) if n == i));
     assert!(matches!(msg("Move down"), Message::MoveBlock(n, true) if n == i));
     assert!(matches!(msg("Delete"), Message::DeleteBlock(n) if n == i));
@@ -208,7 +209,7 @@ fn a_text_block_has_the_cell_menu_without_the_proof_items_and_copies_as_its_mark
     let i = theory(&app).blocks.iter().position(|b| b.kind == Kind::Text).unwrap();
     let table = app.table("local");
     let rows = context_menu::cell_rows(ws(&app), &*table, i);
-    assert_eq!(rows_of(&rows), ["Edit", "\u{2014}", "Copy", "Copy as Markdown", "\u{2014}", "Insert text above", "Insert lemma below", "Move up", "Move down", "\u{2014}", "!Delete"]);
+    assert_eq!(rows_of(&rows), ["Edit", "\u{2014}", "Copy", "Copy as Markdown", "\u{2014}", "Insert text above", "Insert lemma below", "Insert definition below", "Move up", "Move down", "\u{2014}", "!Delete"]);
     let Some(Row::Item { message: Message::CopyText(md), .. }) = find(&rows, "Copy as Markdown") else { panic!() };
     assert!(!md.contains("```") && md.contains("addition with zero"), "prose as Markdown, not as code: {md}");
 }
