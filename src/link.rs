@@ -228,6 +228,24 @@ fn remote_root(target: &Target) -> (String, String) {
 }
 
 /// Install the bundled sources on the target when its copy differs
+/// What says which sources are installed: VERSION, but only if the host's main file is its whole
+/// size, so that an install cut short by an older Deductum is repaired rather than taken as done
+fn installed_check_script(root: &str, host_size: u64) -> String {
+    format!("[ \"$(wc -c < {root}/host/deductum_host.py 2>/dev/null)\" = {host_size} ] && cat {root}/VERSION 2>/dev/null || true")
+}
+
+/// What unpacks the sources from stdin. They go to a directory beside their place and then move
+/// in a file at a time, with VERSION last, so that two windows starting together, or one closed
+/// half way, never leave a part of a file behind. Runs inside single quotes over ssh: it has none
+fn unpack_script(root: &str, env: &str, version: &str) -> String {
+    format!(
+        "{{ [ -f {root}/host/deductum_host.py ] && {env}python3 {root}/host/deductum_host.py stop-host >/dev/null 2>&1; true; }} && mkdir -p {root} && r=$(cd {root} && pwd) \
+         && {{ find \"$r\" -maxdepth 1 -name \".install-*\" -mmin +60 -exec rm -rf {{}} + ; t=$(mktemp -d \"$r/.install-XXXXXX\"); }} \
+         && {{ tar -C \"$t\" -xf - || {{ rm -rf \"$t\"; exit 1; }}; }} && (cd \"$t\" && find . -type f) | while IFS= read -r f; do mkdir -p \"$(dirname \"$r/$f\")\" && mv -f \"$t/$f\" \"$r/$f\" || exit 1; done \
+         && rm -rf \"$t\" && echo {version} > \"$r/VERSION\""
+    )
+}
+
 async fn install(target: &Target) -> Result<(), String> {
     #[cfg(windows)]
     if target.destination.is_none() {
@@ -244,7 +262,8 @@ async fn install(target: &Target) -> Result<(), String> {
         return Ok(());
     }
     let version = bundle_version(&bundle);
-    let check = format!("cat {root}/VERSION 2>/dev/null || true");
+    let host_size = std::fs::metadata(bundle.join("host/deductum_host.py")).map_or(0, |m| m.len());
+    let check = installed_check_script(&root, host_size);
     let output = match &target.destination {
         None => host_command("sh", &["-c".into(), check]).output().await,
         Some(dest) => {
@@ -269,9 +288,7 @@ async fn install(target: &Target) -> Result<(), String> {
     // A host already running there runs the old sources: it is asked to stop first (its sessions
     // that were running start again, a new epoch, when the next client starts the new host)
     let (_, env) = remote_root(target);
-    let unpack = format!(
-        "{{ [ -f {root}/host/deductum_host.py ] && {env}python3 {root}/host/deductum_host.py stop-host >/dev/null 2>&1; true; }} && mkdir -p {root} && tar -C {root} -xf - && echo {version} > {root}/VERSION"
-    );
+    let unpack = unpack_script(&root, &env, &version);
     let mut child = match &target.destination {
         None => host_command("sh", &["-c".into(), unpack]),
         Some(dest) => host_command("ssh", &["-o".into(), "BatchMode=yes".into(), dest.clone(), "sh".into(), "-c".into(), format!("'{unpack}'")]),
@@ -751,6 +768,63 @@ mod tests {
         assert!(commands.is_closed());
         assert!(read_dropped.load(Ordering::SeqCst));
         assert!(write_dropped.load(Ordering::SeqCst));
+    }
+
+    /// The unpack script, run for real on a tar stream: whole, cut short, and beside built files
+    #[cfg(unix)]
+    #[test]
+    fn a_host_install_cut_short_leaves_the_old_files_whole() {
+        use std::io::Write;
+        let base = std::env::temp_dir().join(format!("deductum-unpack-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        let source = base.join("source");
+        std::fs::create_dir_all(source.join("host")).unwrap();
+        std::fs::create_dir_all(source.join("backend/Isabelle2025/src")).unwrap();
+        // large enough for a cut to land inside the file
+        let host = "# the host\n".repeat(30_000);
+        std::fs::write(source.join("host/deductum_host.py"), &host).unwrap();
+        std::fs::write(source.join("backend/Isabelle2025/src/backend.scala"), "new").unwrap();
+        let tar = std::process::Command::new("tar").current_dir(&source).args(["-cf", "-", "host", "backend"]).output().unwrap();
+        assert!(tar.status.success());
+        let root = base.join("root");
+        std::fs::create_dir_all(root.join("host")).unwrap();
+        std::fs::create_dir_all(root.join("backend/Isabelle2025/lib")).unwrap();
+        std::fs::write(root.join("host/deductum_host.py"), "old\n").unwrap();
+        std::fs::write(root.join("backend/Isabelle2025/lib/built.jar"), "kept").unwrap();
+        std::fs::write(root.join("VERSION"), "old\n").unwrap();
+        let run = |stream: &[u8]| {
+            let script = super::unpack_script(root.to_str().unwrap(), "", "new-version");
+            let mut child = std::process::Command::new("/bin/sh")
+                .args(["-c", &script])
+                .stdin(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::null())
+                .spawn()
+                .unwrap();
+            child.stdin.take().unwrap().write_all(stream).unwrap();
+            child.wait().unwrap()
+        };
+        assert!(!super::unpack_script("~/x", "", "v").contains('\''), "it goes inside single quotes over ssh");
+        // cut short inside the host file, as when a window closes: nothing changes
+        let status = run(&tar.stdout[..64_512]);
+        assert!(!status.success());
+        assert_eq!(std::fs::read_to_string(root.join("host/deductum_host.py")).unwrap(), "old\n");
+        assert_eq!(std::fs::read_to_string(root.join("VERSION")).unwrap(), "old\n");
+        // whole: the new files, VERSION last, what was built there kept, nothing left over
+        assert!(run(&tar.stdout).success());
+        assert_eq!(std::fs::read_to_string(root.join("host/deductum_host.py")).unwrap(), host);
+        assert_eq!(std::fs::read_to_string(root.join("backend/Isabelle2025/src/backend.scala")).unwrap(), "new");
+        assert_eq!(std::fs::read_to_string(root.join("backend/Isabelle2025/lib/built.jar")).unwrap(), "kept");
+        assert_eq!(std::fs::read_to_string(root.join("VERSION")).unwrap().trim(), "new-version");
+        assert_eq!(std::fs::read_dir(&root).unwrap().flatten().filter(|e| e.file_name().to_string_lossy().starts_with(".install-")).count(), 0, "nothing is left over");
+        // an install already cut short: its VERSION is not believed, so the next start repairs it
+        let check = |size: u64| {
+            let out = std::process::Command::new("/bin/sh").args(["-c", &super::installed_check_script(root.to_str().unwrap(), size)]).output().unwrap();
+            String::from_utf8_lossy(&out.stdout).trim().to_string()
+        };
+        assert_eq!(check(host.len() as u64), "new-version");
+        std::fs::write(root.join("host/deductum_host.py"), &host[..64_512]).unwrap();
+        assert_eq!(check(host.len() as u64), "");
+        let _ = std::fs::remove_dir_all(&base);
     }
 
     #[test]
