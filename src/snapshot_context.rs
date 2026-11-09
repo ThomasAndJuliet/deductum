@@ -388,6 +388,8 @@ fn the_selection_menu_is_the_designs_and_each_item_sends_what_it_should() {
     // one name selected: its uses are searched for at once; the same text opens the panel unrun
     assert!(matches!(msg("Find uses"), Message::FindFor(q, true) if q == "\"lemma\""));
     assert!(matches!(msg("Search theorems for it\u{2026}"), Message::FindFor(q, false) if q == "\"lemma\""));
+    // Windows has no agent-session popover, so this message doesn't exist there
+    #[cfg(not(windows))]
     assert!(matches!(msg("Ask an agent about it\u{2026}"), Message::Shell(Msg::AgentOpen(true))));
     // two words: no single name to find the uses of, and it says so; with nothing selected, Copy
     // and Cut are disabled
