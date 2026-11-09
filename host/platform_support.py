@@ -424,7 +424,9 @@ def process_group_usage(pid):
         from _windows import job_usage
         name = _jobs.get(pid)
         return job_usage(name) if name else None
-    ticks = rss_pages = 0
+    # The group and everything started under it: Isabelle runs its ML process in a session of its
+    # own, outside the JVM's group, and that is where the proofs happen
+    stats = {}
     try:
         for entry in os.listdir("/proc"):
             if not entry.isdigit():
@@ -432,11 +434,15 @@ def process_group_usage(pid):
             try:
                 with open(f"/proc/{entry}/stat") as f:
                     fields = f.read().rsplit(")", 1)[1].split()
-                if int(fields[2]) == pid:
-                    ticks += int(fields[11]) + int(fields[12])
-                    rss_pages += int(fields[21])
+                stats[int(entry)] = (int(fields[1]), int(fields[2]), int(fields[11]) + int(fields[12]), int(fields[21]))
             except (OSError, ValueError, IndexError):
                 continue
     except OSError:
         return None
-    return ticks, rss_pages
+    members = {p for p, stat in stats.items() if stat[1] == pid}
+    grew = True
+    while grew:
+        more = {p for p, stat in stats.items() if p not in members and stat[0] in members}
+        grew = bool(more)
+        members |= more
+    return sum(stats[p][2] for p in members), sum(stats[p][3] for p in members)
