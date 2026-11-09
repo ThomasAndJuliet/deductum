@@ -16,7 +16,7 @@
 // jemalloc, not glibc's malloc: libcosmic calls malloc_trim after every
 // update and view, which with glibc scans the whole fragmented heap on the UI
 // thread; with jemalloc it only scans glibc's own small heap
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 #[global_allocator]
 static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 

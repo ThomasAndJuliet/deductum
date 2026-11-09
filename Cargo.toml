@@ -62,8 +62,15 @@ git = "https://github.com/pop-os/libcosmic.git"
 default-features = false
 features = ["rfd"]
 
-[target.'cfg(unix)'.dependencies]
-# The global allocator of the GUI binary (src/):
+# On macOS libcosmic has no portal, so the folder picker uses rfd as on Windows
+[target.'cfg(target_os = "macos")'.dependencies.libcosmic]
+git = "https://github.com/pop-os/libcosmic.git"
+default-features = false
+features = ["rfd"]
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# The global allocator of the GUI binary (src/), on Linux only: jemalloc's
+# background threads are not supported on macOS.
 # libcosmic's malloc_trim after each update and view then has only glibc's
 # small heap to scan. Background threads return freed memory from jemalloc's
 # own thread, so an idle window gives memory back too.

@@ -53,6 +53,34 @@ with `-X utf8`, because it ignores `PYTHONUTF8`. Separate VM acceptance also
 covers visible GUI use, second-user isolation and Windows-to-Linux SSH.
 `deductum.exe --build-info` reports the package's embedded source identity.
 
+## Build the macOS package
+
+The macOS package is built on a Mac, from both architectures, and joined into
+one universal binary with `lipo`:
+
+```sh
+rustup target add aarch64-apple-darwin x86_64-apple-darwin
+cargo build --locked --release --bin deductum --target aarch64-apple-darwin
+cargo build --locked --release --bin deductum --target x86_64-apple-darwin
+python3 scripts/test-package-macos.py
+python3 scripts/package-macos.py
+```
+
+The packaging script downloads and verifies the pinned Python 3.12 runtimes of
+`packaging/macos/python-runtime.json` (python-build-standalone, one per
+architecture) and writes the ZIP and its provenance JSON under `dist/macos`.
+As for Windows, release packaging requires a clean checkout and binaries built
+from that exact revision, and `--allow-dirty` marks a development package.
+The package holds `deductum`, `share/deductum`, `python/arm64`,
+`python/x86_64`, the `Deductum.command` launcher and `README.txt`. The launcher
+puts the bundled Python and `~/.elan/bin` on `PATH`, because an app opened from
+Finder gets no shell `PATH`. The binary needs macOS 11 or later.
+
+The binary has an ad-hoc signature only. Without signing and notarisation with
+an Apple Developer ID, Gatekeeper blocks the downloaded package until its
+quarantine attribute is removed, as `packaging/macos/README.txt` explains. No
+CI job builds the macOS package yet.
+
 ## Automated versioned downloads
 
 `.github/workflows/release-binaries.yml` runs after the **entire** main-branch

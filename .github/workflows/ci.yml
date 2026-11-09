@@ -50,6 +50,7 @@ jobs:
           python3 scripts/test-submit-home-apps.py
           python3 scripts/test-release-policy.py
           python3 scripts/test-package-windows.py
+          python3 scripts/test-package-macos.py
       - name: Check the Flatpak test manifest can be prepared
         run: python3 scripts/prepare-ci-manifest.py
       - name: Test the session host

@@ -95,6 +95,13 @@ windows, run `stop-host.cmd` from the **old** package to flush and stop its
 session host, then launch the new package. Keep the old package until you have
 checked the update. Settings and session data are stored outside the package.
 
+### macOS: package built from source
+
+There is no macOS download in the releases yet. A universal package for Apple
+Silicon and Intel Macs, with its own Python, can be built on a Mac as described
+in [the development guide](docs/development.md#build-the-macos-package). Its
+`README.txt` explains how to open it and how to start a session.
+
 ## Set up a prover
 
 Install provers on the machine that will run the project. A computer used only
@@ -197,6 +204,7 @@ python3 scripts/test-submit-home-apps.py
 python3 scripts/test-release-policy.py
 python3 scripts/test-package-flatpak-bundle.py
 python3 scripts/test-package-windows.py
+python3 scripts/test-package-macos.py
 python3 scripts/prepare-ci-manifest.py
 ```
 
