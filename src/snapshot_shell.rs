@@ -1722,6 +1722,35 @@ mod agent {
         std::thread::sleep(std::time::Duration::from_millis(100));
         let got: Vec<String> = std::fs::read(&record).unwrap().split(|b| *b == 0).filter(|a| !a.is_empty()).map(|a| String::from_utf8_lossy(a).to_string()).collect();
         assert_eq!(got, command[1..], "cosmic-term got exactly its arguments");
+        // a stock COSMIC Terminal on the path, and Terminal Agents' Flatpak with several branches,
+        // which `flatpak info` would refuse: the Flatpak is the one started
+        std::fs::remove_file(&record).unwrap();
+        std::fs::write(&fake, "#!/bin/sh\necho 'COSMIC Terminal'\n").unwrap();
+        let flatpak = dir.join("flatpak");
+        let script = |app: &str| format!(
+            "#!/bin/sh\ncase \"$1\" in\n  list) printf '{app}\\n{app}\\n{app}\\n' ;;\n  info) echo 'error: Multiple branches available' >&2; exit 1 ;;\n  run) shift 2\n    if [ \"$1\" = --help ]; then echo '--new-thread DIR'; exit 0; fi\n    for a in \"$@\"; do printf '%s\\0' \"$a\"; done > {} ;;\nesac\n",
+            record.display()
+        );
+        std::fs::write(&flatpak, script("dev.twright.CosmicTermAgents")).unwrap();
+        std::fs::set_permissions(&flatpak, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let out = run(&command);
+        assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+        for _ in 0..100 {
+            if record.exists() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(30));
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        let got: Vec<String> = std::fs::read(&record).unwrap().split(|b| *b == 0).filter(|a| !a.is_empty()).map(|a| String::from_utf8_lossy(a).to_string()).collect();
+        assert_eq!(got, command[1..], "the Flatpak got exactly its arguments");
+        // only a stock COSMIC Terminal, with other Flatpaks installed: it is not started
+        std::fs::remove_file(&record).unwrap();
+        std::fs::write(&flatpak, script("com.system76.CosmicTerm")).unwrap();
+        let out = run(&command);
+        assert_eq!(out.status.code(), Some(126));
+        assert!(String::from_utf8_lossy(&out.stderr).contains("dev.twright.CosmicTermAgents"), "{}", String::from_utf8_lossy(&out.stderr));
+        assert!(!record.exists(), "nothing was started");
         let _ = std::fs::remove_dir_all(&dir);
     }
 
