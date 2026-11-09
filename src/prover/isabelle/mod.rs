@@ -59,6 +59,8 @@ const BLOCK_TEMPLATES: &[BlockTemplate] = &[
     BlockTemplate { kind: "section", label: "+ Section", body: "section \\<open>\\<close>", caret: None },
     // (the caret between the quotes)
     BlockTemplate { kind: "lemma", label: "+ Lemma", body: "lemma \"\"\n  sorry", caret: Some((0, 7)) },
+    // (the caret at the definition's name)
+    BlockTemplate { kind: "definition", label: "+ Definition", body: "definition name where\n  \"name = undefined\"", caret: Some((0, 11)) },
 ];
 
 impl Profile for Isabelle {

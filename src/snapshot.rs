@@ -541,6 +541,49 @@ fn clicking_prose_puts_the_caret_there() {
     assert!(at > 10 && at + 10 < len, "caret at {at} of {len}");
 }
 
+/// `+ Definition` adds a definition skeleton with the caret on its name, in either prover, and
+/// Undo takes it back; left untouched, the skeleton stays (it is source, unlike an empty block)
+#[test]
+fn inserts_a_definition_with_the_caret_on_its_name() {
+    for lean in [false, true] {
+        let mut app = if lean {
+            super::snapshot_lean::lean_app_with(Mode::Literate, "import Mathlib\n\ndef x := 0\n")
+        } else {
+            let text = "theory G imports Main begin\n\nlemma one: \"True\" by simp\n\nend\n";
+            let mut app = demo_app(Mode::Literate);
+            let doc = json!({"text": text, "revision": 1, "prover": prover_json(text)});
+            app.workspace.as_mut().unwrap().theory = Some(Theory::new("/tmp/G.thy".into(), &doc, &Table::fallback(), Arc::new(HashMap::new()), Mode::Literate, crate::prover::profile(None)));
+            app
+        };
+        let before = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().local.clone();
+        // (for review: the row of add buttons, then the definition added, light and dark)
+        let prover = if lean { "lean" } else { "isabelle" };
+        for dark in [false, true] {
+            let tone = if dark { "dark" } else { "light" };
+            cosmic::theme::set_active(if dark { cosmic::theme::ThemeType::Dark } else { crate::tones::light_type_for_tests() });
+            draw(&app, &format!("add-blocks-{prover}-{tone}-buttons"), Size::new(1400.0, 900.0));
+        }
+        let _ = cosmic::Application::update(&mut app, super::Message::InsertBlock(None, "definition"));
+        for dark in [false, true] {
+            let tone = if dark { "dark" } else { "light" };
+            cosmic::theme::set_active(if dark { cosmic::theme::ThemeType::Dark } else { crate::tones::light_type_for_tests() });
+            draw(&app, &format!("add-blocks-{prover}-{tone}-definition"), Size::new(1400.0, 900.0));
+        }
+        let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+        let skeleton = if lean { "def name : _ := _" } else { "definition name where\n  \"name = undefined\"" };
+        assert!(t.local.contains(skeleton), "{}", t.local);
+        let be = t.block_editor.as_ref().expect("the new definition opens");
+        assert!(t.source_text(be.start, be.end).starts_with(if lean { "def name" } else { "definition name" }));
+        let pos = be.content.cursor().position;
+        assert_eq!((pos.line, pos.column), (0, if lean { 4 } else { 11 }), "the caret at the name");
+        // Left as it is, it stays: it has text
+        let _ = cosmic::Application::update(&mut app, super::Message::CloseBlock);
+        let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+        assert!(t.local.contains(skeleton), "kept when left");
+        assert_ne!(t.local, before);
+    }
+}
+
 #[test]
 fn inserts_and_deletes_blocks() {
     let mut app = demo_app(Mode::Literate);

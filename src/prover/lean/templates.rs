@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! The blocks the "+ Text", "+ Section" and "+ Lemma" actions add to a Lean file (design 7.3, as
+//! The blocks the "+ Text", "+ Section", "+ Lemma" and "+ Definition" actions add to a Lean file (design 7.3, as
 //! `theory.rs` has `text \<open>…\<close>`, `section` and `lemma` for Isabelle). Text is a module doc,
 //! `/-! … -/`; a section is a module doc holding a Markdown heading; a lemma is a `theorem` with
 //! `sorry` for its proof, which the prover accepts with a warning until the proof is written.
@@ -46,6 +46,11 @@ pub fn section(level: u8) -> Template {
 /// "+ Lemma": `theorem name : _ := by\n  sorry`, the name selected
 pub fn lemma(name: &str) -> Template {
     template("theorem ", if name.is_empty() { "name" } else { name }, " : _ := by\n  sorry")
+}
+
+/// "+ Definition": `def name : _ := _`, the name selected
+pub fn definition(name: &str) -> Template {
+    template("def ", if name.is_empty() { "name" } else { name }, " : _ := _")
 }
 
 /// A name for a new lemma that no word of `source` uses: `base`, or `base_1`, `base_2`, …
@@ -122,6 +127,9 @@ mod tests {
         assert_eq!(l.text, "theorem foo_bar : _ := by\n  sorry");
         assert_eq!(&l.text[l.select.0..l.select.1], "foo_bar");
         assert_eq!(lemma("").text, "theorem name : _ := by\n  sorry");
+        let d = definition("");
+        assert_eq!(d.text, "def name : _ := _");
+        assert_eq!(&d.text[d.select.0..d.select.1], "name");
     }
 
     #[test]

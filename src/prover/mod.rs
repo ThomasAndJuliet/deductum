@@ -90,10 +90,10 @@ impl PaletteEntry {
     }
 }
 
-/// A block the page's `+ Text`, `+ Section` and `+ Lemma` buttons add
+/// A block the page's `+ Text`, `+ Section`, `+ Lemma` and `+ Definition` buttons add
 #[derive(Clone, Copy, Debug)]
 pub struct BlockTemplate {
-    /// What the buttons ask for (`text`, `section`, `lemma`)
+    /// What the buttons ask for (`text`, `section`, `lemma`, `definition`)
     pub kind: &'static str,
     pub label: &'static str,
     pub body: &'static str,

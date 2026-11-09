@@ -49,6 +49,8 @@ const BLOCK_TEMPLATES: &[BlockTemplate] = &[
     BlockTemplate { kind: "section", label: "+ Section", body: "/-!\n# Section\n-/", caret: None },
     // (the caret at the lemma's name)
     BlockTemplate { kind: "lemma", label: "+ Lemma", body: "theorem name : _ := by\n  sorry", caret: Some((0, 8)) },
+    // (the caret at the definition's name)
+    BlockTemplate { kind: "definition", label: "+ Definition", body: "def name : _ := _", caret: Some((0, 4)) },
 ];
 
 // ---------------------------------------------------------------- symbols
@@ -969,6 +971,8 @@ mod tests {
         assert_eq!(t[1].body, templates::section(1).text);
         assert_eq!(t[2].body, templates::lemma("name").text);
         assert_eq!(t[2].caret, Some((0, "theorem ".len())));
+        assert_eq!(t[3].body, templates::definition("name").text);
+        assert_eq!(t[3].caret, Some((0, "def ".len())));
     }
 
     #[test]
