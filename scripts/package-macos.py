@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
-"""Package linked macOS Deductum binaries (arm64 and x86_64) as one universal app
-with a pinned Python runtime for each architecture.
+"""Package linked macOS Deductum binaries (arm64 and x86_64) as one universal
+Deductum.app bundle with a pinned Python runtime for each architecture.
 
 Release packages require a clean checkout and binaries stamped with that exact
 commit. --allow-dirty creates an explicitly marked development artifact only.
 No source credentials, user state, signing key or installed prover is bundled.
-The binary gets an ad-hoc signature only: it is not signed with a Developer ID.
+The bundle gets an ad-hoc signature only: it is not signed with a Developer ID.
+The ZIP holds Deductum.app and README.txt. binary_sha256 in the receipt and in
+RELEASE.json is that of the joined binary before the bundle is signed: signing
+the bundle seals Info.plist and the resources into the binary's signature.
 """
 from __future__ import annotations
 
@@ -13,6 +16,7 @@ import argparse
 import hashlib
 import json
 import os
+import plistlib
 from pathlib import Path, PurePosixPath
 import shutil
 import subprocess
@@ -29,6 +33,8 @@ ARCHES = ("arm64", "x86_64")
 RUNTIME_ORIGIN = "https://github.com/astral-sh/python-build-standalone/releases/download/"
 # Thin 64-bit Mach-O executables, as cargo writes them, in either byte order
 MACHO_MAGICS = (b"\xcf\xfa\xed\xfe", b"\xfe\xed\xfa\xcf")
+APP = "Deductum.app"
+BUNDLE_ID = "dev.twright.Deductum"
 
 
 def sha256(path: Path) -> str:
@@ -92,19 +98,39 @@ def bundle_digest(bundle: Path) -> str:
 
 
 def make_universal(binaries: dict[str, Path], output: Path) -> None:
-    """Join the two thin binaries with lipo and give the result an ad-hoc signature,
-    which Apple Silicon requires before it runs a binary that lipo has rewritten."""
+    """Join the two thin binaries with lipo. The bundle signature, applied last, covers it."""
     subprocess.run(["lipo", "-create", "-output", str(output), *(str(binaries[a]) for a in ARCHES)], check=True)
-    subprocess.run(["codesign", "--force", "--sign", "-", str(output)], check=True)
+
+
+def sign_bundle(app: Path) -> None:
+    """An ad-hoc signature over the whole bundle: Apple Silicon refuses to run an unsigned
+    binary that lipo has rewritten, and the signature seals Info.plist and the resources."""
+    subprocess.run(["codesign", "--force", "--deep", "--sign", "-", str(app)], check=True)
+
+
+def info_plist(version: str) -> dict:
+    return {
+        "CFBundleIdentifier": BUNDLE_ID,
+        "CFBundleName": "Deductum",
+        "CFBundleDisplayName": "Deductum",
+        "CFBundleExecutable": "deductum",
+        "CFBundlePackageType": "APPL",
+        "CFBundleIconFile": "Deductum",
+        "CFBundleShortVersionString": version,
+        "CFBundleVersion": version,
+        "LSMinimumSystemVersion": "11.0",
+        "NSHighResolutionCapable": True,
+        "LSApplicationCategoryType": "public.app-category.developer-tools",
+    }
 
 
 def write_zip(stage: Path, archive: Path) -> None:
-    """A fixed timestamp and ordering keep equivalent inputs reproducible. Unlike the Windows
-    package, the permission bits and symbolic links are kept: the launcher and the runtime
+    """Entries are named relative to `stage`. A fixed timestamp and ordering keep equivalent inputs reproducible. Unlike the Windows
+    package, the permission bits and symbolic links are kept: the binary and the runtime
     must stay executable, and the runtime links python3 to python3.12."""
     with zipfile.ZipFile(archive, "x", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as target:
         for path in sorted(stage.rglob("*")):
-            name = path.relative_to(stage.parent).as_posix()
+            name = path.relative_to(stage).as_posix()
             if path.is_symlink():
                 info = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
                 info.create_system = 3
@@ -120,7 +146,7 @@ def write_zip(stage: Path, archive: Path) -> None:
 
 
 def package(root: Path, binaries: dict[str, Path], runtimes: dict[str, Path], output: Path, *,
-            allow_dirty: bool = False, universal=make_universal) -> tuple[Path, dict]:
+            allow_dirty: bool = False, universal=make_universal, sign=sign_bundle) -> tuple[Path, dict]:
     def git(*args: str) -> str:
         return subprocess.check_output(["git", *args], cwd=root, text=True).strip()
 
@@ -144,14 +170,17 @@ def package(root: Path, binaries: dict[str, Path], runtimes: dict[str, Path], ou
     if archive.exists():
         raise ValueError(f"Refusing to overwrite existing package: {archive}")
     with tempfile.TemporaryDirectory(prefix="deductum-package-") as temporary:
-        stage = Path(temporary) / name
-        stage.mkdir()
+        stage = Path(temporary) / "stage"
+        app = stage / APP
+        resources = app / "Contents/Resources"
+        resources.mkdir(parents=True)
+        (app / "Contents/MacOS").mkdir()
         for arch in ARCHES:
-            extract_runtime(runtimes[arch], stage / "python" / arch, runtime[arch]["sha256"])
-        binary = stage / "deductum"
+            extract_runtime(runtimes[arch], resources / "python" / arch, runtime[arch]["sha256"])
+        binary = app / "Contents/MacOS/deductum"
         universal(binaries, binary)
         binary.chmod(0o755)
-        bundle = stage / "share/deductum"
+        bundle = resources / "share/deductum"
         for folder in ("host", "backend"):
             shutil.copytree(root / folder, bundle / folder,
                             ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "tests", "lib"))
@@ -165,17 +194,19 @@ def package(root: Path, binaries: dict[str, Path], runtimes: dict[str, Path], ou
                        **{arch: runtime[arch] for arch in ARCHES}},
         }
         (bundle / "RELEASE.json").write_text(json.dumps(metadata, sort_keys=True, indent=2) + "\n", encoding="utf-8")
-        launcher = stage / "Deductum.command"
-        shutil.copy2(root / "packaging/macos/Deductum.command", launcher)
-        launcher.chmod(0o755)
-        shutil.copy2(root / "packaging/macos/README.txt", stage / "README.txt")
-        shutil.copy2(root / "LICENSE", stage / "LICENSE")
+        with (app / "Contents/Info.plist").open("wb") as plist:
+            plistlib.dump(info_plist(version), plist)
+        shutil.copy2(root / "packaging/macos/Deductum.icns", resources / "Deductum.icns")
+        shutil.copy2(root / "LICENSE", resources / "LICENSE")
         # Embedded fonts and icons keep their redistribution notices beside the app
         for folder in (root / "res/fonts", root / "res/icons"):
             for notice in folder.glob("LICENSE*"):
-                target = stage / "licenses" / folder.relative_to(root) / notice.name
+                target = resources / "licenses" / folder.relative_to(root) / notice.name
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(notice, target)
+        # The README is outside the bundle, so signing does not need to cover it
+        sign(app)
+        shutil.copy2(root / "packaging/macos/README.txt", stage / "README.txt")
         write_zip(stage, archive)
     metadata["archive_sha256"] = sha256(archive)
     metadata["archive_bytes"] = archive.stat().st_size

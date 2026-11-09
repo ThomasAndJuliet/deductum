@@ -175,6 +175,8 @@ pub fn bundle() -> Option<PathBuf> {
     {
         candidates.push(dir.join("share/deductum"));
         candidates.push(dir.join("../share/deductum"));
+        // Deductum.app/Contents/MacOS/deductum
+        candidates.push(dir.join("../Resources/share/deductum"));
         // target/<profile>/deductum in a source checkout: the checkout root holds host/ and backend/
         candidates.push(dir.join("../.."));
     }

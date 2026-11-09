@@ -42,7 +42,7 @@ def macos_package(directory, macos_binary=b"immutable tested macOS package"):
     directory.mkdir(parents=True, exist_ok=True)
     archive = directory / f"deductum-1.9.0-{SHA[:12]}-macos-universal.zip"
     with zipfile.ZipFile(archive, "w") as contents:
-        contents.writestr("deductum/deductum", macos_binary)
+        contents.writestr("Deductum.app/Contents/MacOS/deductum", macos_binary)
     metadata = {
         "repository": publisher.REPOSITORY, "source_sha": SHA, "source_dirty": False,
         "architecture": "universal", "architectures": ["arm64", "x86_64"],
@@ -320,7 +320,8 @@ class PublicationTests(unittest.TestCase):
         with patch.object(publisher, "gh", self.gh):
             self.publish()
         self.assertIn("macOS universal", self.notes)
-        self.assertIn("xattr -dr com.apple.quarantine", self.notes)
+        self.assertIn("xattr -dr com.apple.quarantine /Applications/Deductum.app", self.notes)
+        self.assertNotIn("Deductum.command", self.notes)
         self.assertEqual(publisher.release_scan.text_findings(self.notes), [])
 
     def test_never_downloads_or_publishes_from_failed_ci(self):
