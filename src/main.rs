@@ -158,6 +158,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if std::env::var_os("DEDUCTUM_VNC_FIXTURE").is_some() {
         return ui_vnc::run();
     }
+    // Before anything starts a thread: an app opened from Finder has no shell PATH
+    #[cfg(target_os = "macos")]
+    platform::prepare_bundle_environment();
     env_logger_init();
     prover::register_highlighters();
     let request = cli::parse(std::env::args().skip(1).collect());

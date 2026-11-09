@@ -7,12 +7,15 @@ import importlib.util
 import io
 import json
 import os
+import plistlib
 from pathlib import Path
 import subprocess
 import tarfile
 import tempfile
 import unittest
 import zipfile
+
+import release_config
 
 spec = importlib.util.spec_from_file_location("package_macos", Path(__file__).with_name("package-macos.py"))
 P = importlib.util.module_from_spec(spec)
@@ -44,6 +47,11 @@ def fake_universal(binaries, output):
     output.write_bytes(b"".join(binaries[arch].read_bytes() for arch in P.ARCHES))
 
 
+def fake_sign(app):
+    """Stands in for codesign, which only exists on a Mac."""
+    assert (app / "Contents/Info.plist").is_file() and (app / "Contents/Resources/Deductum.icns").is_file()
+
+
 class PackageMacos(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="Deductum packaging Å ")
@@ -55,7 +63,8 @@ class PackageMacos(unittest.TestCase):
         self.digests = {arch: runtime_archive(path) for arch, path in self.runtimes.items()}
         files = {"Cargo.toml": '[package]\nversion = "0.1.0"\n', "LICENSE": "license",
                  "packaging/macos/README.txt": "macOS package",
-                 "packaging/macos/Deductum.command": "#!/bin/sh\nexec \"$(dirname \"$0\")/deductum\" \"$@\"\n",
+                 "packaging/macos/Deductum.icns": "icns fixture",
+                 "res/icons/LICENSE-icons.txt": "icon licence",
                  "res/fonts/LICENSE-fixture.txt": "font licence",
                  "host/deductum_host.py": "print('fixture')\n",
                  "host/tests/test_secret.py": "must not be shipped",
@@ -87,11 +96,12 @@ class PackageMacos(unittest.TestCase):
             path.write_bytes(MACHO + f"{arch}\0deductum-build:{sha or self.sha}:{state}".encode())
 
     def package(self, **kwargs):
-        return P.package(self.root, self.binaries, self.runtimes, self.output, universal=fake_universal, **kwargs)
+        return P.package(self.root, self.binaries, self.runtimes, self.output, universal=fake_universal, sign=fake_sign, **kwargs)
 
     def test_package_provenance_matches_exact_binaries_runtimes_and_host_bundle(self):
         archive, metadata = self.package()
         self.assertEqual(metadata["source_sha"], self.sha)
+        self.assertEqual(metadata["repository"], release_config.repository())
         self.assertFalse(metadata["source_dirty"])
         for arch in P.ARCHES:
             self.assertEqual(metadata["thin_binary_sha256"][arch], hashlib.sha256(self.binaries[arch].read_bytes()).hexdigest())
@@ -99,27 +109,58 @@ class PackageMacos(unittest.TestCase):
         self.assertEqual(metadata["archive_sha256"], hashlib.sha256(archive.read_bytes()).hexdigest())
         with zipfile.ZipFile(archive) as source:
             names = source.namelist()
-            prefix = names[0].split("/")[0] + "/"
-            release = json.loads(source.read(prefix + "share/deductum/RELEASE.json"))
+            app = "Deductum.app/Contents/"
+            resources = app + "Resources/"
+            release = json.loads(source.read(resources + "share/deductum/RELEASE.json"))
             self.assertEqual(release["source_sha"], self.sha)
-            self.assertEqual(source.read(prefix + "deductum"),
+            self.assertEqual(source.read(app + "MacOS/deductum"),
                              b"".join(self.binaries[a].read_bytes() for a in P.ARCHES))
             for arch in P.ARCHES:
-                self.assertIn(prefix + f"python/{arch}/bin/python3.12", names)
-            self.assertIn(prefix + "share/deductum/host/deductum_host.py", names)
-            self.assertIn(prefix + "share/deductum/backend/Isabelle2025/src/backend.scala", names)
-            self.assertIn(prefix + "licenses/res/fonts/LICENSE-fixture.txt", names)
+                self.assertIn(resources + f"python/{arch}/bin/python3.12", names)
+            self.assertIn(resources + "share/deductum/host/deductum_host.py", names)
+            self.assertIn(resources + "share/deductum/backend/Isabelle2025/src/backend.scala", names)
+            self.assertIn(resources + "licenses/res/fonts/LICENSE-fixture.txt", names)
+            self.assertIn(resources + "licenses/res/icons/LICENSE-icons.txt", names)
+            self.assertEqual(source.read(resources + "LICENSE"), b"license")
+            self.assertEqual(source.read(resources + "Deductum.icns"), b"icns fixture")
             for forbidden in ("/.git/", "/.ssh/", "/state/", "/tests/", "/__pycache__/", "/.env"):
                 self.assertFalse(any(forbidden in name for name in names), "package included " + forbidden)
 
-    def test_launcher_and_runtime_stay_executable_and_the_runtime_link_survives(self):
+    def test_the_zip_holds_only_the_app_and_the_readme(self):
         archive, _ = self.package()
         with zipfile.ZipFile(archive) as source:
-            infos = {info.filename.split("/", 1)[1]: info for info in source.infolist()}
-            for name in ("Deductum.command", "deductum", "python/arm64/bin/python3.12"):
+            self.assertEqual({name.split("/")[0] for name in source.namelist()}, {"Deductum.app", "README.txt"})
+
+    def test_info_plist_describes_the_app(self):
+        archive, metadata = self.package()
+        with zipfile.ZipFile(archive) as source:
+            plist = plistlib.loads(source.read("Deductum.app/Contents/Info.plist"))
+        self.assertEqual(plist, {
+            "CFBundleIdentifier": "dev.twright.Deductum", "CFBundleName": "Deductum",
+            "CFBundleDisplayName": "Deductum", "CFBundleExecutable": "deductum",
+            "CFBundlePackageType": "APPL", "CFBundleIconFile": "Deductum",
+            "CFBundleShortVersionString": "0.1.0", "CFBundleVersion": "0.1.0",
+            "LSMinimumSystemVersion": "11.0", "NSHighResolutionCapable": True,
+            "LSApplicationCategoryType": "public.app-category.developer-tools"})
+        self.assertEqual(metadata["version"], "0.1.0")
+
+    def test_the_bundle_is_signed_once_it_is_complete(self):
+        calls = []
+        def sign(app):
+            calls.append(app.name)
+            fake_sign(app)
+        P.package(self.root, self.binaries, self.runtimes, self.output, universal=fake_universal, sign=sign)
+        self.assertEqual(calls, ["Deductum.app"])
+
+    def test_binary_and_runtime_stay_executable_and_the_runtime_link_survives(self):
+        archive, _ = self.package()
+        with zipfile.ZipFile(archive) as source:
+            infos = {info.filename: info for info in source.infolist()}
+            resources = "Deductum.app/Contents/Resources/"
+            for name in ("Deductum.app/Contents/MacOS/deductum", resources + "python/arm64/bin/python3.12"):
                 self.assertTrue((infos[name].external_attr >> 16) & 0o111, name + " lost its executable bit")
             self.assertFalse((infos["README.txt"].external_attr >> 16) & 0o111)
-            link = infos["python/x86_64/bin/python3"]
+            link = infos[resources + "python/x86_64/bin/python3"]
             self.assertEqual((link.external_attr >> 16) & 0o170000, 0o120000)
             self.assertEqual(source.read(link), b"python3.12")
 

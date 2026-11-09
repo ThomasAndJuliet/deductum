@@ -10,5 +10,6 @@ __pycache__/
 **/target/
 **/.lake/
 /ci-artifact/
+/dist/macos/
 /dist/windows/
 /packaging/flatpak/*.ci.yml

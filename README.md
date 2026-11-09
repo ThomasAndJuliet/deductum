@@ -8,8 +8,10 @@ code. Deductum shows a file as a document, with formatted prose, typeset
 mathematics and proofs, and checks it continuously as you type. Click anything
 to edit its source; the file on disk stays the source of truth. You can share the
 same live prover session with AI agents, deciding what each one may change and
-seeing who changed what. Deductum runs on Linux and Windows, with projects on your
+seeing who changed what. Deductum runs on Linux, Windows and macOS, with projects on your
 own computer or on a remote Linux machine.
+
+![Deductum showing an Isabelle theory as a document: the Sessions sidebar, prose with typeset mathematics, and definitions in code cells](docs/images/deductum.png)
 
 ## Features
 
@@ -34,14 +36,15 @@ own computer or on a remote Linux machine.
 
 ## Install
 
-Download prebuilt Linux and Windows packages from GitHub Releases. Both are built
+Download prebuilt Linux, Windows and macOS packages from GitHub Releases. All are built
 by GitHub Actions; you do not need Rust or a source checkout to install them.
 
 ### Release downloads
 
 1. Open [Deductum's releases](https://github.com/ThomasAndJuliet/deductum/releases).
-2. Choose a version (`vMAJOR.MINOR.PATCH`). Download the Linux `.flatpak` or
-   Windows `…-windows-x86_64.zip` file from its **Assets**.
+2. Choose a version (`vMAJOR.MINOR.PATCH`). Download the Linux `.flatpak`,
+   Windows `…-windows-x86_64.zip` or macOS `…-macos-universal.zip` file from its
+   **Assets**.
 3. Follow the installation steps for your platform below.
 
 GitHub's **Source code** archives contain source, rather than an installable app.
@@ -95,12 +98,23 @@ windows, run `stop-host.cmd` from the **old** package to flush and stop its
 session host, then launch the new package. Keep the old package until you have
 checked the update. Settings and session data are stored outside the package.
 
-### macOS: package built from source
+### macOS: app
 
-There is no macOS download in the releases yet. A universal package for Apple
-Silicon and Intel Macs, with its own Python, can be built on a Mac as described
-in [the development guide](docs/development.md#build-the-macos-package). Its
-`README.txt` explains how to open it and how to start a session.
+Use the **macOS universal** package; it runs natively on Apple Silicon and Intel
+Macs with macOS 11 or later and carries its own Python.
+
+1. Download the prebuilt macOS package as described in
+   [Release downloads](#release-downloads) and extract the ZIP.
+2. Move `Deductum.app` to `/Applications` or `~/Applications`.
+3. The app is not signed with an Apple Developer ID, so macOS blocks it
+   after a download. In Terminal, run
+   `xattr -dr com.apple.quarantine /Applications/Deductum.app`
+   (use `~/Applications` if you put it there).
+4. Open Deductum like any other app.
+
+For an update, quit Deductum and replace the app with the new one. Settings and
+sessions are stored outside the app and are kept. To build the package yourself,
+see [the development guide](docs/development.md#build-the-macos-package).
 
 ## Set up a prover
 
@@ -112,8 +126,9 @@ to connect to remote sessions does not need a local prover.
   project's `lean-toolchain`; elan downloads that toolchain if needed. Prepare
   the project's dependencies as you would for any other Lean editor.
 - **Isabelle:** install [Isabelle2025](https://isabelle.in.tum.de/website-Isabelle2025/).
-  On Windows, use the official Windows distribution. Other Isabelle versions
-  are not supported yet.
+  On Windows, use the official Windows distribution. On macOS, move
+  `Isabelle2025.app` to `/Applications` or `~/Applications`, where Deductum
+  finds it. Other Isabelle versions are not supported yet.
 
 If Deductum cannot find Isabelle, add its `bin/isabelle` path to `host.json`
 in the [configuration directory](#settings-and-data) on the prover machine:
@@ -122,7 +137,8 @@ in the [configuration directory](#settings-and-data) on the prover machine:
 {"isabelle": [{"path": "/opt/Isabelle2025/bin/isabelle"}]}
 ```
 
-On Windows, an equivalent path is `C:/Isabelle2025/bin/isabelle`. If a folder
+On Windows, an equivalent path is `C:/Isabelle2025/bin/isabelle`; on macOS,
+`/Applications/Isabelle2025.app/bin/isabelle`. If a folder
 path causes a problem, the error message says what to do.
 
 ## Open your first project
@@ -137,7 +153,7 @@ path causes a problem, the error message says what to do.
 
 Closing a window leaves its proof sessions running. Reopen them from the
 Sessions sidebar, or use **Stop** to stop a prover explicitly. Open Settings
-with **Ctrl+,** to adjust the display and editor preferences.
+with **Ctrl+,** (**⌘,** on macOS) to adjust the display and editor preferences.
 
 You can also open a folder from a terminal:
 
@@ -149,6 +165,12 @@ In PowerShell, from the extracted Windows package:
 
 ```powershell
 .\deductum.exe C:\Proofs\Example
+```
+
+On macOS, in Terminal:
+
+```sh
+/Applications/Deductum.app/Contents/MacOS/deductum ~/Proofs/Example
 ```
 
 ## Remote Linux projects
@@ -176,16 +198,20 @@ flatpak run dev.twright.Deductum --machine proof-server /srv/proofs/Example
 .\deductum.exe --machine proof-server /srv/proofs/Example
 ```
 
+```sh
+/Applications/Deductum.app/Contents/MacOS/deductum --machine proof-server /srv/proofs/Example
+```
+
 ## Settings and data
 
-| Data | Linux default | Windows default |
-| --- | --- | --- |
-| App configuration (`settings.json`, `machines.json`) | `~/.config/deductum`¹ | `%APPDATA%\deductum` |
-| Host configuration (`host.json`) | `~/.config/deductum` | `%APPDATA%\deductum` |
-| Sessions and recovery journal | `~/.local/state/deductum` | `%LOCALAPPDATA%\deductum\state` |
+| Data | Linux default | Windows default | macOS default |
+| --- | --- | --- | --- |
+| App configuration (`settings.json`, `machines.json`) | `~/.config/deductum`¹ | `%APPDATA%\deductum` | `~/.config/deductum` |
+| Host configuration (`host.json`) | `~/.config/deductum` | `%APPDATA%\deductum` | `~/.config/deductum` |
+| Sessions and recovery journal | `~/.local/state/deductum` | `%LOCALAPPDATA%\deductum\state` | `~/.local/state/deductum` |
 
 ¹ The Flatpak uses `~/.var/app/dev.twright.Deductum/config/deductum` for app
-configuration. Linux paths follow the corresponding XDG directory settings.
+configuration. Linux and macOS paths follow the corresponding XDG directory settings.
 Remote sessions keep their state on the remote machine. Your proof files stay
 in their project folders; back those up along with session state.
 

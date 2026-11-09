@@ -46,6 +46,103 @@ pub fn config_dir() -> PathBuf {
         .unwrap_or_else(|| config_home().join("deductum"))
 }
 
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+/// The `PATH` an app bundle should run with: its bundled Python, then the places a Mac keeps
+/// the Lean toolchain and Homebrew tools, ahead of whatever `PATH` already holds. Finder gives
+/// apps no shell `PATH`. Entries already present are not repeated; the others keep their order.
+pub fn bundle_path(
+    resources: &std::path::Path,
+    arm64: bool,
+    home: &std::path::Path,
+    existing: Option<&std::ffi::OsStr>,
+) -> Option<std::ffi::OsString> {
+    let python = resources.join("python").join(if arm64 { "arm64" } else { "x86_64" }).join("bin");
+    let wanted = [python, home.join(".elan/bin"), PathBuf::from("/opt/homebrew/bin"), PathBuf::from("/usr/local/bin")];
+    let existing: Vec<PathBuf> = existing.map(|p| std::env::split_paths(p).collect()).unwrap_or_default();
+    let mut entries: Vec<PathBuf> = Vec::new();
+    for entry in wanted {
+        if !existing.contains(&entry) && !entries.contains(&entry) {
+            entries.push(entry);
+        }
+    }
+    entries.extend(existing);
+    std::env::join_paths(entries).ok()
+}
+
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+/// The `Contents/Resources` folder of the `.app` bundle that `exe` runs from, if it does
+pub fn bundle_resources(exe: &std::path::Path) -> Option<PathBuf> {
+    let macos = exe.parent()?;
+    let contents = macos.parent()?;
+    let app = contents.parent()?;
+    let inside = macos.file_name()? == "MacOS"
+        && contents.file_name()? == "Contents"
+        && app.extension().is_some_and(|extension| extension == "app");
+    inside.then(|| contents.join("Resources"))
+}
+
+/// Gives an app opened from Finder the `PATH` it needs. Call it first in `main`, before any
+/// thread starts: changing the environment is not safe once there are other threads.
+#[cfg(target_os = "macos")]
+pub fn prepare_bundle_environment() {
+    let Some(resources) = std::env::current_exe().ok().and_then(|exe| bundle_resources(&exe)) else { return };
+    let existing = std::env::var_os("PATH");
+    if let Some(path) = bundle_path(&resources, cfg!(target_arch = "aarch64"), &home(), existing.as_deref()) {
+        // SAFETY: called at the start of main, while the process is single-threaded
+        unsafe { std::env::set_var("PATH", path) };
+    }
+}
+
+// The bundle path is built only on macOS; the tests use Unix paths and `:`, so they run on Unix
+#[cfg(all(test, unix))]
+mod bundle_tests {
+    use super::*;
+    use std::ffi::OsString;
+    use std::path::Path;
+
+    fn paths(value: Option<OsString>) -> Vec<PathBuf> {
+        std::env::split_paths(&value.unwrap()).collect()
+    }
+
+    #[test]
+    fn the_bundled_python_comes_first_for_each_architecture() {
+        let resources = Path::new("/Applications/Deductum.app/Contents/Resources");
+        let home = Path::new("/Users/me");
+        let existing = OsString::from("/usr/bin:/bin");
+        let arm = paths(bundle_path(resources, true, home, Some(&existing)));
+        assert_eq!(arm, [
+            "/Applications/Deductum.app/Contents/Resources/python/arm64/bin", "/Users/me/.elan/bin",
+            "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin",
+        ].map(PathBuf::from));
+        let intel = paths(bundle_path(resources, false, home, Some(&existing)));
+        assert_eq!(intel[0], Path::new("/Applications/Deductum.app/Contents/Resources/python/x86_64/bin"));
+    }
+
+    #[test]
+    fn entries_already_on_the_path_are_not_repeated_or_moved() {
+        let existing = OsString::from("/usr/bin:/opt/homebrew/bin:/bin");
+        let got = paths(bundle_path(Path::new("/A.app/Contents/Resources"), true, Path::new("/h"), Some(&existing)));
+        assert_eq!(got, ["/A.app/Contents/Resources/python/arm64/bin", "/h/.elan/bin", "/usr/local/bin",
+            "/usr/bin", "/opt/homebrew/bin", "/bin"].map(PathBuf::from));
+    }
+
+    #[test]
+    fn a_missing_path_still_gets_the_entries() {
+        let got = paths(bundle_path(Path::new("/A.app/Contents/Resources"), false, Path::new("/h"), None));
+        assert_eq!(got.len(), 4);
+    }
+
+    #[test]
+    fn only_an_executable_inside_an_app_bundle_has_resources() {
+        assert_eq!(bundle_resources(Path::new("/Applications/Deductum.app/Contents/MacOS/deductum")),
+            Some(PathBuf::from("/Applications/Deductum.app/Contents/Resources")));
+        assert_eq!(bundle_resources(Path::new("/x/target/release/deductum")), None);
+        assert_eq!(bundle_resources(Path::new("/x/Deductum/Contents/MacOS/deductum")), None);
+        assert_eq!(bundle_resources(Path::new("/x/Deductum.app/MacOS/deductum")), None);
+        assert_eq!(bundle_resources(Path::new("deductum")), None);
+    }
+}
+
 #[cfg(windows)]
 pub mod windows {
     use std::ffi::{OsStr, c_void};

@@ -27,7 +27,26 @@ class VersionTests(unittest.TestCase):
         for messages, expected in cases:
             with self.subTest(messages=messages):
                 self.assertEqual(policy.next_version((1, 2, 3), messages), expected)
-        self.assertEqual(policy.next_version((0, 1, 0), ["feat!: incompatible change"]), (1, 0, 0))
+
+    def test_before_1_0_breaking_changes_are_minor_and_1_0_is_chosen_by_hand(self):
+        cases = [
+            (["feat!: incompatible change"], (0, 7, 0)),
+            (["fix: change format\n\nBREAKING CHANGE: old states need conversion"], (0, 7, 0)),
+            (["fix: repair navigation"], (0, 6, 1)),
+            (["chore: declare the stable release\n\nRelease-As: 1.0.0"], (1, 0, 0)),
+            (["feat!: stable protocol\n\nRelease-As: v1.0.0", "fix: a typo"], (1, 0, 0)),
+            # The footer must be a footer, and a version at or below the base cannot be released
+            (["chore: Release-As: 1.0.0"], None),
+            (["fix: a typo\n\nRelease-As: 0.6.0"], (0, 6, 1)),
+            (["feat: a tool\n\nRelease-As: 0.6.5"], (0, 7, 0)),
+            (["docs: notes\n\nRelease-As: 1.0"], None),
+        ]
+        for messages, expected in cases:
+            with self.subTest(messages=messages):
+                self.assertEqual(policy.next_version((0, 6, 0), messages), expected)
+        # From 1.0 a breaking change advances the major version again
+        self.assertEqual(policy.next_version((1, 0, 0), ["feat!: change the protocol"]), (2, 0, 0))
+        self.assertEqual(policy.next_version((1, 4, 2), ["docs: x\n\nRelease-As: 3.0.0"]), (3, 0, 0))
 
 
 class HistoryTests(unittest.TestCase):
@@ -94,6 +113,15 @@ class HistoryTests(unittest.TestCase):
         self.assertEqual(plan["tag"], "v0.2.1")
         self.assertNotIn("search tool", plan["notes"])
         self.assertNotIn("v0.2.0", self.git("tag").splitlines())
+
+    def test_release_as_footer_takes_a_0_x_history_to_1_0_0(self):
+        sha = self.commit("feat!: change the protocol")
+        self.assertEqual(policy.plan(sha)["tag"], "v0.2.0")
+        self.git("tag", "v0.2.0", sha)
+        sha = self.commit("chore: declare the stable release\n\nRelease-As: 1.0.0")
+        plan = policy.plan(sha)
+        self.assertEqual(plan["tag"], "v1.0.0")
+        self.assertIn("Release-As", plan["notes"])
 
     def test_merged_feature_commits_are_counted(self):
         self.git("switch", "-qc", "feature")

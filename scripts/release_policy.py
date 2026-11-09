@@ -7,6 +7,8 @@ import subprocess
 TAG = re.compile(r"v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)")
 SUBJECT = re.compile(r"(?P<type>[a-z]+)(?:\((?P<scope>[^()\r\n]+)\))?(?P<breaking>!)?: (?P<description>\S.*)", re.I)
 FOOTER = re.compile(r"^BREAKING[ -]CHANGE: \S", re.M)
+# A footer that sets the next version by hand: the only way to leave 0.x for 1.0.0
+RELEASE_AS = re.compile(r"^Release-As: v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)[ \t]*$", re.M | re.I)
 
 
 def git(*args):
@@ -29,9 +31,11 @@ def change(message):
     return rank, match["description"]
 
 
-def next_version(base, messages):
-    rank = max((change(message)[0] for message in messages), default=0)
+def bump(base, rank):
     major, minor, patch = base
+    # Before 1.0 a breaking change is a minor bump: 1.0.0 is only ever chosen by hand
+    if rank == 3 and major == 0:
+        rank = 2
     if rank == 3:
         return major + 1, 0, 0
     if rank == 2:
@@ -39,6 +43,21 @@ def next_version(base, messages):
     if rank == 1:
         return major, minor, patch + 1
     return None
+
+
+def requested(messages):
+    """Versions asked for with a `Release-As: X.Y.Z` footer (the subject line does not count)"""
+    return [tuple(map(int, match.groups()))
+            for message in messages for match in RELEASE_AS.finditer(message.partition("\n")[2])]
+
+
+def next_version(base, messages):
+    rank = max((change(message)[0] for message in messages), default=0)
+    automatic = bump(base, rank)
+    # A requested version releases even after only docs or chores; one at or below the
+    # base cannot be honoured and is ignored, as is one below the automatic bump
+    manual = [version for version in requested(messages) if version > base]
+    return max([*manual, *([automatic] if automatic else [])], default=None)
 
 
 def plan(sha, tags=None):
@@ -78,4 +97,6 @@ def plan(sha, tags=None):
     notes = "\n\n".join(heading + "\n" + "\n".join("- " + item for item in items)
                           for heading, items in groups.values() if items)
     tag = max(reserved)[1] if reserved else "v" + ".".join(map(str, version))
+    if not notes and not reserved:
+        notes = f"Released as {tag}, set by a Release-As footer, with no listed features or fixes."
     return {"tag": tag, "notes": notes, "reserved": bool(reserved)}
