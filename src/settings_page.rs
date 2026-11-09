@@ -27,8 +27,10 @@ use cosmic::{iced, theme};
 
 use super::settings::{Change, CODE_SIZES, DisplayChange, INTERFACE_SIZES, Loogle, Rights, Settings, TextFont, ThemeChoice};
 use super::shell::{self, Msg, sp};
+use super::fields::Field;
 use super::tones;
 use super::{App, Message};
+use household_widgets::ShortTextBox;
 
 // ----- the layout
 
@@ -105,7 +107,10 @@ pub enum Sub {
 /// What the page keeps between frames
 #[derive(Default)]
 pub struct PageState {
-    pub query: String,
+    pub query: ShortTextBox,
+    /// The fields of the settings typed in, from the settings each time the page opens
+    pub claude_model: ShortTextBox,
+    pub codex_model: ShortTextBox,
     pub changed_only: bool,
     /// The section being read (the list marks it)
     pub current: Option<Section>,
@@ -118,11 +123,36 @@ impl PageState {
     fn width(&self) -> f32 {
         f32::from_bits(self.width.load(Ordering::Relaxed))
     }
+
+    /// The fields of the settings typed in, starting as the settings are: where they start, not
+    /// a change to them
+    pub fn fields_from(&mut self, settings: &super::settings::Settings) {
+        self.claude_model = ShortTextBox::starting_with(&settings.llm.claude_model);
+        self.codex_model = ShortTextBox::starting_with(&settings.llm.codex_model);
+    }
+
+    /// The box of one of the page's fields
+    pub fn field(&self, field: &Field) -> Option<&ShortTextBox> {
+        match field {
+            Field::SettingsSearch => Some(&self.query),
+            Field::ClaudeModel => Some(&self.claude_model),
+            Field::CodexModel => Some(&self.codex_model),
+            _ => None,
+        }
+    }
+
+    pub fn field_mut(&mut self, field: &Field) -> Option<&mut ShortTextBox> {
+        match field {
+            Field::SettingsSearch => Some(&mut self.query),
+            Field::ClaudeModel => Some(&mut self.claude_model),
+            Field::CodexModel => Some(&mut self.codex_model),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
 pub enum PageMsg {
-    Search(String),
     ChangedOnly(bool),
     /// Scroll to a section
     Jump(Section),
@@ -150,7 +180,6 @@ impl menu::Action for ResetRow {
 
 pub fn update(app: &mut App, msg: PageMsg) -> Task<Message> {
     match msg {
-        PageMsg::Search(q) => app.shell.page.query = q,
         PageMsg::ChangedOnly(on) => app.shell.page.changed_only = on,
         PageMsg::Jump(section) => {
             app.shell.page.current = Some(section);
@@ -244,7 +273,8 @@ pub enum Control {
     /// The household's muted switch
     Switch { on: bool, set: fn(bool) -> Msg },
     Spin { text: String, value: i32, step: i32, min: i32, max: i32, set: fn(i32) -> Msg },
-    Text { placeholder: &'static str, value: String, set: fn(String) -> Msg },
+    /// A field typed in (its value is the setting's: see [`PageState::fields_from`])
+    Text { placeholder: &'static str, field: Field },
     /// A button that does something (opens a page)
     Open { label: &'static str, msg: Msg },
     /// A machine's connection (the nth of the app's)
@@ -451,10 +481,10 @@ pub fn rows(app: &App) -> Vec<Row> {
         None => add("route", Agents, "Where keyword lines go", "Each session's own choice: open a session to set it", Control::Info(String::new()), false, None),
     }
     add("claude_model", Agents, "Claude's model", "When a claude line names none, as claude[opus] does",
-        Control::Text { placeholder: "Claude's default", value: st.llm.claude_model.clone(), set: Msg::ClaudeModel },
+        Control::Text { placeholder: "Claude's default", field: Field::ClaudeModel },
         !st.llm.claude_model.is_empty(), Some(Msg::ClaudeModel(String::new())));
     add("codex_model", Agents, "Codex's model", "When a codex line names none",
-        Control::Text { placeholder: "Codex's default", value: st.llm.codex_model.clone(), set: Msg::CodexModel },
+        Control::Text { placeholder: "Codex's default", field: Field::CodexModel },
         !st.llm.codex_model.is_empty(), Some(Msg::CodexModel(String::new())));
     #[cfg(not(windows))]
     add("default_rights", Agents, "Default editing rights", "What a new agent session may edit until you say otherwise; not on Windows",
@@ -583,10 +613,7 @@ fn settings_page(app: &App) -> Element<'_, Message> {
         .push(widget::text::title3("Settings").width(Length::Fill))
         .push(
             widget::container(
-                widget::search_input("Search settings", page.query.clone())
-                    .on_input(|q| page_msg(PageMsg::Search(q)))
-                    .on_clear(page_msg(PageMsg::Search(String::new())))
-                    .width(Length::Fill),
+                super::fields::search(&page.query, Field::SettingsSearch, "Search settings", |f| f.width(Length::Fill)),
             )
             .max_width(280)
             .width(Length::Fill),
@@ -792,7 +819,10 @@ fn control<'a>(app: &'a App, c: Control) -> Element<'a, Message> {
         Control::Drop { options, selected, msgs } => widget::dropdown(options, selected, move |i| set(msgs[i].clone())).into(),
         Control::Switch { on, set: make } => household_widgets::switch(on, move |v| set(make(v))),
         Control::Spin { text, value, step, min, max, set: make } => widget::spin_button(text, value, step, min, max, move |v| set(make(v))).into(),
-        Control::Text { placeholder, value, set: make } => widget::text_input(placeholder, value).on_input(move |v| set(make(v))).width(Length::Fixed(200.0)).into(),
+        Control::Text { placeholder, field } => match app.shell.page.field(&field) {
+            Some(text_box) => super::fields::text(text_box, field, placeholder, |f| f.width(Length::Fixed(200.0))),
+            None => widget::Space::new().into(),
+        },
         Control::Open { label, msg } => widget::button::standard(label).on_press(set(msg)).into(),
         Control::Machine(i) => app.links.get(i).map(machine_state).unwrap_or_else(|| widget::Space::new().into()),
         Control::Info(words) if words.is_empty() => widget::Space::new().into(),
@@ -996,11 +1026,11 @@ mod tests {
         let _turn = ui_turn();
         plain_view_state();
         let mut app = settings_app(false);
-        let _ = app.shell_update(Msg::Page(PageMsg::Search("loogle".into())));
+        let _ = app.set_field(Field::SettingsSearch, "loogle".into());
         assert_eq!(ids(&shown_rows(&app)), ["loogle"]);
         let _ = app.shell_update(Msg::Page(PageMsg::ChangedOnly(true)));
         assert!(shown_rows(&app).is_empty(), "loogle is at its default");
-        let _ = app.shell_update(Msg::Page(PageMsg::Search(String::new())));
+        let _ = app.set_field(Field::SettingsSearch, String::new());
         let _ = app.shell_update(Msg::Page(PageMsg::ChangedOnly(false)));
         assert!(shown_rows(&app).len() > 20);
         // Back from a page of its own returns to Settings; Back from Settings closes it
@@ -1113,7 +1143,7 @@ mod tests {
             ("switch-on", Control::Switch { on: true, set: |_| Msg::Theme(ThemeChoice::Dark) }),
             ("switch-off", Control::Switch { on: false, set: |_| Msg::Theme(ThemeChoice::Dark) }),
             ("spin", Control::Spin { text: "100%".into(), value: 100, step: 10, min: 50, max: 300, set: Msg::TextSize }),
-            ("text", Control::Text { placeholder: "Claude's default", value: String::new(), set: Msg::ClaudeModel }),
+            ("text", Control::Text { placeholder: "Claude's default", field: Field::ClaudeModel }),
             ("open", Control::Open { label: "Show", msg: msg.clone() }),
             ("info", Control::Info("Some words".into())),
             ("machine", Control::Machine(0)),
@@ -1138,13 +1168,13 @@ mod tests {
         // (the harness holds the UI's turn, so that the published settings are ours meanwhile)
         let mut h = Harness::new(Size::new(1400.0, 900.0));
         let _ = app.shell_update(Msg::Display(DisplayChange::MathScale(1.1)));
-        let _ = app.shell_update(Msg::Page(PageMsg::Search("size".into())));
+        let _ = app.set_field(Field::SettingsSearch, "size".into());
         let _ = h.draw(&app, "settings-search-warm");
         let frame = h.draw(&app, "settings-search");
         assert!(frame.chunks(4).any(|p| p[0] != frame[0]));
-        let _ = app.shell_update(Msg::Page(PageMsg::Search("zzz".into())));
+        let _ = app.set_field(Field::SettingsSearch, "zzz".into());
         let _ = h.draw(&app, "settings-none");
-        let _ = app.shell_update(Msg::Page(PageMsg::Search(String::new())));
+        let _ = app.set_field(Field::SettingsSearch, String::new());
         for sub in [Sub::Shortcuts, Sub::About] {
             let _ = app.shell_update(Msg::Page(PageMsg::Open(sub)));
             let _ = h.draw(&app, &format!("settings-{sub:?}"));

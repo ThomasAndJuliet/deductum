@@ -6,10 +6,10 @@ use serde_json::json;
 #[test]
 fn editing_folder_invalidates_detected_project() {
     let mut app = super::snapshot_lean::lean_app(Mode::Source);
-    let mut ns = NewSession { folder: "/a".into(), listing: Some(json!({"path":"/a"})), backend: Some("lean".into()), ..Default::default() };
+    let mut ns = NewSession { folder: household_widgets::ShortTextBox::starting_with("/a"), listing: Some(json!({"path":"/a"})), backend: Some("lean".into()), ..Default::default() };
     ns.suggested(&json!({"detections":[{"backend":"lean", "project":{"root":"/a"}}]}));
     app.new_session = Some(ns);
-    let _ = app.update(Message::NewFolder("/b".into()));
+    let _ = app.update(Message::SetField(super::fields::Field::NewFolder, "/b".into()));
     let ns = app.new_session.as_ref().unwrap();
     assert!(ns.listing.is_none() && ns.backend.is_none() && ns.detections.is_none());
 }
@@ -22,13 +22,13 @@ fn old_folder_replies_and_errors_cannot_replace_current_selection() {
     let _ = app.update(Message::NewBrowse("/a".into()));
     let old = app.new_session.as_ref().unwrap().generation;
     let _ = app.on_reply("other-machine".into(), Pending::ListDir(old, "/a".into()), json!({"ok":true,"path":"/other"}));
-    assert_eq!(app.new_session.as_ref().unwrap().folder, "/a");
+    assert_eq!(app.new_session.as_ref().unwrap().folder.value(), "/a");
     let _ = app.update(Message::NewBrowse("/b".into()));
     let current = app.new_session.as_ref().unwrap().generation;
     let _ = app.on_reply("local".into(), Pending::ListDir(old, "/a".into()), json!({"ok":true,"path":"/a"}));
     let _ = app.on_reply("local".into(), Pending::Suggest(old, "/a".into()), json!({"ok":false,"error":"old error"}));
     let ns = app.new_session.as_ref().unwrap();
-    assert_eq!(ns.folder, "/b");
+    assert_eq!(ns.folder.value(), "/b");
     assert!(ns.listing.is_none() && ns.error.is_none() && !ns.ready());
     let _ = app.on_reply("local".into(), Pending::ListDir(current, "/b".into()), json!({"ok":true,"path":"/b"}));
     let _ = app.on_reply("local".into(), Pending::Suggest(current, "/b".into()), json!({"ok":true,"detections":[{"backend":"lean","project":{"root":"/b"}}]}));
@@ -36,7 +36,7 @@ fn old_folder_replies_and_errors_cannot_replace_current_selection() {
     let _ = app.update(Message::NewSession(false));
     let _ = app.update(Message::NewSession(true));
     let _ = app.on_reply("local".into(), Pending::ListDir(current, "/b".into()), json!({"ok":true,"path":"/b"}));
-    assert_ne!(app.new_session.as_ref().unwrap().folder, "/b");
+    assert_ne!(app.new_session.as_ref().unwrap().folder.value(), "/b");
 }
 
 #[test]
@@ -49,7 +49,7 @@ fn machine_change_invalidates_old_replies_and_loading_form_cannot_start() {
     let _ = app.update(Message::NewMachine(0));
     let _ = app.on_reply("local".into(), Pending::ListDir(old, "/a".into()), json!({"ok":true,"path":"/a"}));
     let ns = app.new_session.as_ref().unwrap();
-    assert_eq!(ns.folder, "");
+    assert_eq!(ns.folder.value(), "");
     assert!(!ns.ready());
     let _ = app.update(Message::NewCreate);
     assert!(app.new_session.is_some());

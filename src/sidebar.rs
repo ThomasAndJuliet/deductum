@@ -584,7 +584,7 @@ fn documents<'a>(app: &'a App, ws: &'a Workspace) -> Element<'a, Message> {
     // A big folder gets a filter
     if all.len() > 10 && !collapsed {
         col = col.push(
-            widget::container(widget::text_input(format!("Filter {} documents", all.len()), &ws.theory_filter).on_input(Message::TheoryFilter))
+            widget::container(super::fields::text(&ws.theory_filter, super::fields::Field::Documents, format!("Filter {} documents", all.len()), |f| f))
                 .padding(Padding { bottom: 4.0, right: 4.0, ..Padding::ZERO }),
         );
     }

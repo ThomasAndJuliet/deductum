@@ -28,6 +28,7 @@ mod cli;
 mod codec;
 mod context_menu;
 mod editor;
+mod fields;
 mod flow;
 mod gap;
 mod goals;
@@ -58,6 +59,8 @@ mod vim;
 mod snapshot;
 #[cfg(test)]
 mod snapshot_shell;
+#[cfg(test)]
+mod snapshot_fields;
 #[cfg(test)]
 mod snapshot_lean;
 #[cfg(test)]
@@ -149,6 +152,8 @@ use tokio::sync::mpsc;
 use codec::Symbols;
 use editor::{Mode, Theory};
 use prover::{Capabilities, Profile, Tool};
+use household_widgets::short_text_box::Caret;
+use household_widgets::{ShortTextBox, Undoable};
 pub use new_session::NewSession;
 
 pub const APP_ID: &str = "dev.twright.Deductum";
@@ -247,11 +252,10 @@ pub enum Message {
     /// Run the panel's proof tool at the caret, or at a source offset
     RunTool(String),
     RunToolAt(String, usize),
-    /// A proof tool's setting changed (tool, setting, value)
+    /// A proof tool's switch changed (tool, setting, value; the typed ones are fields)
     ToolSetting(String, String, String),
     CancelQuery,
     InsertProof(String),
-    FindInput(String),
     Find,
     Grant(String, String, &'static str),
     Revoke(String),
@@ -264,9 +268,7 @@ pub enum Message {
     DismissAlternative(String),
     NewSession(bool),
     NewMachine(usize),
-    NewFolder(String),
     NewBrowse(String),
-    NewLogic(String),
     NewCreate,
     Merge(String),
     PopOut,
@@ -291,7 +293,6 @@ pub enum Message {
     /// Input declined by a focused read-only message, mapped by its window.
     ReadOnlyKey(cosmic::widget::text_editor::KeyPress),
     SetModeEntity(widget::segmented_button::Entity),
-    SymbolSearch(String),
     /// A motion or selection in a message shown as code (it is read-only)
     ViewAction(u64, Action),
     /// A click in a formal block shown in the literate view: opens it there, caret at the click
@@ -310,7 +311,6 @@ pub enum Message {
     StateText(bool),
     /// Goals or text, with types or without: the narrow goal panel's one dropdown
     GoalView { text: bool, types: bool },
-    TheoryFilter(String),
     /// The pointer over an editor (where, in its coordinates), or off it
     HoverMove(HoverTarget, cosmic::iced::Point),
     HoverExit,
@@ -363,8 +363,10 @@ pub enum Message {
     LineMove(EditorTarget, bool),
     /// The goal beside the text, or under the proof with the page centred
     ToggleGoalBeside,
-    /// The insert palette's search (the bar's above the goal too)
-    PaletteQuery(String),
+    /// A one-line field's own message: typing, Undo and Redo, from its keys or its menu
+    Field(fields::Field, household_widgets::short_text_box::Action),
+    /// The app's change of a field's value (Clear): a step the field's Undo takes back
+    SetField(fields::Field, String),
     /// The insert bar above the goal: open (the whole palette under its row) or one row
     InsertBar(bool),
     /// Put this before and this after the selection, or at the caret with the caret between
@@ -383,12 +385,10 @@ pub enum Message {
     RefClosed(cosmic::iced::window::Id),
     /// Go to the place an agent offered to show (true), or dismiss it
     ShowOffer(bool),
-    NoteReplyInput(String, String),
     /// Send the reply to a note; resolve it if true
     NoteReply(String, bool),
     ShowTypes(bool),
     AllGoals(bool),
-    CommandParams(String),
     InsertSymbol(String),
     LeftMode(LeftMode),
     /// Dragging a sidebar's edge: start (true for the left one), move, end
@@ -634,11 +634,11 @@ pub struct Workspace {
     pub show_types: bool,
     pub all_goals: bool,
     /// Narrows the session's list of theories
-    pub theory_filter: String,
+    pub theory_filter: ShortTextBox,
     /// Agents' notes on the open theory, a reply being written to each, and a place an agent
     /// offers to show
     pub notes: Vec<Value>,
-    pub note_reply: HashMap<String, String>,
+    pub note_reply: HashMap<String, ShortTextBox>,
     pub show_offer: Option<Value>,
     /// Where to go once the theory being opened is read (host offset)
     pub pending_goto: Option<usize>,
@@ -659,20 +659,22 @@ pub struct Workspace {
     pub all_offers: bool,
     /// What the insert palette (beside the text, when there is no goal) and the insert bar
     /// (above the goal) are searched for
-    pub palette_query: String,
+    pub palette_query: ShortTextBox,
     /// Whether the insert bar above the goal shows the whole palette, not just its row
     pub insert_open: bool,
     pub find: QueryState,
-    pub find_input: String,
+    pub find_input: ShortTextBox,
     pub cex: QueryState,
     pub fill: FillState,
-    pub cex_params: String,
+    pub cex_params: ShortTextBox,
     pub activity: Option<Value>,
     /// Messages shown as code, by the hash of the message
     pub views: HashMap<u64, editor::CodeView>,
-    /// Proof tools' settings as the human set them, by `tool.setting` (see [`Tool::value`])
+    /// Proof tools' settings as the human set them, by `tool.setting` (see [`Tool::value`]), and
+    /// the fields of those typed in (see [`fields::tool_fields`])
     pub tool_settings: HashMap<String, String>,
-    pub symbol_search: String,
+    pub tool_fields: HashMap<String, ShortTextBox>,
+    pub symbol_search: ShortTextBox,
     pub history: Vec<Value>,
     pub follow: Option<String>,
     pub log: Vec<String>,
@@ -1087,6 +1089,7 @@ impl App {
         ws.profile = profile;
         if caps != ws.caps {
             let typed = caps.typed_tools();
+            ws.tool_fields = fields::tool_fields(&caps.tools, &ws.tool_settings, std::mem::take(&mut ws.tool_fields));
             ws.caps = caps;
             if let Some(t) = &mut ws.theory {
                 t.typed_tools = typed;
@@ -1202,7 +1205,7 @@ impl App {
         }
         if let Pending::ListDir(generation, path) | Pending::Suggest(generation, path) = &pending {
             let current = self.new_session.as_ref().is_some_and(|ns| {
-                ns.generation == *generation && ns.folder == *path
+                ns.generation == *generation && ns.folder.value() == path.as_str()
                     && self.links.get(ns.machine).is_some_and(|link| link.target.key == machine)
             });
             if !current {
@@ -1522,11 +1525,12 @@ impl App {
             Pending::PickDir(seq) => self.picker_listed(seq, v),
             Pending::ListDir(generation, _) => {
                 if let Some(ns) = &mut self.new_session {
-                    ns.folder = v["path"].as_str().unwrap_or("").to_string();
+                    // (the folder as the host found it: the field shows that, a step Undo takes back)
+                    ns.folder.replace(v["path"].as_str().unwrap_or(""), Caret::End);
                     ns.listing = Some(v);
                     ns.detections = None;
                     ns.error = None;
-                    let folder = ns.folder.clone();
+                    let folder = ns.folder.to_string();
                     let machine = self.links.get(ns.machine).map(|l| l.target.key.clone()).unwrap_or_default();
                     self.send(&machine, "suggest", json!({"folder": folder}), Pending::Suggest(generation, folder.clone()));
                 }
@@ -2678,6 +2682,45 @@ pub fn file_name(path: &str) -> &str {
     path.rsplit('/').next().unwrap_or(path)
 }
 
+/// The window's keys that no widget took (a focused field takes its own Ctrl+Z, and an editor
+/// its keys): the app's shortcuts, and the rest as [`Message::WindowKey`]; the window's size and
+/// the modifiers held, whoever took them
+fn app_key(event: cosmic::iced::Event, status: cosmic::iced::event::Status, _window: cosmic::iced::window::Id) -> Option<Message> {
+    use cosmic::iced::keyboard::{Event as Key, Key as K};
+    if let cosmic::iced::Event::Keyboard(Key::ModifiersChanged(m)) = event {
+        return Some(Message::Modifiers(m.control(), m.alt()));
+    }
+    if status == cosmic::iced::event::Status::Captured
+        && !matches!(event, cosmic::iced::Event::Window(_))
+    {
+        return None;
+    }
+    if let cosmic::iced::Event::Window(cosmic::iced::window::Event::Resized(size)) = event {
+        return Some(Message::WindowResized(size.width, size.height));
+    }
+    let cosmic::iced::Event::Keyboard(Key::KeyPressed { key, modified_key, physical_key, modifiers, text, .. }) = event else { return None };
+    match key.as_ref() {
+        K::Character("=" | "+") if modifiers.command() => Some(Message::Zoom(1)),
+        K::Character("-") if modifiers.command() => Some(Message::Zoom(-1)),
+        K::Character("0") if modifiers.command() => Some(Message::Zoom(0)),
+        K::Character(",") if modifiers.command() => Some(Message::Shell(shell::Msg::ToggleSettings)),
+        K::Character("1") if modifiers.command() && !modifiers.shift() => Some(Message::SetMode(Mode::Literate)),
+        K::Character("2") if modifiers.command() && !modifiers.shift() => Some(Message::SetMode(Mode::Source)),
+        K::Named(cosmic::iced::keyboard::key::Named::F9) => Some(Message::ToggleSidebar),
+        K::Named(cosmic::iced::keyboard::key::Named::F8) if modifiers.shift() => Some(Message::Shell(shell::Msg::NextProblem(attention::Problem::Unfinished))),
+        K::Named(cosmic::iced::keyboard::key::Named::F8) => Some(Message::Shell(shell::Msg::NextProblem(attention::Problem::Failed))),
+        K::Named(cosmic::iced::keyboard::key::Named::ArrowLeft) if modifiers.alt() => Some(Message::Back),
+        K::Named(cosmic::iced::keyboard::key::Named::ArrowUp) if modifiers.alt() && !modifiers.shift() => Some(Message::MoveSelected(false)),
+        K::Named(cosmic::iced::keyboard::key::Named::ArrowDown) if modifiers.alt() && !modifiers.shift() => Some(Message::MoveSelected(true)),
+        K::Character("c") if modifiers.command() && !modifiers.shift() => Some(Message::CopySelectedCell),
+        _ if !modifiers.alt() && !modifiers.logo() => Some(Message::WindowKey(cosmic::widget::text_editor::KeyPress {
+            key, modified_key, physical_key, modifiers, text,
+            status: cosmic::widget::text_editor::Status::Focused { is_hovered: false },
+        })),
+        _ => None,
+    }
+}
+
 impl cosmic::Application for App {
     type Executor = executor::Default;
     type Flags = Flags;
@@ -2791,11 +2834,13 @@ impl cosmic::Application for App {
 
     fn view(&self) -> Element<'_, Self::Message> {
         view::set_vim_mode(self.vim_enabled.then_some(self.vim.mode));
+        fields::set_window_behind(self.core.focused_window() != self.core.main_window_id());
         // (what passed, as toasts at the foot of the window)
         self.shell.toasts.over(view::view(self))
     }
 
     fn view_window(&self, id: cosmic::iced::window::Id) -> Element<'_, Self::Message> {
+        fields::set_window_behind(self.core.focused_window() != Some(id));
         if self.popout == Some(id) {
             return view::proof_window(self);
         }
@@ -2816,41 +2861,7 @@ impl cosmic::Application for App {
         let links = self.links.iter().map(|l| {
             Subscription::run_with(l.target.clone(), link::run).map(|(key, event)| Message::Link(key, event))
         });
-        let keys = cosmic::iced::event::listen_with(|event, status, _window| {
-            use cosmic::iced::keyboard::{Event as Key, Key as K};
-            if let cosmic::iced::Event::Keyboard(Key::ModifiersChanged(m)) = event {
-                return Some(Message::Modifiers(m.control(), m.alt()));
-            }
-            if status == cosmic::iced::event::Status::Captured
-                && !matches!(event, cosmic::iced::Event::Window(_))
-            {
-                return None;
-            }
-            if let cosmic::iced::Event::Window(cosmic::iced::window::Event::Resized(size)) = event {
-                return Some(Message::WindowResized(size.width, size.height));
-            }
-            let cosmic::iced::Event::Keyboard(Key::KeyPressed { key, modified_key, physical_key, modifiers, text, .. }) = event else { return None };
-            match key.as_ref() {
-                K::Character("=" | "+") if modifiers.command() => Some(Message::Zoom(1)),
-                K::Character("-") if modifiers.command() => Some(Message::Zoom(-1)),
-                K::Character("0") if modifiers.command() => Some(Message::Zoom(0)),
-                K::Character(",") if modifiers.command() => Some(Message::Shell(shell::Msg::ToggleSettings)),
-                K::Character("1") if modifiers.command() && !modifiers.shift() => Some(Message::SetMode(Mode::Literate)),
-                K::Character("2") if modifiers.command() && !modifiers.shift() => Some(Message::SetMode(Mode::Source)),
-                K::Named(cosmic::iced::keyboard::key::Named::F9) => Some(Message::ToggleSidebar),
-                K::Named(cosmic::iced::keyboard::key::Named::F8) if modifiers.shift() => Some(Message::Shell(shell::Msg::NextProblem(attention::Problem::Unfinished))),
-                K::Named(cosmic::iced::keyboard::key::Named::F8) => Some(Message::Shell(shell::Msg::NextProblem(attention::Problem::Failed))),
-                K::Named(cosmic::iced::keyboard::key::Named::ArrowLeft) if modifiers.alt() => Some(Message::Back),
-                K::Named(cosmic::iced::keyboard::key::Named::ArrowUp) if modifiers.alt() && !modifiers.shift() => Some(Message::MoveSelected(false)),
-                K::Named(cosmic::iced::keyboard::key::Named::ArrowDown) if modifiers.alt() && !modifiers.shift() => Some(Message::MoveSelected(true)),
-                K::Character("c") if modifiers.command() && !modifiers.shift() => Some(Message::CopySelectedCell),
-                _ if !modifiers.alt() && !modifiers.logo() => Some(Message::WindowKey(cosmic::widget::text_editor::KeyPress {
-                    key, modified_key, physical_key, modifiers, text,
-                    status: cosmic::widget::text_editor::Status::Focused { is_hovered: false },
-                })),
-                _ => None,
-            }
-        });
+        let keys = cosmic::iced::event::listen_with(app_key);
         // While a sidebar's edge is dragged: the pointer, wherever it is, and its release,
         // whichever widget it lands on
         let drag = self.dragging.is_some().then(|| {
@@ -3060,7 +3071,7 @@ impl App {
                     machine: machine.clone(),
                     sid: sid.clone(),
                     profile,
-                    caps,
+                    caps: caps.clone(),
                     info: None,
                     theory: None,
                     opening: None,
@@ -3072,7 +3083,7 @@ impl App {
                     state_text: false,
                     show_types: self.shell.settings.proof_state.show_types,
                     all_goals: false,
-                    theory_filter: String::new(),
+                    theory_filter: ShortTextBox::new(),
                     notes: Vec::new(),
                     note_reply: HashMap::new(),
                     show_offer: None,
@@ -3084,17 +3095,18 @@ impl App {
                     tools_stopping: false,
                     pick: None,
                     all_offers: false,
-                    palette_query: String::new(),
+                    palette_query: ShortTextBox::new(),
                     insert_open: false,
                     find: QueryState { operation: "find_theorems", ..Default::default() },
-                    find_input: String::new(),
+                    find_input: ShortTextBox::new(),
                     cex: QueryState { operation: "deductum_command", ..Default::default() },
                     fill: FillState::default(),
-                    cex_params: String::new(),
+                    cex_params: ShortTextBox::new(),
                     activity: None,
                     views: HashMap::new(),
                     tool_settings: HashMap::new(),
-                    symbol_search: String::new(),
+                    tool_fields: fields::tool_fields(&caps.tools, &HashMap::new(), HashMap::new()),
+                    symbol_search: ShortTextBox::new(),
                     history: Vec::new(),
                     follow: None,
                     log: Vec::new(),
@@ -3420,9 +3432,6 @@ impl App {
             }
             Message::ToolSetting(tool, key, value) => {
                 if let Some(ws) = &mut self.workspace {
-                    // (a number's field takes digits only)
-                    let number = ws.caps.tool(&tool).and_then(|t| t.settings.iter().find(|s| s.key == key)).is_some_and(|s| s.kind == "number");
-                    let value = if number { value.chars().filter(char::is_ascii_digit).collect() } else { value };
                     ws.tool_settings.insert(Tool::setting_key(&tool, &key), value);
                 }
             }
@@ -3483,17 +3492,12 @@ impl App {
                     return self.flush_edits();
                 }
             }
-            Message::FindInput(s) => {
-                if let Some(ws) = &mut self.workspace {
-                    ws.find_input = s;
-                }
-            }
             Message::Find => {
                 let Some(ws) = &mut self.workspace else { return Task::none() };
                 let Some(t) = &ws.theory else { return Task::none() };
                 let host = Self::host_offset(t, t.cursor.saturating_sub(1));
                 let Some(search) = ws.caps.search.clone() else { return Task::none() };
-                let (machine, sid, path, rev, query) = (ws.machine.clone(), ws.sid.clone(), t.path.clone(), t.confirmed_rev, ws.find_input.clone());
+                let (machine, sid, path, rev, query) = (ws.machine.clone(), ws.sid.clone(), t.path.clone(), t.confirmed_rev, ws.find_input.to_string());
                 ws.find = QueryState { operation: "find_theorems", status: "starting".into(), ..Default::default() };
                 // (Loogle takes its source after the query: the setting's, public until the settings page has one)
                 let args: Vec<String> = if search.operation == "loogle" {
@@ -3597,32 +3601,19 @@ impl App {
                 if let Some(ns) = &mut self.new_session {
                     ns.machine = i;
                     ns.invalidate_folder();
-                    ns.folder.clear();
+                    ns.folder = ShortTextBox::new();
                     let generation = ns.generation;
                     let key = self.links.get(i).map(|l| l.target.key.clone()).unwrap_or_default();
                     self.send(&key, "list_dir", json!({}), Pending::ListDir(generation, String::new()));
                 }
             }
-            Message::NewFolder(folder) => {
-                if let Some(ns) = &mut self.new_session {
-                    if ns.folder != folder {
-                        ns.invalidate_folder();
-                    }
-                    ns.folder = folder;
-                }
-            }
             Message::NewBrowse(path) => {
                 if let Some(ns) = &mut self.new_session {
                     ns.invalidate_folder();
-                    ns.folder = path.clone();
+                    ns.folder.replace(&path, Caret::End);
                     let generation = ns.generation;
                     let key = self.links.get(ns.machine).map(|l| l.target.key.clone()).unwrap_or_default();
                     self.send(&key, "list_dir", json!({"path": path}), Pending::ListDir(generation, path.clone()));
-                }
-            }
-            Message::NewLogic(logic) => {
-                if let Some(ns) = &mut self.new_session {
-                    ns.logic = logic;
                 }
             }
             Message::NewCreate => {
@@ -3759,11 +3750,8 @@ impl App {
                 tasks.push(widget::text_input::focus(focus));
                 return Task::batch(tasks);
             }
-            Message::PaletteQuery(q) => {
-                if let Some(ws) = &mut self.workspace {
-                    ws.palette_query = q;
-                }
-            }
+            Message::Field(field, action) => return self.field_action(field, action),
+            Message::SetField(field, text) => return self.set_field(field, text),
             Message::InsertBar(open) => {
                 let Some(ws) = &mut self.workspace else { return Task::none() };
                 ws.insert_open = open;
@@ -3846,14 +3834,9 @@ impl App {
                     return self.go_to_place(&offer);
                 }
             }
-            Message::NoteReplyInput(id, text) => {
-                if let Some(ws) = &mut self.workspace {
-                    ws.note_reply.insert(id, text);
-                }
-            }
             Message::NoteReply(id, resolve) => {
                 if let Some(ws) = &mut self.workspace {
-                    let text = ws.note_reply.remove(&id).unwrap_or_default();
+                    let text = ws.note_reply.remove(&id).map(|reply| reply.to_string()).unwrap_or_default();
                     let (machine, sid) = (ws.machine.clone(), ws.sid.clone());
                     self.send(&machine, "reply_note", json!({"session": sid, "note": id, "text": text, "resolve": resolve}), Pending::Plain);
                 }
@@ -4204,8 +4187,10 @@ impl App {
                 return Task::batch([self.update(act(A::Move(M::End))), self.update(Message::Wrap(step, String::new()))]);
             }
             Message::FindFor(query, run) => {
-                let Some(ws) = &mut self.workspace else { return Task::none() };
-                ws.find_input = query;
+                if self.workspace.is_none() {
+                    return Task::none();
+                }
+                let _ = self.set_field(fields::Field::Find, query);
                 let panel = self.update(Message::Panel(Panel::Search));
                 return if run { Task::batch([panel, self.update(Message::Find)]) } else { panel };
             }
@@ -4261,11 +4246,6 @@ impl App {
                 let at = Self::host_offset(t, h.offset);
                 let (machine, sid, path, rev) = (ws.machine.clone(), ws.sid.clone(), t.path.clone(), t.confirmed_rev);
                 self.send(&machine, "info", json!({"session": sid, "path": path, "offset": at, "revision": rev}), Pending::Info(generation));
-            }
-            Message::TheoryFilter(f) => {
-                if let Some(ws) = &mut self.workspace {
-                    ws.theory_filter = f;
-                }
             }
             Message::StateText(on) => {
                 if let Some(ws) = &mut self.workspace {
@@ -4334,11 +4314,6 @@ impl App {
                 ws.fill = FillState { agent: f.agent, hint: f.hint, ..Default::default() };
                 return self.put_text(s, e, &text);
             }
-            Message::CommandParams(p) => {
-                if let Some(ws) = &mut self.workspace {
-                    ws.cex_params = p;
-                }
-            }
             Message::RunCommand(cmd) => {
                 let Some(ws) = &mut self.workspace else { return Task::none() };
                 let Some(t) = &ws.theory else { return Task::none() };
@@ -4383,11 +4358,6 @@ impl App {
                     && let Some(v) = ws.views.get_mut(&key)
                 {
                     v.content.perform(action);
-                }
-            }
-            Message::SymbolSearch(q) => {
-                if let Some(ws) = &mut self.workspace {
-                    ws.symbol_search = q;
                 }
             }
             Message::InsertSymbol(text) => {

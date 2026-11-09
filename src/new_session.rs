@@ -30,6 +30,9 @@ use cosmic::{iced, theme};
 use serde_json::{Value, json};
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use household_widgets::ShortTextBox;
+
+use super::fields::Field;
 use super::shell::{self, Msg, backend_mark, sp};
 use super::{App, Message};
 
@@ -38,7 +41,7 @@ use super::{App, Message};
 pub struct NewSession {
     /// The machine, as an index of the app's links
     pub machine: usize,
-    pub folder: String,
+    pub folder: ShortTextBox,
     pub listing: Option<Value>,
     /// What each backend found in the folder, as the host's `suggest` says; none yet while asked
     pub detections: Option<Vec<Value>>,
@@ -46,8 +49,8 @@ pub struct NewSession {
     pub backend: Option<String>,
     pub toolchain: Option<String>,
     /// Isabelle's base logic and session directories, as typed
-    pub logic: String,
-    pub dirs: String,
+    pub logic: ShortTextBox,
+    pub dirs: ShortTextBox,
     /// The host's older suggestion (Isabelle's), for hosts without detections
     pub suggestion: Option<Value>,
     pub error: Option<String>,
@@ -94,8 +97,8 @@ impl NewSession {
         self.backend = None;
         self.toolchain = None;
         self.suggestion = None;
-        self.logic.clear();
-        self.dirs.clear();
+        self.logic = ShortTextBox::new();
+        self.dirs = ShortTextBox::new();
         self.error = None;
         self.changing = false;
     }
@@ -122,8 +125,9 @@ impl NewSession {
         self.detections = Some(detections);
         let isabelle = self.detection("isabelle").map(|d| d["project"].clone());
         let project = isabelle.as_ref().unwrap_or(&v["suggestion"]);
-        self.logic = project["logic"].as_str().unwrap_or("HOL").to_string();
-        self.dirs = project["dirs"].as_array().into_iter().flatten().filter_map(Value::as_str).collect::<Vec<_>>().join(", ");
+        // (where the fields start, not a change to them)
+        self.logic = ShortTextBox::starting_with(project["logic"].as_str().unwrap_or("HOL"));
+        self.dirs = ShortTextBox::starting_with(&project["dirs"].as_array().into_iter().flatten().filter_map(Value::as_str).collect::<Vec<_>>().join(", "));
         self.toolchain = None;
     }
 
@@ -131,7 +135,7 @@ impl NewSession {
     /// and nothing was picked)
     pub fn create_params(&self) -> Value {
         let backend = self.backend.clone().unwrap_or_else(|| "isabelle".into());
-        let mut params = json!({"folder": self.folder, "start": true, "resume": true, "backend": backend});
+        let mut params = json!({"folder": self.folder.value(), "start": true, "resume": true, "backend": backend});
         let detected = self.detection(&backend);
         match backend.as_str() {
             "isabelle" => {
@@ -220,7 +224,7 @@ impl App {
             });
         }
         // (the dialog opens in the folder typed, else the machine's home)
-        ns.picker = Some(Picker { path: ns.folder.clone(), ..Default::default() });
+        ns.picker = Some(Picker { path: ns.folder.to_string(), ..Default::default() });
         self.picker_go(None)
     }
 
@@ -330,7 +334,7 @@ pub fn page<'a>(app: &'a App, ns: &'a NewSession) -> Element<'a, Message> {
     col = col.push(field("Machine", machine));
     // Folder: the field, Browse, and what the host said about it
     let on = app.links.get(ns.machine).map(|l| if l.target.destination.is_none() { "this computer".to_string() } else { format!("{}", l.name) }).unwrap_or_default();
-    let input = widget::text_input("/path/to/project", &ns.folder).on_input(Message::NewFolder).on_submit(Message::NewBrowse).width(Length::Fixed(340.0));
+    let input = super::fields::text(&ns.folder, Field::NewFolder, "/path/to/project", |f| f.on_submit(Message::NewBrowse(ns.folder.to_string())).width(Length::Fixed(340.0)));
     let folder_row = widget::row::with_capacity(2).spacing(s.space_s).align_y(Alignment::Center).push(input).push(super::view::secondary("Browse", Some(Message::Shell(Msg::NewBrowseOpen))));
     let mut folder = widget::column::with_capacity(3).spacing(4).push(folder_row);
     let looked_at = ns.listing.is_some();
@@ -643,12 +647,12 @@ fn form<'a>(app: &'a App, ns: &'a NewSession, backend: &str) -> Vec<Element<'a, 
             }
             let logic = widget::column::with_capacity(2)
                 .spacing(4)
-                .push(optional(widget::text_input("HOL", &ns.logic).on_input(Message::NewLogic).width(Length::Fixed(200.0)).into()))
+                .push(optional(super::fields::text(&ns.logic, Field::NewLogic, "HOL", |f| f.width(Length::Fixed(200.0)))))
                 .push(widget::text::caption("The heap the theories build on; its parent session when the folder is one"));
             rows.push(field("Base logic", logic.into()));
             let dirs = widget::column::with_capacity(2)
                 .spacing(4)
-                .push(optional(widget::text_input("none", &ns.dirs).on_input(|d| Message::Shell(Msg::NewDirs(d))).width(Length::Fixed(200.0)).into()))
+                .push(optional(super::fields::text(&ns.dirs, Field::NewDirs, "none", |f| f.width(Length::Fixed(200.0)))))
                 .push(widget::text::caption("Other folders whose ROOT sessions the theories import, separated by commas"));
             rows.push(field("Session directories", dirs.into()));
         }
@@ -699,11 +703,11 @@ mod tests {
 
     #[test]
     fn a_folder_of_two_backends_waits_for_a_card_and_each_card_starts_its_own() {
-        let mut ns = NewSession { folder: "/p".into(), ..Default::default() };
+        let mut ns = NewSession { folder: ShortTextBox::starting_with("/p"), ..Default::default() };
         ns.suggested(&both());
         assert_eq!(ns.backend, None, "two backends: none picked for the human");
-        assert_eq!(ns.logic, "HOL-Library");
-        assert_eq!(ns.dirs, "../lib");
+        assert_eq!(ns.logic.value(), "HOL-Library");
+        assert_eq!(ns.dirs.value(), "../lib");
         ns.backend = Some("isabelle".into());
         let p = ns.create_params();
         assert_eq!(p["backend"], "isabelle");
@@ -724,13 +728,13 @@ mod tests {
 
     #[test]
     fn one_backend_is_picked_and_a_changed_logic_drops_its_sessions() {
-        let mut ns = NewSession { folder: "/p".into(), ..Default::default() };
+        let mut ns = NewSession { folder: ShortTextBox::starting_with("/p"), ..Default::default() };
         let mut v = both();
         v["detections"].as_array_mut().unwrap().pop();
         ns.suggested(&v);
         assert_eq!(ns.backend.as_deref(), Some("isabelle"));
-        ns.logic = "HOL".into();
-        ns.dirs = "a, b".into();
+        ns.logic = ShortTextBox::starting_with("HOL");
+        ns.dirs = ShortTextBox::starting_with("a, b");
         let p = ns.create_params();
         assert_eq!(p["project"]["dirs"], json!(["a", "b"]));
         assert!(p["project"].get("include_sessions").is_none());

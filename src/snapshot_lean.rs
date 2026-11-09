@@ -75,6 +75,7 @@ pub fn lean_app_with(mode: Mode, text: &str) -> App {
     let ws = app.workspace.as_mut().unwrap();
     ws.profile = &super::prover::LEAN;
     ws.caps = super::prover::LEAN.default_capabilities();
+    ws.tool_fields = super::fields::tool_fields(&ws.caps.tools, &ws.tool_settings, std::mem::take(&mut ws.tool_fields));
     ws.theory = Some(theory);
     ws.info = Some(json!({"folder": "/home/me/DSRVLean", "theories": [{"path": PATH, "status": {"failed": 1}, "dirty": false}], "seen": {}}));
     ws.panel = Panel::Output;
@@ -257,7 +258,7 @@ fn the_search_panel_lists_hits_with_insert() {
     {
         let ws = app.workspace.as_mut().unwrap();
         ws.panel = Panel::Search;
-        ws.find_input = "?a + ?b = ?b + ?a".into();
+        ws.find_input = household_widgets::ShortTextBox::starting_with("?a + ?b = ?b + ?a");
         ws.find = QueryState {
             operation: "find_theorems",
             status: "finished".into(),
@@ -834,9 +835,9 @@ fn the_insert_bar_sits_above_the_lean_goal() {
             update(&mut app, super::Message::InsertBar(true));
             harness.draw(&app, &name("tactic-open"));
             // a search for tactics by label
-            update(&mut app, super::Message::PaletteQuery("simp".into()));
+            update(&mut app, super::Message::SetField(super::fields::Field::Palette, "simp".into()));
             harness.draw(&app, &name("tactic-search"));
-            update(&mut app, super::Message::PaletteQuery(String::new()));
+            update(&mut app, super::Message::SetField(super::fields::Field::Palette, String::new()));
             update(&mut app, super::Message::InsertBar(false));
             // in a tactic's argument (have's statement): symbols again
             caret_in_block(&mut app, "exact hq", 6);
@@ -927,7 +928,7 @@ fn a_chip_on_the_lean_bar_inserts_unicode_and_wraps_the_selection() {
         let p = li.position(&text, s);
         be.content.move_to(Cursor { position: Position { line: p.line, column: p.column + 4 }, selection: Some(p) });
     }
-    update(&mut app, super::Message::PaletteQuery("⟨".into()));
+    update(&mut app, super::Message::SetField(super::fields::Field::Palette, "⟨".into()));
     h.draw(&app, "lean-chip-2-search");
     for m in click_chip(&mut h, &app, "⟨") {
         let task = cosmic::Application::update(&mut app, m);

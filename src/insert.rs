@@ -29,6 +29,7 @@ use super::prover::{InsertContext, PaletteEntry};
 use super::theory::Kind;
 use super::view::{muted, page_color, spacing, vim_mode_now};
 use super::{Message, Workspace};
+use household_widgets::ShortTextBox;
 
 /// Whether the proof window is open, as the view last drew it: the palette then edits the block
 /// in it, whichever view the main window shows
@@ -269,11 +270,9 @@ fn selected(t: &Theory) -> bool {
     !block_cursor && content.selection().is_some_and(|s| !s.trim().is_empty())
 }
 
-/// The palette's search field, its clear button only when there is something to clear (on the
-/// bar's row the room is the chips')
-fn search_field<'a>(placeholder: &'static str, query: &'a str) -> widget::TextInput<'a, Message> {
-    let input = widget::search_input(placeholder, query).on_input(Message::PaletteQuery);
-    if query.is_empty() { input } else { input.on_clear(Message::PaletteQuery(String::new())) }
+/// The palette's search field
+fn search_field<'a>(placeholder: &'static str, query: &'a ShortTextBox) -> Element<'a, Message> {
+    super::fields::search(query, super::fields::Field::Palette, placeholder, |f| f)
 }
 
 /// Beside the block being edited, when there is no goal: what can be inserted at the caret, by

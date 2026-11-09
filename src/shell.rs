@@ -88,10 +88,9 @@ pub enum Msg {
     /// Run one of the session's project actions, by name
     ProjectAction(String),
     /// The new-session flow: the backend card picked, the toolchain picked (index among the
-    /// backend's), the session directories typed, a document clicked in the folder browser
+    /// backend's), a document clicked in the folder browser
     NewBackend(String),
     NewToolchain(usize),
-    NewDirs(String),
     OpenDocument(String),
     /// Browse (the folder dialog), the folder it returned or why it could not, Change (the other
     /// provers), and the remote folder dialog: into a folder, Choose, Cancel
@@ -201,6 +200,7 @@ impl App {
                 self.shell.settings_open = open;
                 if open {
                     self.shell.page.sub = super::settings_page::Sub::Settings;
+                    self.shell.page.fields_from(&self.shell.settings);
                     self.new_session = None;
                 } else if closing && let Some(t) = self.workspace.as_ref().and_then(|w| w.theory.as_ref()) {
                     if t.mode == Mode::Source {
@@ -280,11 +280,13 @@ impl App {
                 }
             }
             Msg::ClaudeModel(m) => {
+                self.model_field_follows(super::fields::Field::ClaudeModel, &m);
                 self.shell.settings.llm.claude_model = m;
                 self.save_settings();
                 self.tell_hosts();
             }
             Msg::CodexModel(m) => {
+                self.model_field_follows(super::fields::Field::CodexModel, &m);
                 self.shell.settings.llm.codex_model = m;
                 self.save_settings();
                 self.tell_hosts();
@@ -324,11 +326,6 @@ impl App {
                 let toolchains = self.new_session.as_ref().map(|ns| self.toolchains(ns.machine, ns.backend.as_deref().unwrap_or("isabelle"))).unwrap_or_default();
                 if let (Some(ns), Some(t)) = (&mut self.new_session, toolchains.get(i)) {
                     ns.toolchain = t["id"].as_str().map(str::to_string);
-                }
-            }
-            Msg::NewDirs(d) => {
-                if let Some(ns) = &mut self.new_session {
-                    ns.dirs = d;
                 }
             }
             Msg::OpenDocument(path) => return self.open_document(path),

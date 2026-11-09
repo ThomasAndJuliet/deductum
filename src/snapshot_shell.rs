@@ -345,7 +345,7 @@ fn new_session_app(backend: Option<&str>, detections: Value) -> App {
     let mut app = mixed_app();
     app.workspace = None;
     app.show_right = false;
-    let mut ns = super::NewSession { machine: 0, folder: "/home/me/Research/Mixed".into(), ..Default::default() };
+    let mut ns = super::NewSession { machine: 0, folder: household_widgets::ShortTextBox::starting_with("/home/me/Research/Mixed"), ..Default::default() };
     ns.listing = Some(json!({"path": "/home/me/Research/Mixed", "parent": "/home/me/Research", "entries": [
         {"name": "DSRV", "dir": true}, {"name": "Theories", "dir": true}, {"name": "Main.lean", "dir": false}, {"name": "Semantics.thy", "dir": false}, {"name": "ROOT", "dir": false}, {"name": "lakefile.toml", "dir": false}]}));
     ns.suggested(&json!({"suggestion": {"logic": "HOL"}, "detections": detections}));
@@ -427,7 +427,7 @@ fn browse_on_a_remote_machine_lists_folders_over_the_link_and_choose_fills_the_f
     };
     update(&mut app, Message::NewMachine(1));
     assert!(requests(&mut receiver).iter().any(|r| r["op"] == "list_dir"), "the form's own lookup of the machine's home");
-    app.new_session.as_mut().unwrap().folder = "/home/me/Proofs".into();
+    app.new_session.as_mut().unwrap().folder = household_widgets::ShortTextBox::starting_with("/home/me/Proofs");
     update(&mut app, Message::Shell(Msg::NewBrowseOpen));
     let asked = requests(&mut receiver);
     assert_eq!(asked.len(), 1, "{asked:?}");
@@ -464,7 +464,7 @@ fn browse_on_a_remote_machine_lists_folders_over_the_link_and_choose_fills_the_f
     update(&mut app, Message::Shell(Msg::PickerChoose));
     let ns = app.new_session.as_ref().unwrap();
     assert!(ns.picker.is_none());
-    assert_eq!(ns.folder, "/home/me/Proofs/utp");
+    assert_eq!(ns.folder.value(), "/home/me/Proofs/utp");
     let asked = requests(&mut receiver);
     assert!(asked.iter().any(|r| r["op"] == "list_dir" && r["path"] == "/home/me/Proofs/utp"), "{asked:?}");
     // Cancel closes it without touching the folder
@@ -472,7 +472,7 @@ fn browse_on_a_remote_machine_lists_folders_over_the_link_and_choose_fills_the_f
     update(&mut app, Message::Shell(Msg::PickerClose));
     let ns = app.new_session.as_ref().unwrap();
     assert!(ns.picker.is_none());
-    assert_eq!(ns.folder, "/home/me/Proofs/utp");
+    assert_eq!(ns.folder.value(), "/home/me/Proofs/utp");
 }
 
 /// A host that cannot list the folder is said in the dialog, and Choose stays unavailable

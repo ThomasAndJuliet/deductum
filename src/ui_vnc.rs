@@ -90,7 +90,7 @@ impl Application for Fixture {
             }
         }
         if std::env::var_os("DEDUCTUM_VNC_NEW_SESSION").is_some() {
-            let mut ns = super::NewSession { folder: "/fixture/a".into(), listing: Some(serde_json::json!({"path":"/fixture/a", "entries":[]})), ..Default::default() };
+            let mut ns = super::NewSession { folder: household_widgets::ShortTextBox::starting_with("/fixture/a"), listing: Some(serde_json::json!({"path":"/fixture/a", "entries":[]})), ..Default::default() };
             ns.suggested(&serde_json::json!({"detections":[{"backend":"lean", "project":{"root":"/fixture/a"}}]}));
             app.new_session = Some(ns);
         }
@@ -163,7 +163,7 @@ impl Application for Fixture {
 impl Fixture {
     fn record(&self) {
         if let Some(ns) = &self.0.new_session {
-            let value = serde_json::json!({"folder": ns.folder, "backend": ns.backend, "listing": ns.listing.is_some(), "ready": ns.ready()});
+            let value = serde_json::json!({"folder": ns.folder.value(), "backend": ns.backend, "listing": ns.listing.is_some(), "ready": ns.ready()});
             let _ = std::fs::write("/tmp/deductum-vnc-session.json", value.to_string());
         }
         let theory = self.0.workspace.as_ref().and_then(|w| w.theory.as_ref());

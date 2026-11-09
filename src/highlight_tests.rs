@@ -782,7 +782,7 @@ fn a_text_input_keeps_the_solid_selection() {
         let mut app = demo_app(Mode::Literate);
         app.show_right = true;
         app.workspace.as_mut().unwrap().panel = Panel::Symbols;
-        app.workspace.as_mut().unwrap().symbol_search = "MMMMMMMMMMMMMMMMMMMM".into();
+        app.workspace.as_mut().unwrap().symbol_search = household_widgets::ShortTextBox::starting_with("MMMMMMMMMMMMMMMMMMMM");
         let mut h = Harness::new(Size::new(1600.0, 900.0));
         let theme = Themed::set(dark);
         let _ = frame(&mut h, &app, "hl-input-warm");

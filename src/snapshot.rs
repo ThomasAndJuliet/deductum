@@ -158,7 +158,7 @@ pub fn demo_app(mode: Mode) -> App {
             state_text: false,
             show_types: false,
             all_goals: false,
-            theory_filter: String::new(),
+            theory_filter: Default::default(),
             notes: vec![json!({"id": "n1", "label": "Claude", "start": 330, "end": 360, "line": 18, "text": "This needs induction on a; simp alone will not do.", "replies": []})],
             note_reply: Default::default(),
             show_offer: None,
@@ -170,10 +170,10 @@ pub fn demo_app(mode: Mode) -> App {
             tools_stopping: false,
             pick: None,
             all_offers: false,
-            palette_query: String::new(),
+            palette_query: Default::default(),
             insert_open: false,
             find: QueryState { operation: "find_theorems", ..Default::default() },
-            find_input: String::new(),
+            find_input: Default::default(),
             cex: QueryState { operation: "deductum_command", ..Default::default() },
             fill: super::FillState {
                 status: "done".into(),
@@ -181,14 +181,15 @@ pub fn demo_app(mode: Mode) -> App {
                                  json!({"text": "by auto", "ok": false, "message": "Failed to finish proof"})],
                 ..Default::default()
             },
-            cex_params: String::new(),
+            cex_params: Default::default(),
             views: HashMap::new(),
             activity: Some(json!({"lifecycle": "Running", "prover": {"cpu": 385, "rss_mb": 3120},
                 "running": [{"path": "/home/me/Demo/Demo.thy", "line": 21, "name": "by", "seconds": 41}],
                 "theories": [{"path": "/home/me/Demo/Demo.thy", "theory": "Draft.Demo", "percentage": 80, "running": 1, "failed": 1, "consolidated": false, "total": 16, "imports": ["/home/me/Demo/Base.thy"]},
                              {"path": "/home/me/Demo/Base.thy", "theory": "Draft.Base", "percentage": 45, "running": 2, "failed": 0, "consolidated": false, "total": 120, "imports": []}]})),
             tool_settings: HashMap::new(),
-            symbol_search: String::new(),
+            tool_fields: super::fields::tool_fields(&super::prover::profile(None).default_capabilities().tools, &HashMap::new(), HashMap::new()),
+            symbol_search: Default::default(),
             history: vec![json!({"id": 3, "author": {"kind": "agent", "label": "Claude"}, "kind": "edit", "line": 18, "summary": "−5 +'by simp'"}),
                           json!({"id": 2, "author": {"kind": "human", "label": "You"}, "kind": "edit", "line": 7, "summary": "+'zero'"})],
             follow: None,
@@ -844,11 +845,17 @@ impl Harness {
 
     /// Events through the widgets; the messages they publish
     pub fn events(&mut self, app: &App, events: &[Event]) -> Vec<super::Message> {
+        self.events_taken(app, events).0
+    }
+
+    /// Events through the widgets: the messages they publish, and whether a widget took each
+    /// (an event no widget took goes on to the app's own keys, `app_key`)
+    pub fn events_taken(&mut self, app: &App, events: &[Event]) -> (Vec<super::Message>, Vec<cosmic::iced::event::Status>) {
         let mut ui = UserInterface::build(super::view::view(app), self.size, self.cache.take().unwrap_or_default(), &mut self.renderer);
         let mut messages = Vec::new();
-        let _ = ui.update(events, self.cursor, &mut self.renderer, &mut self.clipboard, &mut messages);
+        let (_, taken) = ui.update(events, self.cursor, &mut self.renderer, &mut self.clipboard, &mut messages);
         self.cache = Some(ui.into_cache());
-        messages
+        (messages, taken)
     }
 
     pub fn copied_text(&self) -> Option<&str> {
@@ -2596,7 +2603,7 @@ fn the_insert_palette_follows_the_context() {
         super::editor::place(&mut be.content, li.position(&text, at));
     }
     assert_eq!(ctx(&app), Some(super::prover::InsertContext::Symbols), "inside $…$: symbols");
-    let _ = cosmic::Application::update(&mut app, super::Message::PaletteQuery("forall".into()));
+    let _ = cosmic::Application::update(&mut app, super::Message::SetField(super::fields::Field::Palette, "forall".into()));
     h.draw(&app, "palette-symbols");
     // a template, inserted at the caret, in the source
     let before = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().local.clone();
@@ -3191,11 +3198,11 @@ fn the_insert_bar_sits_above_the_isabelle_goal() {
             caret_in_block(&mut app, "x::nat", 0);
             harness.draw(&app, &name("term-open"));
             // a search: by name, and by the character itself
-            let _ = cosmic::Application::update(&mut app, super::Message::PaletteQuery("subseteq".into()));
+            let _ = cosmic::Application::update(&mut app, super::Message::SetField(super::fields::Field::Palette, "subseteq".into()));
             harness.draw(&app, &name("term-search"));
             let _ = cosmic::Application::update(&mut app, super::Message::InsertBar(false));
             harness.draw(&app, &name("term-search-row"));
-            let _ = cosmic::Application::update(&mut app, super::Message::PaletteQuery(String::new()));
+            let _ = cosmic::Application::update(&mut app, super::Message::SetField(super::fields::Field::Palette, String::new()));
             cosmic::theme::set_active(cosmic::theme::ThemeType::Dark);
             super::view::set_goal_beside(true);
         }
@@ -3270,7 +3277,7 @@ fn a_chip_on_the_bar_inserts_at_the_caret_and_keeps_the_focus() {
         be.content.move_to(Cursor { position: Position { line, column: col + 5 }, selection: Some(Position { line, column: col }) });
     }
     // (found by searching for its character: the pair is the bar's first match)
-    let _ = cosmic::Application::update(&mut app, super::Message::PaletteQuery("‹".into()));
+    let _ = cosmic::Application::update(&mut app, super::Message::SetField(super::fields::Field::Palette, "‹".into()));
     h.draw(&app, "chip-2-search");
     let msgs = click_chip(&mut h, &app, "‹");
     for m in msgs {

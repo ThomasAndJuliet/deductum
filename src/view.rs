@@ -15,6 +15,7 @@ use cosmic::{iced, theme};
 use serde_json::Value;
 
 use super::editor::{Mode, Theory, highlight_format};
+use super::fields::Field;
 use super::prover::{GoalBody, Setting, Tool};
 use super::theory::{Block, Kind, Status};
 use super::tones::{Beneath, code_selection, muted_button};
@@ -733,8 +734,7 @@ fn note_body<'a>(ws: &'a Workspace, n: &Value) -> Element<'a, Message> {
     for r in n["replies"].as_array().into_iter().flatten() {
         col = col.push(widget::text::caption(format!("{}: {}", r["by"].as_str().unwrap_or(""), r["text"].as_str().unwrap_or(""))));
     }
-    let reply = ws.note_reply.get(&id).cloned().unwrap_or_default();
-    let reply_id = id.clone();
+    let reply = super::fields::reply(&ws.note_reply, &id);
     // (Reply sends what is typed, so only with something typed)
     let can_reply = !reply.trim().is_empty();
     col = col.push(
@@ -742,16 +742,7 @@ fn note_body<'a>(ws: &'a Workspace, n: &Value) -> Element<'a, Message> {
             widget::row::with_capacity(3)
                 .spacing(sp.space_xxs)
                 .align_y(Alignment::Center)
-                .push(
-                    widget::text_input("Reply to the agent", reply)
-                        .on_input(move |t| Message::NoteReplyInput(reply_id.clone(), t))
-                        .on_submit({
-                            let id = id.clone();
-                            move |_| Message::NoteReply(id.clone(), false)
-                        })
-                        .style(plain_input())
-                        .width(Length::Fill),
-                )
+                .push(super::fields::text(reply, Field::Reply(id.clone()), "Reply to the agent", |f| f.on_submit(Message::NoteReply(id.clone(), false)).width(Length::Fill)))
                 .push(secondary("Reply", can_reply.then(|| Message::NoteReply(id.clone(), false)))),
         )
         .padding(Padding { top: sp.space_xxxs as f32, ..Padding::ZERO }),
@@ -780,27 +771,6 @@ fn note_card<'a>(ws: &'a Workspace, n: &Value, width: Option<f32>) -> Element<'a
     let sp = spacing();
     let body = widget::container(note_body(ws, n)).padding([sp.space_xxs as f32, code_padding().left]).width(Length::Fill);
     widget::container(card(body.into(), Status::Unprocessed, false)).padding(Padding { top: ATTACHED, ..Padding::ZERO }).width(width.map_or(Length::Fill, Length::Fixed)).into()
-}
-
-/// A text input plain on the page: the page's own fill and a hairline border (the accent ring when
-/// it has the focus)
-fn plain_input() -> theme::TextInput {
-    use cosmic::widget::text_input::{Appearance, StyleSheet as _};
-    fn plain(mut a: Appearance, theme: &cosmic::Theme, focused: bool) -> Appearance {
-        a.background = Color::from(page_color(theme)).into();
-        if !focused {
-            a.border_width = 1.0;
-            a.border_color = card_border_color(theme);
-        }
-        a
-    }
-    theme::TextInput::Custom {
-        active: Box::new(|theme| plain(theme.active(&theme::TextInput::Default), theme, false)),
-        error: Box::new(|theme| plain(theme.error(&theme::TextInput::Default), theme, false)),
-        hovered: Box::new(|theme| plain(theme.hovered(&theme::TextInput::Default), theme, false)),
-        focused: Box::new(|theme| plain(theme.focused(&theme::TextInput::Default), theme, true)),
-        disabled: Box::new(|theme| plain(theme.disabled(&theme::TextInput::Default), theme, false)),
-    }
 }
 
 /// A Secondary button (household rule 7): no fill, a 2 px accent border, an accent semibold label,
@@ -958,7 +928,7 @@ fn counterexamples_panel<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbol
     }
     col = col.push(buttons);
     let params = caps.counterexamples.iter().filter_map(|n| caps.tool(n)).map(|t| t.params.as_str()).find(|p| !p.is_empty()).unwrap_or("options");
-    col = col.push(widget::text_input(params, &ws.cex_params).on_input(Message::CommandParams));
+    col = col.push(super::fields::text(&ws.cex_params, Field::Counterexample, params, |f| f));
     if !q.status.is_empty() {
         col = col.push(
             widget::row::with_capacity(2)
@@ -4213,6 +4183,17 @@ fn counterexample_table<'a>(headline: &str, sections: &[super::flow::Section], t
     col.into()
 }
 
+/// A proof tool's setting typed in: a labelled number `number_width` wide, the others as wide as
+/// their row; Enter does `submit`
+fn tool_field<'a>(ws: &'a Workspace, tool: &Tool, s: &'a Setting, number_width: f32, submit: Option<Message>) -> Element<'a, Message> {
+    let width = if s.kind == "number" && !s.label.is_empty() { Length::Fixed(number_width) } else { Length::Fill };
+    let field = Field::Tool(tool.name.clone(), s.key.clone());
+    super::fields::text(super::fields::tool(ws, &tool.name, &s.key), field, s.placeholder.as_str(), move |f| match submit {
+        Some(submit) => f.width(width).on_submit(submit),
+        None => f.width(width),
+    })
+}
+
 /// A typed tool's settings, folded away under the proof state: the tool itself is typed in the
 /// text (where its proofs come with Insert), so only the settings that set prover options are
 /// here, for they hold for it there. Built from the tool's settings: a setting without a label
@@ -4226,10 +4207,7 @@ fn tool_settings<'a>(ws: &'a Workspace, tool: &'a Tool) -> Element<'a, Message> 
         let last_row = shown.iter().rposition(|s| !s.label.is_empty());
         let apply = || Message::ToolApply(tool.name.clone());
         for (i, s) in shown.iter().enumerate() {
-            let (name, key) = (tool.name.clone(), s.key.clone());
-            let input = widget::text_input(s.placeholder.as_str(), tool.value(&ws.tool_settings, &s.key))
-                .on_input(move |v| Message::ToolSetting(name.clone(), key.clone(), v))
-                .on_submit(move |_| apply());
+            let input = tool_field(ws, tool, s, 64.0, Some(apply()));
             if s.label.is_empty() {
                 col = col.push(input);
                 continue;
@@ -4238,7 +4216,7 @@ fn tool_settings<'a>(ws: &'a Workspace, tool: &'a Tool) -> Element<'a, Message> 
                 .spacing(sp.space_xs)
                 .align_y(Alignment::Center)
                 .push(widget::text::body(s.label.as_str()))
-                .push(if s.kind == "number" { input.width(Length::Fixed(64.0)) } else { input.width(Length::Fill) })
+                .push(input)
                 .push(widget::text::body(s.unit.as_str()).width(Length::Fill));
             if Some(i) == last_row {
                 row = row.push(widget::button::standard("Apply").on_press(apply()));
@@ -4570,15 +4548,11 @@ fn tool_panel<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Eleme
         if !tool.panel_note.is_empty() {
             col = col.push(widget::text::caption(tool.panel_note.as_str()));
         }
-        let setting = |s: &'a Setting| {
-            let (name, key) = (tool.name.clone(), s.key.clone());
-            widget::text_input(s.placeholder.as_str(), tool.value(&ws.tool_settings, &s.key)).on_input(move |v| Message::ToolSetting(name.clone(), key.clone(), v))
-        };
         let label_width = Length::Fixed(72.0);
         for s in tool.settings.iter().filter(|s| s.kind != "bool") {
-            let input = setting(s);
+            let input = tool_field(ws, tool, s, 72.0, None);
             if s.label.is_empty() {
-                col = col.push(input.width(Length::Fill));
+                col = col.push(input);
                 continue;
             }
             col = col.push(
@@ -4586,7 +4560,7 @@ fn tool_panel<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Eleme
                     .spacing(sp.space_xs)
                     .align_y(Alignment::Center)
                     .push(widget::text::body(s.label.as_str()).width(label_width))
-                    .push(if s.kind == "number" { input.width(Length::Fixed(72.0)) } else { input.width(Length::Fill) })
+                    .push(input)
                     .push(widget::text::body(s.unit.as_str())),
             );
         }
@@ -4712,7 +4686,7 @@ fn find_panel<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Eleme
     col = col.push(
         widget::row::with_capacity(2)
             .spacing(sp.space_xs)
-            .push(widget::text_input(search.placeholder.as_str(), &ws.find_input).on_input(Message::FindInput).on_submit(|_| Message::Find).width(Length::Fill))
+            .push(super::fields::text(&ws.find_input, Field::Find, search.placeholder.as_str(), |f| f.on_submit(Message::Find).width(Length::Fill)))
             .push(widget::button::suggested(search.short()).on_press(Message::Find)),
     );
     if !search.note.is_empty() {
@@ -4776,7 +4750,7 @@ fn search_hit<'a>(m: &Value) -> Element<'a, Message> {
 fn symbols_panel<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Element<'a, Message> {
     let sp = spacing();
     let mut col = widget::column::with_capacity(24).spacing(sp.space_xxs);
-    col = col.push(widget::search_input("forall, leq, -->, sub…", &ws.symbol_search).on_input(Message::SymbolSearch).on_clear(Message::SymbolSearch(String::new())));
+    col = col.push(super::fields::search(&ws.symbol_search, Field::Symbols, "forall, leq, -->, sub…", |f| f));
     col = col.push(widget::text::caption("In the text, type \\ and a name (or a LaTeX name) and press Tab."));
     let mut typed: std::collections::HashMap<char, Vec<String>> = std::collections::HashMap::new();
     for (c, abbrev) in table.abbreviations() {

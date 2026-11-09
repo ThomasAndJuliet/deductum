@@ -730,7 +730,7 @@ print(json.dumps(a.request("add_note", session="{sid}", path="{path}", start=one
         println!("went where the agent pointed");
 
         // Reply to the note, then resolve it, by its buttons
-        let _ = app.update(Message::NoteReplyInput(note.clone(), "thanks, will do".into()));
+        let _ = app.update(Message::SetField(super::fields::Field::Reply(note.clone()), "thanks, will do".into()));
         let (_, reply) = find_click(&mut h, &app, |m| matches!(m, Message::NoteReply(_, false))).expect("a Reply button");
         let _ = app.update(reply);
         assert!(pump(&mut app, &mut stream, 10, |a| a.workspace.as_ref().unwrap().notes.iter().any(|n| n["replies"].as_array().is_some_and(|r| !r.is_empty()))).await, "the reply shows on the note");
