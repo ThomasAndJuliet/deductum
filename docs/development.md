@@ -56,15 +56,21 @@ covers visible GUI use, second-user isolation and Windows-to-Linux SSH.
 ## Build the macOS package
 
 The macOS package is built on a Mac, from both architectures, and joined into
-one universal binary with `lipo`:
+one universal binary with `lipo`. The commands use the same feature set as CI
+(`wayland` and `dbus-config` are Linux desktop features):
 
 ```sh
 rustup target add aarch64-apple-darwin x86_64-apple-darwin
-cargo build --locked --release --bin deductum --target aarch64-apple-darwin
-cargo build --locked --release --bin deductum --target x86_64-apple-darwin
+cargo build --locked --release --bin deductum --no-default-features \
+  --features wgpu --target aarch64-apple-darwin
+cargo build --locked --release --bin deductum --no-default-features \
+  --features wgpu --target x86_64-apple-darwin
 python3 scripts/test-package-macos.py
 python3 scripts/package-macos.py
 ```
+
+The packaging script needs Python 3.11 or later. The stock macOS `python3` is
+3.9, so use a newer one, for example from Homebrew or python.org.
 
 The packaging script downloads and verifies the pinned Python 3.12 runtimes of
 `packaging/macos/python-runtime.json` (python-build-standalone, one per
@@ -78,14 +84,22 @@ Finder gets no shell `PATH`. The binary needs macOS 11 or later.
 
 The binary has an ad-hoc signature only. Without signing and notarisation with
 an Apple Developer ID, Gatekeeper blocks the downloaded package until its
-quarantine attribute is removed, as `packaging/macos/README.txt` explains. No
-CI job builds the macOS package yet.
+quarantine attribute is removed, as `packaging/macos/README.txt` explains.
+
+The `macos-build` CI job runs on a GitHub-hosted `macos-15` runner for every run,
+including forks' pull requests, and uses no secret. It builds both targets,
+runs `scripts/test-package-macos.py`, packages the exact revision and smoke-tests
+the ZIP: it extracts it with `ditto`, checks both architectures with `lipo`,
+runs `--build-info` to confirm the clean source revision, and starts each
+bundled Python. The x86_64 binary and Python run under Rosetta when the runner
+has it; otherwise the job emits a notice instead. It uploads the `macos-universal`
+artifact. The job does not run the app's GUI or real provers on a Mac.
 
 ## Automated versioned downloads
 
 `.github/workflows/release-binaries.yml` runs after the **entire** main-branch
 CI run succeeds, including native Windows and Linux prover tests. It publishes
-the tested Windows ZIP and Linux `.flatpak`, their source/checksum receipts,
+the tested Windows ZIP, Linux `.flatpak` and macOS universal ZIP, their source/checksum receipts,
 `SHA256SUMS` and generated release notes to a permanent GitHub Release, which
 has the repository's visibility.
 It downloads CI artifacts instead of recompiling either app. Download filenames
@@ -126,7 +140,7 @@ A public repository adds three rules. `public_signing` in `release-config.json`
 must record the signing decision (`github-attestation` is the one implemented);
 until then CI runs normally and nothing is released, and the next release covers
 the waiting commits. `scripts/release_scan.py` must find no household network
-names in the Windows package, the Linux payload (scanned when CI bundles it and
+names in the Windows and macOS packages, the Linux payload (scanned when CI bundles it and
 recorded in the receipt) or the receipts, and generated notes omit any commit
 subject naming household systems. And `publish-release.py stage` uploads to a
 draft, the workflow attests every file with `actions/attest`, and
@@ -145,8 +159,8 @@ its Actions artifacts are still retained (seven days):
 gh workflow run release-binaries.yml --ref main -f run_id=CI_RUN_ID
 ```
 
-The `linux-x86_64` and `windows-x86_64` Actions artifacts are also available
-for direct downloads during that retention window. The Windows package jobs
+The `linux-x86_64`, `windows-x86_64` and `macos-universal` Actions artifacts are
+also available for direct downloads during that retention window. The Windows package jobs
 come from the Windows support change; merge that support before this publisher.
 
 The standalone Linux bundle comes from `ci-artifact/build.tar.gz`, including

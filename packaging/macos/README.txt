@@ -16,7 +16,8 @@ from Terminal with the project folder:
   ./Deductum.command ~/path/to/lake-project
 
 In the app, choose New session, pick the project folder, choose Lean and
-then Start session. Closing a window leaves proof sessions running. Use Stop
+then Start session. Closing the Terminal window of Deductum.command quits Deductum.
+Closing a window leaves proof sessions running. Use Stop
 in the application to stop a particular prover.
 
 On the first start the app adds a "deductum" MCP server to ~/.claude.json

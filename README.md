@@ -34,14 +34,15 @@ own computer or on a remote Linux machine.
 
 ## Install
 
-Download prebuilt Linux and Windows packages from GitHub Releases. Both are built
+Download prebuilt Linux, Windows and macOS packages from GitHub Releases. All are built
 by GitHub Actions; you do not need Rust or a source checkout to install them.
 
 ### Release downloads
 
 1. Open [Deductum's releases](https://github.com/ThomasAndJuliet/deductum/releases).
-2. Choose a version (`vMAJOR.MINOR.PATCH`). Download the Linux `.flatpak` or
-   Windows `…-windows-x86_64.zip` file from its **Assets**.
+2. Choose a version (`vMAJOR.MINOR.PATCH`). Download the Linux `.flatpak`,
+   Windows `…-windows-x86_64.zip` or macOS `…-macos-universal.zip` file from its
+   **Assets**.
 3. Follow the installation steps for your platform below.
 
 GitHub's **Source code** archives contain source, rather than an installable app.
@@ -95,12 +96,23 @@ windows, run `stop-host.cmd` from the **old** package to flush and stop its
 session host, then launch the new package. Keep the old package until you have
 checked the update. Settings and session data are stored outside the package.
 
-### macOS: package built from source
+### macOS: universal package
 
-There is no macOS download in the releases yet. A universal package for Apple
-Silicon and Intel Macs, with its own Python, can be built on a Mac as described
-in [the development guide](docs/development.md#build-the-macos-package). Its
-`README.txt` explains how to open it and how to start a session.
+Use the **macOS universal** package; it runs natively on Apple Silicon and Intel
+Macs with macOS 11 or later and carries its own Python.
+
+1. Download the prebuilt macOS package as described in
+   [Release downloads](#release-downloads) and extract the ZIP.
+2. The package is not signed with an Apple Developer ID, so macOS blocks it
+   after a download. In Terminal, run the line below with a space at the end,
+   drag the extracted folder into the Terminal window and press Return:
+   `xattr -dr com.apple.quarantine`
+3. Double-click `Deductum.command`. Closing the Terminal window that it opens
+   quits Deductum.
+
+The package's `README.txt` explains how to open a project straight away and how
+to start a session. To build the package yourself, see
+[the development guide](docs/development.md#build-the-macos-package).
 
 ## Set up a prover
 
