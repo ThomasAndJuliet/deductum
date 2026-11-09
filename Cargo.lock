@@ -2565,17 +2565,17 @@ checksum = "dfa686283ad6dd069f105e5ab091b04c62850d3e4cf5d67debad1933f55023df"
 [[package]]
 name = "household-highlight"
 version = "0.1.0"
-source = "git+https://github.com/ThomasAndJuliet/household-kit.git#bef3a9e943f33f8a1b8745386e66c930613e7ba7"
+source = "git+https://github.com/ThomasAndJuliet/household-kit.git#2df3d0c0f98adeeda5e483683cbf4b6a0d838f33"
 
 [[package]]
 name = "household-tones"
 version = "0.1.0"
-source = "git+https://github.com/ThomasAndJuliet/household-kit.git#bef3a9e943f33f8a1b8745386e66c930613e7ba7"
+source = "git+https://github.com/ThomasAndJuliet/household-kit.git#2df3d0c0f98adeeda5e483683cbf4b6a0d838f33"
 
 [[package]]
 name = "household-widgets"
 version = "0.1.0"
-source = "git+https://github.com/ThomasAndJuliet/household-widgets.git#9d0688b0a02b71181093d5276f2a300155bf346a"
+source = "git+https://github.com/ThomasAndJuliet/household-widgets.git?rev=5a266b19b31854819d017a2de50b07e5f8d354c2#5a266b19b31854819d017a2de50b07e5f8d354c2"
 dependencies = [
  "household-tones",
  "libcosmic",

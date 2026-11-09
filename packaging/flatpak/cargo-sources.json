@@ -13,7 +13,7 @@
     },
     {
         "type": "git",
-        "url": "https://github.com/ThomasAndJuliet/libcosmic.git",
+        "url": "https://github.com/thomasandjuliet/libcosmic",
         "commit": "cb889ef4bbfccd45739d5fa6f9140fd0e53df9fa",
         "dest": "flatpak-cargo/git/libcosmic-cb889ef"
     },
@@ -49,15 +49,15 @@
     },
     {
         "type": "git",
-        "url": "https://github.com/ThomasAndJuliet/household-kit.git",
-        "commit": "bef3a9e943f33f8a1b8745386e66c930613e7ba7",
-        "dest": "flatpak-cargo/git/household-kit-bef3a9e"
+        "url": "https://github.com/thomasandjuliet/household-kit",
+        "commit": "2df3d0c0f98adeeda5e483683cbf4b6a0d838f33",
+        "dest": "flatpak-cargo/git/household-kit-2df3d0c"
     },
     {
         "type": "git",
-        "url": "https://github.com/ThomasAndJuliet/household-widgets.git",
-        "commit": "9d0688b0a02b71181093d5276f2a300155bf346a",
-        "dest": "flatpak-cargo/git/household-widgets-9d0688b"
+        "url": "https://github.com/thomasandjuliet/household-widgets",
+        "commit": "5a266b19b31854819d017a2de50b07e5f8d354c2",
+        "dest": "flatpak-cargo/git/household-widgets-5a266b1"
     },
     {
         "type": "git",
@@ -3122,12 +3122,12 @@
     {
         "type": "shell",
         "commands": [
-            "cp -r --reflink=auto \"flatpak-cargo/git/household-kit-bef3a9e/crates/household-highlight\" \"cargo/vendor/household-highlight\""
+            "cp -r --reflink=auto \"flatpak-cargo/git/household-kit-2df3d0c/crates/household-highlight\" \"cargo/vendor/household-highlight\""
         ]
     },
     {
         "type": "inline",
-        "contents": "[package]\nname = \"household-highlight\"\ndescription = \"Code colours by token class (household rule 25b): the class of a syntax scope and the colour role of a class, without a highlighter or a theme\"\nversion = \"0.1.0\"\nedition = \"2024\"\nrust-version = \"1.89\"\npublish = false\nrepository = \"https://github.com/ThomasAndJuliet/household-kit\"\n\n[dependencies]\n\n[dev-dependencies.household-tones]\npath = \"../household-tones\"\n",
+        "contents": "[package]\nname = \"household-highlight\"\ndescription = \"Code colours by token class (household rule 25b): the class of a syntax scope and the colour role of a class, without a highlighter or a theme\"\nversion = \"0.1.0\"\nedition = \"2024\"\nlicense = \"GPL-3.0-only\"\nrust-version = \"1.89\"\npublish = false\nrepository = \"https://github.com/ThomasAndJuliet/household-kit\"\n\n[dependencies]\n\n[dev-dependencies.household-tones]\npath = \"../household-tones\"\n",
         "dest": "cargo/vendor/household-highlight",
         "dest-filename": "Cargo.toml"
     },
@@ -3140,12 +3140,12 @@
     {
         "type": "shell",
         "commands": [
-            "cp -r --reflink=auto \"flatpak-cargo/git/household-kit-bef3a9e/crates/household-tones\" \"cargo/vendor/household-tones\""
+            "cp -r --reflink=auto \"flatpak-cargo/git/household-kit-2df3d0c/crates/household-tones\" \"cargo/vendor/household-tones\""
         ]
     },
     {
         "type": "inline",
-        "contents": "[package]\nname = \"household-tones\"\ndescription = \"The household's tone maths: OKLab/OKLCH, the surface cap, the muted accent, the seven tones of rule 25d and APCA-W3 0.0.98G-4g contrast\"\nversion = \"0.1.0\"\nedition = \"2024\"\nrust-version = \"1.89\"\npublish = false\nrepository = \"https://github.com/ThomasAndJuliet/household-kit\"\n\n[dependencies]\n",
+        "contents": "[package]\nname = \"household-tones\"\ndescription = \"The household's tone maths: OKLab/OKLCH, the surface cap, the muted accent, the seven tones of rule 25d and APCA-W3 0.0.98G-4g contrast\"\nversion = \"0.1.0\"\nedition = \"2024\"\nlicense = \"GPL-3.0-only AND AGPL-3.0-only\"\nrust-version = \"1.89\"\npublish = false\nrepository = \"https://github.com/ThomasAndJuliet/household-kit\"\n\n[dependencies]\n",
         "dest": "cargo/vendor/household-tones",
         "dest-filename": "Cargo.toml"
     },
@@ -3158,12 +3158,12 @@
     {
         "type": "shell",
         "commands": [
-            "cp -r --reflink=auto \"flatpak-cargo/git/household-widgets-9d0688b/.\" \"cargo/vendor/household-widgets\""
+            "cp -r --reflink=auto \"flatpak-cargo/git/household-widgets-5a266b1/.\" \"cargo/vendor/household-widgets\""
         ]
     },
     {
         "type": "inline",
-        "contents": "[package]\nname = \"household-widgets\"\ndescription = \"The household apps' shared libcosmic widgets: what more than one app draws, in one place\"\nversion = \"0.1.0\"\nedition = \"2024\"\nrust-version = \"1.89\"\nlicense = \"GPL-3.0-only\"\npublish = false\nrepository = \"https://github.com/ThomasAndJuliet/household-widgets\"\n\n[workspace]\n\n[features]\na11y = [\"libcosmic/a11y\", \"dep:iced_accessibility\"]\n\n[dependencies.libcosmic]\ngit = \"https://github.com/pop-os/libcosmic.git\"\ndefault-features = false\n\n[dependencies.iced_accessibility]\ngit = \"https://github.com/pop-os/libcosmic.git\"\noptional = true\n\n[dependencies.household-tones]\ngit = \"https://github.com/ThomasAndJuliet/household-kit.git\"\n\n[patch.\"https://github.com/pop-os/libcosmic.git\".libcosmic]\ngit = \"https://github.com/ThomasAndJuliet/libcosmic.git\"\nrev = \"dbbbcfa31dd80f3e4b23f2631ce1c9444bc3adbc\"\n\n[patch.\"https://github.com/pop-os/libcosmic.git\".cosmic-config]\ngit = \"https://github.com/ThomasAndJuliet/libcosmic.git\"\nrev = \"dbbbcfa31dd80f3e4b23f2631ce1c9444bc3adbc\"\n\n[patch.\"https://github.com/pop-os/libcosmic.git\".cosmic-config-derive]\ngit = \"https://github.com/ThomasAndJuliet/libcosmic.git\"\nrev = \"dbbbcfa31dd80f3e4b23f2631ce1c9444bc3adbc\"\n\n[patch.\"https://github.com/pop-os/libcosmic.git\".cosmic-theme]\ngit = \"https://github.com/ThomasAndJuliet/libcosmic.git\"\nrev = \"dbbbcfa31dd80f3e4b23f2631ce1c9444bc3adbc\"\n\n[patch.\"https://github.com/pop-os/libcosmic.git\".iced]\ngit = \"https://github.com/ThomasAndJuliet/libcosmic.git\"\nrev = \"dbbbcfa31dd80f3e4b23f2631ce1c9444bc3adbc\"\n\n[patch.\"https://github.com/pop-os/libcosmic.git\".iced_core]\ngit = \"https://github.com/ThomasAndJuliet/libcosmic.git\"\nrev = \"dbbbcfa31dd80f3e4b23f2631ce1c9444bc3adbc\"\n\n[patch.\"https://github.com/pop-os/libcosmic.git\".iced_debug]\ngit = \"https://github.com/ThomasAndJuliet/libcosmic.git\"\nrev = \"dbbbcfa31dd80f3e4b23f2631ce1c9444bc3adbc\"\n\n[patch.\"https://github.com/pop-os/libcosmic.git\".iced_futures]\ngit = \"https://github.com/ThomasAndJuliet/libcosmic.git\"\nrev = \"dbbbcfa31dd80f3e4b23f2631ce1c9444bc3adbc\"\n\n[patch.\"https://github.com/pop-os/libcosmic.git\".iced_graphics]\ngit = \"https://github.com/ThomasAndJuliet/libcosmic.git\"\nrev = \"dbbbcfa31dd80f3e4b23f2631ce1c9444bc3adbc\"\n\n[patch.\"https://github.com/pop-os/libcosmic.git\".iced_program]\ngit = \"https://github.com/ThomasAndJuliet/libcosmic.git\"\nrev = \"dbbbcfa31dd80f3e4b23f2631ce1c9444bc3adbc\"\n\n[patch.\"https://github.com/pop-os/libcosmic.git\".iced_renderer]\ngit = \"https://github.com/ThomasAndJuliet/libcosmic.git\"\nrev = \"dbbbcfa31dd80f3e4b23f2631ce1c9444bc3adbc\"\n\n[patch.\"https://github.com/pop-os/libcosmic.git\".iced_runtime]\ngit = \"https://github.com/ThomasAndJuliet/libcosmic.git\"\nrev = \"dbbbcfa31dd80f3e4b23f2631ce1c9444bc3adbc\"\n\n[patch.\"https://github.com/pop-os/libcosmic.git\".iced_tiny_skia]\ngit = \"https://github.com/ThomasAndJuliet/libcosmic.git\"\nrev = \"dbbbcfa31dd80f3e4b23f2631ce1c9444bc3adbc\"\n\n[patch.\"https://github.com/pop-os/libcosmic.git\".iced_wgpu]\ngit = \"https://github.com/ThomasAndJuliet/libcosmic.git\"\nrev = \"dbbbcfa31dd80f3e4b23f2631ce1c9444bc3adbc\"\n\n[patch.\"https://github.com/pop-os/libcosmic.git\".iced_widget]\ngit = \"https://github.com/ThomasAndJuliet/libcosmic.git\"\nrev = \"dbbbcfa31dd80f3e4b23f2631ce1c9444bc3adbc\"\n\n[patch.\"https://github.com/pop-os/libcosmic.git\".iced_accessibility]\ngit = \"https://github.com/ThomasAndJuliet/libcosmic.git\"\nrev = \"dbbbcfa31dd80f3e4b23f2631ce1c9444bc3adbc\"\n",
+        "contents": "[package]\nname = \"household-widgets\"\ndescription = \"The household apps' shared libcosmic widgets: what more than one app draws, in one place\"\nversion = \"0.1.0\"\nedition = \"2024\"\nrust-version = \"1.89\"\nlicense = \"GPL-3.0-only\"\npublish = false\nrepository = \"https://github.com/ThomasAndJuliet/household-widgets\"\n\n[workspace]\n\n[features]\na11y = [\"libcosmic/a11y\", \"dep:iced_accessibility\"]\n\n[dependencies.libcosmic]\ngit = \"https://github.com/pop-os/libcosmic.git\"\ndefault-features = false\n\n[dependencies.iced_accessibility]\ngit = \"https://github.com/pop-os/libcosmic.git\"\noptional = true\n\n[dependencies.household-tones]\ngit = \"https://github.com/ThomasAndJuliet/household-kit.git\"\n\n[patch.\"https://github.com/pop-os/libcosmic.git\".libcosmic]\ngit = \"https://github.com/ThomasAndJuliet/libcosmic.git\"\nrev = \"cb889ef4bbfccd45739d5fa6f9140fd0e53df9fa\"\n\n[patch.\"https://github.com/pop-os/libcosmic.git\".cosmic-config]\ngit = \"https://github.com/ThomasAndJuliet/libcosmic.git\"\nrev = \"cb889ef4bbfccd45739d5fa6f9140fd0e53df9fa\"\n\n[patch.\"https://github.com/pop-os/libcosmic.git\".cosmic-config-derive]\ngit = \"https://github.com/ThomasAndJuliet/libcosmic.git\"\nrev = \"cb889ef4bbfccd45739d5fa6f9140fd0e53df9fa\"\n\n[patch.\"https://github.com/pop-os/libcosmic.git\".cosmic-theme]\ngit = \"https://github.com/ThomasAndJuliet/libcosmic.git\"\nrev = \"cb889ef4bbfccd45739d5fa6f9140fd0e53df9fa\"\n\n[patch.\"https://github.com/pop-os/libcosmic.git\".iced]\ngit = \"https://github.com/ThomasAndJuliet/libcosmic.git\"\nrev = \"cb889ef4bbfccd45739d5fa6f9140fd0e53df9fa\"\n\n[patch.\"https://github.com/pop-os/libcosmic.git\".iced_core]\ngit = \"https://github.com/ThomasAndJuliet/libcosmic.git\"\nrev = \"cb889ef4bbfccd45739d5fa6f9140fd0e53df9fa\"\n\n[patch.\"https://github.com/pop-os/libcosmic.git\".iced_debug]\ngit = \"https://github.com/ThomasAndJuliet/libcosmic.git\"\nrev = \"cb889ef4bbfccd45739d5fa6f9140fd0e53df9fa\"\n\n[patch.\"https://github.com/pop-os/libcosmic.git\".iced_futures]\ngit = \"https://github.com/ThomasAndJuliet/libcosmic.git\"\nrev = \"cb889ef4bbfccd45739d5fa6f9140fd0e53df9fa\"\n\n[patch.\"https://github.com/pop-os/libcosmic.git\".iced_graphics]\ngit = \"https://github.com/ThomasAndJuliet/libcosmic.git\"\nrev = \"cb889ef4bbfccd45739d5fa6f9140fd0e53df9fa\"\n\n[patch.\"https://github.com/pop-os/libcosmic.git\".iced_program]\ngit = \"https://github.com/ThomasAndJuliet/libcosmic.git\"\nrev = \"cb889ef4bbfccd45739d5fa6f9140fd0e53df9fa\"\n\n[patch.\"https://github.com/pop-os/libcosmic.git\".iced_renderer]\ngit = \"https://github.com/ThomasAndJuliet/libcosmic.git\"\nrev = \"cb889ef4bbfccd45739d5fa6f9140fd0e53df9fa\"\n\n[patch.\"https://github.com/pop-os/libcosmic.git\".iced_runtime]\ngit = \"https://github.com/ThomasAndJuliet/libcosmic.git\"\nrev = \"cb889ef4bbfccd45739d5fa6f9140fd0e53df9fa\"\n\n[patch.\"https://github.com/pop-os/libcosmic.git\".iced_tiny_skia]\ngit = \"https://github.com/ThomasAndJuliet/libcosmic.git\"\nrev = \"cb889ef4bbfccd45739d5fa6f9140fd0e53df9fa\"\n\n[patch.\"https://github.com/pop-os/libcosmic.git\".iced_wgpu]\ngit = \"https://github.com/ThomasAndJuliet/libcosmic.git\"\nrev = \"cb889ef4bbfccd45739d5fa6f9140fd0e53df9fa\"\n\n[patch.\"https://github.com/pop-os/libcosmic.git\".iced_widget]\ngit = \"https://github.com/ThomasAndJuliet/libcosmic.git\"\nrev = \"cb889ef4bbfccd45739d5fa6f9140fd0e53df9fa\"\n\n[patch.\"https://github.com/pop-os/libcosmic.git\".iced_accessibility]\ngit = \"https://github.com/ThomasAndJuliet/libcosmic.git\"\nrev = \"cb889ef4bbfccd45739d5fa6f9140fd0e53df9fa\"\n",
         "dest": "cargo/vendor/household-widgets",
         "dest-filename": "Cargo.toml"
     },
@@ -9768,7 +9768,7 @@
     },
     {
         "type": "inline",
-        "contents": "[source.vendored-sources]\ndirectory = \"cargo/vendor\"\n\n[source.crates-io]\nreplace-with = \"vendored-sources\"\n\n[source.\"https://github.com/wash2/accesskit\"]\ngit = \"https://github.com/wash2/accesskit\"\nreplace-with = \"vendored-sources\"\nrev = \"6c20249\"\n\n[source.\"https://github.com/jackpot51/rust-atomicwrites\"]\ngit = \"https://github.com/jackpot51/rust-atomicwrites\"\nreplace-with = \"vendored-sources\"\n\n[source.\"https://github.com/thomasandjuliet/libcosmic\"]\ngit = \"https://github.com/thomasandjuliet/libcosmic\"\nreplace-with = \"vendored-sources\"\nrev = \"cb889ef4bbfccd45739d5fa6f9140fd0e53df9fa\"\n\n[source.\"https://github.com/pop-os/window_clipboard\"]\ngit = \"https://github.com/pop-os/window_clipboard\"\nreplace-with = \"vendored-sources\"\ntag = \"sctk-0.20\"\n\n[source.\"https://github.com/pop-os/cosmic-protocols\"]\ngit = \"https://github.com/pop-os/cosmic-protocols\"\nreplace-with = \"vendored-sources\"\nrev = \"c0cff4d\"\n\n[source.\"https://github.com/pop-os/freedesktop-icons\"]\ngit = \"https://github.com/pop-os/freedesktop-icons\"\nreplace-with = \"vendored-sources\"\n\n[source.\"https://github.com/pop-os/dbus-settings-bindings\"]\ngit = \"https://github.com/pop-os/dbus-settings-bindings\"\nreplace-with = \"vendored-sources\"\n\n[source.\"https://github.com/iced-rs/cryoglyph\"]\ngit = \"https://github.com/iced-rs/cryoglyph\"\nreplace-with = \"vendored-sources\"\nrev = \"e429a025df36ab8145708acb309080ae3deec17a\"\n\n[source.\"https://github.com/thomasandjuliet/household-kit\"]\ngit = \"https://github.com/thomasandjuliet/household-kit\"\nreplace-with = \"vendored-sources\"\n\n[source.\"https://github.com/thomasandjuliet/household-widgets\"]\ngit = \"https://github.com/thomasandjuliet/household-widgets\"\nreplace-with = \"vendored-sources\"\n\n[source.\"https://github.com/pop-os/smithay-clipboard\"]\ngit = \"https://github.com/pop-os/smithay-clipboard\"\nreplace-with = \"vendored-sources\"\ntag = \"sctk-0.20\"\n\n[source.\"https://github.com/pop-os/softbuffer\"]\ngit = \"https://github.com/pop-os/softbuffer\"\nreplace-with = \"vendored-sources\"\ntag = \"cosmic-4.0\"\n",
+        "contents": "[source.vendored-sources]\ndirectory = \"cargo/vendor\"\n\n[source.crates-io]\nreplace-with = \"vendored-sources\"\n\n[source.\"https://github.com/wash2/accesskit\"]\ngit = \"https://github.com/wash2/accesskit\"\nreplace-with = \"vendored-sources\"\nrev = \"6c20249\"\n\n[source.\"https://github.com/jackpot51/rust-atomicwrites\"]\ngit = \"https://github.com/jackpot51/rust-atomicwrites\"\nreplace-with = \"vendored-sources\"\n\n[source.\"https://github.com/thomasandjuliet/libcosmic\"]\ngit = \"https://github.com/thomasandjuliet/libcosmic\"\nreplace-with = \"vendored-sources\"\nrev = \"cb889ef4bbfccd45739d5fa6f9140fd0e53df9fa\"\n\n[source.\"https://github.com/pop-os/window_clipboard\"]\ngit = \"https://github.com/pop-os/window_clipboard\"\nreplace-with = \"vendored-sources\"\ntag = \"sctk-0.20\"\n\n[source.\"https://github.com/pop-os/cosmic-protocols\"]\ngit = \"https://github.com/pop-os/cosmic-protocols\"\nreplace-with = \"vendored-sources\"\nrev = \"c0cff4d\"\n\n[source.\"https://github.com/pop-os/freedesktop-icons\"]\ngit = \"https://github.com/pop-os/freedesktop-icons\"\nreplace-with = \"vendored-sources\"\n\n[source.\"https://github.com/pop-os/dbus-settings-bindings\"]\ngit = \"https://github.com/pop-os/dbus-settings-bindings\"\nreplace-with = \"vendored-sources\"\n\n[source.\"https://github.com/iced-rs/cryoglyph\"]\ngit = \"https://github.com/iced-rs/cryoglyph\"\nreplace-with = \"vendored-sources\"\nrev = \"e429a025df36ab8145708acb309080ae3deec17a\"\n\n[source.\"https://github.com/thomasandjuliet/household-kit\"]\ngit = \"https://github.com/thomasandjuliet/household-kit\"\nreplace-with = \"vendored-sources\"\n\n[source.\"https://github.com/thomasandjuliet/household-widgets\"]\ngit = \"https://github.com/thomasandjuliet/household-widgets\"\nreplace-with = \"vendored-sources\"\nrev = \"5a266b19b31854819d017a2de50b07e5f8d354c2\"\n\n[source.\"https://github.com/pop-os/smithay-clipboard\"]\ngit = \"https://github.com/pop-os/smithay-clipboard\"\nreplace-with = \"vendored-sources\"\ntag = \"sctk-0.20\"\n\n[source.\"https://github.com/pop-os/softbuffer\"]\ngit = \"https://github.com/pop-os/softbuffer\"\nreplace-with = \"vendored-sources\"\ntag = \"cosmic-4.0\"\n",
         "dest": "cargo",
         "dest-filename": "config"
     }
