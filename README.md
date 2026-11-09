@@ -11,6 +11,8 @@ same live prover session with AI agents, deciding what each one may change and
 seeing who changed what. Deductum runs on Linux and Windows, with projects on your
 own computer or on a remote Linux machine.
 
+![Deductum showing an Isabelle theory as a document: the Sessions sidebar, prose with typeset mathematics, and definitions in code cells](docs/images/deductum.png)
+
 ## Features
 
 - **Literate and source views.** Read Isabelle text blocks and Lean doc comments
