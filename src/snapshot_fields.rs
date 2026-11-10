@@ -187,6 +187,26 @@ fn a_tool_number_field_takes_digits_and_sets_the_setting() {
     let (_, messages, _) = press(&mut h, &app, "z", Code::KeyZ, Modifiers::CTRL);
     apply(&mut h, &mut app, messages);
     assert_eq!(app.workspace.as_ref().unwrap().tool_settings.get("sledgehammer.timeout").map(String::as_str), Some(""), "Undo puts the setting back too");
+    // Typed fast, the keys given together before the app answers any: the letter is still refused
+    let keys: Vec<Event> = "4x5"
+        .chars()
+        .map(|c| {
+            Event::Keyboard(keyboard::Event::KeyPressed {
+                key: Key::Character(c.to_string().into()),
+                modified_key: Key::Character(c.to_string().into()),
+                physical_key: Physical::Unidentified(keyboard::key::NativeCode::Unidentified),
+                location: Location::Standard,
+                modifiers: Modifiers::empty(),
+                text: Some(c.to_string().into()),
+                repeat: false,
+            })
+        })
+        .collect();
+    let (messages, _) = h.events_taken(&app, &keys);
+    apply(&mut h, &mut app, messages);
+    let ws = app.workspace.as_ref().unwrap();
+    assert_eq!(super::fields::tool(ws, "sledgehammer", "timeout").value(), "45", "however fast it is typed");
+    assert_eq!(ws.tool_settings.get("sledgehammer.timeout").map(String::as_str), Some("45"));
 }
 
 /// A setting typed in (Claude's model): what is typed is the setting; putting the row back to its

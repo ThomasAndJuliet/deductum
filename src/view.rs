@@ -4183,14 +4183,20 @@ fn counterexample_table<'a>(headline: &str, sections: &[super::flow::Section], t
     col.into()
 }
 
-/// A proof tool's setting typed in: a labelled number `number_width` wide, the others as wide as
-/// their row; Enter does `submit`
+/// A proof tool's setting typed in: a labelled number `number_width` wide, taking digits only, the
+/// others as wide as their row; Enter does `submit`
 fn tool_field<'a>(ws: &'a Workspace, tool: &Tool, s: &'a Setting, number_width: f32, submit: Option<Message>) -> Element<'a, Message> {
     let width = if s.kind == "number" && !s.label.is_empty() { Length::Fixed(number_width) } else { Length::Fill };
     let field = Field::Tool(tool.name.clone(), s.key.clone());
-    super::fields::text(super::fields::tool(ws, &tool.name, &s.key), field, s.placeholder.as_str(), move |f| match submit {
-        Some(submit) => f.width(width).on_submit(submit),
-        None => f.width(width),
+    // (a number's field takes digits only as they are typed, whatever the keys' timing: the input
+    // edits its own copy of the value before the app answers)
+    let number = s.kind == "number";
+    super::fields::text(super::fields::tool(ws, &tool.name, &s.key), field, s.placeholder.as_str(), move |f| {
+        let f = if number { f.accepts(|c| c.is_ascii_digit()) } else { f };
+        match submit {
+            Some(submit) => f.width(width).on_submit(submit),
+            None => f.width(width),
+        }
     })
 }
 
