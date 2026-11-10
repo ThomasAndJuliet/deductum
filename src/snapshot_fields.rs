@@ -267,3 +267,78 @@ fn a_focused_fields_border_follows_its_window() {
     let count = |frame: &[u8]| frame.chunks(4).filter(|p| p[0].abs_diff(muted[0]) < 3 && p[1].abs_diff(muted[1]) < 3 && p[2].abs_diff(muted[2]) < 3).count();
     assert!(count(&front) > count(&behind) + 100, "the muted accent ring in front ({}), not behind ({})", count(&front), count(&behind));
 }
+
+/// The text field `element` holds, as laid out alone in a window
+fn laid_out(element: cosmic::Element<'_, Message>) -> Rectangle {
+    use cosmic::iced::advanced::renderer::Headless;
+    use cosmic::iced::runtime::user_interface::{Cache, UserInterface};
+    super::load_fonts();
+    let mut renderer = cosmic::iced::futures::executor::block_on(<cosmic::Renderer as Headless>::new(cosmic::iced::Font::default(), cosmic::iced::Pixels(14.0), Some("tiny-skia"))).expect("a headless renderer");
+    let mut ui = UserInterface::build(element, Size::new(800.0, 200.0), Cache::default(), &mut renderer);
+    let mut fields = Fields(Vec::new());
+    ui.operate(&renderer, &mut fields);
+    fields.0.first().copied().expect("a text field")
+}
+
+/// The adoption changes no field's size: each field is laid out as main's libcosmic input with
+/// the same settings, empty and with text (the widths the app's fields set)
+#[test]
+fn each_field_is_the_size_mains_input_was() {
+    use cosmic::iced::Length;
+    use cosmic::widget;
+    let _turn = super::snapshot::ui_turn();
+    let set = |_: String| Message::SetField(Field::Find, String::new());
+    for value in ["", "abc"] {
+        let text_box = household_widgets::ShortTextBox::starting_with(value);
+        for width in [None, Some(Length::Fill), Some(Length::Fixed(340.0)), Some(Length::Fixed(200.0)), Some(Length::Fixed(64.0))] {
+            let adopted = laid_out(super::fields::text(&text_box, Field::Find, "", |f| match width {
+                Some(width) => f.width(width),
+                None => f,
+            }));
+            let main = widget::text_input("", value.to_string()).on_input(set);
+            let main = laid_out(match width {
+                Some(width) => main.width(width).into(),
+                None => main.into(),
+            });
+            assert_eq!(adopted.size(), main.size(), "a text field {width:?} ({value:?})");
+        }
+        // The search fields: their clear button only with something to clear (Juliet's approved
+        // choice); on main the palette's was so, the Symbols' and Settings' always there: a
+        // search field is the same size either way
+        let adopted = laid_out(super::fields::search(&text_box, Field::Symbols, "", |f| f));
+        let while_typed = widget::search_input("", value.to_string()).on_input(set);
+        let while_typed = laid_out(if value.is_empty() { while_typed.into() } else { while_typed.on_clear(set(String::new())).into() });
+        let always = laid_out(widget::search_input("", value.to_string()).on_input(set).on_clear(set(String::new())).into());
+        assert_eq!(adopted.size(), while_typed.size(), "the palette's search as on main ({value:?})");
+        assert_eq!(adopted.size(), always.size(), "the Symbols and Settings searches as on main ({value:?})");
+    }
+}
+
+/// In the window, the Symbols panel's search is the size main's was, typed in or not, though its
+/// clear button shows only with text
+#[test]
+fn the_symbols_search_is_the_size_it_was() {
+    let mut h = Harness::new(WINDOW);
+    let mut app = demo_app(Mode::Literate);
+    let field = |h: &mut Harness, app: &App| {
+        let edge = WINDOW.width - app.right_width;
+        fields(h, app).into_iter().find(|r| r.x >= edge).expect("the Symbols search")
+    };
+    let empty = field(&mut h, &app);
+    let _ = app.set_field(Field::Symbols, "leq".into());
+    let typed = field(&mut h, &app);
+    assert_eq!(empty.size(), typed.size(), "typing does not change its size");
+}
+
+/// The Settings page's search is the size main's was, typed in or not
+#[test]
+fn the_settings_search_is_the_size_it_was() {
+    let mut h = Harness::new(WINDOW);
+    let mut app = demo_app(Mode::Literate);
+    let _ = app.shell_update(Msg::Settings(true));
+    let field = |h: &mut Harness, app: &App| fields(h, app).into_iter().min_by(|a, b| a.y.total_cmp(&b.y)).expect("the Settings search");
+    let empty = field(&mut h, &app);
+    let _ = app.set_field(Field::SettingsSearch, "size".into());
+    let typed = field(&mut h, &app);
+    assert_eq!(empty.size(), typed.size(), "typing does not change its size");
+}
