@@ -2575,10 +2575,11 @@ source = "git+https://github.com/ThomasAndJuliet/household-kit.git#2df3d0c0f98ad
 [[package]]
 name = "household-widgets"
 version = "0.1.0"
-source = "git+https://github.com/ThomasAndJuliet/household-widgets.git?rev=5a266b19b31854819d017a2de50b07e5f8d354c2#5a266b19b31854819d017a2de50b07e5f8d354c2"
+source = "git+https://github.com/ThomasAndJuliet/household-widgets.git?rev=52641f65097d7850db66e507e9f5d1a51315ea3b#52641f65097d7850db66e507e9f5d1a51315ea3b"
 dependencies = [
  "household-tones",
  "libcosmic",
+ "zeroize",
 ]
 
 [[package]]
