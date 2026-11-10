@@ -31,7 +31,7 @@ household-highlight = { git = "https://github.com/ThomasAndJuliet/household-kit.
 # The household's shared libcosmic widgets (the muted switch, tooltips, menu rows, buttons, the
 # settings rows' alignment, and the text boxes: their look, undo history, keys and text menu). It
 # builds with this libcosmic, through the patch below; at the revision with the text boxes
-household-widgets = { git = "https://github.com/ThomasAndJuliet/household-widgets.git", rev = "52641f65097d7850db66e507e9f5d1a51315ea3b" }
+household-widgets = { git = "https://github.com/ThomasAndJuliet/household-widgets.git", rev = "b4193feee2d35bed35837febd83f40315bbd8bad" }
 
 [dependencies.cosmic-text]
 version = "0.19"
