@@ -2575,7 +2575,7 @@ source = "git+https://github.com/ThomasAndJuliet/household-kit.git#2df3d0c0f98ad
 [[package]]
 name = "household-widgets"
 version = "0.1.0"
-source = "git+https://github.com/ThomasAndJuliet/household-widgets.git?rev=b4193feee2d35bed35837febd83f40315bbd8bad#b4193feee2d35bed35837febd83f40315bbd8bad"
+source = "git+https://github.com/ThomasAndJuliet/household-widgets.git?rev=3280277e30866052f36d5e2171ea18f762e76690#3280277e30866052f36d5e2171ea18f762e76690"
 dependencies = [
  "household-tones",
  "libcosmic",
