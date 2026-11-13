@@ -4870,7 +4870,7 @@ fn agents_panel<'a>(app: &'a App, ws: &'a Workspace) -> Element<'a, Message> {
                         .push(widget::text::caption("Go where it shows you, as it does").class(muted()))
                         .width(Length::Fill),
                 )
-                .push(widget::toggler(following).on_toggle(move |on| Message::Follow(on.then(|| key.clone())))),
+                .push(household_widgets::switch(following, move |on| Message::Follow(on.then(|| key.clone())))),
         );
         col = col.push(widget::container(card).padding(sp.space_xs).class(theme::Container::Card).width(Length::Fill));
     }
