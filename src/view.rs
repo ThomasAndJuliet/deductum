@@ -3100,7 +3100,12 @@ pub(super) fn resolve_key_binding(press: text_editor::KeyPress, completing: bool
     use cosmic::iced::keyboard::Key;
     use cosmic::iced::keyboard::key::Named;
     let m = press.modifiers;
+    // Zoom and Go to file are the window's: declined in every vim mode, so the window-wide
+    // shortcut sees them
     if m.command() && matches!(press.key.as_ref(), Key::Character("=" | "+" | "-" | "0")) {
+        return None;
+    }
+    if m.command() && !m.shift() && !m.alt() && matches!(press.key.as_ref(), Key::Character("p")) {
         return None;
     }
     // The settings, from any editor and in any vim mode

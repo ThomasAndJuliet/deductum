@@ -27,6 +27,7 @@ use super::{App, Message, Pending, Workspace, file_name, link};
 #[derive(Default)]
 pub struct Shell {
     pub settings: Settings,
+    pub file_picker: super::file_picker::Picker,
     /// The settings page is shown instead of the document
     pub settings_open: bool,
     /// Project actions' runs, by session and action name: running, or how the last one ended
@@ -199,6 +200,7 @@ impl App {
                 let closing = self.shell.settings_open && !open;
                 self.shell.settings_open = open;
                 if open {
+                    self.dismiss_file_picker();
                     self.shell.page.sub = super::settings_page::Sub::Settings;
                     self.shell.page.fields_from(&self.shell.settings);
                     self.new_session = None;
@@ -253,6 +255,7 @@ impl App {
             Msg::ForgetSession(machine, sid) => {
                 self.send(&machine, "discard", json!({"session": sid}), Pending::Plain);
                 super::recent::forget(&machine, &sid);
+                self.shell.file_picker.forget(&machine, &sid);
                 self.sessions.remove(&(machine, sid));
             }
             Msg::KeywordPause(ms) => {
@@ -686,7 +689,7 @@ pub fn header_center(app: &App) -> Vec<Element<'_, Message>> {
     if app.workspace.is_none() {
         return Vec::new();
     }
-    let mut items = vec![super::chip::chip(app)];
+    let mut items = vec![super::file_picker::header(app).unwrap_or_else(|| super::chip::chip(app))];
     items.extend(super::chip::controls(app));
     items
 }
