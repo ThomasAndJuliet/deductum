@@ -44,6 +44,20 @@ pub enum Op {
     Escape,
     /// Go to a symbol of the document (`g s`, as Zed's vim mode has it; Ctrl+Shift+O)
     Symbols,
+    /// Back to where a jump came from (Ctrl+O; Alt+Left)
+    Back,
+    /// The definition of the name at the caret (`g d`; Ctrl+click)
+    Definition,
+    /// What the prover says about the name at the caret, as the pointer shows it (`g h`)
+    Hover,
+    /// The caret's menu, as a right click there opens it (`g .`)
+    Actions,
+    /// The session's theorems searched for the name at the caret (`g S`)
+    SearchProject,
+    /// The next problem (true) or the one before (`] d`, `[ d`, `g ]`, `g [`)
+    Problem(bool),
+    /// Comment out these lines from the caret's, or take their comments away (`g c c`)
+    ToggleComment(usize),
 }
 
 #[derive(Clone, Debug, Default)]
@@ -81,6 +95,7 @@ impl Vim {
                 "d" => vec![Act(Action::Move(Motion::PageDown))],
                 "u" => vec![Act(Action::Move(Motion::PageUp))],
                 "s" => vec![Save],
+                "o" => vec![Back],
                 _ => Vec::new(),
             };
         }
@@ -127,10 +142,37 @@ impl Vim {
             let select = visual || !op_pending.trim_end_matches('g').is_empty();
             return vec![Act(if select { Action::Select(Motion::DocumentStart) } else { Action::Move(Motion::DocumentStart) })];
         }
-        // gs: the document's symbols, in normal mode
-        if op_pending == "g" && key == "s" && !visual {
+        // g and a key: what Zed's vim mode does with it (normal mode): gs the document's
+        // symbols, gd the definition, gh the hover, g. the caret's menu, gS the theorems search,
+        // g] and g[ the next and previous problem, gcc a comment
+        if op_pending == "g" && !visual {
+            let op = match key {
+                "s" => Some(Symbols),
+                "d" => Some(Definition),
+                "h" => Some(Hover),
+                "." => Some(Actions),
+                "S" => Some(SearchProject),
+                "]" => Some(Problem(true)),
+                "[" => Some(Problem(false)),
+                _ => None,
+            };
+            if let Some(op) = op {
+                self.pending.clear();
+                return vec![op];
+            }
+            if key == "c" {
+                self.pending = format!("{digits}gc");
+                return Vec::new();
+            }
+        }
+        if op_pending == "gc" {
             self.pending.clear();
-            return vec![Op::Symbols];
+            return if key == "c" { vec![ToggleComment(count)] } else { Vec::new() };
+        }
+        // ]d and [d: the next and previous problem
+        if op_pending == "]" || op_pending == "[" {
+            self.pending.clear();
+            return if key == "d" { vec![Problem(op_pending == "]")] } else { Vec::new() };
         }
         // Operators: d, c, y followed by a motion, the same key (whole lines), or iw/aw
         if let Some(op) = op_pending.chars().next().filter(|c| matches!(c, 'd' | 'c' | 'y')) {
@@ -256,7 +298,7 @@ impl Vim {
                 self.mode = Mode::VisualLine;
                 vec![Act(Action::Move(Motion::Home)), Act(Action::Select(Motion::Down))]
             }
-            "d" | "c" | "y" | "g" | "r" | ":" => {
+            "d" | "c" | "y" | "g" | "r" | ":" | "]" | "[" => {
                 self.pending = format!("{digits}{key}");
                 Vec::new()
             }
@@ -278,6 +320,35 @@ impl Vim {
         }
         ops
     }
+}
+
+/// Lines commented out, or their comments taken away if every line that is not blank has one
+/// (as vim-commentary and Zed's `g c c`): the comment goes after the indent; blank lines stay
+pub fn toggle_comments(lines: &[&str], (open, close): (&str, &str)) -> Vec<String> {
+    let (bare_open, bare_close) = (open.trim_end(), close.trim_start());
+    let commented = |l: &str| {
+        let t = l.trim();
+        t.starts_with(bare_open) && t.ends_with(bare_close) && t.len() >= bare_open.len() + bare_close.len()
+    };
+    let uncomment = lines.iter().any(|l| !l.trim().is_empty()) && lines.iter().filter(|l| !l.trim().is_empty()).all(|l| commented(l));
+    lines
+        .iter()
+        .map(|l| {
+            let body = l.trim_start();
+            if body.is_empty() {
+                return l.to_string();
+            }
+            let indent = &l[..l.len() - body.len()];
+            let body = body.trim_end();
+            if uncomment {
+                let inner = body.strip_prefix(open).or_else(|| body.strip_prefix(bare_open)).unwrap_or(body);
+                let inner = if bare_close.is_empty() { inner } else { inner.strip_suffix(close).or_else(|| inner.strip_suffix(bare_close)).unwrap_or(inner) };
+                format!("{indent}{inner}")
+            } else {
+                format!("{indent}{open}{body}{close}")
+            }
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -313,5 +384,46 @@ mod tests {
         v.key("g", false);
         assert_eq!(v.key("s", false), vec![Op::Symbols]);
         assert_eq!(v.pending, "");
+    }
+
+    #[test]
+    fn comments_go_on_after_the_indent_and_come_off_again() {
+        let isabelle = ("(* ", " *)");
+        assert_eq!(toggle_comments(&["  by simp"], isabelle), ["  (* by simp *)"]);
+        assert_eq!(toggle_comments(&["  (* by simp *)"], isabelle), ["  by simp"]);
+        assert_eq!(toggle_comments(&["(*by simp*)"], isabelle), ["by simp"]);
+        let lean = ("-- ", "");
+        assert_eq!(toggle_comments(&["  exact h", "", "  rfl"], lean), ["  -- exact h", "", "  -- rfl"]);
+        assert_eq!(toggle_comments(&["  -- exact h", "", "  -- rfl"], lean), ["  exact h", "", "  rfl"]);
+        // (some lines commented, some not: all are commented)
+        assert_eq!(toggle_comments(&["-- a", "b"], lean), ["-- -- a", "-- b"]);
+        assert_eq!(toggle_comments(&["   "], lean), ["   "]);
+    }
+
+    #[test]
+    fn zed_s_g_keys_jumps_and_problems() {
+        let mut v = Vim::default();
+        v.mode = Mode::Normal;
+        let mut keys = |ks: &[&str]| ks.iter().map(|k| v.key(k, false)).last().unwrap();
+        assert_eq!(keys(&["g", "d"]), vec![Op::Definition]);
+        assert_eq!(keys(&["g", "h"]), vec![Op::Hover]);
+        assert_eq!(keys(&["g", "."]), vec![Op::Actions]);
+        assert_eq!(keys(&["g", "S"]), vec![Op::SearchProject]);
+        assert_eq!(keys(&["g", "]"]), vec![Op::Problem(true)]);
+        assert_eq!(keys(&["g", "["]), vec![Op::Problem(false)]);
+        assert_eq!(keys(&["]", "d"]), vec![Op::Problem(true)]);
+        assert_eq!(keys(&["[", "d"]), vec![Op::Problem(false)]);
+        assert_eq!(keys(&["g", "c", "c"]), vec![Op::ToggleComment(1)]);
+        assert_eq!(keys(&["3", "g", "c", "c"]), vec![Op::ToggleComment(3)]);
+        // (anything else after ] or gc does nothing, and is not left pending)
+        assert_eq!(keys(&["]", "x"]), vec![]);
+        assert_eq!(keys(&["g", "c", "x"]), vec![]);
+        assert_eq!(v.pending, "");
+        assert_eq!(v.key("o", true), vec![Op::Back]);
+        // the old ones still work
+        v.key("g", false);
+        assert_eq!(v.key("g", false), vec![Op::Act(Action::Move(Motion::DocumentStart))]);
+        v.key("d", false);
+        assert_eq!(v.key("d", false).last(), Some(&Op::Act(Action::Edit(Edit::Delete))));
     }
 }

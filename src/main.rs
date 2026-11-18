@@ -959,9 +959,97 @@ impl App {
                     let window = self.core.main_window_id().unwrap_or(cosmic::iced::window::Id::RESERVED);
                     tasks.push(self.update(Message::SymbolPickerShortcut(window)));
                 }
+                vim::Op::Back => tasks.push(self.update(Message::Back)),
+                vim::Op::Definition => tasks.push(self.update(Message::GotoDefinition)),
+                vim::Op::Hover => tasks.push(self.hover_at_caret(in_block)),
+                vim::Op::Actions => tasks.push(self.menu_at_caret(in_block)),
+                vim::Op::SearchProject => tasks.push(self.search_at_caret()),
+                vim::Op::Problem(forward) => tasks.push(self.update(Message::Shell(shell::Msg::StepProblem(None, forward)))),
+                vim::Op::ToggleComment(n) => {
+                    let task = self.toggle_comment(n, in_block);
+                    tasks.push(task);
+                }
             }
         }
         Task::batch(tasks)
+    }
+
+    /// The caret in the editor in use, in that editor's coordinates (the block editor's from the
+    /// cell's edge, as its pointer is): none outside an editor
+    fn caret_in_editor(&mut self, in_block: bool) -> Option<(EditorTarget, cosmic::iced::Point)> {
+        let t = self.workspace.as_mut()?.theory.as_mut()?;
+        match &mut t.block_editor {
+            Some(be) if in_block => {
+                let p = editor::caret_point(&mut be.content);
+                Some((EditorTarget::Block, cosmic::iced::Point::new(p.x + view::block_text_inset(be), p.y)))
+            }
+            _ if t.mode == Mode::Source => Some((EditorTarget::Source, editor::caret_point(&mut t.source))),
+            _ => None,
+        }
+    }
+
+    /// `g h`: what the prover says about the name at the caret, in the card the pointer shows
+    fn hover_at_caret(&mut self, in_block: bool) -> Task<Message> {
+        let Some((target, point)) = self.caret_in_editor(in_block) else { return Task::none() };
+        let Some(cursor) = self.workspace.as_ref().and_then(|w| w.theory.as_ref()).map(|t| t.cursor) else { return Task::none() };
+        let target = if target == EditorTarget::Block { HoverTarget::Block } else { HoverTarget::Source };
+        self.hover_gen += 1;
+        let generation = self.hover_gen;
+        if let Some(ws) = &mut self.workspace {
+            ws.hover = Some(Hover { target, point, offset: cursor, generation, info: None });
+        }
+        self.update(Message::HoverTick(generation))
+    }
+
+    /// `g .`: the caret's menu (Sledgehammer, a search, a quick proof, Copy…), as a right click there
+    fn menu_at_caret(&mut self, in_block: bool) -> Task<Message> {
+        let Some((target, point)) = self.caret_in_editor(in_block) else { return Task::none() };
+        // (under the caret's line, as a menu opens under the pointer)
+        let at = cosmic::iced::Point::new(point.x, point.y + view::code_line_height());
+        self.shell_update(shell::Msg::ContextOpen(context_menu::Target::Editor(target), at))
+    }
+
+    /// `g S`: the session's theorems searched for the name at the caret (Find theorems, Loogle),
+    /// or the search field ready for one
+    fn search_at_caret(&mut self) -> Task<Message> {
+        let Some(t) = self.workspace.as_ref().and_then(|w| w.theory.as_ref()) else { return Task::none() };
+        let name = t.profile.name_at(&t.local, t.cursor);
+        let run = name.is_some();
+        let shown = self.update(Message::FindFor(name.unwrap_or_default(), run));
+        if run { shown } else { Task::batch([shown, widget::text_input::focus(view::find_input_id())]) }
+    }
+
+    /// `g c c`: the caret's line and the `n - 1` after it commented out, or their comments taken
+    /// away (as the backend writes a comment), the caret at the start of the last
+    fn toggle_comment(&mut self, n: usize, in_block: bool) -> Task<Message> {
+        use cosmic::widget::text_editor::{Action as A, Edit as E, Motion as M};
+        let Some(t) = self.workspace.as_ref().and_then(|w| w.theory.as_ref()) else { return Task::none() };
+        let content = match &t.block_editor {
+            Some(be) if in_block => {
+                if be.kind == theory::Kind::Text {
+                    self.status = Some("Prose has no comments: g c c comments out code".into());
+                    return Task::none();
+                }
+                &be.content
+            }
+            _ if t.mode == Mode::Source => &t.source,
+            _ => return Task::none(),
+        };
+        let first = content.cursor().position.line;
+        let last = (first + n).min(content.line_count()).max(first + 1) - 1;
+        let lines: Vec<String> = (first..=last).filter_map(|i| content.line(i).map(|l| l.text.to_string())).collect();
+        let refs: Vec<&str> = lines.iter().map(String::as_str).collect();
+        let changed = vim::toggle_comments(&refs, t.profile.line_comment());
+        if changed == lines {
+            return Task::none();
+        }
+        let act = |a: A| if in_block && t.block_editor.is_some() { Message::BlockAction(a) } else { Message::SourceAction(a) };
+        let mut steps = vec![act(A::Move(M::Home))];
+        steps.extend((first..last).map(|_| act(A::Select(M::Down))));
+        steps.push(act(A::Select(M::End)));
+        steps.push(act(A::Edit(E::Paste(Arc::new(changed.join("\n"))))));
+        steps.push(act(A::Move(M::Home)));
+        Task::batch(steps.into_iter().map(|m| self.update(m)).collect::<Vec<_>>())
     }
 
     fn nav_wait_layout(&mut self) -> Task<Message> {
@@ -4586,6 +4674,18 @@ impl App {
                 let pending_g = pending == "g";
                 let pending_d = pending == "d";
                 let next = match (key, ctrl) {
+                    // (Zed's keys that need no caret in a cell: the symbols, the problems, the
+                    // theorems search, the cell's menu, and back)
+                    ("o", true) => return self.update(Message::Back),
+                    ("s", false) if pending_g => return self.update(Message::SymbolPickerShortcut(self.core.main_window_id().unwrap_or(cosmic::iced::window::Id::RESERVED))),
+                    ("]" | "[", false) if pending_g => return self.update(Message::Shell(shell::Msg::StepProblem(None, key == "]"))),
+                    ("d", false) if pending == "]" || pending == "[" => return self.update(Message::Shell(shell::Msg::StepProblem(None, pending == "]"))),
+                    ("]" | "[", false) => {
+                        self.vim.pending = key.into();
+                        None
+                    }
+                    ("S", false) if pending_g => return self.search_at_caret(),
+                    (".", false) if pending_g => return self.shell_update(shell::Msg::ContextOpen(context_menu::Target::Cell(cur), cosmic::iced::Point::new(24.0, 24.0))),
                     ("r", true) => return self.update(Message::Redo),
                     ("u", false) => return self.update(Message::Undo),
                     ("j" | "Down", false) => Some((cur + 1).min(n - 1)),

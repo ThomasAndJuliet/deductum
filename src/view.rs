@@ -23,6 +23,12 @@ use prose_render::rich::{Typography, rich_text};
 use super::{App, LeftMode, Message, Panel, Workspace, file_name};
 
 static BLOCK_EDITOR: LazyLock<widget::Id> = LazyLock::new(widget::Id::unique);
+static FIND_INPUT: LazyLock<widget::Id> = LazyLock::new(widget::Id::unique);
+
+/// The Search panel's field (vim's `g S` puts the keys there)
+pub fn find_input_id() -> widget::Id {
+    FIND_INPUT.clone()
+}
 static SOURCE_EDITOR: LazyLock<widget::Id> = LazyLock::new(widget::Id::unique);
 static LITERATE_SCROLL: LazyLock<widget::Id> = LazyLock::new(widget::Id::unique);
 
@@ -4700,7 +4706,7 @@ fn find_panel<'a>(ws: &'a Workspace, table: &dyn super::codec::Symbols) -> Eleme
     col = col.push(
         widget::row::with_capacity(2)
             .spacing(sp.space_xs)
-            .push(super::fields::text(&ws.find_input, Field::Find, search.placeholder.as_str(), |f| f.on_submit(Message::Find).width(Length::Fill)))
+            .push(super::fields::text(&ws.find_input, Field::Find, search.placeholder.as_str(), |f| f.id(find_input_id()).on_submit(Message::Find).width(Length::Fill)))
             .push(widget::button::suggested(search.short()).on_press(Message::Find)),
     );
     if !search.note.is_empty() {

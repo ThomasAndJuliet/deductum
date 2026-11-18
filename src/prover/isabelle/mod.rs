@@ -87,6 +87,10 @@ impl Profile for Isabelle {
         }
     }
 
+    fn line_comment(&self) -> (&'static str, &'static str) {
+        ("(* ", " *)")
+    }
+
     fn is_definition(&self, block: &Block) -> bool {
         matches!(
             block.name.as_str(),
