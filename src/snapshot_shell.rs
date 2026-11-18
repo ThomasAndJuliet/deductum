@@ -2071,3 +2071,207 @@ fn start_page_frames_for_the_review() {
     empty.sessions.clear();
     draw_in(true, || start_window(&empty), "start-page-light-no-history", Size::new(1400.0, 600.0));
 }
+
+// ----- Go to file (Ctrl+P)
+
+/// The mixed app with its own session id (the recent files are kept by session, for the whole
+/// test run) and a local link whose requests the test reads
+fn picker_app(sid: &str) -> (App, tokio::sync::mpsc::UnboundedReceiver<String>) {
+    let mut app = mixed_app();
+    let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+    app.links[0].sender = Some(sender);
+    app.workspace.as_mut().unwrap().sid = sid.into();
+    let summary = app.sessions[&("local".to_string(), "s1".to_string())].clone();
+    app.sessions.insert(("local".into(), sid.into()), summary);
+    (app, receiver)
+}
+
+fn picker_update(app: &mut App, m: Message) -> Task<Message> {
+    cosmic::Application::update(app, m)
+}
+
+use cosmic::app::Task;
+
+/// The header with room under it for the list
+fn header_and_list(app: &App) -> Element<'_, Message> {
+    widget::column::with_capacity(2).push(header(app)).push(widget::Space::new().height(Length::Fixed(360.0))).into()
+}
+
+fn ctrl_p() -> Message {
+    Message::FilePickerShortcut(cosmic::iced::window::Id::RESERVED)
+}
+
+fn shown(app: &App) -> Vec<String> {
+    let open = app.shell.file_picker.open.as_ref().expect("the picker is open");
+    open.hits_for_tests(&app.shell.file_picker)
+}
+
+fn picked_read(app: &App) -> Option<(u64, super::Pending)> {
+    app.pending.iter().find_map(|(id, (_, p))| matches!(p, super::Pending::PickFile(..)).then(|| (*id, p.clone())))
+}
+
+const DEMO: &str = "/home/me/Research/Demo";
+
+/// Ctrl+P puts the search in the header in place of the chip (pause and stop stay), lists the
+/// files known already at once, and asks the host for the folder's files once in the background
+#[test]
+fn ctrl_p_searches_the_session_s_files_in_the_header_in_place_of_the_chip() {
+    let (mut app, mut receiver) = picker_app("fp-open");
+    let _ = picker_update(&mut app, ctrl_p());
+    assert!(app.shell.file_picker.open.is_some());
+    // (the open file is left out until it is searched for; no history yet: by name)
+    assert_eq!(shown(&app), ["lib/Base.thy", "More.thy", "ROOT"]);
+    let asked = requests(&mut receiver);
+    assert_eq!(asked.iter().filter(|r| r["op"] == "project_files" && r["session"] == "fp-open").count(), 1, "{asked:?}");
+    // again while it is out: no second request
+    let _ = picker_update(&mut app, ctrl_p());
+    assert!(requests(&mut receiver).iter().all(|r| r["op"] != "project_files"));
+    // the chip has gone; pause and stop are still there
+    // (the list is open under it: the header's row, in a window with room for the list)
+    let hits: Vec<(u32, Vec<Message>)> = (0..1400u32).step_by(2).map(|x| (x, clicks(header_and_list(&app), Point::new(x as f32, 24.0), Size::new(1400.0, 408.0)))).collect();
+    assert!(span_of(&hits, |m| matches!(m, Message::Lifecycle("pause"))).is_some() && span_of(&hits, |m| matches!(m, Message::Lifecycle("stop"))).is_some());
+    for light in [false, true] {
+        let name = if light { "header-go-to-file-light" } else { "header-go-to-file-dark" };
+        draw_in(light, || header_and_list(&app), name, Size::new(1400.0, 408.0));
+    }
+    app.window_width = 760.0;
+    draw_in(false, || header_and_list(&app), "header-go-to-file-narrow", Size::new(760.0, 408.0));
+    // Esc closes it, and the chip is back
+    let _ = picker_update(&mut app, Message::FilePickerKey(cosmic::iced::window::Id::RESERVED, super::file_picker::Key::Escape));
+    assert!(app.shell.file_picker.open.is_none());
+}
+
+/// Typing filters what is known at once; the host's list replaces it when it comes, the file
+/// selected staying selected wherever it now ranks
+#[test]
+fn the_host_s_list_comes_in_while_typing_and_the_selection_stays_on_its_file() {
+    let (mut app, _receiver) = picker_app("fp-refresh");
+    let _ = picker_update(&mut app, ctrl_p());
+    let _ = app.set_field(super::fields::Field::ProjectFiles, "b".into());
+    assert_eq!(shown(&app), ["lib/Base.thy"]);
+    let _ = app.set_field(super::fields::Field::ProjectFiles, "".into());
+    let down = |app: &mut App| { let _ = picker_update(app, Message::FilePickerKey(cosmic::iced::window::Id::RESERVED, super::file_picker::Key::Down)); };
+    down(&mut app);
+    assert_eq!(app.shell.file_picker.open.as_ref().unwrap().selected_for_tests(&app.shell.file_picker).as_deref(), Some(format!("{DEMO}/More.thy").as_str()));
+    // a new file, ranking before it
+    let files = json!({"ok": true, "folder": DEMO, "files": [format!("{DEMO}/ROOT"), format!("{DEMO}/Demo.thy"), format!("{DEMO}/More.thy"), format!("{DEMO}/lib/Base.thy"), format!("{DEMO}/Again.thy")]});
+    let _ = app.on_reply("local".into(), super::Pending::ProjectFiles("fp-refresh".into()), files);
+    assert_eq!(shown(&app), ["Again.thy", "lib/Base.thy", "More.thy", "ROOT"]);
+    assert_eq!(app.shell.file_picker.open.as_ref().unwrap().selected_for_tests(&app.shell.file_picker).as_deref(), Some(format!("{DEMO}/More.thy").as_str()));
+    // the next Ctrl+P starts from that list
+    let _ = picker_update(&mut app, Message::FilePickerClose);
+    let _ = picker_update(&mut app, ctrl_p());
+    assert_eq!(shown(&app)[0], "Again.thy");
+}
+
+/// Enter opens the selected file; the picker says so until it has opened, then goes. Back returns
+/// to the file and the caret it was opened from, and the file is first among the recent ones
+#[test]
+fn enter_opens_the_file_and_back_returns_to_where_it_was_opened_from() {
+    let (mut app, mut receiver) = picker_app("fp-enter");
+    app.workspace.as_mut().unwrap().theory.as_mut().unwrap().cursor = 12;
+    // (the open document was opened as documents are: it is among the recent ones)
+    super::recent::note("local", "fp-enter", &format!("{DEMO}/Demo.thy"));
+    let _ = picker_update(&mut app, ctrl_p());
+    let _ = app.set_field(super::fields::Field::ProjectFiles, "more".into());
+    let _ = requests(&mut receiver);
+    let _ = picker_update(&mut app, Message::FilePickerAccept(None));
+    let asked = requests(&mut receiver);
+    let read = asked.iter().find(|r| r["op"] == "read").expect("a read");
+    assert_eq!((read["path"].as_str(), read["project_file"].as_bool()), (Some(format!("{DEMO}/More.thy").as_str()), Some(true)));
+    assert!(app.shell.file_picker.open.is_some(), "it stays until the file has opened");
+    let (_, pending) = picked_read(&app).expect("the read is pending");
+    let doc = json!({"ok": true, "doc": {"path": format!("{DEMO}/More.thy"), "text": "theory More imports Main begin\nend\n", "revision": 1, "prover": null}});
+    let _ = app.on_reply("local".into(), pending, doc);
+    assert!(app.shell.file_picker.open.is_none());
+    assert_eq!(app.workspace.as_ref().unwrap().theory.as_ref().unwrap().path, format!("{DEMO}/More.thy"));
+    assert_eq!(app.back.last().map(|(p, _)| p.as_str()), Some(format!("{DEMO}/Demo.thy").as_str()));
+    assert_eq!(super::recent::paths("local", "fp-enter").first().map(String::as_str), Some(format!("{DEMO}/More.thy").as_str()));
+    // the old file is closed on the host, the new one stays subscribed
+    let asked = requests(&mut receiver);
+    assert!(asked.iter().any(|r| r["op"] == "close" && r["path"] == format!("{DEMO}/Demo.thy")), "{asked:?}");
+    // the next Ctrl+P, Enter goes back to the file before
+    let _ = picker_update(&mut app, ctrl_p());
+    assert_eq!(shown(&app)[0], "Demo.thy");
+    let _ = picker_update(&mut app, Message::Back);
+    let asked = requests(&mut receiver);
+    assert!(asked.iter().any(|r| r["op"] == "read" && r["path"] == format!("{DEMO}/Demo.thy")), "{asked:?}");
+}
+
+/// A file that cannot be opened keeps the picker and the query, with the reason on its row, and
+/// the document open stays as it was
+#[test]
+fn a_file_that_cannot_open_says_why_on_its_row_and_the_query_is_kept() {
+    let (mut app, _receiver) = picker_app("fp-fail");
+    let _ = picker_update(&mut app, ctrl_p());
+    let _ = app.set_field(super::fields::Field::ProjectFiles, "base".into());
+    let _ = picker_update(&mut app, Message::FilePickerAccept(None));
+    let (id, pending) = picked_read(&app).expect("the read is pending");
+    app.pending.remove(&id);
+    let _ = app.on_reply("local".into(), pending, json!({"ok": false, "error": "Cannot open project file lib/Base.thy", "code": "not_found"}));
+    let open = app.shell.file_picker.open.as_ref().expect("still open");
+    assert_eq!(open.query.value(), "base");
+    assert_eq!(open.issue_for_tests().map(|(p, e)| (p.as_str(), e.as_str())), Some((format!("{DEMO}/lib/Base.thy").as_str(), "Cannot open project file lib/Base.thy")));
+    let ws = app.workspace.as_ref().unwrap();
+    assert_eq!((ws.theory.as_ref().unwrap().path.as_str(), ws.opening.as_deref()), (format!("{DEMO}/Demo.thy").as_str(), None));
+    draw_in(false, || header_and_list(&app), "header-go-to-file-failed", Size::new(1400.0, 408.0));
+    // another file can be chosen
+    let _ = app.set_field(super::fields::Field::ProjectFiles, "more".into());
+    let _ = picker_update(&mut app, Message::FilePickerAccept(None));
+    assert!(picked_read(&app).is_some_and(|(_, p)| matches!(p, super::Pending::PickFile(_, ref path, _) if path.ends_with("More.thy"))));
+}
+
+/// A click on a row opens that file, as Enter does: the press does not close the list first
+#[test]
+fn a_click_on_a_row_opens_its_file() {
+    let (mut app, _receiver) = picker_app("fp-click");
+    let _ = picker_update(&mut app, ctrl_p());
+    // (the list hangs under the field, centred on it: its second row)
+    let size = Size::new(1400.0, 408.0);
+    let row_x = (0..1400u32).step_by(4).find_map(|x| {
+        let m = clicks(header_and_list(&app), Point::new(x as f32, 48.0 + 4.0 + 34.0 + 17.0), size);
+        m.iter().any(|m| matches!(m, Message::FilePickerAccept(Some(_)))).then_some(x)
+    }).expect("a row to click");
+    let messages = clicks(header_and_list(&app), Point::new(row_x as f32, 48.0 + 4.0 + 34.0 + 17.0), size);
+    for m in messages {
+        let _ = picker_update(&mut app, m);
+    }
+    let (_, pending) = picked_read(&app).expect("the click opens the file");
+    assert!(matches!(pending, super::Pending::PickFile(_, ref path, _) if path.ends_with("More.thy")), "{pending:?}");
+    assert!(app.shell.file_picker.open.is_some());
+    // a click outside closes it
+    for m in clicks(header_and_list(&app), Point::new(700.0, 400.0), size) {
+        let _ = picker_update(&mut app, m);
+    }
+    assert!(app.shell.file_picker.open.is_none());
+}
+
+/// Ctrl+P (⌘P on macOS) reaches the window from an editor in any vim mode, and from a field
+#[test]
+fn ctrl_p_is_the_window_s_in_every_editor_and_field() {
+    use cosmic::iced::keyboard::{Key, Location, Modifiers, key::Physical};
+    use cosmic::widget::text_editor::{KeyPress, Status};
+    let press = KeyPress {
+        key: Key::Character("p".into()),
+        modified_key: Key::Character("p".into()),
+        physical_key: Physical::Unidentified(cosmic::iced::keyboard::key::NativeCode::Unidentified),
+        modifiers: Modifiers::COMMAND,
+        text: None,
+        status: Status::Focused { is_hovered: false },
+    };
+    for vim in [None, Some(super::vim::Mode::Normal), Some(super::vim::Mode::Insert)] {
+        assert!(super::view::resolve_key_binding(press.clone(), false, vim, super::EditorTarget::Block).is_none(), "{vim:?}");
+    }
+    let event = cosmic::iced::Event::Keyboard(cosmic::iced::keyboard::Event::KeyPressed {
+        key: Key::Character("p".into()),
+        modified_key: Key::Character("p".into()),
+        physical_key: Physical::Unidentified(cosmic::iced::keyboard::key::NativeCode::Unidentified),
+        location: Location::Standard,
+        modifiers: Modifiers::COMMAND,
+        text: None,
+        repeat: false,
+    });
+    for status in [cosmic::iced::event::Status::Ignored, cosmic::iced::event::Status::Captured] {
+        assert!(matches!(super::app_key(event.clone(), status, cosmic::iced::window::Id::RESERVED), Some(Message::FilePickerShortcut(_))), "{status:?}");
+    }
+}
