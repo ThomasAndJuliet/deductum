@@ -87,6 +87,16 @@ impl Profile for Isabelle {
         }
     }
 
+    fn is_definition(&self, block: &Block) -> bool {
+        matches!(
+            block.name.as_str(),
+            "definition" | "abbreviation" | "fun" | "function" | "primrec" | "primcorec" | "corec" | "corecursive"
+                | "partial_function" | "nominal_function" | "lift_definition" | "datatype" | "codatatype" | "type_synonym"
+                | "typedef" | "record" | "inductive" | "coinductive" | "inductive_set" | "coinductive_set" | "locale" | "class"
+                | "consts" | "axiomatization" | "bundle" | "named_theorems"
+        )
+    }
+
     fn unfinished(&self) -> &'static [&'static str] {
         &["sorry", "oops"]
     }

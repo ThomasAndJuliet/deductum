@@ -192,6 +192,10 @@ pub trait Profile: Send + Sync {
     /// Whether a formal block states something to prove, for the Theorems list
     fn is_statement(&self, block: &Block, kinds: &HashMap<String, String>) -> bool;
 
+    /// Whether a formal block defines something by name (a definition, a function, a datatype,
+    /// a structure), for Go to symbol
+    fn is_definition(&self, block: &Block) -> bool;
+
     /// Commands that leave a proof unfinished (`sorry`, `oops`), listed as Problems
     fn unfinished(&self) -> &'static [&'static str];
 

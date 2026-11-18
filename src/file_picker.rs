@@ -12,11 +12,18 @@
 //! more recent first among equals. ↑ and ↓ select, Enter or a click opens (the picker stays,
 //! saying so, until the file has opened, and shows why beside it if it cannot), Esc returns to
 //! the caret, and Back returns to the file and caret it was opened from.
+//!
+//! The same search finds the open document's symbols (`doc_symbols`): Ctrl+Shift+O, or `g s` in
+//! vim's normal mode, opens it for them, and `@` typed first in Ctrl+P's search turns it to them.
+//! With nothing typed they are listed in document order, the one the caret is in selected; ↑ and
+//! ↓ show each in the document as it is selected, Esc puts the caret back, and Enter or a click
+//! goes there, Back returning to where the caret was.
 
 use std::cmp::Reverse;
 use std::collections::{HashMap, HashSet};
 use std::sync::LazyLock;
 
+use cosmic::Application as _;
 use cosmic::app::Task;
 use cosmic::iced::{Alignment, Length, widget::{scrollable, text::Wrapping}};
 use cosmic::widget::{self, button, popover};
@@ -25,6 +32,7 @@ use household_widgets::ShortTextBox;
 use serde_json::{Value, json};
 
 use crate::editor::Mode;
+use crate::doc_symbols::Symbol;
 use crate::fields::{self, Field};
 use crate::{App, DeferredLeave, Message, Pending};
 
@@ -116,9 +124,47 @@ pub struct Open {
     issue: Option<(String, String)>,
     refreshing: bool,
     refresh_error: Option<String>,
+    /// The host has been asked for the session's files since the picker opened
+    listed: bool,
+    /// Opened for symbols (Ctrl+Shift+O, `g s`): the query is a symbol's name. Otherwise `@`
+    /// typed first turns the search to the document's symbols
+    symbols_only: bool,
+    /// The open document's symbols while the search is for them, and the ones shown
+    symbols: Option<SymbolSearch>,
+    /// Where the caret was when the picker opened: Esc returns there after a symbol was previewed
+    origin: Option<Origin>,
+}
+
+struct SymbolSearch {
+    list: Vec<Symbol>,
+    hits: Vec<usize>,
+}
+
+struct Origin {
+    path: String,
+    cursor: usize,
+    selected: Option<usize>,
+    previewed: bool,
 }
 
 impl Open {
+    /// What is searched for among the document's symbols, if the search is for them
+    fn symbol_query(&self) -> Option<&str> {
+        let query = self.query.value();
+        if self.symbols_only { Some(query.strip_prefix('@').unwrap_or(query)) } else { query.strip_prefix('@') }
+    }
+
+    /// How many rows are shown
+    fn shown(&self) -> usize {
+        self.symbols.as_ref().map_or(self.hits.len(), |s| s.hits.len())
+    }
+
+    /// The selected symbol
+    fn selected_symbol(&self) -> Option<&Symbol> {
+        let search = self.symbols.as_ref()?;
+        search.hits.get(self.selected).map(|i| &search.list[*i])
+    }
+
     fn selected_path<'a>(&self, index: &'a Index) -> Option<&'a str> {
         let hit = *self.hits.get(self.selected)?;
         Some(&index.0[hit].path)
@@ -130,7 +176,7 @@ impl Open {
     }
 
     fn reveal_selection(&mut self, window_height: f32) -> Task<Message> {
-        let height = list_height(window_height, self.hits.len());
+        let height = list_height(window_height, self.shown());
         let top = self.selected as f32 * ROW;
         self.scroll = self.scroll.min(top).max(top + ROW - height).max(0.0);
         scrollable::scroll_to(RESULTS.clone(), scrollable::AbsoluteOffset { x: None, y: Some(self.scroll) })
@@ -152,18 +198,15 @@ impl Open {
     pub fn issue_for_tests(&self) -> Option<&(String, String)> {
         self.issue.as_ref()
     }
+
+    /// The symbols shown, by name, and the selected one's, while the search is for symbols
+    pub fn symbols_for_tests(&self) -> Option<(Vec<String>, Option<String>)> {
+        let search = self.symbols.as_ref()?;
+        Some((search.hits.iter().map(|i| search.list[*i].name.clone()).collect(), self.selected_symbol().map(|s| s.name.clone())))
+    }
 }
 
 impl Picker {
-    pub fn query_changed(&mut self) -> Task<Message> {
-        if let Some(open) = self.open.as_mut() && let Some(index) = self.indexes.get(&open.scope) {
-            open.rank(index, None);
-            open.scroll = 0.0;
-            return scrollable::scroll_to(RESULTS.clone(), scrollable::AbsoluteOffset { x: None, y: Some(0.0) });
-        }
-        Task::none()
-    }
-
     pub fn forget(&mut self, machine: &str, sid: &str) {
         self.indexes.remove(&(machine.into(), sid.into()));
     }
@@ -181,13 +224,73 @@ impl App {
         self.workspace.is_some() && !self.shell.settings_open && self.new_session.is_none()
     }
 
+    /// The search typed changed: the files or the symbols matching it, the first selected (with
+    /// nothing typed for symbols: the one the caret is in)
+    pub fn file_picker_query_changed(&mut self) -> Task<Message> {
+        self.rank_symbols();
+        let picker = &mut self.shell.file_picker;
+        let Some(open) = picker.open.as_mut() else { return Task::none() };
+        if open.symbols.is_none() && let Some(index) = picker.indexes.get(&open.scope) {
+            open.rank(index, None);
+        }
+        open.scroll = 0.0;
+        let to_selection = open.reveal_selection(self.window_height);
+        let refresh = if open.symbols.is_none() { self.refresh_project_files() } else { Task::none() };
+        Task::batch([to_selection, refresh])
+    }
+
+    /// The document's symbols again, ranked for the query, while the search is for them
+    fn rank_symbols(&mut self) {
+        let table = self.workspace.as_ref().map(|w| self.table(&w.machine));
+        let theory = self.workspace.as_ref().and_then(|w| w.theory.as_ref());
+        let Some(open) = self.shell.file_picker.open.as_mut() else { return };
+        let Some(query) = open.symbol_query().map(str::to_string) else {
+            if open.symbols.take().is_some() { open.selected = 0; }
+            return;
+        };
+        let list = match (theory, &table) {
+            (Some(t), Some(table)) => crate::doc_symbols::symbols(t, &**table),
+            _ => Vec::new(),
+        };
+        let hits = crate::doc_symbols::rank(&list, &query);
+        open.selected = if query.trim().is_empty() {
+            let here = theory.and_then(|t| crate::doc_symbols::at_caret(&list, open.origin.as_ref().map_or(t.cursor, |o| o.cursor)));
+            here.and_then(|i| hits.iter().position(|h| *h == i)).unwrap_or(0)
+        } else {
+            0
+        };
+        open.symbols = Some(SymbolSearch { list, hits });
+    }
+
+    /// Go to symbol (Ctrl+Shift+O, `g s`): the picker, searching the open document's symbols
+    pub fn open_symbol_picker(&mut self) -> Task<Message> {
+        if !self.file_picker_available() || self.workspace.as_ref().is_none_or(|w| w.theory.is_none()) { return Task::none(); }
+        let task = self.open_file_picker_for(true);
+        Task::batch([task, self.file_picker_query_changed()])
+    }
+
+    /// Go to file (Ctrl+P): the picker, searching the session's files
     pub fn open_file_picker(&mut self) -> Task<Message> {
+        let switching = self.shell.file_picker.open.as_ref().is_some_and(|o| o.symbols_only);
+        let task = self.open_file_picker_for(false);
+        if switching { Task::batch([task, self.file_picker_query_changed()]) } else { task }
+    }
+
+    fn open_file_picker_for(&mut self, symbols: bool) -> Task<Message> {
         if !self.file_picker_available() { return Task::none(); }
         let focus = widget::text_input::focus(SEARCH.clone());
-        if self.shell.file_picker.open.is_some() { return focus; }
+        // (open already: Ctrl+P and Ctrl+Shift+O turn it to files or symbols, the query cleared)
+        if let Some(open) = self.shell.file_picker.open.as_mut() {
+            if open.symbols_only != symbols {
+                open.symbols_only = symbols;
+                open.query = ShortTextBox::new();
+            }
+            return focus;
+        }
         let ws = self.workspace.as_ref().unwrap();
         let scope = (ws.machine.clone(), ws.sid.clone());
         let current = ws.theory.as_ref().map(|t| t.path.clone());
+        let origin = ws.theory.as_ref().map(|t| Origin { path: t.path.clone(), cursor: t.cursor, selected: t.selected, previewed: false });
         let picker = &mut self.shell.file_picker;
         if !picker.indexes.contains_key(&scope)
             && let Some(info) = &ws.info
@@ -200,10 +303,26 @@ impl App {
         let mut open = Open {
             scope: scope.clone(), generation: picker.generation, query: ShortTextBox::new(), current,
             recent: crate::recent::paths(&scope.0, &scope.1), hits: Vec::new(), selected: 0, scroll: 0.0,
-            opening: None, issue: None, refreshing: true, refresh_error: None,
+            opening: None, issue: None, refreshing: false, refresh_error: None, listed: false,
+            symbols_only: symbols, symbols: None, origin,
         };
         if let Some(index) = picker.indexes.get(&scope) { open.rank(index, None); }
         picker.open = Some(open);
+        if symbols {
+            return focus;
+        }
+        Task::batch([focus, self.refresh_project_files()])
+    }
+
+    /// The session's files listed again by its host, in the background (one request at a time)
+    fn refresh_project_files(&mut self) -> Task<Message> {
+        let Some(open) = self.shell.file_picker.open.as_mut() else { return Task::none() };
+        let scope = open.scope.clone();
+        if open.listed {
+            return Task::none();
+        }
+        open.listed = true;
+        open.refreshing = true;
         let in_flight = self.pending.values().any(|(machine, pending)| {
             machine == &scope.0 && matches!(pending, Pending::ProjectFiles(sid) if sid == &scope.1)
         });
@@ -216,7 +335,7 @@ impl App {
                 open.refresh_error = Some("The project host is disconnected".into());
             }
         }
-        focus
+        Task::none()
     }
 
     pub fn project_files_reply(&mut self, machine: String, sid: String, reply: &Value) -> Task<Message> {
@@ -246,18 +365,53 @@ impl App {
     }
 
     pub fn file_picker_key(&mut self, key: Key) -> Task<Message> {
-        if matches!(key, Key::Escape) { return self.close_file_picker(); }
+        if matches!(key, Key::Escape) { return self.escape_file_picker(); }
         let Some(open) = self.shell.file_picker.open.as_mut() else { return Task::none() };
-        if open.opening.is_some() || open.hits.is_empty() { return Task::none(); }
+        let shown = open.shown();
+        if open.opening.is_some() || shown == 0 { return Task::none(); }
         open.selected = match key {
             Key::Up => open.selected.saturating_sub(1),
-            Key::Down => (open.selected + 1).min(open.hits.len() - 1),
+            Key::Down => (open.selected + 1).min(shown - 1),
             Key::Escape => unreachable!(),
         };
-        open.reveal_selection(self.window_height)
+        let reveal = open.reveal_selection(self.window_height);
+        // A symbol selected is shown in the document; the keys stay in the search
+        let Some(start) = open.selected_symbol().map(|s| s.start) else { return reveal };
+        if let Some(origin) = open.origin.as_mut() { origin.previewed = true; }
+        let show = self.update(Message::Goto(start));
+        Task::batch([reveal, show.chain(widget::text_input::focus(SEARCH.clone()))])
+    }
+
+    /// Esc: the picker goes and the caret is where it was (back from a symbol previewed)
+    fn escape_file_picker(&mut self) -> Task<Message> {
+        let back = self.shell.file_picker.open.as_ref().and_then(|o| o.origin.as_ref()).filter(|o| o.previewed)
+            .map(|o| (o.path.clone(), o.cursor, o.selected));
+        let close = self.close_file_picker();
+        let Some((path, cursor, selected)) = back else { return close };
+        let Some(t) = self.workspace.as_mut().and_then(|w| w.theory.as_mut()).filter(|t| t.path == path) else { return close };
+        t.selected = selected;
+        Task::batch([self.update(Message::Goto(cursor)), close])
+    }
+
+    /// Enter, or a click on a symbol's row (by where it starts): the caret goes to the symbol, and
+    /// Back returns to where it was
+    pub fn choose_symbol(&mut self, clicked: Option<usize>) -> Task<Message> {
+        let Some(open) = self.shell.file_picker.open.as_ref() else { return Task::none() };
+        let Some(start) = clicked.or_else(|| open.selected_symbol().map(|s| s.start)) else { return Task::none() };
+        let origin = open.origin.as_ref().map(|o| (o.path.clone(), o.cursor));
+        if let Some((path, cursor)) = origin
+            && let Some(t) = self.workspace.as_ref().and_then(|w| w.theory.as_ref()).filter(|t| t.path == path)
+        {
+            self.back.push((path, Self::host_offset(t, cursor)));
+        }
+        self.dismiss_file_picker();
+        self.update(Message::Goto(start))
     }
 
     pub fn choose_project_file(&mut self, clicked: Option<String>) -> Task<Message> {
+        if clicked.is_none() && self.shell.file_picker.open.as_ref().is_some_and(|o| o.symbols.is_some()) {
+            return self.choose_symbol(None);
+        }
         let picker = &mut self.shell.file_picker;
         let Some(open) = picker.open.as_mut().filter(|open| open.opening.is_none()) else { return Task::none() };
         let Some(index) = picker.indexes.get(&open.scope) else { return Task::none() };
@@ -321,11 +475,17 @@ pub fn header(app: &App) -> Option<Element<'_, Message>> {
     let picker = &app.shell.file_picker;
     let open = picker.open.as_ref().filter(|_| app.file_picker_available())?;
     let field_width = (app.window_width - 415.0).clamp(95.0, 340.0);
-    let field = fields::search(&open.query, Field::ProjectFiles, "Search project files", |field| {
+    let placeholder = match app.workspace.as_ref().and_then(|w| w.theory.as_ref()) {
+        Some(t) if open.symbols_only => format!("Go to a symbol in {}", crate::file_name(&t.path)),
+        _ => "Search project files, or @ for symbols".to_string(),
+    };
+    let field = fields::search(&open.query, Field::ProjectFiles, placeholder, |field| {
         field.id(SEARCH.clone()).width(Length::Fixed(field_width)).on_submit(Message::FilePickerAccept(None))
     });
     let mut rows = widget::column::with_capacity(16);
-    if let Some(index) = picker.indexes.get(&open.scope) && !open.hits.is_empty() {
+    if let Some(search) = &open.symbols {
+        rows = symbol_rows(app, open, search, rows);
+    } else if let Some(index) = picker.indexes.get(&open.scope) && !open.hits.is_empty() {
         let len = open.hits.len();
         let height = list_height(app.window_height, len);
         let start = ((open.scroll / ROW) as usize).min(len.saturating_sub(1)).saturating_sub(2);
@@ -356,14 +516,14 @@ pub fn header(app: &App) -> Option<Element<'_, Message>> {
         let message = if open.refreshing { "Loading project files…" } else { "No matching project files" };
         rows = rows.push(widget::container(widget::text::caption(message).class(crate::view::muted())).padding(10));
     }
-    let error = open.refresh_error.as_deref();
+    let error = open.refresh_error.as_deref().filter(|_| open.symbols.is_none());
     let mut content = widget::column::with_capacity(2).push(widget::scrollable(rows).id(RESULTS.clone())
-        .height(Length::Fixed(list_height(app.window_height, open.hits.len())))
+        .height(Length::Fixed(list_height(app.window_height, open.shown())))
         .on_scroll(|v| Message::FilePickerScroll(v.absolute_offset().y)));
     if let Some(error) = error {
         content = content.push(widget::container(widget::text::caption(error)).padding(8));
     }
-    if let Some((path, error)) = &open.issue
+    if let Some((path, error)) = open.issue.as_ref().filter(|_| open.symbols.is_none())
         && !picker.indexes.get(&open.scope).is_some_and(|index| open.hits.iter().any(|i| index.0[*i].path == *path))
     {
         content = content.push(widget::container(widget::text::caption(error.as_str())).padding(8));
@@ -380,6 +540,52 @@ pub fn header(app: &App) -> Option<Element<'_, Message>> {
     // (a little below the field, so that the list does not cover its border)
     let popup = widget::container(popup).padding(cosmic::iced::Padding { top: 4.0, ..cosmic::iced::Padding::ZERO });
     Some(widget::popover(field).popup(popup).position(popover::Position::Bottom).on_close(Message::FilePickerClose).into())
+}
+
+/// The rows of the document's symbols: a heading indented by its level, a formal block with its
+/// status (the Theorems list's dots), each with the command that makes it
+fn symbol_rows<'a>(app: &App, open: &'a Open, search: &'a SymbolSearch, mut rows: widget::Column<'a, Message, cosmic::Theme>) -> widget::Column<'a, Message, cosmic::Theme> {
+    let len = search.hits.len();
+    if len == 0 {
+        let why = if app.workspace.as_ref().is_some_and(|w| w.theory.is_none()) {
+            "Open a document to go to its symbols"
+        } else if search.list.is_empty() {
+            "This document has no headings, statements or definitions yet"
+        } else {
+            "No matching symbols"
+        };
+        return rows.push(widget::container(widget::text::caption(why).class(crate::view::muted())).padding(10));
+    }
+    let height = list_height(app.window_height, len);
+    let start = ((open.scroll / ROW) as usize).min(len.saturating_sub(1)).saturating_sub(2);
+    let end = (start + (height / ROW).ceil() as usize + 5).min(len);
+    rows = rows.push(widget::Space::new().height(Length::Fixed(start as f32 * ROW)));
+    for (row, i) in search.hits[start..end].iter().enumerate() {
+        let symbol = &search.list[*i];
+        let selected = start + row == open.selected;
+        let mark: Element<'a, Message> = match symbol.status {
+            Some(status) => widget::container(widget::Space::new()).width(Length::Fixed(8.0)).height(Length::Fixed(8.0))
+                .class(theme::Container::custom(move |theme| cosmic::iced::widget::container::Style {
+                    background: Some(crate::view::status_color(status, theme).into()),
+                    border: cosmic::iced::Border { radius: 4.0.into(), ..Default::default() },
+                    ..Default::default()
+                }))
+                .into(),
+            None => widget::Space::new().width(Length::Fixed(0.0)).into(),
+        };
+        // (a section's title where the dots are; a subsection and below indented under it)
+        let indent = symbol.level.map_or(0.0, |l| 12.0 * l.saturating_sub(2).min(4) as f32);
+        let label = widget::row::with_capacity(4).align_y(Alignment::Center).spacing(10).height(Length::Fill)
+            .push_maybe((indent > 0.0).then(|| widget::Space::new().width(Length::Fixed(indent))))
+            .push_maybe(symbol.status.is_some().then_some(mark))
+            .push(widget::text(symbol.name.as_str()).wrapping(Wrapping::None).size(14).font(crate::sidebar::row_font(selected)))
+            .push(widget::text::caption(symbol.kind.as_str()).wrapping(Wrapping::None).class(crate::view::muted()).width(Length::Fill));
+        let row = button::custom(label).width(Length::Fill).height(Length::Fixed(ROW)).padding([0, 10])
+            .class(crate::sidebar::nav_style(selected))
+            .on_press(Message::FilePickerSymbol(symbol.start));
+        rows = rows.push(row);
+    }
+    rows.push(widget::Space::new().height(Length::Fixed((len - end) as f32 * ROW)))
 }
 
 #[cfg(test)]

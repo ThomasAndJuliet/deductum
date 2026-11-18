@@ -236,7 +236,7 @@ impl App {
             return Task::none();
         }
         match field {
-            Field::ProjectFiles => return self.shell.file_picker.query_changed(),
+            Field::ProjectFiles => return self.file_picker_query_changed(),
             // A folder typed is another folder: what was found in the last one no longer holds
             Field::NewFolder => {
                 if let Some(ns) = &mut self.new_session {

@@ -28,6 +28,7 @@ mod cli;
 mod codec;
 mod context_menu;
 mod editor;
+mod doc_symbols;
 mod fields;
 mod file_picker;
 mod flow;
@@ -233,6 +234,10 @@ pub enum Message {
     CloseWorkspace,
     OpenTheory(String),
     FilePickerShortcut(cosmic::iced::window::Id),
+    /// Ctrl+Shift+O (`g s` in vim): the header's search, for the document's symbols
+    SymbolPickerShortcut(cosmic::iced::window::Id),
+    /// A symbol's row clicked, by where it starts
+    FilePickerSymbol(usize),
     FilePickerKey(cosmic::iced::window::Id, file_picker::Key),
     FilePickerAccept(Option<String>),
     FilePickerClose,
@@ -950,6 +955,10 @@ impl App {
                 vim::Op::Redo => tasks.push(self.update(Message::Redo)),
                 vim::Op::Save => tasks.push(self.update(Message::Save)),
                 vim::Op::Escape => tasks.push(self.update(Message::Escape)),
+                vim::Op::Symbols => {
+                    let window = self.core.main_window_id().unwrap_or(cosmic::iced::window::Id::RESERVED);
+                    tasks.push(self.update(Message::SymbolPickerShortcut(window)));
+                }
             }
         }
         Task::batch(tasks)
@@ -2767,6 +2776,13 @@ fn app_key(event: cosmic::iced::Event, status: cosmic::iced::event::Status, wind
     {
         return Some(Message::FilePickerShortcut(window));
     }
+    // (Ctrl+Shift+O: the key is O or o as the layout gives it with Shift)
+    if let cosmic::iced::Event::Keyboard(Key::KeyPressed { key, modifiers, repeat: false, .. }) = &event
+        && matches!(key.as_ref(), K::Character("o" | "O"))
+        && modifiers.command() && modifiers.shift() && !modifiers.alt()
+    {
+        return Some(Message::SymbolPickerShortcut(window));
+    }
     if status == cosmic::iced::event::Status::Captured
         && !matches!(event, cosmic::iced::Event::Window(_))
     {
@@ -3145,6 +3161,12 @@ impl App {
                     return self.file_picker_key(key);
                 }
             }
+            Message::SymbolPickerShortcut(window) => {
+                if self.core.main_window_id().is_none_or(|main| window == main) {
+                    return self.open_symbol_picker();
+                }
+            }
+            Message::FilePickerSymbol(start) => return self.choose_symbol(Some(start)),
             Message::FilePickerAccept(path) => return self.choose_project_file(path),
             // (a click elsewhere: the picker goes, and the keys stay with what was clicked; Esc
             // returns them to the caret)

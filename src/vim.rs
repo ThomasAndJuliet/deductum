@@ -42,6 +42,8 @@ pub enum Op {
     Redo,
     Save,
     Escape,
+    /// Go to a symbol of the document (`g s`, as Zed's vim mode has it; Ctrl+Shift+O)
+    Symbols,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -124,6 +126,11 @@ impl Vim {
             self.pending.clear();
             let select = visual || !op_pending.trim_end_matches('g').is_empty();
             return vec![Act(if select { Action::Select(Motion::DocumentStart) } else { Action::Move(Motion::DocumentStart) })];
+        }
+        // gs: the document's symbols, in normal mode
+        if op_pending == "g" && key == "s" && !visual {
+            self.pending.clear();
+            return vec![Op::Symbols];
         }
         // Operators: d, c, y followed by a motion, the same key (whole lines), or iw/aw
         if let Some(op) = op_pending.chars().next().filter(|c| matches!(c, 'd' | 'c' | 'y')) {
@@ -303,5 +310,8 @@ mod tests {
         assert_eq!(v.key("y", false), vec![Op::YankLines(1)]);
         v.key("g", false);
         assert_eq!(v.key("g", false), vec![Op::Act(Action::Move(Motion::DocumentStart))]);
+        v.key("g", false);
+        assert_eq!(v.key("s", false), vec![Op::Symbols]);
+        assert_eq!(v.pending, "");
     }
 }
