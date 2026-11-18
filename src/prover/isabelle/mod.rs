@@ -135,6 +135,14 @@ impl Profile for Isabelle {
         isar::comments(text)
     }
 
+    fn source_highlight(&self, sem: Sem) -> Hl {
+        // Isar clause keywords such as `assumes` and `shows` read like commands.
+        Hl::Sem(match sem {
+            Sem::Keyword2 => Sem::Keyword1,
+            _ => sem,
+        })
+    }
+
     fn derived_colours(&self, text: &str, colours: &[(usize, usize, Sem)]) -> Vec<(usize, usize, Sem)> {
         isar::paired_brackets(text, colours)
     }

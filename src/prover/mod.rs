@@ -261,6 +261,11 @@ pub trait Profile: Send + Sync {
         Vec::new()
     }
 
+    /// The editor style for a semantic token reported by this prover.
+    fn source_highlight(&self, sem: Sem) -> Hl {
+        Hl::Sem(sem)
+    }
+
     /// Colours the profile adds to the prover's (Isabelle: the other half of a coloured bracket)
     fn derived_colours(&self, text: &str, colours: &[(usize, usize, Sem)]) -> Vec<(usize, usize, Sem)> {
         let _ = (text, colours);

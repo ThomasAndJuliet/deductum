@@ -1532,12 +1532,12 @@ impl Theory {
             paint(&mut class, s, e, hl, &[]);
         }
         for (s, e, sem) in prover.colours.iter().chain(&self.profile.derived_colours(&self.local, &prover.colours)) {
-            paint(&mut class, *s, *e, Hl::Sem(*sem), &[]);
+            paint(&mut class, *s, *e, self.profile.source_highlight(*sem), &[]);
         }
         // A `claude` or `codex` line reads to the prover as a `sorry` of the same length: the
         // whole keyword (and its model) coloured as that `sorry` is
         for (s, e) in self.profile.keyword_tokens(&self.local) {
-            let hl = prover.colours.iter().find(|(cs, ce, _)| *cs <= s && s < *ce).map_or(Hl::Keyword, |(_, _, sem)| Hl::Sem(*sem));
+            let hl = prover.colours.iter().find(|(cs, ce, _)| *cs <= s && s < *ce).map_or(Hl::Keyword, |(_, _, sem)| self.profile.source_highlight(*sem));
             paint(&mut class, s, e, hl, &[]);
         }
         for cmd in &prover.commands {
@@ -2413,6 +2413,29 @@ mod staleness_tests {
 mod prover_view_tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn isabelle_clause_keywords_have_the_same_emphasis_as_commands() {
+        let profile = crate::prover::profile(None);
+        let table = profile.symbols(None);
+        let text = "lemma example:\n  assumes A: True\n    and B: True\n  shows True\nproof -\n  show True by simp\nqed\n";
+        let colours: Vec<_> = [("lemma", "keyword1"), ("assumes", "keyword2"), ("and", "keyword2"), ("shows", "keyword2"), ("proof", "keyword1")]
+            .into_iter().map(|(word, class)| {
+                let at = text.find(word).unwrap();
+                json!([at, at + word.len(), class])
+            }).collect();
+        let proof = text.find("proof").unwrap();
+        let commands = json!([[0, proof - 1, "lemma", "finished"], [proof, proof + "proof -".len(), "proof", "finished"]]);
+        let doc = json!({"text": text, "revision": 1, "prover": {"colours": colours, "commands": commands}});
+        let mut theory = Theory::new("/Example.thy".into(), &doc, &*table, Arc::new(HashMap::new()), Mode::Literate, profile);
+        theory.open_block(0, &*table);
+
+        let lines = &theory.block_highlight.0.lines;
+        let command = lines[0][0].1;
+        for (line, keyword) in [(1, "assumes"), (2, "and"), (3, "shows")] {
+            assert_eq!(lines[line][0].1, command, "the open cell should emphasise {keyword} like lemma");
+        }
+    }
 
     #[test]
     fn disjoint_agent_edits_keep_the_open_isabelle_cell_separate() {
