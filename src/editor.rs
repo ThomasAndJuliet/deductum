@@ -2215,7 +2215,7 @@ impl Theory {
             let pending = ot::diff(&self.confirmed, &self.local);
             let rebased = ot::rebase_merge(&pending, change);
             let local = ot::apply(&confirmed, &rebased);
-            let moved = ot::diff(&self.local, &local);
+            let moved = ot::applied_remote(change, &pending, &rebased, &self.local, &local);
             self.cursor = ot::map_pos(self.cursor, &moved, true);
             if let Some(be) = &mut self.block_editor {
                 be.start = ot::map_pos(be.start, &moved, false);
@@ -2413,6 +2413,51 @@ mod staleness_tests {
 mod prover_view_tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn disjoint_agent_edits_keep_the_open_isabelle_cell_separate() {
+        let profile = crate::prover::profile(None);
+        let table = profile.symbols(None);
+        let text = concat!(
+            "theory Demo imports Main begin\n\n",
+            "section \\<open>Lifting\\<close>\n\n",
+            "text \\<open>A retained sample.\\<close>\n\n",
+            "definition sample where \"sample = True\"\n\n",
+            "text \\<open>The next cell stays readable.\\<close>\n\n",
+            "lemma sample: \"sample\" by (simp add: sample_def)\n\nend\n",
+        );
+        let section = text.find("section").unwrap();
+        let lemma = text.find("lemma").unwrap();
+        let change = vec![
+            (section, section, "bundle sample_syntax\nbegin\nnotation True (\"TRUE\")\nend\n\n".into()),
+            (lemma, lemma + "lemma sample".len(), "lemma sample_value".into()),
+        ];
+        let doc = json!({"text": text, "revision": 1});
+
+        for pending in [false, true] {
+            let mut t = Theory::new("/Demo.thy".into(), &doc, &*table, Arc::new(HashMap::new()), Mode::Literate, profile);
+            let cell = t.blocks.iter().position(|b| b.name == "definition").unwrap();
+            t.open_block(cell, &*table);
+            t.block_action(Action::Move(text_editor::Motion::DocumentEnd), &*table);
+            if pending {
+                t.block_action(Action::Edit(text_editor::Edit::Insert(' ')), &*table);
+            }
+            let editor = t.block_editor.as_ref().unwrap();
+            let edited_text = editor.shown_text.clone();
+            let caret_in_cell = t.cursor - editor.start;
+
+            assert!(t.committed(2, &change, None, false, &*table));
+
+            let editor = t.block_editor.as_ref().unwrap();
+            let definition = t.blocks.iter().find(|b| b.name == "definition").unwrap();
+            let following = t.blocks.iter().position(|b| b.kind == theory::Kind::Text && b.start > definition.end).unwrap();
+            assert_eq!(editor.start, definition.start, "pending human edit: {pending}");
+            assert!(editor.end < t.blocks[following].start);
+            assert!(t.docs[following].is_some());
+            assert_eq!(editor.shown_text, edited_text);
+            assert_eq!(t.cursor, editor.start + caret_in_cell);
+        }
+    }
 
     #[test]
     fn rendered_hits_compose_exact_markdown_bytes_with_source_characters() {
