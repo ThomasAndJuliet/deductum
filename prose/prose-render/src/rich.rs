@@ -1269,13 +1269,17 @@ impl<'a, Message> RichText<'a, Message> {
                 }
                 Block::Code { lang, text, .. } => {
                     let pad = size * 0.5;
+                    // Every line stays one line, as written: a line wider
+                    // than the column keeps its width and the block scrolls
+                    // sideways, as a wide table does, rather than wrapping
+                    // (its columns would no longer line up)
                     let shaped = shape(
                         font_system,
                         t,
                         code_cell(lang, text),
                         0,
                         Point::new(x0 + pad, y + pad),
-                        available - 2.0 * pad,
+                        f32::MAX / 4.0,
                         size * 0.88,
                         false,
                         t.code,
@@ -1284,6 +1288,15 @@ impl<'a, Message> RichText<'a, Message> {
                     // No card: code has no actions here, and its monospace
                     // and colours set it apart (household rule 25f)
                     let height = shaped.size.height + 2.0 * pad;
+                    let total = shaped.size.width.ceil() + 2.0 * pad + 1.0;
+                    if total > available + 0.5 {
+                        wide = Some((
+                            Rectangle::new(Point::new(x0, y), Size::new(total, height)),
+                            available,
+                        ));
+                        // Room for its scrollbar under it
+                        y += 2.0 * TABLE_BAR;
+                    }
                     y += height;
                     Laid::Cells(vec![shaped])
                 }
@@ -3373,6 +3386,36 @@ mod tests {
         // A narrow table (two columns) fits: not wide
         let small = Rig::new("| a | b |\n|---|---|\n| 1 | 2 |\n", 400.0);
         assert!(small.state().blocks[0].wide.is_none());
+    }
+
+    /// A code block with a line wider than its column keeps that line whole
+    /// and every space in it: the block is wide (cut at the column's edge, a
+    /// bar under it) and not wrapped, so its columns line up. A block that
+    /// fits is not wide, and its lines are as many in a column of any width
+    #[test]
+    fn a_code_block_wider_than_its_column_is_not_wrapped() {
+        let table = "```\n  first product (tick 0)      next product (tick 1)      layout program   area access\n         \"true\"                       \"false\"\n true                          true\n```\n";
+        let markdown = format!("Before.\n\n{table}\nAfter.\n");
+        let lines = |rig: &Rig| {
+            let Laid::Cells(cells) = &rig.state().blocks[1].laid else {
+                panic!("a code block's cells")
+            };
+            cells[0].buffer.layout_runs().count()
+        };
+        let narrow = Rig::new(&markdown, 300.0);
+        let (rect, view) = narrow.wide().expect("wide in a 300 px column");
+        assert_eq!(view, 300.0);
+        assert!(rect.width > 600.0, "its natural width: {}", rect.width);
+        assert_eq!(lines(&narrow), 3, "three lines, none wrapped");
+        let Laid::Cells(cells) = &narrow.state().blocks[1].laid else {
+            panic!()
+        };
+        assert!(cells[0].cell.text.starts_with("  first"), "leading spaces kept");
+        assert!(cells[0].cell.text.contains("         \"true\""), "runs of spaces kept");
+        // Room for all of it: not wide, the same three lines
+        let room = Rig::new(&markdown, rect.width + 50.0);
+        assert!(room.wide().is_none());
+        assert_eq!(lines(&room), 3);
     }
 
     /// Across the wide table: a sideways wheel or touchpad, or Shift with
