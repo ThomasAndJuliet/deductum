@@ -105,6 +105,33 @@ fn strip_quotes(s: &str) -> String {
     t.to_string()
 }
 
+/// A verbatim text (`\<^verbatim>‹…›`, `@{verbatim …}`). On one line it is inline code. Over several
+/// lines it is a code block with every line, space and indent as written: the author laid it out
+/// (a table's columns, say) and joining, trimming or wrapping its lines would undo that
+fn verbatim(table: &dyn Codec, s: &str) -> String {
+    if !s.trim_matches(|c| c == '\n' || c == '\r').contains('\n') {
+        return code(table, s);
+    }
+    let text = table.decode(s).text.replace("\r\n", "\n");
+    // (the line break after the opening delimiter and the one before the closing are not content)
+    let text = text.strip_prefix('\n').unwrap_or(&text);
+    let lines: Vec<&str> = text.split('\n').map(str::trim_end).collect();
+    let mut lines = lines.as_slice();
+    while let [rest @ .., ""] = lines {
+        lines = rest;
+    }
+    while let ["", rest @ ..] = lines {
+        lines = rest;
+    }
+    if lines.is_empty() {
+        return String::new();
+    }
+    let body = lines.join("\n");
+    let longest = body.split(|c| c != '`').map(str::len).max().unwrap_or(0);
+    let fence = "`".repeat((longest + 1).max(3));
+    format!("\n\n{fence}\n{body}\n{fence}\n\n")
+}
+
 fn code(table: &dyn Codec, s: &str) -> String {
     let text = table.decode(s.trim()).text.replace('`', "'").replace('\n', " ");
     if text.is_empty() { String::new() } else { format!("`{text}`") }
@@ -531,6 +558,7 @@ fn antiquotation(name: &str, arg: &str, table: &dyn Codec) -> String {
         "url" | "doc" | "file" | "path" | "dir" => format!("`{}`", arg.trim()),
         "emph" => format!("*{}*", table.decode(arg).text),
         "bold" => format!("**{}**", table.decode(arg).text),
+        "verbatim" => verbatim(table, arg),
         _ => code(table, arg),
     }
 }
@@ -651,5 +679,27 @@ mod tests {
             let latex = math_symbols(source);
             assert!(latex.contains("\\mathbf{") && prose_render::math::parses(&latex), "{source:?}: {latex:?}");
         }
+    }
+
+    /// A verbatim passage over several lines (a table laid out in columns) keeps its lines, its
+    /// indents and its runs of spaces: a code block, not inline code with the lines joined
+    #[test]
+    fn a_multi_line_verbatim_text_keeps_its_lines_and_spaces() {
+        let table = Table::fallback();
+        let rows = ["  first product   next product", "      \"true\"        \"false\"", " true       true"];
+        for open_close in [("\\<^verbatim>\\<open>", "\\<close>"), ("\\<^verbatim>‹", "›")] {
+            let source = format!("For example.\n\n{}\n{}\n{}{}\n\nAfter.", open_close.0.to_string() + rows[0], rows[1], rows[2], open_close.1);
+            // (blank lines around a block are not counted: the page makes one gap of them)
+            let md = to_markdown(&source, &table).replace("\n\n\n\n", "\n\n");
+            let expected = format!("For example.\n\n```\n{}\n{}\n{}\n```\n\nAfter.", rows[0], rows[1], rows[2]);
+            assert_eq!(md, expected, "{source:?}");
+        }
+        // as an antiquotation too, and the prose around it is unchanged
+        let md = to_markdown("x @{verbatim \\<open>\n a  b\n   c\\<close>} y", &table);
+        assert!(md.contains("\n\n```\n a  b\n   c\n```\n\n"), "{md:?}");
+        // a fence longer than any run of backticks in it
+        assert!(to_markdown("\\<^verbatim>‹a ```\nb›", &table).contains("````\na ```\nb\n````"));
+        // one line stays inline
+        assert_eq!(to_markdown("x \\<^verbatim>‹a  b› y", &table), "x `a  b` y");
     }
 }
