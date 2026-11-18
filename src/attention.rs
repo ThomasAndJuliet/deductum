@@ -52,11 +52,47 @@ pub fn words(failed: usize, unfinished: usize) -> String {
 /// The source offset of the next cell of this kind after the selected one (or the caret), going
 /// round to the first
 pub fn next(t: &Theory, kind: Problem) -> Option<usize> {
-    let all: Vec<usize> = problems(t).into_iter().filter(|p| p.1 == kind).map(|p| p.0).collect();
+    step(t, Some(kind), true)
+}
+
+/// The source offset of the next problem cell (of this kind, or of either) after the selected one
+/// or the caret's, or the one before it (`] d`, `[ d`), going round at the ends
+pub fn step(t: &Theory, kind: Option<Problem>, forward: bool) -> Option<usize> {
+    let all: Vec<usize> = problems(t).into_iter().filter(|p| kind.is_none_or(|k| p.1 == k)).map(|p| p.0).collect();
     let here = t.selected.or_else(|| t.blocks.iter().position(|b| b.start <= t.cursor && t.cursor < b.end.max(b.start + 1)));
-    let pick = match here {
-        Some(h) => all.iter().find(|i| **i > h).or(all.first()),
-        None => all.first(),
+    let pick = match (here, forward) {
+        (Some(h), true) => all.iter().find(|i| **i > h).or(all.first()),
+        (Some(h), false) => all.iter().rev().find(|i| **i < h).or(all.last()),
+        (None, true) => all.first(),
+        (None, false) => all.last(),
     };
     pick.and_then(|i| t.blocks.get(*i)).map(|b| b.start)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+    use std::sync::Arc;
+
+    use super::*;
+    use crate::editor::Mode;
+
+    #[test]
+    fn the_previous_problem_and_either_kind() {
+        let text = "theory T imports Main begin\n\nlemma a: \"True\"\n  sorry\n\nlemma b: \"True\"\n  by simp\n\nlemma c: \"True\"\n  oops\n\nend\n";
+        let profile = crate::prover::profile(None);
+        let table = profile.symbols(None);
+        let doc = serde_json::json!({"text": text, "revision": 1});
+        let mut t = Theory::new("/T.thy".into(), &doc, &*table, Arc::new(HashMap::new()), Mode::Literate, profile);
+        let a = text.find("lemma a").unwrap();
+        let c = text.find("lemma c").unwrap();
+        t.selected = None;
+        t.cursor = text.find("lemma b").unwrap();
+        assert_eq!(step(&t, None, true), Some(c));
+        assert_eq!(step(&t, None, false), Some(a));
+        assert_eq!(step(&t, Some(Problem::Failed), true), None);
+        t.cursor = 0;
+        assert_eq!(step(&t, None, false), Some(c), "round to the last");
+        assert_eq!(next(&t, Problem::Unfinished), Some(a));
+    }
 }

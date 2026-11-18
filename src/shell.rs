@@ -108,6 +108,8 @@ pub enum Msg {
     ToggleDocFolder(String),
     /// Go to the next cell that failed or is unfinished
     NextProblem(super::attention::Problem),
+    /// The next problem cell, of this kind or of either, or the one before it (vim's `] d`, `[ d`)
+    StepProblem(Option<super::attention::Problem>, bool),
     /// Quit, once the edits have reached the host
     Quit,
     /// The settings page, on one of its pages (Keyboard shortcuts, About)
@@ -380,6 +382,10 @@ impl App {
             Msg::ToastUndo(id) => {
                 self.shell.toasts.gone(id);
                 return self.update(Message::Undo);
+            }
+            Msg::StepProblem(kind, forward) => {
+                let Some(at) = self.workspace.as_ref().and_then(|w| w.theory.as_ref()).and_then(|t| super::attention::step(t, kind, forward)) else { return Task::none() };
+                return self.update(Message::Goto(at));
             }
             Msg::NextProblem(kind) => {
                 let Some(at) = self.workspace.as_ref().and_then(|w| w.theory.as_ref()).and_then(|t| super::attention::next(t, kind)) else { return Task::none() };

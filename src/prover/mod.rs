@@ -192,6 +192,9 @@ pub trait Profile: Send + Sync {
     /// Whether a formal block states something to prove, for the Theorems list
     fn is_statement(&self, block: &Block, kinds: &HashMap<String, String>) -> bool;
 
+    /// How a line of code is commented out: what goes before it and after it (`(* … *)`, `-- …`)
+    fn line_comment(&self) -> (&'static str, &'static str);
+
     /// Whether a formal block defines something by name (a definition, a function, a datatype,
     /// a structure), for Go to symbol
     fn is_definition(&self, block: &Block) -> bool;

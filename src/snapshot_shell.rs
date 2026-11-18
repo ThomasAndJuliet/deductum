@@ -2418,3 +2418,121 @@ fn ctrl_shift_o_and_g_s_open_the_symbols() {
     let _ = app.vim_ops(vec![super::vim::Op::Symbols]);
     assert!(app.shell.file_picker.open.as_ref().is_some_and(|o| o.symbols_for_tests().is_some()));
 }
+
+// ----- Zed's g keys in vim's normal mode
+
+fn vim_app(sid: &str) -> (App, tokio::sync::mpsc::UnboundedReceiver<String>) {
+    let (mut app, receiver) = picker_app(sid);
+    app.vim_enabled = true;
+    (app, receiver)
+}
+
+fn source_line(app: &App, line: usize) -> String {
+    let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+    t.local.split('\n').nth(line).unwrap_or("").to_string()
+}
+
+/// `g c c` comments out the caret's line as the backend writes a comment, and takes it away again
+#[test]
+fn g_c_c_comments_a_line_out_and_back_in() {
+    let (mut app, _receiver) = vim_app("vg-comment");
+    let _ = picker_update(&mut app, Message::SetMode(Mode::Source));
+    let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+    let line = t.local.split('\n').position(|l| l.trim_start().starts_with("lemma")).expect("a lemma line");
+    let before = source_line(&app, line);
+    super::editor::place(&mut app.workspace.as_mut().unwrap().theory.as_mut().unwrap().source, cosmic::widget::text_editor::Position { line, column: 3 });
+    let _ = app.vim_ops(vec![super::vim::Op::ToggleComment(1)]);
+    let indent = &before[..before.len() - before.trim_start().len()];
+    assert_eq!(source_line(&app, line), format!("{indent}(* {} *)", before.trim()));
+    let _ = app.vim_ops(vec![super::vim::Op::ToggleComment(1)]);
+    assert_eq!(source_line(&app, line), before);
+}
+
+/// `] d` and `[ d` go to the next and the previous problem cell, round at the ends; Ctrl+O is Back
+#[test]
+fn bracket_d_steps_through_the_problems_both_ways() {
+    let (mut app, _receiver) = vim_app("vg-problems");
+    let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+    let problems: Vec<usize> = super::attention::problems(t).into_iter().map(|(i, _)| t.blocks[i].start).collect();
+    assert!(!problems.is_empty(), "the demo has a problem cell");
+    app.workspace.as_mut().unwrap().theory.as_mut().unwrap().cursor = 0;
+    app.workspace.as_mut().unwrap().theory.as_mut().unwrap().selected = None;
+    let _ = app.vim_ops(vec![super::vim::Op::Problem(true)]);
+    assert_eq!(caret(&app), problems[0]);
+    let _ = app.vim_ops(vec![super::vim::Op::Problem(false)]);
+    assert_eq!(caret(&app), *problems.last().unwrap(), "round to the last");
+    // Ctrl+O: back to where a jump came from
+    let path = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().path.clone();
+    app.back.push((path, 0));
+    let _ = app.vim_ops(vec![super::vim::Op::Back]);
+    assert_eq!(caret(&app), 0);
+}
+
+/// `g h` asks the prover about the caret's place for the hover card; `g .` opens the caret's menu;
+/// `g S` searches the theorems for the name at the caret
+#[test]
+fn g_h_g_dot_and_g_shift_s_act_at_the_caret() {
+    let (mut app, mut receiver) = vim_app("vg-caret");
+    let _ = picker_update(&mut app, Message::SetMode(Mode::Source));
+    let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+    let at = t.local.find("add_zero").expect("a name") + 2;
+    let (pos, name) = {
+        let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+        let before = &t.local[..at];
+        let line = before.matches('\n').count();
+        let column = before.len() - before.rfind('\n').map_or(0, |i| i + 1);
+        (cosmic::widget::text_editor::Position { line, column }, t.profile.name_at(&t.local, at))
+    };
+    {
+        let t = app.workspace.as_mut().unwrap().theory.as_mut().unwrap();
+        super::editor::place(&mut t.source, pos);
+        t.cursor = at;
+    }
+    let _ = requests(&mut receiver);
+    let _ = app.vim_ops(vec![super::vim::Op::Hover]);
+    let hover = app.workspace.as_ref().unwrap().hover.clone().expect("a hover");
+    assert_eq!((hover.target, hover.offset), (super::HoverTarget::Source, at));
+    assert!(requests(&mut receiver).iter().any(|r| r["op"] == "info"), "the prover is asked");
+    let _ = app.vim_ops(vec![super::vim::Op::Actions]);
+    assert!(matches!(app.shell.context.as_ref().map(|c| &c.target), Some(super::context_menu::Target::Editor(super::EditorTarget::Source))));
+    app.shell.context = None;
+    let _ = app.vim_ops(vec![super::vim::Op::SearchProject]);
+    assert_eq!(Some(app.workspace.as_ref().unwrap().find_input.value().to_string()), name);
+    assert_eq!(app.workspace.as_ref().unwrap().panel, super::Panel::Search);
+}
+
+/// With a cell selected and none open, `g s`, `] d` and Ctrl+O work as in an editor
+#[test]
+fn the_g_keys_that_need_no_caret_work_on_a_selected_cell() {
+    let (mut app, _receiver) = vim_app("vg-cell");
+    {
+        let t = app.workspace.as_mut().unwrap().theory.as_mut().unwrap();
+        t.block_editor = None;
+        t.selected = Some(0);
+        t.cursor = 0;
+    }
+    let key = |app: &mut App, k: &str, ctrl: bool| {
+        use cosmic::iced::keyboard::{Key, Modifiers, key::Physical};
+        let press = cosmic::widget::text_editor::KeyPress {
+            key: Key::Character(k.into()),
+            modified_key: Key::Character(k.into()),
+            physical_key: Physical::Unidentified(cosmic::iced::keyboard::key::NativeCode::Unidentified),
+            modifiers: if ctrl { Modifiers::CTRL } else { Modifiers::empty() },
+            text: (!ctrl).then(|| k.into()),
+            status: cosmic::widget::text_editor::Status::Focused { is_hovered: false },
+        };
+        let _ = picker_update(app, Message::WindowKey(press));
+    };
+    key(&mut app, "]", false);
+    key(&mut app, "d", false);
+    let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+    let first = super::attention::problems(t).first().map(|(i, _)| t.blocks[*i].start);
+    assert_eq!(Some(caret(&app)), first);
+    let path = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().path.clone();
+    app.back.push((path, 0));
+    key(&mut app, "o", true);
+    assert_eq!(caret(&app), 0);
+    key(&mut app, "g", false);
+    key(&mut app, "s", false);
+    assert!(app.shell.file_picker.open.as_ref().is_some_and(|o| o.symbols_for_tests().is_some()));
+}
