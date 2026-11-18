@@ -17,6 +17,9 @@ pub struct Seen {
     pub file: String,
     /// When it was opened (seconds since the epoch)
     pub at: u64,
+    /// Most recently opened paths first, with folder names retained.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    paths: Vec<String>,
 }
 
 fn path() -> PathBuf {
@@ -44,8 +47,17 @@ pub fn note(machine: &str, sid: &str, document_path: &str) {
 pub(crate) fn set(machine: &str, sid: &str, document_path: &str, at: u64) {
     let file = document_path.rsplit(['/', '\\']).next().unwrap_or(document_path).to_string();
     let mut store = STORE.lock().unwrap();
-    store.insert(key(machine, sid), Seen { file, at });
+    let seen = store.entry(key(machine, sid)).or_default();
+    seen.file = file;
+    seen.at = at;
+    seen.paths.retain(|path| path != document_path);
+    seen.paths.insert(0, document_path.to_string());
+    seen.paths.truncate(100);
     write(&store);
+}
+
+pub fn paths(machine: &str, sid: &str) -> Vec<String> {
+    STORE.lock().unwrap().get(&key(machine, sid)).map(|seen| seen.paths.clone()).unwrap_or_default()
 }
 
 /// This session is gone from the start page

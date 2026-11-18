@@ -275,6 +275,28 @@ class DriverTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(sorted(os.path.basename(p) for p in H.list_documents(str(d), classes=[IsabelleDriver])),
                          ["A.thy", "ROOT"])
 
+    async def test_project_files_lists_the_session_s_files_and_a_picked_read_stays_in_its_folder(self):
+        d = self.folder("B.fk", "FAKEROOT", "C.txt", "sub/D.fk", "A.thy")
+        outside = self.folder("E.fk")
+        os.symlink(outside / "E.fk", d / "Out.fk")
+        os.symlink(d / "B.fk", d / "Alias.fk")
+        app = App()
+        s = H.Session(self.host, "f2", {"folder": str(d), "backend": "fake", "toolchain": "fake-1",
+                                        "project": {}, "lifecycle": "Stopped"})
+        self.host.sessions["f2"] = s
+        r = await self.host.handle(app, {"op": "project_files", "session": "f2"})
+        self.assertEqual(r["folder"], str(d))
+        # the backend's documents and project files; a link out of the folder is left out
+        self.assertEqual(sorted(os.path.relpath(p, d) for p in r["files"]),
+                         ["Alias.fk", "B.fk", "FAKEROOT", os.path.join("sub", "D.fk")])
+        # a picked file is read only if it is a file of the session inside its folder
+        for path in (d / "C.txt", d / "A.thy", d / "Out.fk", outside / "E.fk", d / "Gone.fk"):
+            with self.assertRaises(H.HostError, msg=str(path)) as caught:
+                await self.host.handle(app, {"op": "read", "session": "f2", "path": str(path), "project_file": True})
+            self.assertEqual(caught.exception.code, "not_found")
+        r = await self.host.handle(app, {"op": "read", "session": "f2", "path": str(d / "sub" / "D.fk"), "project_file": True})
+        self.assertEqual(r["doc"]["path"], str(d / "sub" / "D.fk"))
+
     # ----- sessions
 
     def test_find_session_is_keyed_by_backend_toolchain_and_project(self):

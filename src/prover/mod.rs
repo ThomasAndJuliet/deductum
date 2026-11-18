@@ -192,6 +192,13 @@ pub trait Profile: Send + Sync {
     /// Whether a formal block states something to prove, for the Theorems list
     fn is_statement(&self, block: &Block, kinds: &HashMap<String, String>) -> bool;
 
+    /// How a line of code is commented out: what goes before it and after it (`(* … *)`, `-- …`)
+    fn line_comment(&self) -> (&'static str, &'static str);
+
+    /// Whether a formal block defines something by name (a definition, a function, a datatype,
+    /// a structure), for Go to symbol
+    fn is_definition(&self, block: &Block) -> bool;
+
     /// Commands that leave a proof unfinished (`sorry`, `oops`), listed as Problems
     fn unfinished(&self) -> &'static [&'static str];
 
@@ -259,6 +266,11 @@ pub trait Profile: Send + Sync {
     fn lexical_colours(&self, text: &str) -> Vec<(usize, usize, Hl)> {
         let _ = text;
         Vec::new()
+    }
+
+    /// The editor style for a semantic token reported by this prover.
+    fn source_highlight(&self, sem: Sem) -> Hl {
+        Hl::Sem(sem)
     }
 
     /// Colours the profile adds to the prover's (Isabelle: the other half of a coloured bracket)

@@ -866,12 +866,24 @@ fn shortcuts_page(_app: &App) -> Element<'_, Message> {
     let section = settings::section()
         .title("Everywhere")
         .add(key("Ctrl+,", "Settings"))
+        .add(key("Ctrl+P", "Go to a file of the session"))
+        .add(key("Ctrl+Shift+O  \u{b7}  g s", "Go to a symbol of the document (g s in vim's normal mode; @ in Ctrl+P too)"))
         .add(key("Ctrl+=  ·  Ctrl+−  ·  Ctrl+0", "Larger, smaller and default content size"))
         .add(key("Alt+Left", "Back to where Ctrl+click came from"))
         .add(key("Ctrl+1  \u{b7}  Ctrl+2", "The document as Literate, as Source"))
         .add(key("F9", "Show or hide the sidebar"))
         .add(key("F8  \u{b7}  Shift+F8", "The next failed cell, the next unfinished one"));
-    sub_page(back_head("Keyboard shortcuts"), section)
+    // (vim's normal mode, with the keys Zed's vim mode gives them)
+    let vim = settings::section()
+        .title("Vim's normal mode")
+        .add(key("g d  \u{b7}  Ctrl+O", "The definition of the name at the caret, and back"))
+        .add(key("] d  \u{b7}  [ d", "The next and the previous problem (also g ] and g [)"))
+        .add(key("g h", "What the prover says about the caret's place"))
+        .add(key("g .", "The caret's menu, as a right click there"))
+        .add(key("g s  \u{b7}  g S", "A symbol of the document; the session's theorems, for the name at the caret"))
+        .add(key("g c c", "Comment the line out, or back in (with a count: that many lines)"));
+    let both = widget::column::with_capacity(2).spacing(sp().space_m).push(section).push(vim);
+    sub_page(back_head("Keyboard shortcuts"), both)
 }
 
 fn about_page(_app: &App) -> Element<'_, Message> {

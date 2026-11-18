@@ -28,7 +28,9 @@ mod cli;
 mod codec;
 mod context_menu;
 mod editor;
+mod doc_symbols;
 mod fields;
+mod file_picker;
 mod flow;
 mod gap;
 mod goals;
@@ -231,6 +233,15 @@ pub enum Message {
     OpenSession(String, String),
     CloseWorkspace,
     OpenTheory(String),
+    FilePickerShortcut(cosmic::iced::window::Id),
+    /// Ctrl+Shift+O (`g s` in vim): the header's search, for the document's symbols
+    SymbolPickerShortcut(cosmic::iced::window::Id),
+    /// A symbol's row clicked, by where it starts
+    FilePickerSymbol(usize),
+    FilePickerKey(cosmic::iced::window::Id, file_picker::Key),
+    FilePickerAccept(Option<String>),
+    FilePickerClose,
+    FilePickerScroll(f32),
     SetMode(Mode),
     SourceAction(Action),
     SourcePage(u64, bool, bool),
@@ -460,6 +471,7 @@ struct Navigation {
 /// A request to leave the current replica after its edits have reached the host.
 enum DeferredLeave {
     Theory { path: String, nav: Option<Navigation>, goto: Option<usize> },
+    PickFile { path: String, generation: u64 },
     Session { machine: String, sid: String },
     Close,
     Quit,
@@ -488,6 +500,8 @@ enum Pending {
     Symbols,
     SessionInfo(String),
     Read(String, String, Option<Navigation>),
+    PickFile(String, String, u64),
+    ProjectFiles(String),
     Edit(String, String),
     State(StateRequest),
     Query(&'static str),
@@ -941,9 +955,101 @@ impl App {
                 vim::Op::Redo => tasks.push(self.update(Message::Redo)),
                 vim::Op::Save => tasks.push(self.update(Message::Save)),
                 vim::Op::Escape => tasks.push(self.update(Message::Escape)),
+                vim::Op::Symbols => {
+                    let window = self.core.main_window_id().unwrap_or(cosmic::iced::window::Id::RESERVED);
+                    tasks.push(self.update(Message::SymbolPickerShortcut(window)));
+                }
+                vim::Op::Back => tasks.push(self.update(Message::Back)),
+                vim::Op::Definition => tasks.push(self.update(Message::GotoDefinition)),
+                vim::Op::Hover => tasks.push(self.hover_at_caret(in_block)),
+                vim::Op::Actions => tasks.push(self.menu_at_caret(in_block)),
+                vim::Op::SearchProject => tasks.push(self.search_at_caret()),
+                vim::Op::Problem(forward) => tasks.push(self.update(Message::Shell(shell::Msg::StepProblem(None, forward)))),
+                vim::Op::ToggleComment(n) => {
+                    let task = self.toggle_comment(n, in_block);
+                    tasks.push(task);
+                }
             }
         }
         Task::batch(tasks)
+    }
+
+    /// The caret in the editor in use, in that editor's coordinates (the block editor's from the
+    /// cell's edge, as its pointer is): none outside an editor
+    fn caret_in_editor(&mut self, in_block: bool) -> Option<(EditorTarget, cosmic::iced::Point)> {
+        let t = self.workspace.as_mut()?.theory.as_mut()?;
+        match &mut t.block_editor {
+            Some(be) if in_block => {
+                let p = editor::caret_point(&mut be.content);
+                Some((EditorTarget::Block, cosmic::iced::Point::new(p.x + view::block_text_inset(be), p.y)))
+            }
+            _ if t.mode == Mode::Source => Some((EditorTarget::Source, editor::caret_point(&mut t.source))),
+            _ => None,
+        }
+    }
+
+    /// `g h`: what the prover says about the name at the caret, in the card the pointer shows
+    fn hover_at_caret(&mut self, in_block: bool) -> Task<Message> {
+        let Some((target, point)) = self.caret_in_editor(in_block) else { return Task::none() };
+        let Some(cursor) = self.workspace.as_ref().and_then(|w| w.theory.as_ref()).map(|t| t.cursor) else { return Task::none() };
+        let target = if target == EditorTarget::Block { HoverTarget::Block } else { HoverTarget::Source };
+        self.hover_gen += 1;
+        let generation = self.hover_gen;
+        if let Some(ws) = &mut self.workspace {
+            ws.hover = Some(Hover { target, point, offset: cursor, generation, info: None });
+        }
+        self.update(Message::HoverTick(generation))
+    }
+
+    /// `g .`: the caret's menu (Sledgehammer, a search, a quick proof, Copy…), as a right click there
+    fn menu_at_caret(&mut self, in_block: bool) -> Task<Message> {
+        let Some((target, point)) = self.caret_in_editor(in_block) else { return Task::none() };
+        // (under the caret's line, as a menu opens under the pointer)
+        let at = cosmic::iced::Point::new(point.x, point.y + view::code_line_height());
+        self.shell_update(shell::Msg::ContextOpen(context_menu::Target::Editor(target), at))
+    }
+
+    /// `g S`: the session's theorems searched for the name at the caret (Find theorems, Loogle),
+    /// or the search field ready for one
+    fn search_at_caret(&mut self) -> Task<Message> {
+        let Some(t) = self.workspace.as_ref().and_then(|w| w.theory.as_ref()) else { return Task::none() };
+        let name = t.profile.name_at(&t.local, t.cursor);
+        let run = name.is_some();
+        let shown = self.update(Message::FindFor(name.unwrap_or_default(), run));
+        if run { shown } else { Task::batch([shown, widget::text_input::focus(view::find_input_id())]) }
+    }
+
+    /// `g c c`: the caret's line and the `n - 1` after it commented out, or their comments taken
+    /// away (as the backend writes a comment), the caret at the start of the last
+    fn toggle_comment(&mut self, n: usize, in_block: bool) -> Task<Message> {
+        use cosmic::widget::text_editor::{Action as A, Edit as E, Motion as M};
+        let Some(t) = self.workspace.as_ref().and_then(|w| w.theory.as_ref()) else { return Task::none() };
+        let content = match &t.block_editor {
+            Some(be) if in_block => {
+                if be.kind == theory::Kind::Text {
+                    self.status = Some("Prose has no comments: g c c comments out code".into());
+                    return Task::none();
+                }
+                &be.content
+            }
+            _ if t.mode == Mode::Source => &t.source,
+            _ => return Task::none(),
+        };
+        let first = content.cursor().position.line;
+        let last = (first + n).min(content.line_count()).max(first + 1) - 1;
+        let lines: Vec<String> = (first..=last).filter_map(|i| content.line(i).map(|l| l.text.to_string())).collect();
+        let refs: Vec<&str> = lines.iter().map(String::as_str).collect();
+        let changed = vim::toggle_comments(&refs, t.profile.line_comment());
+        if changed == lines {
+            return Task::none();
+        }
+        let act = |a: A| if in_block && t.block_editor.is_some() { Message::BlockAction(a) } else { Message::SourceAction(a) };
+        let mut steps = vec![act(A::Move(M::Home))];
+        steps.extend((first..last).map(|_| act(A::Select(M::Down))));
+        steps.push(act(A::Select(M::End)));
+        steps.push(act(A::Edit(E::Paste(Arc::new(changed.join("\n"))))));
+        steps.push(act(A::Move(M::Home)));
+        Task::batch(steps.into_iter().map(|m| self.update(m)).collect::<Vec<_>>())
     }
 
     fn nav_wait_layout(&mut self) -> Task<Message> {
@@ -1183,6 +1289,10 @@ impl App {
                 if let Some(t) = self.workspace.as_mut().filter(|w| w.machine == key).and_then(|w| w.theory.as_mut()) {
                     t.inflight = None;
                 }
+                if let Some(ws) = self.workspace.as_ref().filter(|w| w.machine == key) {
+                    let _ = self.project_files_reply(key.clone(), ws.sid.clone(), &json!({"error": "The project host is disconnected"}));
+                    return self.file_picker_failed("The project host is disconnected".into());
+                }
             }
             link::Event::Line(value) => {
                 if let Some(id) = value.get("id").and_then(Value::as_u64) {
@@ -1198,6 +1308,27 @@ impl App {
     }
 
     fn on_reply(&mut self, machine: String, pending: Pending, v: Value) -> Task<Message> {
+        let (pending, picked) = match pending {
+            Pending::ProjectFiles(sid) => return self.project_files_reply(machine, sid, &v),
+            Pending::PickFile(sid, path, generation) => {
+                if !self.shell.file_picker.owns_opening(&machine, &sid, &path, generation) {
+                    // A dismissed picker may have subscribed just before its reply arrived.
+                    let actual = v["doc"]["path"].as_str().unwrap_or(&path);
+                    if v["ok"] == json!(true)
+                        && !self.workspace.as_ref().is_some_and(|ws| ws.machine == machine && ws.sid == sid
+                            && (ws.theory.as_ref().is_some_and(|t| t.path == actual) || ws.opening.as_deref() == Some(path.as_str())))
+                    {
+                        self.send(&machine, "close", json!({"session": sid, "path": actual}), Pending::Plain);
+                    }
+                    return Task::none();
+                }
+                if v["ok"] != json!(true) {
+                    return self.file_picker_failed(v["error"].as_str().unwrap_or("Could not open the file").into());
+                }
+                (Pending::Read(sid, path, None), Some(generation))
+            }
+            pending => (pending, None),
+        };
         if let Pending::Read(sid, _, _) = &pending
             && !self.workspace.as_ref().is_some_and(|ws| ws.machine == machine && ws.sid == *sid)
         {
@@ -1335,7 +1466,7 @@ impl App {
                 }
             }
             Pending::SessionInfo(sid) => {
-                if let Some(ws) = self.workspace.as_mut().filter(|w| w.sid == sid) {
+                if let Some(ws) = self.workspace.as_mut().filter(|w| w.machine == machine && w.sid == sid) {
                     ws.log = v["session"]["logs"].as_array().map(|l| l.iter().filter_map(|x| x.as_str().map(str::to_string)).collect()).unwrap_or_default();
                     ws.info = Some(v["session"].clone());
                 }
@@ -1349,7 +1480,8 @@ impl App {
                     return self.update(Message::OpenTheory(want));
                 }
                 // Open the first theory if none is open
-                if let Some(ws) = self.workspace.as_ref().filter(|w| w.sid == sid && w.theory.is_none() && w.opening.is_none())
+                if self.shell.file_picker.open.is_none()
+                    && let Some(ws) = self.workspace.as_ref().filter(|w| w.machine == machine && w.sid == sid && w.theory.is_none() && w.opening.is_none())
                     && let Some(first) = ws.info.as_ref().and_then(|i| {
                         i["theories"].as_array()?.iter().filter_map(|t| t["path"].as_str()).find(|p| ws.profile.is_document(p)).map(str::to_string)
                     })
@@ -1379,14 +1511,23 @@ impl App {
                     }
                     if !self.leave_ready() {
                         let goto = self.workspace.as_mut().and_then(|ws| { ws.opening = None; ws.pending_goto.take() });
-                        self.defer_leave(DeferredLeave::Theory { path, nav, goto });
+                        self.defer_leave(match picked {
+                            Some(generation) => DeferredLeave::PickFile { path, generation },
+                            None => DeferredLeave::Theory { path, nav, goto },
+                        });
                         return self.flush_edits();
                     }
                 }
-                if nav.as_ref().is_some_and(|n| n.record_back)
+                if (picked.is_some() || nav.as_ref().is_some_and(|n| n.record_back))
                     && let Some(t) = self.workspace.as_ref().and_then(|w| w.theory.as_ref())
                 {
                     self.back.push((t.path.clone(), Self::host_offset(t, t.cursor)));
+                }
+                if picked.is_some() {
+                    self.shell.file_picker.open = None;
+                    if let Some(old) = current.as_ref().filter(|old| *old != v["doc"]["path"].as_str().unwrap_or(&path)) {
+                        self.send(&machine, "close", json!({"session": sid, "path": old}), Pending::Plain);
+                    }
                 }
                 if self.workspace.as_ref().and_then(|ws| ws.theory.as_ref()).is_some_and(|t| {
                     t.path == path && t.inflight.is_none() && t.inflight_unknown
@@ -1656,6 +1797,8 @@ impl App {
             Pending::ProjectAction(sid, name) => self.project_action_done(sid, name, &v),
             Pending::Saved(name) => return self.toast(format!("Saved {name}"), false),
             Pending::Reverted(what) => return self.toast(format!("Reverted {what}"), true),
+            // (taken at the top: a picked file's read goes on as a read, the file list to the picker)
+            Pending::PickFile(..) | Pending::ProjectFiles(..) => {}
             Pending::Plain => {
                 if let Some(files) = v.get("files")
                     && let Some(ws) = &mut self.workspace
@@ -2060,6 +2203,7 @@ impl App {
                         self.open_theory(path, nav, goto)
                     }
                 }
+                DeferredLeave::PickFile { path, generation } => self.open_picked_file(path, generation),
                 DeferredLeave::Session { machine, sid } => self.update(Message::OpenSession(machine, sid)),
                 DeferredLeave::Close => self.update(Message::CloseWorkspace),
                 DeferredLeave::Quit => self.shell_update(shell::Msg::Quit),
@@ -2547,28 +2691,52 @@ impl App {
 
     /// Read a theory while retaining the originating navigation until the reply arrives.
     fn open_theory(&mut self, path: String, nav: Option<Navigation>, goto: Option<usize>) -> Task<Message> {
+        self.dismiss_file_picker();
+        self.read_theory(path, nav, goto, None)
+    }
+
+    fn open_picked_file(&mut self, path: String, generation: u64) -> Task<Message> {
+        self.read_theory(path, None, None, Some(generation))
+    }
+
+    fn read_theory(&mut self, path: String, nav: Option<Navigation>, goto: Option<usize>, picked: Option<u64>) -> Task<Message> {
         let Some((machine, sid)) = self.workspace_ids() else { return Task::none() };
+        if let Some(generation) = picked
+            && !self.shell.file_picker.owns_opening(&machine, &sid, &path, generation)
+        {
+            return Task::none();
+        }
         let current = self.workspace.as_ref().and_then(|ws| ws.theory.as_ref()).map(|t| t.path.as_str());
         if current == Some(path.as_str()) && self.deferred_leave.is_some() && nav.is_none() {
             self.deferred_leave = None;
             if self.status.as_deref() == Some("Waiting for edits to reach the host before switching documents") { self.status = None; }
             return Task::none();
         }
-        if current.is_some_and(|old| old != path) && self.defer_leave(DeferredLeave::Theory { path: path.clone(), nav: nav.clone(), goto }) {
+        if current.is_some_and(|old| old != path) && self.defer_leave(match picked {
+            Some(generation) => DeferredLeave::PickFile { path: path.clone(), generation },
+            None => DeferredLeave::Theory { path: path.clone(), nav: nav.clone(), goto },
+        }) {
             return self.flush_edits();
         }
         if nav.is_none() {
             self.nav_serial += 1;
             self.nav_latest.insert(None, self.nav_serial);
         }
-        if let Some(old) = self.workspace.as_ref().and_then(|ws| ws.theory.as_ref()).map(|t| t.path.clone()) {
+        if picked.is_none() && let Some(old) = self.workspace.as_ref().and_then(|ws| ws.theory.as_ref()).map(|t| t.path.clone()) {
             self.send(&machine, "close", json!({"session": sid, "path": old}), Pending::Plain);
         }
         if let Some(ws) = &mut self.workspace {
             ws.opening = Some(path.clone());
             ws.pending_goto = goto;
         }
-        self.send(&machine, "read", json!({"session": sid, "path": path}), Pending::Read(sid, path, nav));
+        let id = if let Some(generation) = picked {
+            self.send(&machine, "read", json!({"session": sid, "path": path, "project_file": true}), Pending::PickFile(sid, path, generation))
+        } else {
+            self.send(&machine, "read", json!({"session": sid, "path": path}), Pending::Read(sid, path, nav))
+        };
+        if picked.is_some() && !self.pending.contains_key(&id) {
+            return self.file_picker_failed("The project host is disconnected".into());
+        }
         Task::none()
     }
 
@@ -2685,10 +2853,23 @@ pub fn file_name(path: &str) -> &str {
 /// The window's keys that no widget took (a focused field takes its own Ctrl+Z, and an editor
 /// its keys): the app's shortcuts, and the rest as [`Message::WindowKey`]; the window's size and
 /// the modifiers held, whoever took them
-fn app_key(event: cosmic::iced::Event, status: cosmic::iced::event::Status, _window: cosmic::iced::window::Id) -> Option<Message> {
+fn app_key(event: cosmic::iced::Event, status: cosmic::iced::event::Status, window: cosmic::iced::window::Id) -> Option<Message> {
     use cosmic::iced::keyboard::{Event as Key, Key as K};
     if let cosmic::iced::Event::Keyboard(Key::ModifiersChanged(m)) = event {
         return Some(Message::Modifiers(m.control(), m.alt()));
+    }
+    if let cosmic::iced::Event::Keyboard(Key::KeyPressed { key, modifiers, repeat: false, .. }) = &event
+        && matches!(key.as_ref(), K::Character("p"))
+        && modifiers.command() && !modifiers.shift() && !modifiers.alt()
+    {
+        return Some(Message::FilePickerShortcut(window));
+    }
+    // (Ctrl+Shift+O: the key is O or o as the layout gives it with Shift)
+    if let cosmic::iced::Event::Keyboard(Key::KeyPressed { key, modifiers, repeat: false, .. }) = &event
+        && matches!(key.as_ref(), K::Character("o" | "O"))
+        && modifiers.command() && modifiers.shift() && !modifiers.alt()
+    {
+        return Some(Message::SymbolPickerShortcut(window));
     }
     if status == cosmic::iced::event::Status::Captured
         && !matches!(event, cosmic::iced::Event::Window(_))
@@ -2719,6 +2900,22 @@ fn app_key(event: cosmic::iced::Event, status: cosmic::iced::event::Status, _win
         })),
         _ => None,
     }
+}
+
+fn file_picker_app_key(event: cosmic::iced::Event, status: cosmic::iced::event::Status, window: cosmic::iced::window::Id) -> Option<Message> {
+    use cosmic::iced::keyboard::{Event, Key, key::Named};
+    if let cosmic::iced::Event::Keyboard(Event::KeyPressed { key: Key::Named(key), modifiers, .. }) = &event
+        && modifiers.is_empty()
+    {
+        let key = match key {
+            Named::ArrowUp => Some(file_picker::Key::Up),
+            Named::ArrowDown => Some(file_picker::Key::Down),
+            Named::Escape => Some(file_picker::Key::Escape),
+            _ => None,
+        };
+        if let Some(key) = key { return Some(Message::FilePickerKey(window, key)); }
+    }
+    app_key(event, status, window)
 }
 
 impl cosmic::Application for App {
@@ -2861,7 +3058,7 @@ impl cosmic::Application for App {
         let links = self.links.iter().map(|l| {
             Subscription::run_with(l.target.clone(), link::run).map(|(key, event)| Message::Link(key, event))
         });
-        let keys = cosmic::iced::event::listen_with(app_key);
+        let keys = cosmic::iced::event::listen_with(if self.shell.file_picker.open.is_some() { file_picker_app_key } else { app_key });
         // While a sidebar's edge is dragged: the pointer, wherever it is, and its release,
         // whichever widget it lands on
         let drag = self.dragging.is_some().then(|| {
@@ -2954,7 +3151,7 @@ impl App {
                 | Message::BlockAction(..) | Message::SourcePage(..) | Message::SourcePageRows(..)
                 | Message::LineMove(..) | Message::Newline | Message::Unindent | Message::Undo | Message::Redo
                 | Message::Save | Message::CopySelection(..) | Message::Complete(..) | Message::InsertSymbol(..)
-                | Message::WindowKey(..) | Message::OpenSession(..) | Message::CloseWorkspace | Message::OpenTheory(..)
+                | Message::WindowKey(..) | Message::OpenSession(..) | Message::CloseWorkspace | Message::OpenTheory(..) | Message::FilePickerAccept(..)
                 | Message::SetMode(..) | Message::SetModeEntity(..) | Message::EditBlock(..) | Message::CloseBlock
                 | Message::ViewPress(..) | Message::BlockViewAction(..) | Message::PopOut | Message::PopIn
                 | Message::ToggleVim | Message::Shell(..) | Message::Escape | Message::DeleteBlock(..)
@@ -3042,7 +3239,33 @@ impl App {
             Message::Noop => {}
             Message::Shell(m) => return self.shell_update(m),
             Message::Link(key, event) => return self.on_link(key, event),
+            Message::FilePickerShortcut(window) => {
+                if self.core.main_window_id().is_none_or(|main| window == main) {
+                    return self.open_file_picker();
+                }
+            }
+            Message::FilePickerKey(window, key) => {
+                if self.core.main_window_id().is_none_or(|main| window == main) {
+                    return self.file_picker_key(key);
+                }
+            }
+            Message::SymbolPickerShortcut(window) => {
+                if self.core.main_window_id().is_none_or(|main| window == main) {
+                    return self.open_symbol_picker();
+                }
+            }
+            Message::FilePickerSymbol(start) => return self.choose_symbol(Some(start)),
+            Message::FilePickerAccept(path) => return self.choose_project_file(path),
+            // (a click elsewhere: the picker goes, and the keys stay with what was clicked; Esc
+            // returns them to the caret)
+            Message::FilePickerClose => {
+                self.dismiss_file_picker();
+            }
+            Message::FilePickerScroll(y) => {
+                if let Some(open) = self.shell.file_picker.open.as_mut() { open.scroll = y; }
+            }
             Message::Open(request) => {
+                self.dismiss_file_picker();
                 self.request = Some(request);
                 return self.handle_request();
             }
@@ -3051,6 +3274,7 @@ impl App {
                 self.save_settings();
             }
             Message::OpenSession(machine, sid) => {
+                self.dismiss_file_picker();
                 // (a session picked while the settings show: the document again)
                 if self.workspace.as_ref().is_some_and(|w| w.machine == machine && w.sid == sid) {
                     self.deferred_leave = None;
@@ -3116,6 +3340,7 @@ impl App {
                 return self.retitle();
             }
             Message::CloseWorkspace => {
+                self.dismiss_file_picker();
                 if self.defer_leave(DeferredLeave::Close) {
                     return self.flush_edits();
                 }
@@ -3938,6 +4163,7 @@ impl App {
                 }
             }
             Message::Back => {
+                self.dismiss_file_picker();
                 let Some((path, at)) = self.back.pop() else { return Task::none() };
                 return self.go_to_place(&json!({"path": path, "start": at}));
             }
@@ -4448,6 +4674,18 @@ impl App {
                 let pending_g = pending == "g";
                 let pending_d = pending == "d";
                 let next = match (key, ctrl) {
+                    // (Zed's keys that need no caret in a cell: the symbols, the problems, the
+                    // theorems search, the cell's menu, and back)
+                    ("o", true) => return self.update(Message::Back),
+                    ("s", false) if pending_g => return self.update(Message::SymbolPickerShortcut(self.core.main_window_id().unwrap_or(cosmic::iced::window::Id::RESERVED))),
+                    ("]" | "[", false) if pending_g => return self.update(Message::Shell(shell::Msg::StepProblem(None, key == "]"))),
+                    ("d", false) if pending == "]" || pending == "[" => return self.update(Message::Shell(shell::Msg::StepProblem(None, pending == "]"))),
+                    ("]" | "[", false) => {
+                        self.vim.pending = key.into();
+                        None
+                    }
+                    ("S", false) if pending_g => return self.search_at_caret(),
+                    (".", false) if pending_g => return self.shell_update(shell::Msg::ContextOpen(context_menu::Target::Cell(cur), cosmic::iced::Point::new(24.0, 24.0))),
                     ("r", true) => return self.update(Message::Redo),
                     ("u", false) => return self.update(Message::Undo),
                     ("j" | "Down", false) => Some((cur + 1).min(n - 1)),

@@ -144,6 +144,16 @@ pub fn menus(app: &App) -> Vec<(&'static str, Vec<Row>)> {
         // (the new-session form is where a folder is chosen)
         item("Open a folder\u{2026}", "", Message::NewSession(true)),
         recent_row,
+        // (the header's search of the session's files, as Ctrl+P opens it)
+        act_or("Go to file\u{2026}", "Ctrl+P", match ws {
+            Some(_) if app.file_picker_available() => Ok(Message::FilePickerShortcut(app.core.main_window_id().unwrap_or(cosmic::iced::window::Id::RESERVED))),
+            Some(_) => Err("Close the settings or the new-session form first"),
+            None => Err("Open a session first"),
+        }),
+        act_or("Go to symbol\u{2026}", "Ctrl+Shift+O", match t {
+            Some(_) if app.file_picker_available() => Ok(Message::SymbolPickerShortcut(app.core.main_window_id().unwrap_or(cosmic::iced::window::Id::RESERVED))),
+            _ => Err(no_doc),
+        }),
         Row::Divider,
         act_or("Save", "Ctrl+S", if t.is_some() { Ok(Message::Save) } else { Err(no_doc) }),
         off("Save all", "", "Not built yet: Save saves the open document, and the host autosaves the others"),

@@ -3291,6 +3291,13 @@ class Host:
             info["seen"] = s.meta["seen"]
             info["alternatives"] = [a for d in s.docs.values() for a in d.alternatives[-10:]]
             return {"session": info}
+        if op == "project_files":
+            folder, cls = s.meta["folder"], s.driver_class
+            def scan():
+                return [path for path in list_documents(folder, classes=[cls])
+                        if not os.path.islink(path) or path_inside(path, folder)]
+            files = await self.project_read(folder, scan)
+            return {"folder": folder, "files": files}
         if op == "attach":
             client.attach(s)
             return {"session": s.summary()}
@@ -3327,6 +3334,14 @@ class Host:
             self.broadcast_session(s)
             return {"session": s.summary()}
         if op == "read":
+            if p.get("project_file") is True:
+                source, folder = p["path"], s.meta["folder"]
+                def check_project_file():
+                    path = os.path.realpath(os.path.expanduser(source))
+                    if not s.driver_class.is_document(path) or not path_inside(path, folder) or not os.path.isfile(path):
+                        raise HostError(f"Cannot open project file {source}", "not_found")
+                    return path
+                p["path"] = await self.project_read(source, check_project_file)
             if p.get("peek"):
                 # A theory to look at (a reference window): one outside the session's folder, such
                 # as a library theory, is read from disk and not opened as a document of the session
@@ -3659,8 +3674,9 @@ class Host:
                 except ValueError:
                     client.push({"error": "bad json", "code": "bad_request"})
                     continue
-                if client.concurrent_reads and req.get("op") in ("state", "info"):
-                    slot = (req.get("op"), req.get("session")) if client.kind == "app" else None
+                if client.concurrent_reads and req.get("op") in ("state", "info", "project_files"):
+                    project_files = req.get("op") == "project_files"
+                    slot = (req.get("op"), req.get("session")) if client.kind == "app" and not project_files else None
                     previous = slots.get(slot) if slot else None
                     # Refuse saturation immediately: waiting for a semaphore here would put
                     # the next edit or Stop back behind the very reads we are separating.
@@ -3668,7 +3684,7 @@ class Host:
                         error_reply(req, HostError("Too many pending document reads; try again", "busy"))
                         continue
                     try:
-                        work = self.prepare_snapshot(client, req)
+                        work = (lambda request=req: self.handle(client, request)) if project_files else self.prepare_snapshot(client, req)
                     except Exception as exn:
                         error_reply(req, exn)
                         continue

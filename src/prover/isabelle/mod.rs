@@ -87,6 +87,20 @@ impl Profile for Isabelle {
         }
     }
 
+    fn line_comment(&self) -> (&'static str, &'static str) {
+        ("(* ", " *)")
+    }
+
+    fn is_definition(&self, block: &Block) -> bool {
+        matches!(
+            block.name.as_str(),
+            "definition" | "abbreviation" | "fun" | "function" | "primrec" | "primcorec" | "corec" | "corecursive"
+                | "partial_function" | "nominal_function" | "lift_definition" | "datatype" | "codatatype" | "type_synonym"
+                | "typedef" | "record" | "inductive" | "coinductive" | "inductive_set" | "coinductive_set" | "locale" | "class"
+                | "consts" | "axiomatization" | "bundle" | "named_theorems"
+        )
+    }
+
     fn unfinished(&self) -> &'static [&'static str] {
         &["sorry", "oops"]
     }
@@ -133,6 +147,14 @@ impl Profile for Isabelle {
 
     fn comments(&self, text: &str) -> Vec<(usize, usize)> {
         isar::comments(text)
+    }
+
+    fn source_highlight(&self, sem: Sem) -> Hl {
+        // Isar clause keywords such as `assumes` and `shows` read like commands.
+        Hl::Sem(match sem {
+            Sem::Keyword2 => Sem::Keyword1,
+            _ => sem,
+        })
     }
 
     fn derived_colours(&self, text: &str, colours: &[(usize, usize, Sem)]) -> Vec<(usize, usize, Sem)> {

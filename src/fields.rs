@@ -32,6 +32,8 @@ use super::{App, Message, Tool, Workspace};
 /// A one-line field of Deductum's, by what it is for
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Field {
+    /// Project file search in the header
+    ProjectFiles,
     /// The insert palette's search, beside the text, and the insert bar's above the goal
     Palette,
     /// The Symbols panel's search
@@ -175,6 +177,7 @@ impl App {
     /// The box of `field`, where it is kept; none while what it belongs to is not open
     fn field_box(&mut self, field: &Field) -> Option<&mut ShortTextBox> {
         match field {
+            Field::ProjectFiles => self.shell.file_picker.open.as_mut().map(|picker| &mut picker.query),
             Field::SettingsSearch | Field::ClaudeModel | Field::CodexModel => self.shell.page.field_mut(field),
             Field::NewFolder => self.new_session.as_mut().map(|ns| &mut ns.folder),
             Field::NewLogic => self.new_session.as_mut().map(|ns| &mut ns.logic),
@@ -233,6 +236,7 @@ impl App {
             return Task::none();
         }
         match field {
+            Field::ProjectFiles => return self.file_picker_query_changed(),
             // A folder typed is another folder: what was found in the last one no longer holds
             Field::NewFolder => {
                 if let Some(ns) = &mut self.new_session {

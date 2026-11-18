@@ -62,7 +62,7 @@ pub fn diff(old: &str, new: &str) -> Change {
 }
 
 /// Where `pos` lies after `change`; see the host's `map_pos`
-pub fn map_pos(pos: usize, change: &Change, right: bool) -> usize {
+pub fn map_pos(pos: usize, change: &[Replacement], right: bool) -> usize {
     let mut delta: isize = 0;
     for (s, e, t) in change {
         let (s, e, len) = (*s, *e, t.chars().count());
@@ -187,6 +187,37 @@ pub fn rebase_merge(change: &Change, later: &Change) -> Change {
     merge(out)
 }
 
+/// The incoming edit in local coordinates, after merging pending typing over it.
+/// Keep its separate ranges so anchors between them move with the source.
+pub fn applied_remote(remote: &Change, pending: &Change, rebased: &Change, old: &str, new: &str) -> Change {
+    let moved = if let Some((first_pending, last_pending)) = pending.first().zip(pending.last()) {
+        let (before, rest) = remote.split_at(remote.partition_point(|r| r.1 < first_pending.0));
+        let (touching, after) = rest.split_at(rest.partition_point(|r| r.0 <= last_pending.1));
+        let mut moved = before.to_vec();
+        // Only the part touching pending typing can change shape under the merge.
+        if let Some((first, last)) = touching.first().zip(touching.last()) {
+            let start = first.0.min(first_pending.0);
+            let end = last.1.max(last_pending.1);
+            let old_end = map_pos(end, pending, true);
+            let new_start = map_pos(map_pos(start, before, true), rebased, false);
+            let through_touching = &remote[..before.len() + touching.len()];
+            let new_end = map_pos(map_pos(end, through_touching, true), rebased, true);
+            let new_region = &new[byte_of(new, new_start)..byte_of(new, new_end)];
+            moved.push((start, old_end, new_region.to_string()));
+        }
+        moved.extend(after.iter().map(|(s, e, t)| (map_pos(*s, pending, false), map_pos(*e, pending, false), t.clone())));
+        moved
+    } else {
+        remote.clone()
+    };
+    // An agent may replace a selection that includes unchanged text at either end.
+    // Trim each range independently so anchors in that text are preserved too.
+    let bytes = char_starts(old);
+    moved.into_iter().flat_map(|(start, end, text)| {
+        diff(&old[bytes[start]..bytes[end]], &text).into_iter().map(move |(s, e, t)| (start + s, start + e, t))
+    }).collect()
+}
+
 /// 1-based line and 0-based column (code points) of `offset`
 pub fn line_col(text: &str, offset: usize) -> (usize, usize) {
     let mut line = 1;
@@ -224,6 +255,19 @@ mod tests {
         let human = vec![(2, 8, "h".to_string())];
         let merged = rebase_merge(&human, &agent);
         assert_eq!(apply(&apply(text, &agent), &merged), "01hAGENT89");
+    }
+
+    #[test]
+    fn applied_remote_preserves_ranges_and_merge_order() {
+        let base = "0123456789";
+        let remote = vec![(0, 3, "0one2".into()), (4, 4, "remote".into()), (7, 8, "seven".into())];
+        let pending = vec![(4, 4, "local".into())];
+        let old = apply(base, &pending);
+        let rebased = rebase_merge(&pending, &remote);
+        let new = apply(&apply(base, &remote), &rebased);
+        let moved = applied_remote(&remote, &pending, &rebased, &old, &new);
+        assert_eq!(moved, vec![(1, 2, "one".into()), (4, 4, "remote".into()), (12, 13, "seven".into())]);
+        assert_eq!(apply(&old, &moved), new);
     }
 
     #[test]

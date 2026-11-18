@@ -1532,12 +1532,12 @@ impl Theory {
             paint(&mut class, s, e, hl, &[]);
         }
         for (s, e, sem) in prover.colours.iter().chain(&self.profile.derived_colours(&self.local, &prover.colours)) {
-            paint(&mut class, *s, *e, Hl::Sem(*sem), &[]);
+            paint(&mut class, *s, *e, self.profile.source_highlight(*sem), &[]);
         }
         // A `claude` or `codex` line reads to the prover as a `sorry` of the same length: the
         // whole keyword (and its model) coloured as that `sorry` is
         for (s, e) in self.profile.keyword_tokens(&self.local) {
-            let hl = prover.colours.iter().find(|(cs, ce, _)| *cs <= s && s < *ce).map_or(Hl::Keyword, |(_, _, sem)| Hl::Sem(*sem));
+            let hl = prover.colours.iter().find(|(cs, ce, _)| *cs <= s && s < *ce).map_or(Hl::Keyword, |(_, _, sem)| self.profile.source_highlight(*sem));
             paint(&mut class, s, e, hl, &[]);
         }
         for cmd in &prover.commands {
@@ -2215,7 +2215,7 @@ impl Theory {
             let pending = ot::diff(&self.confirmed, &self.local);
             let rebased = ot::rebase_merge(&pending, change);
             let local = ot::apply(&confirmed, &rebased);
-            let moved = ot::diff(&self.local, &local);
+            let moved = ot::applied_remote(change, &pending, &rebased, &self.local, &local);
             self.cursor = ot::map_pos(self.cursor, &moved, true);
             if let Some(be) = &mut self.block_editor {
                 be.start = ot::map_pos(be.start, &moved, false);
@@ -2413,6 +2413,74 @@ mod staleness_tests {
 mod prover_view_tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn isabelle_clause_keywords_have_the_same_emphasis_as_commands() {
+        let profile = crate::prover::profile(None);
+        let table = profile.symbols(None);
+        let text = "lemma example:\n  assumes A: True\n    and B: True\n  shows True\nproof -\n  show True by simp\nqed\n";
+        let colours: Vec<_> = [("lemma", "keyword1"), ("assumes", "keyword2"), ("and", "keyword2"), ("shows", "keyword2"), ("proof", "keyword1")]
+            .into_iter().map(|(word, class)| {
+                let at = text.find(word).unwrap();
+                json!([at, at + word.len(), class])
+            }).collect();
+        let proof = text.find("proof").unwrap();
+        let commands = json!([[0, proof - 1, "lemma", "finished"], [proof, proof + "proof -".len(), "proof", "finished"]]);
+        let doc = json!({"text": text, "revision": 1, "prover": {"colours": colours, "commands": commands}});
+        let mut theory = Theory::new("/Example.thy".into(), &doc, &*table, Arc::new(HashMap::new()), Mode::Literate, profile);
+        theory.open_block(0, &*table);
+
+        let lines = &theory.block_highlight.0.lines;
+        let command = lines[0][0].1;
+        for (line, keyword) in [(1, "assumes"), (2, "and"), (3, "shows")] {
+            assert_eq!(lines[line][0].1, command, "the open cell should emphasise {keyword} like lemma");
+        }
+    }
+
+    #[test]
+    fn disjoint_agent_edits_keep_the_open_isabelle_cell_separate() {
+        let profile = crate::prover::profile(None);
+        let table = profile.symbols(None);
+        let text = concat!(
+            "theory Demo imports Main begin\n\n",
+            "section \\<open>Lifting\\<close>\n\n",
+            "text \\<open>A retained sample.\\<close>\n\n",
+            "definition sample where \"sample = True\"\n\n",
+            "text \\<open>The next cell stays readable.\\<close>\n\n",
+            "lemma sample: \"sample\" by (simp add: sample_def)\n\nend\n",
+        );
+        let section = text.find("section").unwrap();
+        let lemma = text.find("lemma").unwrap();
+        let change = vec![
+            (section, section, "bundle sample_syntax\nbegin\nnotation True (\"TRUE\")\nend\n\n".into()),
+            (lemma, lemma + "lemma sample".len(), "lemma sample_value".into()),
+        ];
+        let doc = json!({"text": text, "revision": 1});
+
+        for pending in [false, true] {
+            let mut t = Theory::new("/Demo.thy".into(), &doc, &*table, Arc::new(HashMap::new()), Mode::Literate, profile);
+            let cell = t.blocks.iter().position(|b| b.name == "definition").unwrap();
+            t.open_block(cell, &*table);
+            t.block_action(Action::Move(text_editor::Motion::DocumentEnd), &*table);
+            if pending {
+                t.block_action(Action::Edit(text_editor::Edit::Insert(' ')), &*table);
+            }
+            let editor = t.block_editor.as_ref().unwrap();
+            let edited_text = editor.shown_text.clone();
+            let caret_in_cell = t.cursor - editor.start;
+
+            assert!(t.committed(2, &change, None, false, &*table));
+
+            let editor = t.block_editor.as_ref().unwrap();
+            let definition = t.blocks.iter().find(|b| b.name == "definition").unwrap();
+            let following = t.blocks.iter().position(|b| b.kind == theory::Kind::Text && b.start > definition.end).unwrap();
+            assert_eq!(editor.start, definition.start, "pending human edit: {pending}");
+            assert!(editor.end < t.blocks[following].start);
+            assert!(t.docs[following].is_some());
+            assert_eq!(editor.shown_text, edited_text);
+            assert_eq!(t.cursor, editor.start + caret_in_cell);
+        }
+    }
 
     #[test]
     fn rendered_hits_compose_exact_markdown_bytes_with_source_characters() {
