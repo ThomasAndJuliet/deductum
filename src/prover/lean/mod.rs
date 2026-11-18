@@ -369,6 +369,13 @@ impl Profile for Lean {
         matches!(block.name.as_str(), "theorem" | "lemma" | "example" | "proposition" | "corollary")
     }
 
+    fn is_definition(&self, block: &Block) -> bool {
+        matches!(
+            block.name.as_str(),
+            "def" | "abbrev" | "instance" | "structure" | "inductive" | "coinductive" | "class" | "axiom" | "opaque" | "constant"
+        )
+    }
+
     fn unfinished(&self) -> &'static [&'static str] {
         &["sorry", "admit"]
     }

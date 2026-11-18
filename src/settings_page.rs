@@ -867,6 +867,7 @@ fn shortcuts_page(_app: &App) -> Element<'_, Message> {
         .title("Everywhere")
         .add(key("Ctrl+,", "Settings"))
         .add(key("Ctrl+P", "Go to a file of the session"))
+        .add(key("Ctrl+Shift+O  \u{b7}  g s", "Go to a symbol of the document (g s in vim's normal mode; @ in Ctrl+P too)"))
         .add(key("Ctrl+=  ·  Ctrl+−  ·  Ctrl+0", "Larger, smaller and default content size"))
         .add(key("Alt+Left", "Back to where Ctrl+click came from"))
         .add(key("Ctrl+1  \u{b7}  Ctrl+2", "The document as Literate, as Source"))

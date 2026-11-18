@@ -2275,3 +2275,146 @@ fn ctrl_p_is_the_window_s_in_every_editor_and_field() {
         assert!(matches!(super::app_key(event.clone(), status, cosmic::iced::window::Id::RESERVED), Some(Message::FilePickerShortcut(_))), "{status:?}");
     }
 }
+
+// ----- Go to symbol (Ctrl+Shift+O, g s, @ in Ctrl+P)
+
+fn ctrl_shift_o() -> Message {
+    Message::SymbolPickerShortcut(cosmic::iced::window::Id::RESERVED)
+}
+
+fn listed_symbols(app: &App) -> (Vec<String>, Option<String>) {
+    app.shell.file_picker.open.as_ref().expect("the picker is open").symbols_for_tests().expect("searching symbols")
+}
+
+fn document_symbols(app: &App) -> Vec<super::doc_symbols::Symbol> {
+    let ws = app.workspace.as_ref().unwrap();
+    super::doc_symbols::symbols(ws.theory.as_ref().unwrap(), &*app.table(&ws.machine))
+}
+
+fn caret(app: &App) -> usize {
+    app.workspace.as_ref().unwrap().theory.as_ref().unwrap().cursor
+}
+
+/// Ctrl+Shift+O lists the document's symbols in order, the one the caret is in selected; moving
+/// the selection shows each in the document, and Esc puts the caret back where it was
+#[test]
+fn ctrl_shift_o_lists_the_document_s_symbols_and_esc_returns_to_the_caret() {
+    let (mut app, mut receiver) = picker_app("fs-open");
+    let all = document_symbols(&app);
+    assert!(all.len() >= 3, "the demo has symbols: {all:?}");
+    // (the caret in the second symbol)
+    let at = all[1].start + 1;
+    app.workspace.as_mut().unwrap().theory.as_mut().unwrap().cursor = at;
+    let _ = picker_update(&mut app, ctrl_shift_o());
+    let (names, selected) = listed_symbols(&app);
+    assert_eq!(names, all.iter().map(|s| s.name.clone()).collect::<Vec<_>>());
+    assert_eq!(selected.as_deref(), Some(all[1].name.as_str()));
+    assert!(requests(&mut receiver).iter().all(|r| r["op"] != "project_files"), "symbols need nothing from the host");
+    for light in [false, true] {
+        draw_in(light, || header_and_list(&app), if light { "header-go-to-symbol-light" } else { "header-go-to-symbol-dark" }, Size::new(1400.0, 408.0));
+    }
+    // ↓ shows the next symbol in the document
+    let _ = picker_update(&mut app, Message::FilePickerKey(cosmic::iced::window::Id::RESERVED, super::file_picker::Key::Down));
+    assert_eq!(caret(&app), all[2].start);
+    assert!(app.shell.file_picker.open.is_some());
+    // Esc: back to the caret, and nothing recorded for Back
+    let _ = picker_update(&mut app, Message::FilePickerKey(cosmic::iced::window::Id::RESERVED, super::file_picker::Key::Escape));
+    assert!(app.shell.file_picker.open.is_none());
+    assert_eq!(caret(&app), at);
+    assert!(app.back.is_empty());
+}
+
+/// A name typed and Enter goes to its symbol; Back returns to where the caret was
+#[test]
+fn enter_goes_to_the_symbol_typed_and_back_returns() {
+    let (mut app, _receiver) = picker_app("fs-enter");
+    let all = document_symbols(&app);
+    let target = all.iter().rev().find(|s| s.level.is_none()).expect("a statement or definition").clone();
+    let at = 3;
+    app.workspace.as_mut().unwrap().theory.as_mut().unwrap().cursor = at;
+    let _ = picker_update(&mut app, ctrl_shift_o());
+    let _ = app.set_field(super::fields::Field::ProjectFiles, target.name.clone());
+    assert_eq!(listed_symbols(&app).1.as_deref(), Some(target.name.as_str()));
+    let _ = picker_update(&mut app, Message::FilePickerAccept(None));
+    assert!(app.shell.file_picker.open.is_none());
+    assert_eq!(caret(&app), target.start);
+    let path = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().path.clone();
+    let t = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+    assert_eq!(app.back.last(), Some(&(path, App::host_offset(t, at))));
+    let _ = picker_update(&mut app, Message::Back);
+    assert_eq!(caret(&app), at);
+}
+
+/// `@` typed first in Ctrl+P's search searches the document's symbols; taken away, the files again
+#[test]
+fn an_at_sign_in_ctrl_p_turns_the_search_to_symbols() {
+    let (mut app, _receiver) = picker_app("fs-at");
+    let all = document_symbols(&app);
+    let _ = picker_update(&mut app, ctrl_p());
+    assert!(app.shell.file_picker.open.as_ref().unwrap().symbols_for_tests().is_none());
+    let _ = app.set_field(super::fields::Field::ProjectFiles, "@".into());
+    assert_eq!(listed_symbols(&app).0.len(), all.len());
+    let name = &all[0].name;
+    let _ = app.set_field(super::fields::Field::ProjectFiles, format!("@{name}"));
+    assert_eq!(listed_symbols(&app).0.first(), Some(name));
+    let _ = app.set_field(super::fields::Field::ProjectFiles, "".into());
+    assert!(app.shell.file_picker.open.as_ref().unwrap().symbols_for_tests().is_none());
+    assert_eq!(shown(&app), ["lib/Base.thy", "More.thy", "ROOT"]);
+    // Ctrl+Shift+O and Ctrl+P switch an open picker between them
+    let _ = picker_update(&mut app, ctrl_shift_o());
+    assert!(app.shell.file_picker.open.as_ref().unwrap().symbols_for_tests().is_some());
+    let _ = picker_update(&mut app, ctrl_p());
+    assert!(app.shell.file_picker.open.as_ref().unwrap().symbols_for_tests().is_none());
+}
+
+/// A click on a symbol's row goes there
+#[test]
+fn a_click_on_a_symbol_goes_there() {
+    let (mut app, _receiver) = picker_app("fs-click");
+    let all = document_symbols(&app);
+    let _ = picker_update(&mut app, ctrl_shift_o());
+    let size = Size::new(1400.0, 408.0);
+    let y = 48.0 + 4.0 + 34.0 + 17.0;
+    let x = (0..1400u32).step_by(4)
+        .find(|x| clicks(header_and_list(&app), Point::new(*x as f32, y), size).iter().any(|m| matches!(m, Message::FilePickerSymbol(_))))
+        .expect("a symbol's row");
+    for m in clicks(header_and_list(&app), Point::new(x as f32, y), size) {
+        let _ = picker_update(&mut app, m);
+    }
+    assert!(app.shell.file_picker.open.is_none());
+    assert_eq!(caret(&app), all[1].start);
+}
+
+/// Ctrl+Shift+O reaches the window from editors and fields; `g s` in vim's normal mode opens it
+#[test]
+fn ctrl_shift_o_and_g_s_open_the_symbols() {
+    use cosmic::iced::keyboard::{Key, Location, Modifiers, key::Physical};
+    use cosmic::widget::text_editor::{KeyPress, Status};
+    let shifted = Modifiers::COMMAND | Modifiers::SHIFT;
+    for key in ["o", "O"] {
+        let press = KeyPress {
+            key: Key::Character(key.into()),
+            modified_key: Key::Character(key.into()),
+            physical_key: Physical::Unidentified(cosmic::iced::keyboard::key::NativeCode::Unidentified),
+            modifiers: shifted,
+            text: None,
+            status: Status::Focused { is_hovered: false },
+        };
+        for vim in [None, Some(super::vim::Mode::Normal)] {
+            assert!(super::view::resolve_key_binding(press.clone(), false, vim, super::EditorTarget::Source).is_none(), "{key} {vim:?}");
+        }
+        let event = cosmic::iced::Event::Keyboard(cosmic::iced::keyboard::Event::KeyPressed {
+            key: Key::Character(key.into()),
+            modified_key: Key::Character(key.into()),
+            physical_key: Physical::Unidentified(cosmic::iced::keyboard::key::NativeCode::Unidentified),
+            location: Location::Standard,
+            modifiers: shifted,
+            text: None,
+            repeat: false,
+        });
+        assert!(matches!(super::app_key(event, cosmic::iced::event::Status::Captured, cosmic::iced::window::Id::RESERVED), Some(Message::SymbolPickerShortcut(_))));
+    }
+    let (mut app, _receiver) = picker_app("fs-vim");
+    let _ = app.vim_ops(vec![super::vim::Op::Symbols]);
+    assert!(app.shell.file_picker.open.as_ref().is_some_and(|o| o.symbols_for_tests().is_some()));
+}
