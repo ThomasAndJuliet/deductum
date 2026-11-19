@@ -220,3 +220,29 @@ fn a_count_over_all_of_a_cells_lines_takes_the_cell() {
     assert_eq!(source(&mut app), "theory G imports Main begin\n\nlemma bar: \"True\" by simp\n\nend\n");
     assert_eq!(app.vim.register, "lemma foo: \"a = b\"\n  apply simp\n  apply auto\n  by simp\n");
 }
+
+/// A `d` and then something other than vim keys: the `d` is forgotten, so the next `d` starts a
+/// command of its own rather than deleting a line where the caret has gone
+#[test]
+fn a_click_an_arrow_key_or_another_cell_cancels_a_pending_d() {
+    use cosmic::widget::text_editor::{Action, Motion};
+    let mut app = app(Mode::Source, "a\nb\nc\n");
+    keys(&mut app, "d");
+    let _ = cosmic::Application::update(&mut app, super::Message::SourceAction(Action::Click(cosmic::iced::Point::new(10.0, 30.0))));
+    keys(&mut app, "d");
+    assert_eq!(source(&mut app), "a\nb\nc\n", "a click");
+    let mut app = self::app(Mode::Source, "a\nb\nc\n");
+    keys(&mut app, "d");
+    let _ = cosmic::Application::update(&mut app, super::Message::SourceAction(Action::Move(Motion::Down)));
+    keys(&mut app, "d");
+    assert_eq!(source(&mut app), "a\nb\nc\n", "an arrow key");
+    let mut app = self::app(Mode::Literate, T);
+    open(&mut app, "lemma foo");
+    keys(&mut app, "d");
+    let _ = cosmic::Application::update(&mut app, super::Message::CloseBlock);
+    open(&mut app, "lemma bar");
+    keys(&mut app, "d");
+    assert_eq!(source(&mut app), T, "another cell");
+    keys(&mut app, "d");
+    assert_eq!(source(&mut app), T.replace("lemma bar: \"True\" by simp\n\n", ""), "and dd there is its own");
+}
