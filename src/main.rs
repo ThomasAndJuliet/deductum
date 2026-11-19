@@ -88,6 +88,8 @@ mod snapshot_shrink;
 #[cfg(test)]
 mod snapshot_code;
 #[cfg(test)]
+mod snapshot_vim_lines;
+#[cfg(test)]
 #[path = "../vendor/cosmic-text/tests/hanging_indent.rs"]
 mod cosmic_text_hanging;
 #[cfg(test)]
@@ -218,6 +220,14 @@ pub enum LeftMode {
     Outline,
     Theorems,
     Problems,
+}
+
+/// Where on a line vim keys put the caret
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum LineSpot {
+    Start,
+    End,
+    FirstNonBlank,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -919,6 +929,10 @@ impl App {
                     self.vim.register = format!("{}\n", lines.join("\n"));
                     self.vim.linewise = true;
                 }
+                vim::Op::Lines { op, up, down, exact } => {
+                    let task = self.vim_lines(op, up, down, exact, in_block);
+                    tasks.push(task);
+                }
                 vim::Op::Paste { after } => {
                     let reg = self.vim.register.clone();
                     if reg.is_empty() {
@@ -927,11 +941,11 @@ impl App {
                     let paste = |s: String| A::Edit(E::Paste(Arc::new(s)));
                     if self.vim.linewise {
                         let body = reg.trim_end_matches('\n').to_string();
+                        // (at the line's own end or start, not its row's: a line can wrap)
+                        self.vim_caret_on_line(in_block, if after { LineSpot::End } else { LineSpot::Start });
                         if after {
-                            tasks.push(self.update(act(A::Move(M::End))));
                             tasks.push(self.update(act(paste(format!("\n{body}")))));
                         } else {
-                            tasks.push(self.update(act(A::Move(M::Home))));
                             tasks.push(self.update(act(paste(format!("{body}\n")))));
                         }
                     } else {
@@ -972,6 +986,98 @@ impl App {
             }
         }
         Task::batch(tasks)
+    }
+
+    /// The editor vim keys act on: the open block's, or the source view's
+    fn vim_content(&mut self, in_block: bool) -> Option<&mut cosmic::widget::text_editor::Content> {
+        let t = self.workspace.as_mut()?.theory.as_mut()?;
+        match &mut t.block_editor {
+            Some(be) if in_block => Some(&mut be.content),
+            _ => Some(&mut t.source),
+        }
+    }
+
+    /// Put the caret at a place on its own line (or on line `line`) and tell the theory where it is
+    fn vim_place(&mut self, in_block: bool, line: Option<usize>, spot: LineSpot) {
+        use cosmic::widget::text_editor::Position;
+        let Some(content) = self.vim_content(in_block) else { return };
+        let line = line.unwrap_or(content.cursor().position.line).min(content.line_count().saturating_sub(1));
+        let text = content.line(line).map(|l| l.text.to_string()).unwrap_or_default();
+        let column = match spot {
+            LineSpot::Start => 0,
+            LineSpot::End => text.len(),
+            // (Vim's `^`: the first character that is not blank, or the last of a blank line)
+            LineSpot::FirstNonBlank => text
+                .char_indices()
+                .find(|(_, c)| !c.is_whitespace())
+                .or_else(|| text.char_indices().last())
+                .map_or(0, |(i, _)| i),
+        };
+        editor::place(content, Position { line, column });
+        if let Some(t) = self.workspace.as_mut().and_then(|w| w.theory.as_mut()) {
+            if in_block && t.block_editor.is_some() {
+                t.sync_block_cursor();
+            } else {
+                t.sync_source_cursor();
+            }
+        }
+    }
+
+    fn vim_caret_on_line(&mut self, in_block: bool, spot: LineSpot) {
+        self.vim_place(in_block, None, spot);
+    }
+
+    /// `dd`, `cc`, `dj`, `dk` and the like: the lines from `up` above the caret's to `down` below,
+    /// as the text has them (a wrapped line is one line), into the register, and then out of the
+    /// text or replaced by one line with the first one's indent. A last line with nothing on it
+    /// after the text's final line break is not a line, as in Vim
+    fn vim_lines(&mut self, op: vim::LineOp, up: usize, down: usize, exact: bool, in_block: bool) -> Task<Message> {
+        use cosmic::widget::text_editor::{Action as A, Cursor, Edit as E, Position};
+        let Some(content) = self.vim_content(in_block) else { return Task::none() };
+        let lines: Vec<String> = (0..content.line_count()).map(|i| content.line(i).map(|l| l.text.to_string()).unwrap_or_default()).collect();
+        let caret = content.cursor().position.line.min(lines.len().saturating_sub(1));
+        let phantom = lines.len() > 1 && lines.last().is_some_and(String::is_empty) && caret + 1 < lines.len();
+        let count = if phantom { lines.len() - 1 } else { lines.len() };
+        if lines.is_empty() || (exact && (caret < up || caret + down >= count)) {
+            if op == vim::LineOp::Change {
+                self.vim.mode = vim::Mode::Normal;
+            }
+            return Task::none();
+        }
+        let first = caret.saturating_sub(up);
+        let last = (caret + down).min(count - 1);
+        self.vim.register = lines[first..=last].iter().map(|l| format!("{l}\n")).collect();
+        self.vim.linewise = true;
+        let at = |line: usize, column: usize| Position { line, column };
+        let (from, to, edit, caret_line) = match op {
+            vim::LineOp::Yank => {
+                if up > 0 {
+                    self.vim_place(in_block, Some(first), LineSpot::FirstNonBlank);
+                }
+                return Task::none();
+            }
+            vim::LineOp::Change => {
+                let indent: String = lines[first].chars().take_while(|c| c.is_whitespace()).collect();
+                (at(first, 0), at(last, lines[last].len()), E::Paste(Arc::new(indent)), None)
+            }
+            // (the line break after the last line goes with them; after the text's last line,
+            // the one before the first)
+            vim::LineOp::Delete if last + 1 < lines.len() => (at(first, 0), at(last + 1, 0), E::Delete, Some(first)),
+            vim::LineOp::Delete if first > 0 => (at(first - 1, lines[first - 1].len()), at(last, lines[last].len()), E::Delete, Some(first - 1)),
+            vim::LineOp::Delete => (at(0, 0), at(last, lines[last].len()), E::Delete, Some(0)),
+        };
+        let Some(content) = self.vim_content(in_block) else { return Task::none() };
+        content.move_to(Cursor { position: to, selection: Some(from) });
+        let task = self.update(if in_block { Message::BlockAction(A::Edit(edit)) } else { Message::SourceAction(A::Edit(edit)) });
+        if let Some(line) = caret_line {
+            // (on the line that took their place, or the new last line; not the empty one after
+            // the text's final line break)
+            let Some(content) = self.vim_content(in_block) else { return task };
+            let n = content.line_count();
+            let count = if n > 1 && content.line(n - 1).is_some_and(|l| l.text.is_empty()) { n - 1 } else { n };
+            self.vim_place(in_block, Some(line.min(count.saturating_sub(1))), LineSpot::FirstNonBlank);
+        }
+        task
     }
 
     /// The caret in the editor in use, in that editor's coordinates (the block editor's from the
