@@ -246,3 +246,12 @@ fn a_click_an_arrow_key_or_another_cell_cancels_a_pending_d() {
     keys(&mut app, "d");
     assert_eq!(source(&mut app), T.replace("lemma bar: \"True\" by simp\n\n", ""), "and dd there is its own");
 }
+
+#[test]
+fn d3d_takes_three_lines_as_3dd_does() {
+    let mut app = app(Mode::Source, "a\nb\nc\nd\ne\n");
+    caret_at(&mut app, 1, 0);
+    keys(&mut app, "d 3 d");
+    assert_eq!(source(&mut app), "a\ne\n");
+    assert_eq!(app.vim.register, "b\nc\nd\n");
+}

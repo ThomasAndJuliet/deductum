@@ -147,8 +147,9 @@ impl Vim {
         let count: usize = digits.parse().unwrap_or(1).max(1);
         let op_pending: String = self.pending.chars().skip_while(|c| c.is_ascii_digit()).collect();
         let visual = matches!(self.mode, Mode::Visual | Mode::VisualLine);
-        // Counts
-        if key.chars().all(|c| c.is_ascii_digit()) && !(key == "0" && self.pending.is_empty()) {
+        // Counts, before an operator or after it (`3dd`, `d3d`); a 0 that does not go on a count
+        // is the start of the line (`0`, `d0`)
+        if key.chars().all(|c| c.is_ascii_digit()) && !(key == "0" && !self.pending.ends_with(|c: char| c.is_ascii_digit())) {
             self.pending.push_str(key);
             return Vec::new();
         }
@@ -193,7 +194,10 @@ impl Vim {
         }
         // Operators: d, c, y followed by a motion, the same key (whole lines), or iw/aw
         if let Some(op) = op_pending.chars().next().filter(|c| matches!(c, 'd' | 'c' | 'y')) {
-            let rest = &op_pending[1..];
+            // (a count after the operator multiplies the one before it: `2d3d` is six lines)
+            let after: String = op_pending[1..].chars().take_while(|c| c.is_ascii_digit()).collect();
+            let rest = &op_pending[1 + after.len()..];
+            let count = count * after.parse::<usize>().unwrap_or(1).max(1);
             if rest == "i" || rest == "a" {
                 self.pending.clear();
                 if key == "w" || key == "W" {
@@ -424,6 +428,27 @@ mod tests {
         v.key("c", false);
         v.key("j", false);
         assert_eq!(v.mode, Mode::Insert);
+    }
+
+    /// A count after the operator counts as one before it does, and the two multiply; a 0 that
+    /// starts no count is the start of the line
+    #[test]
+    fn a_count_can_come_after_the_operator() {
+        let ops = |keys: &[&str]| {
+            let mut v = Vim::default();
+            let ops = keys.iter().flat_map(|k| v.key(k, false)).collect::<Vec<_>>();
+            assert_eq!(v.pending, "", "{keys:?}");
+            ops
+        };
+        let delete = |down| vec![Op::Lines { op: LineOp::Delete, up: 0, down, exact: false }];
+        assert_eq!(ops(&["d", "3", "d"]), delete(2));
+        assert_eq!(ops(&["2", "d", "3", "d"]), delete(5));
+        assert_eq!(ops(&["d", "1", "0", "d"]), delete(9));
+        assert_eq!(ops(&["y", "2", "y"]), vec![Op::YankLines(2)]);
+        assert_eq!(ops(&["d", "2", "j"]), vec![Op::Lines { op: LineOp::Delete, up: 0, down: 2, exact: true }]);
+        assert_eq!(ops(&["d", "2", "w"]).iter().filter(|op| **op == Op::Act(Action::Select(Motion::WordRight))).count(), 2);
+        assert_eq!(ops(&["d", "0"]).first(), Some(&Op::Act(Action::Select(Motion::Home))));
+        assert_eq!(ops(&["1", "0", "j"]).len(), 10);
     }
 
     #[test]
