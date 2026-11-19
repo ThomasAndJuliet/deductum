@@ -147,11 +147,18 @@ fn char_of(table: &dyn Codec, symbol: &str) -> Option<char> {
     }
 }
 
+/// A character of prose, so that it reads as itself and does not open Markdown. Brackets are
+/// character references, not `\[` and `\]`: the renderer reads those as LaTeX display maths
 fn escape(c: char, out: &mut String) {
-    if matches!(c, '*' | '_' | '#' | '`' | '[' | ']' | '<' | '>' | '|') {
-        out.push('\\');
+    match c {
+        '[' => out.push_str("&#91;"),
+        ']' => out.push_str("&#93;"),
+        '*' | '_' | '#' | '`' | '<' | '>' | '|' => {
+            out.push('\\');
+            out.push(c);
+        }
+        _ => out.push(c),
     }
-    out.push(c);
 }
 
 /// Markdown for the source of a document text
@@ -653,6 +660,29 @@ mod tests {
     fn escapes_markdown_in_prose() {
         let table = Table::fallback();
         assert_eq!(to_markdown("a_b *c*", &table), "a\\_b \\*c\\*");
+    }
+
+    /// Brackets in prose read as brackets: not a link, and not `\[…\]`, which the renderer
+    /// would set as display maths and break the paragraph at (`v[d]` read as `v`, a centred `d`)
+    #[test]
+    fn brackets_in_prose_stay_in_the_line() {
+        use prose_render::markdown::{Block, parse};
+        let table = Table::fallback();
+        let one_paragraph = |source: &str, expected: &str| {
+            let md = to_markdown(source, &table);
+            let doc = parse(&md);
+            let [Block::Text(paragraph)] = doc.blocks.as_slice() else {
+                panic!("{source:?} → {md:?}: one paragraph, not {:?}", doc.blocks);
+            };
+            let text: String = paragraph.runs.iter().map(|r| r.text.as_str()).collect();
+            assert_eq!(text, expected, "{md:?}");
+            assert!(paragraph.runs.iter().all(|r| !r.style.math && r.link.is_none()), "{md:?}: {:?}", paragraph.runs);
+        };
+        one_paragraph(
+            "This is the convention for \\<open>v[d]\\<close> in the paper.",
+            "This is the convention for ‹v[d]› in the paper.",
+        );
+        one_paragraph("see [x](y) and [z] and x[i]", "see [x](y) and [z] and x[i]");
     }
 
     #[test]
