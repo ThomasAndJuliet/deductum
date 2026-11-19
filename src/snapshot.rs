@@ -119,6 +119,7 @@ pub fn demo_app(mode: Mode) -> App {
         prose_pointer: None,
         prose_hover: None,
         vim_block: false,
+        vim_dispatching: false,
         goal_placement_override: None,
         sessions,
         next_id: 0,

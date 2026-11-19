@@ -46,6 +46,7 @@ pub(super) fn app(target: link::Target) -> App {
         prose_pointer: None,
         prose_hover: None,
         vim_block: false,
+        vim_dispatching: false,
         goal_placement_override: None,
         sessions: BTreeMap::new(),
         next_id: 0,

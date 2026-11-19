@@ -735,6 +735,9 @@ pub struct App {
     pub prose_hover: Option<(usize, prose_render::rich::Pos)>,
     /// Vim's block cursor is showing: the character under the caret, selected
     pub vim_block: bool,
+    /// Vim keys' own actions are being carried out: an editor action that is not one of them (a
+    /// click, an arrow key) leaves an unfinished command, as the `d` of a `dd`
+    pub vim_dispatching: bool,
     /// A placement for the proof state instead of the rule (comparing them in pictures)
     pub goal_placement_override: Option<view::GoalPlacement>,
     pub sessions: BTreeMap<(String, String), Value>,
@@ -774,6 +777,13 @@ pub struct App {
 impl App {
     /// Apply the vim machine's ops to the editor in use
     fn vim_ops(&mut self, ops: Vec<vim::Op>) -> Task<Message> {
+        let was = std::mem::replace(&mut self.vim_dispatching, true);
+        let task = self.vim_ops_dispatched(ops);
+        self.vim_dispatching = was;
+        task
+    }
+
+    fn vim_ops_dispatched(&mut self, ops: Vec<vim::Op>) -> Task<Message> {
         use cosmic::widget::text_editor::{Action as A, Edit as E, Motion as M};
         let mut tasks = Vec::new();
         let mut remaining = ops.into_iter();
@@ -3098,6 +3108,7 @@ impl cosmic::Application for App {
             prose_pointer: None,
             prose_hover: None,
             vim_block: false,
+            vim_dispatching: false,
             goal_placement_override: None,
             sessions: BTreeMap::new(),
             next_id: 0,
@@ -3209,6 +3220,18 @@ impl cosmic::Application for App {
 
 impl App {
     fn update_message(&mut self, message: Message) -> Task<Message> {
+        // An unfinished vim command (the `d` of a `dd`) is left when the caret, the text or the
+        // cell changes other than by vim keys: a click, an arrow key, typing, another cell
+        if !self.vim_dispatching
+            && !self.vim.pending.is_empty()
+            && match &message {
+                Message::BlockAction(action) | Message::SourceAction(action) => !matches!(action, cosmic::widget::text_editor::Action::Scroll { .. }),
+                Message::EditBlock(_) | Message::CloseBlock => true,
+                _ => false,
+            }
+        {
+            self.vim.pending.clear();
+        }
         // Esc closes the agent-session popover (a click outside does too: the popover's own)
         #[cfg(not(windows))]
         if self.shell.agent.open
