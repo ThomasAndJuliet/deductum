@@ -197,3 +197,26 @@ fn yk_yanks_this_line_and_the_one_above_and_goes_up() {
     assert_eq!(app.vim.register, "  b\nc\n");
     assert_eq!(caret(&mut app), (1, 2));
 }
+
+#[test]
+fn dd_on_a_cells_only_line_yanks_it_and_the_cell_goes() {
+    let mut app = app(Mode::Literate, T);
+    app.vim.register = "older".into();
+    open(&mut app, "lemma bar");
+    keys(&mut app, "d d");
+    assert_eq!(source(&mut app), T.replace("lemma bar: \"True\" by simp\n\n", ""));
+    assert_eq!((app.vim.register.as_str(), app.vim.linewise), ("lemma bar: \"True\" by simp\n", true));
+    // (and it can be put back in another cell)
+    open(&mut app, "lemma foo");
+    keys(&mut app, "p");
+    assert!(source(&mut app).contains("lemma foo: \"a = b\"\nlemma bar: \"True\" by simp\n"), "{:?}", source(&mut app));
+}
+
+#[test]
+fn a_count_over_all_of_a_cells_lines_takes_the_cell() {
+    let mut app = app(Mode::Literate, T);
+    open(&mut app, "lemma foo");
+    keys(&mut app, "4 d d");
+    assert_eq!(source(&mut app), "theory G imports Main begin\n\nlemma bar: \"True\" by simp\n\nend\n");
+    assert_eq!(app.vim.register, "lemma foo: \"a = b\"\n  apply simp\n  apply auto\n  by simp\n");
+}

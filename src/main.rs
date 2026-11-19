@@ -1048,6 +1048,16 @@ impl App {
         let last = (caret + down).min(count - 1);
         self.vim.register = lines[first..=last].iter().map(|l| format!("{l}\n")).collect();
         self.vim.linewise = true;
+        // All of a cell's lines (`dd` on its only one): the cell goes, as Backspace in an empty
+        // cell takes it (a paragraph of prose stays, emptied: it is part of a text cell)
+        let whole_cell = op == vim::LineOp::Delete
+            && first == 0
+            && last + 1 == count
+            && in_block
+            && self.workspace.as_ref().and_then(|w| w.theory.as_ref()).is_some_and(|t| t.mode == Mode::Literate && t.block_editor.as_ref().is_some_and(|be| be.wrap.is_none()));
+        if whole_cell {
+            return self.delete_open_block();
+        }
         let at = |line: usize, column: usize| Position { line, column };
         let (from, to, edit, caret_line) = match op {
             vim::LineOp::Yank => {
@@ -4716,18 +4726,6 @@ impl App {
                     if normal {
                         t.break_step();
                     }
-                }
-                // `dd` on a block's only line: the block goes
-                if key == "d"
-                    && self.vim.pending == "d"
-                    && self.vim.mode == vim::Mode::Normal
-                    && self.workspace.as_ref().and_then(|w| w.theory.as_ref()).is_some_and(|t| {
-                        t.mode == Mode::Literate && t.block_editor.as_ref().is_some_and(|be| be.wrap.is_none() && be.content.line_count() == 1)
-                    })
-                {
-                    self.vim.pending.clear();
-                    self.vim_caret(false);
-                    return self.delete_open_block();
                 }
                 self.vim_caret(false);
                 if key == "Escape" && self.vim.mode == vim::Mode::Insert {
