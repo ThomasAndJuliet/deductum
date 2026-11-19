@@ -35,6 +35,11 @@ pub enum Op {
     YankSelection(bool),
     /// Copy the current line(s) into the register
     YankLines(usize),
+    /// An operator on whole lines, as the text has them (not as they wrap): from `up` lines
+    /// above the caret's to `down` below it. With `exact`, nothing if those lines are not all
+    /// there (`dj` on the last line, `dk` on the first); else as many as there are (`5dd` two
+    /// lines from the end)
+    Lines { op: LineOp, up: usize, down: usize, exact: bool },
     Paste { after: bool },
     /// A new line below (true) or above, indented, in insert mode
     OpenLine(bool),
@@ -58,6 +63,18 @@ pub enum Op {
     Problem(bool),
     /// Comment out these lines from the caret's, or take their comments away (`g c c`)
     ToggleComment(usize),
+}
+
+/// What an operator does to whole lines
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LineOp {
+    /// Into the register and out of the text (`dd`, `dj`)
+    Delete,
+    /// Into the register, and replaced by one line with the first one's indent, in insert mode
+    /// (`cc`, `cj`)
+    Change,
+    /// Into the register (`yj`, `yk`)
+    Yank,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -189,30 +206,32 @@ impl Vim {
                 return Vec::new();
             }
             self.pending.clear();
+            let line_op = match op {
+                'd' => LineOp::Delete,
+                'c' => LineOp::Change,
+                _ => LineOp::Yank,
+            };
             if key == op.to_string() {
-                // dd, cc, yy: whole lines
+                // dd, cc, yy: this line and the count's others below it
                 if op == 'y' {
                     return vec![YankLines(count)];
                 }
-                let mut sel = vec![Act(Action::Move(Motion::Home))];
-                sel.extend((0..count).map(|_| Act(Action::Select(Motion::Down))));
                 if op == 'c' {
-                    // keep the line itself, cleared
-                    sel = vec![Act(Action::Move(Motion::Home)), Act(Action::Select(Motion::End))];
+                    self.mode = Mode::Insert;
                 }
-                return self.apply_operator(op, sel, op != 'c');
+                return vec![Lines { op: line_op, up: 0, down: count - 1, exact: false }];
+            }
+            // dj, dk (and c, y): this line and the count's others below or above it, all there
+            if key == "j" || key == "k" {
+                if op == 'c' {
+                    self.mode = Mode::Insert;
+                }
+                let (up, down) = if key == "j" { (0, count) } else { (count, 0) };
+                return vec![Lines { op: line_op, up, down, exact: true }];
             }
             if let Some(m) = motion(key) {
                 let sel: Vec<Op> = (0..count).map(|_| Act(Action::Select(m))).collect();
-                let linewise = matches!(key, "j" | "k");
-                let sel = if linewise {
-                    let mut s = vec![Act(Action::Move(Motion::Home))];
-                    s.extend((0..count + 1).map(|_| Act(Action::Select(m))));
-                    s
-                } else {
-                    sel
-                };
-                return self.apply_operator(op, sel, linewise);
+                return self.apply_operator(op, sel, false);
             }
             return Vec::new();
         }
@@ -386,6 +405,27 @@ mod tests {
         assert_eq!(v.pending, "");
     }
 
+    /// Operators on whole lines go to the app as lines, not as moves over rows (which a wrapped
+    /// line has several of, and the last line has none below)
+    #[test]
+    fn whole_line_operators_name_their_lines() {
+        let lines = |keys: &[&str]| {
+            let mut v = Vim::default();
+            keys.iter().flat_map(|k| v.key(k, false)).collect::<Vec<_>>()
+        };
+        let op = |op, up, down, exact| vec![Op::Lines { op, up, down, exact }];
+        assert_eq!(lines(&["d", "d"]), op(LineOp::Delete, 0, 0, false));
+        assert_eq!(lines(&["3", "d", "d"]), op(LineOp::Delete, 0, 2, false));
+        assert_eq!(lines(&["d", "j"]), op(LineOp::Delete, 0, 1, true));
+        assert_eq!(lines(&["2", "d", "k"]), op(LineOp::Delete, 2, 0, true));
+        assert_eq!(lines(&["c", "c"]), op(LineOp::Change, 0, 0, false));
+        assert_eq!(lines(&["y", "k"]), op(LineOp::Yank, 1, 0, true));
+        let mut v = Vim::default();
+        v.key("c", false);
+        v.key("j", false);
+        assert_eq!(v.mode, Mode::Insert);
+    }
+
     #[test]
     fn comments_go_on_after_the_indent_and_come_off_again() {
         let isabelle = ("(* ", " *)");
@@ -424,6 +464,6 @@ mod tests {
         v.key("g", false);
         assert_eq!(v.key("g", false), vec![Op::Act(Action::Move(Motion::DocumentStart))]);
         v.key("d", false);
-        assert_eq!(v.key("d", false).last(), Some(&Op::Act(Action::Edit(Edit::Delete))));
+        assert_eq!(v.key("d", false), vec![Op::Lines { op: LineOp::Delete, up: 0, down: 0, exact: false }]);
     }
 }

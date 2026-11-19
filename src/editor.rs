@@ -1823,6 +1823,11 @@ impl Theory {
     }
 
     /// The source offset of the block editor's caret, for the proof state
+    /// The caret in the source after the source view's caret was put somewhere directly
+    pub fn sync_source_cursor(&mut self) {
+        self.cursor = self.decoded.to_source(self.lines.offset(&self.decoded.text, self.source.cursor().position));
+    }
+
     pub fn sync_block_cursor(&mut self) {
         let Some(be) = &self.block_editor else { return };
         let shown = be.shown();
