@@ -90,6 +90,8 @@ mod snapshot_code;
 #[cfg(test)]
 mod snapshot_vim_lines;
 #[cfg(test)]
+mod snapshot_indent;
+#[cfg(test)]
 #[path = "../vendor/cosmic-text/tests/hanging_indent.rs"]
 mod cosmic_text_hanging;
 #[cfg(test)]
@@ -222,6 +224,11 @@ pub enum LeftMode {
     Problems,
 }
 
+/// The column a line's text before the caret ends at, a tab going on to the next tab stop
+fn column_of(before: &str, width: usize) -> usize {
+    before.chars().fold(0, |column, c| if c == '\t' { (column / width + 1) * width } else { column + 1 })
+}
+
 /// Where on a line vim keys put the caret
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum LineSpot {
@@ -297,7 +304,10 @@ pub enum Message {
     Complete(usize),
     /// Enter: a new line indented for the proof structure
     Newline,
-    /// Shift+Tab: remove up to an indent (a setting) of spaces from the current line
+    /// Tab: the selected lines in by an indent (a setting); with no selection, spaces to the next
+    /// tab stop
+    Indent,
+    /// Shift+Tab: the selected lines, or the caret's, out by up to an indent
     Unindent,
     /// A key for the vim machine (key, with Ctrl)
     Vim(String, bool),
@@ -1037,6 +1047,119 @@ impl App {
         self.vim_place(in_block, None, spot);
     }
 
+    /// Whether Tab, Shift+Tab and Enter go to the open block's editor (else the source view's);
+    /// none in the literate view with no block open
+    fn editing_in_block(&self) -> Option<bool> {
+        let t = self.workspace.as_ref()?.theory.as_ref()?;
+        let in_block = self.nav_target.map_or(t.block_editor.is_some() && t.mode == Mode::Literate, |target| target == EditorTarget::Block);
+        (in_block || t.mode == Mode::Source).then_some(in_block)
+    }
+
+    /// The lines of the editor in use and its caret and selection's other end (the caret too, with
+    /// no selection)
+    fn editor_lines(&mut self, in_block: bool) -> Option<(Vec<String>, cosmic::widget::text_editor::Position, cosmic::widget::text_editor::Position)> {
+        let content = self.vim_content(in_block)?;
+        let lines = (0..content.line_count()).map(|i| content.line(i).map(|l| l.text.to_string()).unwrap_or_default()).collect();
+        let cursor = content.cursor();
+        Some((lines, cursor.position, cursor.selection.unwrap_or(cursor.position)))
+    }
+
+    /// Replace the text from `from` to `to` in the editor in use with `with`, as one edit, then
+    /// select from `anchor` to `head` (or put the caret there, if they are the same place)
+    fn replace_in_editor(
+        &mut self,
+        in_block: bool,
+        (from, to): (cosmic::widget::text_editor::Position, cosmic::widget::text_editor::Position),
+        with: String,
+        (anchor, head): (cosmic::widget::text_editor::Position, cosmic::widget::text_editor::Position),
+    ) -> Task<Message> {
+        use cosmic::widget::text_editor::{Action as A, Cursor, Edit as E};
+        let Some(content) = self.vim_content(in_block) else { return Task::none() };
+        let task = if from == to && with.is_empty() {
+            Task::none()
+        } else {
+            content.move_to(Cursor { position: to, selection: (from != to).then_some(from) });
+            let edit = if with.is_empty() { E::Delete } else { E::Paste(Arc::new(with)) };
+            self.update(if in_block { Message::BlockAction(A::Edit(edit)) } else { Message::SourceAction(A::Edit(edit)) })
+        };
+        let Some(content) = self.vim_content(in_block) else { return task };
+        content.move_to(Cursor { position: head, selection: (anchor != head).then_some(anchor) });
+        if let Some(t) = self.workspace.as_mut().and_then(|w| w.theory.as_mut()) {
+            if in_block && t.block_editor.is_some() {
+                t.sync_block_cursor();
+            } else {
+                t.sync_source_cursor();
+            }
+        }
+        task
+    }
+
+    /// The lines a selection is on, first and last: the caret's with none. A selection that ends
+    /// at the start of a line does not take that line
+    fn selected_lines(anchor: cosmic::widget::text_editor::Position, head: cosmic::widget::text_editor::Position) -> (usize, usize) {
+        let (start, end) = if (anchor.line, anchor.column) <= (head.line, head.column) { (anchor, head) } else { (head, anchor) };
+        let last = if end.line > start.line && end.column == 0 { end.line - 1 } else { end.line };
+        (start.line, last)
+    }
+
+    /// Tab: with a selection, its lines in by an indent, the blank ones left as they are, and the
+    /// selection kept over the same text; with none, spaces to the next tab stop
+    fn indent(&mut self) -> Task<Message> {
+        use cosmic::widget::text_editor::Position;
+        let Some(in_block) = self.editing_in_block() else {
+            self.status = Some("Click into a block or the source first".into());
+            return Task::none();
+        };
+        if let Some(t) = self.workspace.as_mut().and_then(|w| w.theory.as_mut()) {
+            t.break_step();
+        }
+        let Some((lines, head, anchor)) = self.editor_lines(in_block) else { return Task::none() };
+        let width = settings::indent_width().max(1);
+        if anchor == head {
+            let line = lines.get(head.line).map_or("", String::as_str);
+            let column = column_of(&line[..head.column.min(line.len())], width);
+            let spaces = width - column % width;
+            let caret = Position { line: head.line, column: head.column + spaces };
+            return self.replace_in_editor(in_block, (head, head), " ".repeat(spaces), (caret, caret));
+        }
+        let (first, last) = Self::selected_lines(anchor, head);
+        let changed: Vec<String> = lines[first..=last].iter().map(|l| if l.is_empty() { String::new() } else { format!("{}{l}", " ".repeat(width)) }).collect();
+        // (an end at the start of a line stays there, before the indent, so the whole line stays selected)
+        let shift = |p: Position| {
+            let moved = p.line >= first && p.line <= last && p.column > 0 && !lines[p.line].is_empty();
+            Position { line: p.line, column: p.column + if moved { width } else { 0 } }
+        };
+        let range = (Position { line: first, column: 0 }, Position { line: last, column: lines[last].len() });
+        self.replace_in_editor(in_block, range, changed.join("\n"), (shift(anchor), shift(head)))
+    }
+
+    /// Shift+Tab: the selection's lines, or the caret's, out by up to an indent of spaces, or one
+    /// tab; the caret and the selection stay with their text
+    fn unindent(&mut self) -> Task<Message> {
+        use cosmic::widget::text_editor::Position;
+        let Some(in_block) = self.editing_in_block() else { return Task::none() };
+        let Some((lines, head, anchor)) = self.editor_lines(in_block) else { return Task::none() };
+        let width = settings::indent_width().max(1);
+        let (first, last) = Self::selected_lines(anchor, head);
+        let removed: Vec<usize> = lines[first..=last]
+            .iter()
+            .map(|l| if l.starts_with('\t') { 1 } else { l.chars().take_while(|c| *c == ' ').count().min(width) })
+            .collect();
+        if removed.iter().all(|r| *r == 0) {
+            return Task::none();
+        }
+        if let Some(t) = self.workspace.as_mut().and_then(|w| w.theory.as_mut()) {
+            t.break_step();
+        }
+        let changed: Vec<String> = lines[first..=last].iter().zip(&removed).map(|(l, r)| l[*r..].to_string()).collect();
+        let shift = |p: Position| {
+            let r = if p.line >= first && p.line <= last { removed[p.line - first] } else { 0 };
+            Position { line: p.line, column: p.column.saturating_sub(r) }
+        };
+        let range = (Position { line: first, column: 0 }, Position { line: last, column: lines[last].len() });
+        self.replace_in_editor(in_block, range, changed.join("\n"), (shift(anchor), shift(head)))
+    }
+
     /// `dd`, `cc`, `dj`, `dk` and the like: the lines from `up` above the caret's to `down` below,
     /// as the text has them (a wrapped line is one line), into the register, and then out of the
     /// text or replaced by one line with the first one's indent. A last line with nothing on it
@@ -1272,7 +1395,7 @@ impl App {
     fn nav_editor_intent(message: &Message) -> bool {
         matches!(message, Message::RawVim(..) | Message::Vim(..) | Message::NavOps(..) | Message::NavBinding(..)
             | Message::SourceAction(..) | Message::BlockAction(..) | Message::SourcePage(..) | Message::SourcePageRows(..)
-            | Message::LineMove(..) | Message::Newline | Message::Unindent | Message::Undo | Message::Redo
+            | Message::LineMove(..) | Message::Newline | Message::Indent | Message::Unindent | Message::Undo | Message::Redo
             | Message::CopySelection(..) | Message::Complete(..) | Message::InsertSymbol(..) | Message::WindowKey(..)
             | Message::Escape | Message::DeleteBlock(..) | Message::InsertBlock(..) | Message::Wrap(..)
             | Message::InsertProof(..) | Message::InsertFill(..) | Message::InsertUsing | Message::InsertOutput(..)
@@ -3288,7 +3411,7 @@ impl App {
             } else if matches!(&message,
                 Message::RawVim(..) | Message::Vim(..) | Message::NavOps(..) | Message::NavBinding(..) | Message::SourceAction(..)
                 | Message::BlockAction(..) | Message::SourcePage(..) | Message::SourcePageRows(..)
-                | Message::LineMove(..) | Message::Newline | Message::Unindent | Message::Undo | Message::Redo
+                | Message::LineMove(..) | Message::Newline | Message::Indent | Message::Unindent | Message::Undo | Message::Redo
                 | Message::Save | Message::CopySelection(..) | Message::Complete(..) | Message::InsertSymbol(..)
                 | Message::WindowKey(..) | Message::OpenSession(..) | Message::CloseWorkspace | Message::OpenTheory(..) | Message::FilePickerAccept(..)
                 | Message::SetMode(..) | Message::SetModeEntity(..) | Message::EditBlock(..) | Message::CloseBlock
@@ -4882,32 +5005,8 @@ impl App {
                 let mode = if entity == self.mode_entities[1] { Mode::Source } else { Mode::Literate };
                 return self.update(Message::SetMode(mode));
             }
-            Message::Unindent => {
-                use cosmic::widget::text_editor::{Action as A, Edit as E, Motion as M};
-                let Some(t) = self.workspace.as_ref().and_then(|w| w.theory.as_ref()) else { return Task::none() };
-                let in_block = self.nav_target.map_or(t.block_editor.is_some() && t.mode == Mode::Literate, |target| target == EditorTarget::Block);
-                let line = {
-                    let (text, pos) = match &t.block_editor {
-                        Some(be) if in_block => (be.content.text(), be.content.cursor().position),
-                        _ => (t.decoded.text.clone(), t.source.cursor().position),
-                    };
-                    text.split('\n').nth(pos.line).unwrap_or("").to_string()
-                };
-                let n = line.chars().take_while(|c| *c == ' ').count().min(settings::indent_width());
-                if n == 0 {
-                    return Task::none();
-                }
-                let act = |a: A| if in_block { Message::BlockAction(a) } else { Message::SourceAction(a) };
-                self.nav_atomic = true;
-                let mut tasks = vec![self.update(act(A::Move(M::Home)))];
-                for _ in 0..n {
-                    tasks.push(self.update(act(A::Edit(E::Delete))));
-                }
-                self.nav_atomic = false;
-                if std::mem::take(&mut self.nav_reflow_pending) { tasks.push(self.nav_wait_layout()); }
-                tasks.push(self.flush_edits());
-                return Task::batch(tasks);
-            }
+            Message::Indent => return self.indent(),
+            Message::Unindent => return self.unindent(),
             Message::Newline => {
                 let Some(t) = self.workspace.as_ref().and_then(|w| w.theory.as_ref()) else { return Task::none() };
                 let indent = t.profile.next_indent(&t.line_before_caret());

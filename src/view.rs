@@ -3169,7 +3169,7 @@ pub(super) fn resolve_key_binding(press: text_editor::KeyPress, completing: bool
         Key::Named(Named::Tab) if completing && !m.shift() => Some(text_editor::Binding::Custom(Message::Complete(0))),
         // Tab indents, as in any code editor, instead of moving the focus
         Key::Named(Named::Tab) if m.shift() => Some(text_editor::Binding::Custom(Message::Unindent)),
-        Key::Named(Named::Tab) => Some(text_editor::Binding::Custom(Message::InsertSymbol(" ".repeat(super::settings::indent_width())))),
+        Key::Named(Named::Tab) => Some(text_editor::Binding::Custom(Message::Indent)),
         Key::Character("z") if m.command() && m.shift() => Some(text_editor::Binding::Custom(Message::Redo)),
         Key::Character("z") if m.command() => Some(text_editor::Binding::Custom(Message::Undo)),
         Key::Character("y") if m.command() => Some(text_editor::Binding::Custom(Message::Redo)),
@@ -3200,7 +3200,7 @@ fn deferred_vim_keys_resolve_in_the_current_mode() {
     inactive_copy.status = Status::Active;
     assert!(key_binding(inactive_copy, false, Some(super::vim::Mode::Normal), super::EditorTarget::Source).is_none(), "an unfocused source editor cannot intercept a goal's copy shortcut");
     assert!(matches!(key_binding(tab.clone(), false, Some(super::vim::Mode::Normal), super::EditorTarget::Block), Some(B::Custom(Message::RawVim(super::EditorTarget::Block, _)))));
-    assert!(matches!(resolve_key_binding(tab, false, Some(super::vim::Mode::Insert), super::EditorTarget::Block), Some(B::Custom(Message::InsertSymbol(_)))));
+    assert!(matches!(resolve_key_binding(tab, false, Some(super::vim::Mode::Insert), super::EditorTarget::Block), Some(B::Custom(Message::Indent))));
     let letter = press(Key::Character("a".into()), Some("a"));
     assert!(matches!(resolve_key_binding(letter.clone(), false, Some(super::vim::Mode::Normal), super::EditorTarget::Block), Some(B::Custom(Message::Vim(_, false)))));
     assert!(matches!(resolve_key_binding(letter, false, Some(super::vim::Mode::Insert), super::EditorTarget::Block), Some(B::Insert('a'))));
