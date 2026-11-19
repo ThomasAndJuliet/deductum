@@ -281,8 +281,9 @@ pub trait Profile: Send + Sync {
 
     // ----- editing proofs
 
-    /// The indentation for a new line after `line`
-    fn next_indent(&self, line: &str) -> String;
+    /// The indentation for a new line after `before`, the text before it (the lines above the
+    /// line it breaks too, for a profile whose indent depends on more than the last of them)
+    fn next_indent(&self, before: &str) -> String;
 
     /// The construct the caret (at `at`) is in, among a proof's commands: the goal goes level
     /// with it, and the editor tints it

@@ -977,7 +977,8 @@ impl App {
                 }
                 vim::Op::OpenLine(below) => {
                     if below {
-                        tasks.push(self.update(act(A::Move(M::End))));
+                        // (after the line's own end, not its row's: a line can wrap)
+                        self.vim_caret_on_line(in_block, LineSpot::End);
                         tasks.push(self.update(Message::Newline));
                     } else {
                         tasks.push(self.update(act(A::Move(M::Home))));
@@ -1131,6 +1132,34 @@ impl App {
         };
         let range = (Position { line: first, column: 0 }, Position { line: last, column: lines[last].len() });
         self.replace_in_editor(in_block, range, changed.join("\n"), (shift(anchor), shift(head)))
+    }
+
+    /// Enter: a line break in place of the selection, the new line indented as the profile has it
+    /// after the text before the selection (or the caret). No spaces are left at the end of the
+    /// line broken or the start of the text moved: the new line's indent is all it starts with.
+    /// With only an indent before the caret, the line moves down as it is, and the line it
+    /// leaves is empty
+    fn newline(&mut self) -> Task<Message> {
+        use cosmic::widget::text_editor::Position;
+        let Some(in_block) = self.editing_in_block() else { return Task::none() };
+        let Some((lines, head, anchor)) = self.editor_lines(in_block) else { return Task::none() };
+        let (start, end) = if (anchor.line, anchor.column) <= (head.line, head.column) { (anchor, head) } else { (head, anchor) };
+        let first = lines.get(start.line).map_or("", String::as_str);
+        let before = &first[..start.column.min(first.len())];
+        if before.trim().is_empty() {
+            let caret = Position { line: start.line + 1, column: before.len() };
+            return self.replace_in_editor(in_block, (Position { line: start.line, column: 0 }, end), format!("\n{before}"), (caret, caret));
+        }
+        let last = lines.get(end.line).map_or("", String::as_str);
+        let after = &last[end.column.min(last.len())..];
+        let kept = before.trim_end();
+        let context = lines[..start.line].iter().map(|l| format!("{l}\n")).collect::<String>() + kept;
+        let Some(t) = self.workspace.as_ref().and_then(|w| w.theory.as_ref()) else { return Task::none() };
+        let indent = t.profile.next_indent(&context);
+        let from = Position { line: start.line, column: kept.len() };
+        let to = Position { line: end.line, column: end.column + (after.len() - after.trim_start().len()) };
+        let caret = Position { line: start.line + 1, column: indent.len() };
+        self.replace_in_editor(in_block, (from, to), format!("\n{indent}"), (caret, caret))
     }
 
     /// Shift+Tab: the selection's lines, or the caret's, out by up to an indent of spaces, or one
@@ -4667,9 +4696,11 @@ impl App {
                     Some(be) if in_block => &be.content,
                     _ => &t.source,
                 };
-                // On a new line after the caret's, indented as that line's next one is
-                let line = content.text().lines().nth(content.cursor().position.line).unwrap_or("").to_string();
-                let indent = ws.profile.next_indent(&line);
+                // On a new line after the caret's, indented as that line's next one is (after the
+                // lines up to it)
+                let text = content.text();
+                let upto: Vec<&str> = text.lines().take(content.cursor().position.line + 1).collect();
+                let indent = ws.profile.next_indent(&upto.join("\n"));
                 let step = format!("\n{indent}{}", ws.profile.have_step(&statement, &indent));
                 let act = |a: A| if in_block { Message::BlockAction(a) } else { Message::SourceAction(a) };
                 return Task::batch([self.update(act(A::Move(M::End))), self.update(Message::Wrap(step, String::new()))]);
@@ -5007,15 +5038,7 @@ impl App {
             }
             Message::Indent => return self.indent(),
             Message::Unindent => return self.unindent(),
-            Message::Newline => {
-                let Some(t) = self.workspace.as_ref().and_then(|w| w.theory.as_ref()) else { return Task::none() };
-                let indent = t.profile.next_indent(&t.line_before_caret());
-                let paste = cosmic::widget::text_editor::Action::Edit(cosmic::widget::text_editor::Edit::Paste(Arc::new(format!("\n{indent}"))));
-                if self.nav_target.map_or(t.block_editor.is_some() && t.mode == Mode::Literate, |target| target == EditorTarget::Block) {
-                    return self.update(Message::BlockAction(paste));
-                }
-                return self.update(Message::SourceAction(paste));
-            }
+            Message::Newline => return self.newline(),
             Message::Complete(i) => {
                 let Some(machine) = self.workspace.as_ref().map(|w| w.machine.clone()) else { return Task::none() };
                 let table = self.table(&machine);

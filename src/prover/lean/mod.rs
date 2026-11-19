@@ -476,8 +476,8 @@ impl Profile for Lean {
         lexer::lex(text).into_iter().filter_map(|t| colour_of(t.class).map(|hl| (t.start, t.end, hl))).collect()
     }
 
-    fn next_indent(&self, line: &str) -> String {
-        edit::next_indent(line)
+    fn next_indent(&self, before: &str) -> String {
+        edit::next_indent(before)
     }
 
     fn construct_at(&self, text: &str, commands: &[&Command], at: usize) -> Option<(usize, usize)> {
