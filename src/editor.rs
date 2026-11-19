@@ -2419,10 +2419,10 @@ mod prover_view_tests {
         let profile = crate::prover::profile(None);
         let table = profile.symbols(None);
         let text = "lemma example:\n  assumes A: True\n    and B: True\n  shows True\nproof -\n  show True by simp\nqed\n";
-        let colours: Vec<_> = [("lemma", "keyword1"), ("assumes", "keyword2"), ("and", "keyword2"), ("shows", "keyword2"), ("proof", "keyword1")]
+        let colours: Vec<_> = [("lemma", "keyword1"), ("assumes", "keyword2"), ("and", "keyword2"), ("shows", "keyword2"), ("proof", "keyword1"), ("show ", "keyword3")]
             .into_iter().map(|(word, class)| {
                 let at = text.find(word).unwrap();
-                json!([at, at + word.len(), class])
+                json!([at, at + word.trim_end().len(), class])
             }).collect();
         let proof = text.find("proof").unwrap();
         let commands = json!([[0, proof - 1, "lemma", "finished"], [proof, proof + "proof -".len(), "proof", "finished"]]);
@@ -2435,6 +2435,13 @@ mod prover_view_tests {
         for (line, keyword) in [(1, "assumes"), (2, "and"), (3, "shows")] {
             assert_eq!(lines[line][0].1, command, "the open cell should emphasise {keyword} like lemma");
         }
+        // proof commands such as `show` (keyword3) too: not in a lighter, italic face
+        let show = text.find("  show ").unwrap() + 2;
+        let cell = theory.blocks.iter().position(|b| b.start <= show && show < b.end).expect("a cell with show");
+        let line = text[theory.blocks[cell].start..show].matches('\n').count();
+        theory.open_block(cell, &*table);
+        let spans = &theory.block_highlight.0.lines[line];
+        assert!(spans.iter().any(|(range, hl)| range.len() == "show".len() && *hl == command), "show should read like lemma: {spans:?}");
     }
 
     #[test]

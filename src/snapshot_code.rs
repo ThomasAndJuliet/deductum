@@ -13,13 +13,14 @@ use super::theory::Kind;
 
 const TEXT: &str = "lemma map_tock_length: \"length (map Tock Xs) = length Xs\"\nproof (induct Xs)\n  (* the empty list is simp's *)\n  case (Cons X Xs)\n  then show ?case by (simp add: map_def)\nqed simp";
 
-/// Which text is which class
+/// Which text is which class, as Isabelle reports it (`case`, `then` and `show` are keyword3)
 const CLASSES: &[(&str, Sem)] = &[
+    ("?case", Sem::Var),
     ("lemma", Sem::Keyword1),
     ("proof", Sem::Keyword1),
-    ("case", Sem::Keyword1),
+    ("case", Sem::Keyword3),
     ("then", Sem::Keyword3),
-    ("show", Sem::Keyword1),
+    ("show", Sem::Keyword3),
     ("by", Sem::Keyword1),
     ("qed", Sem::Keyword1),
     ("add:", Sem::QuasiKeyword),
@@ -27,11 +28,12 @@ const CLASSES: &[(&str, Sem)] = &[
     ("Xs\"", Sem::Free),
     ("map Tock Xs", Sem::Bound),
     ("X ", Sem::Skolem),
-    ("?case", Sem::Var),
     ("(* the empty list is simp's *)", Sem::Comment),
 ];
 
+/// The classes as the Isabelle profile sets them in an open cell
 fn highlight() -> HighlightSettings {
+    let profile = crate::prover::profile(None);
     let mut lines: Vec<Vec<(std::ops::Range<usize>, Hl)>> = Vec::new();
     for line in TEXT.split('\n') {
         let mut spans: Vec<(std::ops::Range<usize>, Hl)> = Vec::new();
@@ -44,7 +46,7 @@ fn highlight() -> HighlightSettings {
                 let before = line[..s].chars().next_back().is_none_or(|c| !c.is_alphanumeric() && c != '_');
                 let after = line[e..].chars().next().is_none_or(|c| !c.is_alphanumeric() && c != '_');
                 if (!word || (before && after)) && !spans.iter().any(|(r, _)| r.start < e && s < r.end) {
-                    spans.push((s..e, Hl::Sem(*sem)));
+                    spans.push((s..e, profile.source_highlight(*sem)));
                 }
                 from = e;
             }
