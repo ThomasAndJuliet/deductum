@@ -1083,20 +1083,6 @@ impl Theory {
         words.into_iter().take(4000).map(|(w, _)| w.to_string()).collect()
     }
 
-    /// The text of the current line before the caret, in the editor in use
-    pub fn line_before_caret(&self) -> String {
-        let (text, pos) = match &self.block_editor {
-            Some(be) if self.mode == Mode::Literate => (be.content.text(), be.content.cursor().position),
-            _ => (self.decoded.text.clone(), self.source.cursor().position),
-        };
-        let line = text.split('\n').nth(pos.line).unwrap_or("");
-        let mut end = pos.column.min(line.len());
-        while !line.is_char_boundary(end) {
-            end -= 1;
-        }
-        line[..end].to_string()
-    }
-
     /// Recompute the completions at the caret of the editor in use
     pub fn update_completions(&mut self, table: &dyn Symbols, edited: bool) {
         if !edited {

@@ -255,3 +255,16 @@ fn d3d_takes_three_lines_as_3dd_does() {
     assert_eq!(source(&mut app), "a\ne\n");
     assert_eq!(app.vim.register, "b\nc\nd\n");
 }
+
+#[test]
+fn o_on_a_wrapped_line_opens_a_line_after_all_of_it() {
+    let long = format!("  have \"{}\" by simp", "x = x \\<and> ".repeat(40));
+    let text = format!("theory G imports Main begin\n\nlemma foo: \"a = b\"\n{long}\n  by simp\n\nend\n");
+    let mut app = app(Mode::Literate, &text);
+    open(&mut app, "lemma foo");
+    let mut h = super::snapshot::Harness::new(cosmic::iced::Size::new(700.0, 700.0));
+    h.draw(&app, "vim-lines-wrapped-o");
+    caret_at(&mut app, 1, 10);
+    keys(&mut app, "o");
+    assert_eq!(source(&mut app), format!("theory G imports Main begin\n\nlemma foo: \"a = b\"\n{long}\n  \n  by simp\n\nend\n"));
+}

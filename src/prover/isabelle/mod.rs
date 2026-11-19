@@ -162,8 +162,9 @@ impl Profile for Isabelle {
         isar::paired_brackets(text, colours)
     }
 
-    fn next_indent(&self, line: &str) -> String {
-        isar::next_indent(line)
+    fn next_indent(&self, before: &str) -> String {
+        // (the last line decides)
+        isar::next_indent(before.rsplit('\n').next().unwrap_or(""))
     }
 
     fn construct_at(&self, text: &str, commands: &[&Command], at: usize) -> Option<(usize, usize)> {

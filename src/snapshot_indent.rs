@@ -271,3 +271,17 @@ fn typing_a_tab_and_typing_again_are_three_undo_steps() {
 both!(enter_keeps_the_indent, Be::Isabelle, "lemma a: \"P\"\n  apply simp§", &[K::Enter], "lemma a: \"P\"\n  apply simp\n  §");
 both!(enter_after_proof_steps_in, Be::Isabelle, "lemma a: \"P\"\nproof§", &[K::Enter], "lemma a: \"P\"\nproof\n  §");
 both!(enter_after_by_steps_in, Be::Lean, "theorem t : P := by§", &[K::Enter], "theorem t : P := by\n  §");
+both!(enter_indents_from_the_start_of_a_selection, Be::Isabelle, "lemma a: \"P\"\nproof -\n  show ?thesis ⟪sorry\n  sorry⟫\nqed", &[K::Enter], "lemma a: \"P\"\nproof -\n  show ?thesis\n    §\nqed");
+both!(enter_twice_leaves_no_line_of_spaces, Be::Isabelle, "lemma a: \"P\"\n  apply simp§", &[K::Enter, K::Enter], "lemma a: \"P\"\n  apply simp\n\n  §");
+both!(enter_in_a_line_leaves_no_spaces_either_side, Be::Isabelle, "lemma a: \"P\"\n  apply §simp", &[K::Enter], "lemma a: \"P\"\n  apply\n  §simp");
+both!(enter_at_the_indent_moves_the_line_down, Be::Isabelle, "lemma a: \"P\"\n  §apply simp", &[K::Enter], "lemma a: \"P\"\n\n  §apply simp");
+both!(enter_at_the_start_moves_the_line_down, Be::Isabelle, "lemma a: \"P\"\n§  apply simp", &[K::Enter], "lemma a: \"P\"\n\n§  apply simp");
+both!(lean_enter_after_a_comment_line_keeps_the_proofs_indent, Be::Lean, "theorem t : P := by\n  intro h\n  -- note§", &[K::Enter], "theorem t : P := by\n  intro h\n  -- note\n  §");
+both!(lean_enter_over_a_backward_selection, Be::Lean, "theorem t : P := by\n  ⟬intro h\n  exact h⟭", &[K::Enter], "theorem t : P := by\n\n  §");
+
+#[test]
+fn enter_on_a_line_of_spaces_leaves_it_empty() {
+    run(Be::Isabelle, Mode::Source, "lemma a: \"P\"\n  apply simp\n  §", &[K::Enter], "lemma a: \"P\"\n  apply simp\n\n  §", None);
+    run(Be::Lean, Mode::Source, "theorem t : P := by\n  intro h\n  §", &[K::Enter], "theorem t : P := by\n  intro h\n\n  §", None);
+    run(Be::Isabelle, Mode::Source, "lemma a: \"P\"\n  apply simp §", &[K::Enter], "lemma a: \"P\"\n  apply simp\n  §", None);
+}
