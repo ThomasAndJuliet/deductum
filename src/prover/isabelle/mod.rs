@@ -150,9 +150,10 @@ impl Profile for Isabelle {
     }
 
     fn source_highlight(&self, sem: Sem) -> Hl {
-        // Isar clause keywords such as `assumes` and `shows` read like commands.
+        // Isar clause keywords such as `assumes` and `shows`, and proof commands such as `fix`,
+        // `assume` and `show` (keyword3, regular italic in the shared scheme), read like commands
         Hl::Sem(match sem {
-            Sem::Keyword2 => Sem::Keyword1,
+            Sem::Keyword2 | Sem::Keyword3 => Sem::Keyword1,
             _ => sem,
         })
     }
