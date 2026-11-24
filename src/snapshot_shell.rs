@@ -1670,7 +1670,7 @@ mod agent {
             ["cosmic-term", "--new-thread", "/home/twright/Proofs/Timed Circus", "--host", "twright@neo", "--agent", "codex", "--prompt", PROMPT, "--env", "DEDUCTUM_AGENT_ID=deductum-s1-8"]
         );
         // the prompt stays one argument, whole, through the host's shell
-        let args = ag::launch_args(&ag::command(&ctx(None), Tool::Claude, "i", PROMPT));
+        let args = ag::launch_args(&ag::command(&ctx(None), Tool::Claude, "i", PROMPT), &ag::Origin::default());
         assert_eq!(&args[..3], ["-c", args[1].as_str(), "sh"]);
         assert_eq!(args.iter().filter(|a| a.as_str() == PROMPT).count(), 1);
         assert_eq!(ag::agent_id("s1", 7), "deductum-s1-7");
@@ -1694,7 +1694,7 @@ mod agent {
             std::os::unix::fs::symlink(found, dir.join(tool)).unwrap();
         }
         let run = |args: &[String]| {
-            std::process::Command::new("/bin/sh").args(super::super::agent_session::launch_args(args)).env("PATH", &dir).output().unwrap()
+            std::process::Command::new("/bin/sh").args(super::super::agent_session::launch_args(args, &ag::Origin::default())).env("PATH", &dir).output().unwrap()
         };
         let command = ag::command(&ctx(Some("twright@neo")), Tool::Claude, "deductum-s1-7", PROMPT);
         // not installed: a plain sentence
@@ -1751,6 +1751,43 @@ mod agent {
         assert_eq!(out.status.code(), Some(126));
         assert!(String::from_utf8_lossy(&out.stderr).contains("dev.twright.CosmicTermAgents"), "{}", String::from_utf8_lossy(&out.stderr));
         assert!(!record.exists(), "nothing was started");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// "Open agent session" asks to open beside Deductum's window: the new process is started with
+    /// the window's activation token in its environment, the arguments
+    /// untouched, and with neither it is started as before
+    #[test]
+    fn the_host_script_gives_the_new_process_the_windows_token() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = std::env::temp_dir().join(format!("deductum-origin-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        for tool in ["grep", "setsid", "cat", "tr"] {
+            let found = ["/usr/bin", "/bin"].iter().map(|d| std::path::Path::new(d).join(tool)).find(|p| p.exists()).unwrap();
+            std::os::unix::fs::symlink(found, dir.join(tool)).unwrap();
+        }
+        let record = dir.join("seen");
+        let fake = dir.join("cosmic-term");
+        std::fs::write(&fake, format!("#!/bin/sh\nif [ \"$1\" = --help ]; then echo '--new-thread DIR'; exit 0; fi\nprintf '%s|%s|%s|%s' \"$XDG_ACTIVATION_TOKEN\" \"$DESKTOP_STARTUP_ID\" \"$HOUSEHOLD_SOURCE_TAG\" \"$*\" > {}\n", record.display())).unwrap();
+        std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let command = ag::command(&ctx(None), Tool::Claude, "deductum-s1-7", PROMPT);
+        let seen = |origin: &ag::Origin| {
+            let _ = std::fs::remove_file(&record);
+            let out = std::process::Command::new("/bin/sh").args(super::super::agent_session::launch_args(&command, origin)).env("PATH", &dir).output().unwrap();
+            assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+            for _ in 0..100 {
+                if record.exists() {
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(30));
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            std::fs::read_to_string(&record).unwrap()
+        };
+        let args = command[1..].join(" ");
+        assert_eq!(seen(&ag::Origin { token: Some("tok-1".into()) }), format!("tok-1|tok-1||{args}"));
+        assert_eq!(seen(&ag::Origin::default()), format!("|||{args}"), "no origin, as before");
         let _ = std::fs::remove_dir_all(&dir);
     }
 
