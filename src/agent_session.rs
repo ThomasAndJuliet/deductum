@@ -203,17 +203,25 @@ pub fn command(ctx: &Context, tool: Tool, id: &str, prompt: &str) -> Vec<String>
 /// `cosmic-term` on the path that knows `--new-thread` (a stock COSMIC Terminal has that name too
 /// and does not), and a plain error if there is neither. It asks `flatpak list` and leaves the
 /// branch to `flatpak run`, as `flatpak info` refuses an app with several branches installed
-const LAUNCH: &str = r#"shift
+const LAUNCH: &str = r#"token=$1; tag=$2; shift 2; shift
+# Where the new window opens is the desktop's to say from these: the token of a window of
+# Deductum's, and its household source tag if it has one. A Flatpak passes both into the sandbox
+origin() {
+  if [ -n "$token" ]; then XDG_ACTIVATION_TOKEN=$token; DESKTOP_STARTUP_ID=$token; export XDG_ACTIVATION_TOKEN DESKTOP_STARTUP_ID; fi
+  if [ -n "$tag" ]; then HOUSEHOLD_SOURCE_TAG=$tag; export HOUSEHOLD_SOURCE_TAG; fi
+}
 found=
 if flatpak list --app --columns=application 2>/dev/null | grep -qx dev.twright.CosmicTermAgents; then
   found=1
   if flatpak run dev.twright.CosmicTermAgents --help 2>&1 | grep -q -e --new-thread; then
+    origin
     exec setsid -f flatpak run dev.twright.CosmicTermAgents "$@"
   fi
 fi
 if command -v cosmic-term >/dev/null 2>&1; then
   found=1
   if cosmic-term --help 2>&1 | grep -q -e --new-thread; then
+    origin
     exec setsid -f cosmic-term "$@"
   fi
 fi
@@ -221,16 +229,38 @@ if [ -n "$found" ]; then echo "No Terminal Agents on this computer knows --new-t
 echo "Terminal Agents (dev.twright.CosmicTermAgents) is not installed on this computer" >&2
 exit 127"#;
 
-/// The arguments the host's shell is given: the script, then the command's arguments as they are
-pub fn launch_args(command: &[String]) -> Vec<String> {
+/// What tells the desktop where the new window belongs: beside Deductum's own
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Origin {
+    /// An xdg-activation token requested for Deductum's window, `XDG_ACTIVATION_TOKEN` to the new process
+    pub token: Option<String>,
+    /// Deductum's household source tag, if it was started with one, `HOUSEHOLD_SOURCE_TAG` to the new process
+    pub tag: Option<String>,
+}
+
+impl Origin {
+    /// Deductum's own tag from its environment and `token`, a tag only if it is one a shell takes whole
+    pub fn with_token(token: Option<String>) -> Self {
+        let tag = std::env::var("HOUSEHOLD_SOURCE_TAG").ok().filter(|t| {
+            !t.is_empty() && t.len() <= 128 && t.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.' | b':'))
+        });
+        Self { token: token.filter(|t| !t.trim().is_empty()), tag }
+    }
+}
+
+/// The arguments the host's shell is given: the script, the origin's token and tag (empty if none),
+/// then the command's arguments as they are
+pub fn launch_args(command: &[String], origin: &Origin) -> Vec<String> {
     let mut args = vec!["-c".to_string(), LAUNCH.to_string(), "sh".to_string()];
+    args.push(origin.token.clone().unwrap_or_default());
+    args.push(origin.tag.clone().unwrap_or_default());
     args.extend(command.iter().cloned());
     args
 }
 
 /// Start the thread's page in Terminal Agents, on the host system
-pub async fn launch(command: Vec<String>) -> Result<(), String> {
-    let mut run = link::host_command("sh", &launch_args(&command));
+pub async fn launch(command: Vec<String>, origin: Origin) -> Result<(), String> {
+    let mut run = link::host_command("sh", &launch_args(&command, &origin));
     run.stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::piped());
     let output = tokio::time::timeout(std::time::Duration::from_secs(30), run.output())
         .await
@@ -246,7 +276,29 @@ pub async fn launch(command: Vec<String>) -> Result<(), String> {
 
 // ----- the update
 
+/// How long the desktop has to give a token
+#[cfg(feature = "wayland")]
+const TOKEN_DEADLINE: std::time::Duration = std::time::Duration::from_millis(500);
+
 impl App {
+    /// An activation token for this window, or none where the desktop gives none in time
+    fn activation_token(&self) -> iced::Task<Option<String>> {
+        #[cfg(feature = "wayland")]
+        {
+            let (send, receive) = tokio::sync::oneshot::channel();
+            let mut send = Some(send);
+            let ask = iced::platform_specific::shell::commands::activation::request_token(Some(super::APP_ID.to_string()), self.core.main_window_id()).map(move |token| {
+                if let Some(send) = send.take() {
+                    let _ = send.send(token);
+                }
+            });
+            let ready = iced::Task::future(async move { tokio::time::timeout(TOKEN_DEADLINE, receive).await.ok().and_then(Result::ok).flatten() });
+            iced::Task::batch([ask.discard(), ready])
+        }
+        #[cfg(not(feature = "wayland"))]
+        iced::Task::done(None)
+    }
+
     pub fn agent_update(&mut self, msg: Msg) -> cosmic::app::Task<Message> {
         use cosmic::app::Task;
         match msg {
@@ -271,8 +323,14 @@ impl App {
                     tasks.push(self.update(Message::Grant(agent_key(&id), tool.label().to_string(), scope)));
                 }
                 let argv = command(&ctx, tool, &id, &prompt(&ctx, rights));
-                tasks.push(cosmic::task::future(async move { Message::Shell(Msg::AgentLaunched(launch(argv).await)) }));
+                // The window asks the desktop for a token first, so that the new window is placed
+                // beside this one; with none within a moment it starts without
+                tasks.push(self.activation_token().map(move |token| cosmic::Action::App(Message::Shell(Msg::AgentToken(argv.clone(), token)))));
                 return Task::batch(tasks);
+            }
+            Msg::AgentToken(argv, token) => {
+                let origin = Origin::with_token(token);
+                return cosmic::task::future(async move { Message::Shell(Msg::AgentLaunched(launch(argv, origin).await)) });
             }
             Msg::AgentLaunched(Err(error)) => return self.toast(error, false),
             Msg::AgentLaunched(Ok(())) => {}

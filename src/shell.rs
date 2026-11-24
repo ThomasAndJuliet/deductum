@@ -123,6 +123,9 @@ pub enum Msg {
     AgentTool(super::agent_session::Tool),
     #[cfg(not(windows))]
     AgentStart,
+    /// The window's activation token (none if the desktop gave none) for the command to start
+    #[cfg(not(windows))]
+    AgentToken(Vec<String>, Option<String>),
     /// Terminal Agents was asked for the thread's page: how that went
     #[cfg(not(windows))]
     AgentLaunched(Result<(), String>),
@@ -366,7 +369,7 @@ impl App {
                 return Task::batch(tasks);
             }
             #[cfg(not(windows))]
-            m @ (Msg::AgentOpen(_) | Msg::AgentRights(_) | Msg::AgentTool(_) | Msg::AgentStart | Msg::AgentLaunched(_)) => return self.agent_update(m),
+            m @ (Msg::AgentOpen(_) | Msg::AgentRights(_) | Msg::AgentTool(_) | Msg::AgentStart | Msg::AgentToken(..) | Msg::AgentLaunched(_)) => return self.agent_update(m),
             Msg::Quit => {
                 if self.defer_leave(super::DeferredLeave::Quit) {
                     return self.flush_edits();
