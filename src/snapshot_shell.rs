@@ -1755,10 +1755,10 @@ mod agent {
     }
 
     /// "Open agent session" asks to open beside Deductum's window: the new process is started with
-    /// the window's activation token and Deductum's source tag in its environment, the arguments
+    /// the window's activation token in its environment, the arguments
     /// untouched, and with neither it is started as before
     #[test]
-    fn the_host_script_gives_the_new_process_the_windows_token_and_tag() {
+    fn the_host_script_gives_the_new_process_the_windows_token() {
         use std::os::unix::fs::PermissionsExt;
         let dir = std::env::temp_dir().join(format!("deductum-origin-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
@@ -1786,8 +1786,7 @@ mod agent {
             std::fs::read_to_string(&record).unwrap()
         };
         let args = command[1..].join(" ");
-        assert_eq!(seen(&ag::Origin { token: Some("tok-1".into()), tag: Some("tag-1".into()) }), format!("tok-1|tok-1|tag-1|{args}"));
-        assert_eq!(seen(&ag::Origin { token: Some("tok-2".into()), tag: None }), format!("tok-2|tok-2||{args}"));
+        assert_eq!(seen(&ag::Origin { token: Some("tok-1".into()) }), format!("tok-1|tok-1||{args}"));
         assert_eq!(seen(&ag::Origin::default()), format!("|||{args}"), "no origin, as before");
         let _ = std::fs::remove_dir_all(&dir);
     }

@@ -203,12 +203,13 @@ pub fn command(ctx: &Context, tool: Tool, id: &str, prompt: &str) -> Vec<String>
 /// `cosmic-term` on the path that knows `--new-thread` (a stock COSMIC Terminal has that name too
 /// and does not), and a plain error if there is neither. It asks `flatpak list` and leaves the
 /// branch to `flatpak run`, as `flatpak info` refuses an app with several branches installed
-const LAUNCH: &str = r#"token=$1; tag=$2; shift 2; shift
-# Where the new window opens is the desktop's to say from these: the token of a window of
-# Deductum's, and its household source tag if it has one. A Flatpak passes both into the sandbox
+const LAUNCH: &str = r#"token=$1; shift 3
+# Where the new window opens is the desktop's to say from the token of a window of Deductum's,
+# which the compositor reads as that window being the launch's origin. A Flatpak passes it into the
+# sandbox. Deductum's own environment's HOUSEHOLD_SOURCE_TAG names the terminal that started
+# Deductum, not this window, so it is not handed on
 origin() {
   if [ -n "$token" ]; then XDG_ACTIVATION_TOKEN=$token; DESKTOP_STARTUP_ID=$token; export XDG_ACTIVATION_TOKEN DESKTOP_STARTUP_ID; fi
-  if [ -n "$tag" ]; then HOUSEHOLD_SOURCE_TAG=$tag; export HOUSEHOLD_SOURCE_TAG; fi
 }
 found=
 if flatpak list --app --columns=application 2>/dev/null | grep -qx dev.twright.CosmicTermAgents; then
@@ -234,26 +235,20 @@ exit 127"#;
 pub struct Origin {
     /// An xdg-activation token requested for Deductum's window, `XDG_ACTIVATION_TOKEN` to the new process
     pub token: Option<String>,
-    /// Deductum's household source tag, if it was started with one, `HOUSEHOLD_SOURCE_TAG` to the new process
-    pub tag: Option<String>,
 }
 
 impl Origin {
-    /// Deductum's own tag from its environment and `token`, a tag only if it is one a shell takes whole
     pub fn with_token(token: Option<String>) -> Self {
-        let tag = std::env::var("HOUSEHOLD_SOURCE_TAG").ok().filter(|t| {
-            !t.is_empty() && t.len() <= 128 && t.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.' | b':'))
-        });
-        Self { token: token.filter(|t| !t.trim().is_empty()), tag }
+        Self { token: token.filter(|t| !t.trim().is_empty()) }
     }
 }
 
-/// The arguments the host's shell is given: the script, the origin's token and tag (empty if none),
-/// then the command's arguments as they are
+/// The arguments the host's shell is given: the script, the origin's token (empty if none) and a
+/// spare slot, then the command's arguments as they are
 pub fn launch_args(command: &[String], origin: &Origin) -> Vec<String> {
     let mut args = vec!["-c".to_string(), LAUNCH.to_string(), "sh".to_string()];
     args.push(origin.token.clone().unwrap_or_default());
-    args.push(origin.tag.clone().unwrap_or_default());
+    args.push(String::new());
     args.extend(command.iter().cloned());
     args
 }
