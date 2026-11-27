@@ -734,6 +734,8 @@ pub struct Theory {
     pub classes: Vec<Option<Hl>>,
     /// Completions for the word at the caret of the editor in use
     pub completions: Vec<Completion>,
+    /// Which completion in [`Theory::completions`] Tab accepts (reset to 0 when the list changes)
+    pub completion_selected: usize,
     /// Highlighting for the block editor, from the same classes
     pub block_highlight: HighlightSettings,
     /// The first subgoal at the caret, for structure-driven completion
@@ -1060,6 +1062,7 @@ impl Theory {
             typed_tools: profile.default_capabilities().typed_tools(),
             classes: Vec::new(),
             completions: Vec::new(),
+            completion_selected: 0,
             block_highlight: HighlightSettings(Arc::new(HighlightData { generation: 0, lines: Vec::new() }), false),
             block_views: Vec::new(),
             code_columns: 0,
@@ -1087,6 +1090,7 @@ impl Theory {
     pub fn update_completions(&mut self, table: &dyn Symbols, edited: bool) {
         if !edited {
             self.completions.clear();
+            self.completion_selected = 0;
             return;
         }
         let (text, pos) = match &self.block_editor {
@@ -1108,12 +1112,36 @@ impl Theory {
                 chars.get(i) == Some(&'\\') || (i > 0 && chars[i - 1] == '@')
             });
         }
+        self.completion_selected = 0;
+    }
+
+    /// Move the highlighted completion forward (`next = true`) or backward (`next = false`), wrapping
+    pub fn pick_completion(&mut self, next: bool) {
+        let n = self.completions.len();
+        if n == 0 {
+            self.completion_selected = 0;
+            return;
+        }
+        self.completion_selected = if next {
+            (self.completion_selected + 1) % n
+        } else {
+            (self.completion_selected + n - 1) % n
+        };
+    }
+
+    /// Dismiss the completion bar if open; returns whether there were completions to dismiss
+    pub fn dismiss_completions(&mut self) -> bool {
+        let had = !self.completions.is_empty();
+        self.completions.clear();
+        self.completion_selected = 0;
+        had
     }
 
     /// Accept completion `i` in the editor in use
     pub fn accept_completion(&mut self, i: usize, table: &dyn Symbols) {
         let Some(c) = self.completions.get(i).cloned() else { return };
         self.completions.clear();
+        self.completion_selected = 0;
         let in_block = self.block_editor.is_some() && self.mode == Mode::Literate;
         let (text, pos) = match &self.block_editor {
             Some(be) if in_block => (be.content.text(), be.content.cursor().position),

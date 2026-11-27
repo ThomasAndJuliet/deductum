@@ -407,11 +407,11 @@ impl Profile for Lean {
 
     fn prose(&self, body: &str, _codec: &dyn Codec) -> String {
         // (the Markdown as written, without the common indentation, with unindented ASCII art fenced)
-        docs::fence_ascii_art(&docs::to_markdown(body).flowed().markdown)
+        docs::to_markdown(body).flowed().fenced_ascii_art().markdown
     }
 
     fn prose_map(&self, body: &str) -> Option<super::ProseMap> {
-        let d = docs::to_markdown(body).flowed();
+        let d = docs::to_markdown(body).flowed().fenced_ascii_art();
         let runs = d.segments();
         Some(super::ProseMap { markdown: d.markdown, runs })
     }
@@ -1037,5 +1037,16 @@ mod tests {
         assert!(prose_render::highlight::knows("Isabelle"));
         let thy = prover::isabelle::highlight("lemma \"a = a\" (* c *)\n  by simp");
         assert!(thy.iter().any(|(_, c)| *c == Class::Keyword) && thy.iter().any(|(_, c)| *c == Class::Comment) && thy.iter().any(|(_, c)| *c == Class::String));
+    }
+
+    #[test]
+    fn fenced_ascii_art_hit_maps_without_panicking() {
+        let text = "/-! Intro.\n\nC ⊢ t : σ\n———————— App\nC ⊢ u : σ\n\nAfter text. -/\n\ndef x := 1\n";
+        let doc = json!({"text": text, "revision": 1, "dirty": false, "can_undo": false});
+        let t = crate::editor::Theory::new("Test.lean".into(), &doc, &LeanSymbols, Arc::new(HashMap::new()), crate::editor::Mode::Literate, &Lean);
+        let at_code = t.source_of_hit(0, 1, 0).expect("code block hit maps cleanly");
+        assert!(text.chars().skip(at_code).collect::<String>().starts_with("C ⊢"));
+        let at_after = t.source_of_hit(0, 2, 0).expect("paragraph after fence maps cleanly");
+        assert!(text.chars().skip(at_after).collect::<String>().starts_with("After text."));
     }
 }

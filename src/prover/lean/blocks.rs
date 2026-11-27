@@ -363,7 +363,7 @@ fn looks_like_lean_code(body: &str) -> bool {
                 outside.push(ch);
             }
         }
-        if outside.contains(":= by") || outside.trim_end().ends_with(":=") {
+        if outside.contains(":= by") || (outside.trim_end().ends_with(":=") && outside.trim() != ":=") {
             return true;
         }
         let Some((w, rest)) = t.split_once(|c: char| c.is_whitespace()) else { continue };
@@ -373,7 +373,8 @@ fn looks_like_lean_code(body: &str) -> bool {
             | "structure" | "class" | "instance" | "example" => {
                 // Commented-out declaration: followed by a name/signature, not an English sentence
                 let sig = rest.contains(':') || rest.contains(":=") || rest.starts_with('(') || rest.starts_with('{') || rest.starts_with('[') || rest.ends_with(" where");
-                if sig || rest.split_whitespace().count() == 1 {
+                let single_ident = rest.split_whitespace().count() == 1 && !rest.ends_with(['.', ',', ';', '!', '?', ')']);
+                if sig || single_ident {
                     return true;
                 }
             }
@@ -990,5 +991,11 @@ mod tests {
         let mx = blocks_with(mixed, true);
         check_covering(mixed, &mx);
         assert_eq!(mx.iter().map(|b| b.kind).collect::<Vec<_>>(), vec![Kind::Heading(1), Kind::Comment, Kind::Formal]);
+
+        // Prose containing `theorem statement.` or a standalone `:=` separator is still promoted
+        let prose_tricky = "/- # Heading\n\nProve the\ntheorem statement.\n-/\n\n/- ## Sugar\n\n    do\n      x\n  :=\n    bind x\n-/\n";
+        let pt = blocks_with(prose_tricky, true);
+        check_covering(prose_tricky, &pt);
+        assert_eq!(pt.iter().map(|b| b.kind).collect::<Vec<_>>(), vec![Kind::Text, Kind::Text]);
     }
 }
