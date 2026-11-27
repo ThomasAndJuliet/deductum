@@ -134,7 +134,7 @@ class BackgroundHost(unittest.IsolatedAsyncioTestCase):
         for reader, writer, serving in self.connections:
             serving.cancel()
         await asyncio.gather(*(t for _, _, t in self.connections), return_exceptions=True)
-        for broker in (self.host.project_io, self.host.state_io, self.host.sample_io):
+        for broker in (self.host.project_io, self.host.state_io, self.host.sample_io, self.host.navigation_io):
             try:
                 await asyncio.wait_for(broker.flush(), 2)
             except Exception:
@@ -238,7 +238,7 @@ class BackgroundHost(unittest.IsolatedAsyncioTestCase):
             with patch.object(H, "open", opened, create=True):
                 self.send(reader, 10, "edit", **edit)
                 await asyncio.wait_for(entered.wait(), 1)
-                self.send(other, 11, "read", since_revision=rev, receipt_ids=[identity])
+                self.send(other, 11, "read", recovery_read=True, since_revision=rev, receipt_ids=[identity])
                 self.send(other, 12, "edit", **edit)
                 self.send(other, 13, "cancel_tools")
                 await asyncio.wait_for(output.reply(13), 1)
@@ -403,6 +403,99 @@ class BackgroundHost(unittest.IsolatedAsyncioTestCase):
         self.backends[0].release.set()
         self.assertTrue((await writer.reply(2))["ok"])
         self.assertEqual(len([m for m in writer.messages if m.get("id") == 1]), 1)
+
+    async def test_navigation_read_does_not_delay_stop(self):
+        reader, writer = await self.connect("app")
+        path = Path(self.tmp.name) / "Unopened.thy"
+        path.write_text("theory Unopened imports Main begin end")
+        entered, release, block = self.blocked()
+        original_read = H.read_file
+
+        def slow_read(file):
+            if str(file) == str(path):
+                block()
+            return original_read(file)
+
+        with patch.object(H, "read_file", slow_read):
+            self.send(reader, 1, "read", path=str(path), navigation=True)
+            await asyncio.wait_for(entered.wait(), 1)
+            self.send(reader, 2, "stop")
+            self.assertTrue((await writer.reply(2))["ok"])
+            self.assertEqual(self.sessions[0].lifecycle, "Stopped")
+            release.set()
+            self.assertEqual((await writer.reply(1))["doc"]["text"], path.read_text())
+            self.assertFalse(any(c["op"] == "open" for c in self.backends[0].calls))
+
+    async def test_navigation_publishes_text_before_prover_open(self):
+        reader, writer = await self.connect("app")
+        path = self.docs[0].path
+        self.docs[0]._sent_open = False
+        self.send(reader, 1, "read", path=path, navigation=True)
+        self.assertEqual((await writer.reply(1))["doc"]["text"], "abc")
+        self.assertFalse(any(c["op"] == "open" for c in self.backends[0].calls))
+        self.send(reader, 2, "check_document", path=path)
+        self.assertTrue((await writer.reply(2))["ok"])
+        self.assertEqual([c["file"] for c in self.backends[0].calls if c["op"] == "open"], [path])
+
+    async def test_navigation_can_read_cold_source_during_project_enumeration(self):
+        reader, writer = await self.connect("app")
+        path = Path(self.tmp.name) / "Selected.thy"
+        path.write_text("theory Selected imports Main begin end")
+        entered, release, block = self.blocked()
+        original_list = H.list_documents
+
+        def slow_list(*args, **kwargs):
+            block()
+            return original_list(*args, **kwargs)
+
+        with patch.object(H, "list_documents", slow_list):
+            self.send(reader, 1, "session_info", navigation=True)
+            await asyncio.wait_for(entered.wait(), 1)
+            self.send(reader, 2, "read", path=str(path), navigation=True)
+            self.assertEqual((await writer.reply(2))["doc"]["text"], path.read_text())
+            self.assertFalse(any(c["op"] == "open" for c in self.backends[0].calls))
+            release.set()
+            self.assertTrue((await writer.reply(1))["ok"])
+
+    async def test_ordered_recovery_reads_cold_source_during_inventory(self):
+        reader, writer = await self.connect("app")
+        other, other_writer = await self.connect("app")
+        path = Path(self.tmp.name) / "Recovery.thy"
+        path.write_text("theory Recovery imports Main begin end")
+        entered, release, block = self.blocked()
+        read_entered, read_release, block_read = self.blocked()
+        original_list, original_read = H.list_documents, H.read_file
+
+        def slow_list(*args, **kwargs):
+            block()
+            return original_list(*args, **kwargs)
+
+        def slow_read(file):
+            if str(file) == str(path):
+                block_read()
+            return original_read(file)
+
+        with patch.object(H, "list_documents", slow_list), patch.object(H, "read_file", slow_read):
+            self.send(reader, 1, "session_info", navigation=True)
+            await asyncio.wait_for(entered.wait(), 1)
+            self.send(reader, 2, "read", path=str(path), recovery_read=True,
+                      since_revision=0, receipt_ids=["missing"])
+            await asyncio.wait_for(read_entered.wait(), 1)
+            self.send(reader, 3, "ping")
+            self.send(other, 4, "ping")
+            self.assertTrue((await asyncio.wait_for(other_writer.reply(4), 1))["ok"])
+            self.assertFalse(any(m.get("id") == 3 for m in writer.messages))
+            read_release.set()
+            reply = await asyncio.wait_for(writer.reply(2), 1)
+            self.assertTrue(reply["ok"])
+            self.assertEqual(reply["doc"]["text"], path.read_text())
+            self.assertEqual(reply["edit_history"], {"complete": True, "entries": []})
+            self.assertEqual(reply["edit_receipts"], [])
+            self.assertNotIn("check_document", reply)
+            self.assertEqual([c["file"] for c in self.backends[0].calls if c["op"] == "open"], [str(path)])
+            self.assertTrue((await asyncio.wait_for(writer.reply(3), 1))["ok"])
+            release.set()
+            self.assertTrue((await writer.reply(1))["ok"])
 
     async def test_configured_job_and_memory_reservations_cover_starting_provers(self):
         self.host.resource_policy = {"max_running_provers": 2}

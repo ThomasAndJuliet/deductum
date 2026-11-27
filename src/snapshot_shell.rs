@@ -385,10 +385,19 @@ fn a_card_picks_its_backend_and_start_sends_it() {
     assert_eq!(params["project"]["lake_root"], "/home/me/Research/Mixed");
     // A Lean document clicked in the browser of a folder whose Lean session exists opens there
     let mut app = new_session_app(None, both());
-    let _ = cosmic::Application::update(&mut app, Message::Shell(Msg::OpenDocument("/home/me/Research/Demo/Main.lean".into())));
+    let (sender, mut commands) = tokio::sync::mpsc::unbounded_channel();
+    app.links[0].sender = Some(sender);
+    let path = "/home/me/Research/Demo/Main.lean";
+    let _ = cosmic::Application::update(&mut app, Message::Shell(Msg::OpenDocument(path.into())));
     assert!(app.new_session.is_none());
     assert_eq!(app.workspace.as_ref().map(|w| w.sid.as_str()), Some("s3"), "the Lean session of that folder");
-    assert_eq!(app.want_theory.as_deref(), Some("/home/me/Research/Demo/Main.lean"));
+    let sent = requests(&mut commands);
+    assert_eq!(sent.len(), 2, "{sent:?}");
+    assert_eq!((sent[0]["op"].as_str(), sent[0]["session"].as_str(), sent[0]["path"].as_str(), sent[0]["navigation"].as_bool()), (Some("read"), Some("s3"), Some(path), Some(true)));
+    assert_eq!(sent[1]["op"], "session_info");
+    assert_eq!(sent[1]["navigation"], true);
+    let _ = app.on_link("local".into(), link::Event::Line(json!({"id": sent[0]["id"], "ok": true, "doc": {"path": path, "text": "theorem demo : True := trivial", "revision": 1}})));
+    assert_eq!(app.workspace.as_ref().unwrap().theory.as_ref().unwrap().path, path);
     // one in a folder without a session of its backend: the form, its backend picked, says why
     let mut app = new_session_app(None, both());
     let _ = cosmic::Application::update(&mut app, Message::Shell(Msg::OpenDocument("/home/me/Elsewhere/Scratch.lean".into())));
