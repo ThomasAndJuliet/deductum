@@ -307,9 +307,9 @@ pub fn headings(markdown: &str) -> Vec<(u8, usize, String)> {
     out
 }
 
-/// A Text or Heading block for a module doc or a stray docstring
-fn prose_block(s: &Src, start: usize, end: usize) -> Block {
-    let body_start = start + 3;
+/// A Text or Heading block for a module doc, a stray docstring, or a promoted plain block comment
+fn prose_block(s: &Src, start: usize, end: usize, open_len: usize) -> Block {
+    let body_start = start + open_len;
     let closed = end >= body_start + 2 && s.starts(end - 2, "-/");
     let body_end = if closed { end - 2 } else { end }.max(body_start);
     let body: String = s.c[body_start.min(s.n())..body_end.min(s.n())].iter().collect();
@@ -333,14 +333,119 @@ fn prose_block(s: &Src, start: usize, end: usize) -> Block {
     }
 }
 
+/// Whether `body` looks like commented-out Lean code rather than Markdown prose
+fn looks_like_lean_code(body: &str) -> bool {
+    let mut fence = false;
+    for line in body.lines() {
+        let t = line.trim_start();
+        if t.starts_with("```") || t.starts_with("~~~") {
+            fence = !fence;
+            continue;
+        }
+        if fence || line.starts_with("    ") || line.starts_with('\t') || t.is_empty() {
+            continue;
+        }
+        if t.starts_with("@[")
+            || t.starts_with("#check ")
+            || t.starts_with("#eval ")
+            || t.starts_with("#print ")
+            || t.starts_with("#reduce ")
+        {
+            return true;
+        }
+        // Strip inline `...` code spans before checking for `:= by`
+        let mut outside = String::with_capacity(t.len());
+        let mut in_bt = false;
+        for ch in t.chars() {
+            if ch == '`' {
+                in_bt = !in_bt;
+            } else if !in_bt {
+                outside.push(ch);
+            }
+        }
+        if outside.contains(":= by") || outside.trim_end().ends_with(":=") {
+            return true;
+        }
+        let Some((w, rest)) = t.split_once(|c: char| c.is_whitespace()) else { continue };
+        let rest = rest.trim_start();
+        match w {
+            "theorem" | "lemma" | "def" | "abbrev" | "opaque" | "axiom" | "inductive" | "coinductive"
+            | "structure" | "class" | "instance" | "example" => {
+                // Commented-out declaration: followed by a name/signature, not an English sentence
+                let sig = rest.contains(':') || rest.contains(":=") || rest.starts_with('(') || rest.starts_with('{') || rest.starts_with('[') || rest.ends_with(" where");
+                if sig || rest.split_whitespace().count() == 1 {
+                    return true;
+                }
+            }
+            "import" | "set_option" | "attribute" | "namespace" => {
+                if rest.split_whitespace().count() == 1 && !rest.ends_with('.') {
+                    return true;
+                }
+            }
+            _ => {}
+        }
+    }
+    false
+}
+
+/// Whether a leading plain block comment is copyright/license boilerplate rather than prose
+fn is_header_boilerplate(idx: usize, first_header: Option<usize>, body: &str) -> bool {
+    let lower = body.trim_start().to_ascii_lowercase();
+    let license = lower.starts_with("copyright")
+        || lower.starts_with("spdx-")
+        || lower.starts_with("license")
+        || lower.starts_with("authors:");
+    if license && (idx == 0 || first_header.is_some_and(|h| idx < h)) {
+        return true;
+    }
+    first_header.is_some_and(|h| idx < h) && headings(body).is_empty()
+}
+
+/// Promote standalone top-level `/- … -/` comments to prose when a file has no `/-! … -/` module
+/// docs and uses plain block comments with Markdown headings (as LoVe and similar teaching repos do)
+fn promote_literate_comments(s: &Src, out: &mut [Block]) {
+    if out.iter().any(|b| s.starts(b.start, "/-!")) {
+        return;
+    }
+    let first_header = out.iter().position(|b| b.kind == Kind::Header);
+    let plain_body = |b: &Block| -> Option<String> {
+        if b.kind != Kind::Comment || !s.starts(b.start, "/-") || s.starts(b.start, "/-!") || s.starts(b.start, "/--") {
+            return None;
+        }
+        let bs = b.start + 2;
+        let closed = b.end >= bs + 2 && s.starts(b.end - 2, "-/");
+        let be = if closed { b.end - 2 } else { b.end }.max(bs);
+        Some(s.c[bs.min(s.n())..be.min(s.n())].iter().collect())
+    };
+    let has_heading = out.iter().enumerate().any(|(i, b)| {
+        let Some(body) = plain_body(b) else { return false };
+        !is_header_boilerplate(i, first_header, &body) && !looks_like_lean_code(&body) && !headings(&body).is_empty()
+    });
+    if !has_heading {
+        return;
+    }
+    for (i, b) in out.iter_mut().enumerate() {
+        let Some(body) = plain_body(b) else { continue };
+        if !is_header_boilerplate(i, first_header, &body) && !looks_like_lean_code(&body) {
+            *b = prose_block(s, b.start, b.end, 2);
+        }
+    }
+}
+
 /// The end of the logical line at `p`, without trailing space (a trailing comment is part of it)
 fn trimmed_line_end(s: &Src, p: usize) -> usize {
     let (e, _) = s.logical_line(p);
     (p..e).rev().find(|&k| !s.c[k].is_whitespace()).map_or(p, |k| k + 1)
 }
 
-/// The blocks of a Lean file, in order
+/// The blocks of a Lean file, in order (with the plain-comment literate heuristic enabled)
 pub fn blocks(text: &str) -> Vec<Block> {
+    blocks_with(text, true)
+}
+
+/// The blocks of a Lean file, in order; when `literate_comments` is true, plain `/- … -/` block
+/// comments with Markdown headings are promoted to prose if the file has no `/-! … -/` module docs
+pub fn blocks_with(text: &str, literate_comments: bool) -> Vec<Block> {
     let s = Src::new(text);
     let n = s.n();
     let mut out: Vec<Block> = Vec::new();
@@ -369,7 +474,7 @@ pub fn blocks(text: &str) -> Vec<Block> {
             if s.starts(p, "/-!") {
                 flush(&mut out, &mut cur, &s);
                 let e = s.comment_end(p);
-                out.push(prose_block(&s, p, e));
+                out.push(prose_block(&s, p, e, 3));
                 p = e;
                 continue;
             }
@@ -395,7 +500,7 @@ pub fn blocks(text: &str) -> Vec<Block> {
                     mutual = s.word_at(q) == "mutual";
                     p = s.logical_line(q).0;
                 } else {
-                    let mut b = prose_block(&s, p, e);
+                    let mut b = prose_block(&s, p, e, 3);
                     b.kind = Kind::Text;
                     out.push(b);
                     p = e;
@@ -469,6 +574,9 @@ pub fn blocks(text: &str) -> Vec<Block> {
         p = e.max(p + 1);
     }
     flush(&mut out, &mut cur, &s);
+    if literate_comments {
+        promote_literate_comments(&s, &mut out);
+    }
     out
 }
 
@@ -851,5 +959,36 @@ mod tests {
         }
         assert!(theorems > 50, "{theorems}");
         assert!(tactics > theorems, "{tactics} tactics in {theorems} theorems");
+    }
+
+    #[test]
+    fn plain_block_comments_promote_when_file_has_headings_and_no_module_docs() {
+        let love = "/- Copyright © 2026 Authors. -/\n\nimport LoVe.LoVelib\n\n/- # Demo 1\n\nIntro paragraph.\n-/\n\n/- ### Lists -/\n\n/- `opaque` defines an arbitrary constant. -/\n\nopaque a : Nat\n\n/- theorem commented_out : True := by\n  trivial\n-/\n";
+        let bs = blocks_with(love, true);
+        check_covering(love, &bs);
+        let kinds: Vec<Kind> = bs.iter().map(|b| b.kind).collect();
+        assert_eq!(
+            kinds,
+            vec![Kind::Comment, Kind::Header, Kind::Text, Kind::Heading(3), Kind::Text, Kind::Formal, Kind::Comment],
+            "{bs:?}"
+        );
+        assert_eq!(bs[2].level, Some(1));
+        assert_eq!(slice(love, bs[3].body.unwrap().0, bs[3].body.unwrap().1).trim(), "### Lists");
+
+        // When disabled, all plain block comments stay Kind::Comment
+        let off = blocks_with(love, false);
+        check_covering(love, &off);
+        let off_kinds: Vec<Kind> = off.iter().map(|b| b.kind).collect();
+        assert_eq!(
+            off_kinds,
+            vec![Kind::Comment, Kind::Header, Kind::Comment, Kind::Comment, Kind::Comment, Kind::Formal, Kind::Comment],
+            "{off:?}"
+        );
+
+        // When a file already uses /-! module docs, plain /- comments are never promoted
+        let mixed = "/-! # Real module doc -/\n\n/- ## Plain comment -/\n\ndef x := 1\n";
+        let mx = blocks_with(mixed, true);
+        check_covering(mixed, &mx);
+        assert_eq!(mx.iter().map(|b| b.kind).collect::<Vec<_>>(), vec![Kind::Heading(1), Kind::Comment, Kind::Formal]);
     }
 }

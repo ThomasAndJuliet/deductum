@@ -503,6 +503,9 @@ pub fn rows(app: &App) -> Vec<Row> {
             msgs: Loogle::ALL.iter().map(|l| Msg::Loogle(*l)).collect(),
         },
         st.lean.loogle != def.lean.loogle, Some(Msg::Loogle(def.lean.loogle)));
+    add("literate_comments", Lean, "Plain block comments as prose", "Show top-level /- … -/ comments as Markdown prose when a file has no /-! … -/ docs",
+        switch(st.lean.literate_comments, Msg::LiterateComments),
+        st.lean.literate_comments != def.lean.literate_comments, Some(Msg::LiterateComments(def.lean.literate_comments)));
 
     // Machines (their names are not static; the row's label says what they are)
     if app.links.is_empty() {
