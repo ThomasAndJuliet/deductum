@@ -238,6 +238,10 @@ report mapped to the local text. Prover progress retains unchanged prose maps,
 rendered documents and highlighting; source edits explicitly refresh them.
 Current proof-state requests retry after saturation or stale results, and
 delayed navigation replies retain their source context through file reads.
+File switches show the destination while a large editor model is prepared on a
+worker. Repeated navigation keeps at most one preparation running and discards
+superseded results. Document events that arrived during preparation are applied
+after installation, with a fresh read if the bounded event buffer fills.
 The host gives each real socket a bounded output queue. Replaceable prover
 snapshots can coalesce between lossless message fences; edits and replies are
 never dropped. Slow clients disconnect and resynchronise instead of blocking
@@ -274,6 +278,13 @@ available, using the reservation (256 MB by default). Optional thread and job
 limits apply to new backend work; existing session options remain available.
 Process sampling and configuration refresh run off the host event loop. These
 settings do not change machine policy or stop existing sessions. Cold session resolution, independent fork/merge and git/discard cleanup still perform some synchronous filesystem work.
+
+Lean opens files in the editor immediately while serializing the initial Lake
+import setups within each prover. Activity can stop an individual proof query,
+stop or resume checking a Lean theory, or stop the selected session's prover.
+Stopping a theory cancels its queries and proof suggestions and closes its Lean
+worker. The buffer stays editable and checking remains stopped until explicitly
+resumed. A different theory can still compile the stopped theory as an import.
 
 A separate hosted job installs Lean 4.19.0 and the checksum-pinned official
 Isabelle2025 distribution. It runs the existing real backend integrations:

@@ -464,6 +464,7 @@ class Session:
         self.start_task: Optional[asyncio.Task] = None
         self.running_since: Dict[Tuple[str, int, str], float] = {}
         self.fill_tasks: Dict[str, asyncio.Task] = {}
+        self.fill_origins: Dict[str, Tuple[str, Client]] = {}
         # Lines asking `claude` or `codex` for a proof, by job: where they are, and who asked
         self.keyword_holes: Dict[str, Dict[str, Any]] = {}
         # Persistent helper conversations, one query at a time each
@@ -823,10 +824,58 @@ class Session:
                 self.host.broadcast_doc(self, doc, {"event": "doc_prover", "session": self.id, "path": doc.path,
                                                     "prover": doc.prover})
 
+    def document_stopped(self, doc: Doc) -> bool:
+        return doc.path in self.meta.get("stopped_documents", ())
+
+    def require_document_checking(self, doc: Doc) -> None:
+        if self.document_stopped(doc):
+            raise HostError("Checking is stopped for this theory. Resume it in Activity.", "document_stopped")
+
+    def set_document_checking(self, path: str, on: bool) -> None:
+        if not self.driver_class.supports_document_stop:
+            raise HostError("This prover does not support stopping a single theory", "unsupported")
+        driver = self.require_checking()
+        doc = self.docs.get(self.doc_path(path))
+        if doc is None or not doc.opened or not self.driver_class.is_document(doc.path):
+            raise HostError("The theory is not open", "not_found")
+        if on != self.document_stopped(doc):
+            return
+        stopped = set(self.meta.get("stopped_documents", ()))
+        if on:
+            stopped.remove(doc.path)
+            self.meta["stopped_documents"] = sorted(stopped)
+            self.backend_open(doc)
+        else:
+            # Mark it stopped before closing so reading or editing it cannot reopen it.
+            stopped.add(doc.path)
+            self.meta["stopped_documents"] = sorted(stopped)
+            doc._checking_generation = getattr(doc, "_checking_generation", 0) + 1
+            if getattr(doc, "_sent_open", False):
+                driver.send({"op": "close", "file": doc.path})
+                doc._sent_open = False
+            for qid, q in list(self.queries.items()):
+                if q["path"] == doc.path and q["status"] not in ("finished", "canceled", "failed"):
+                    self.cancel_query(qid)
+            for job, (source, client) in list(self.fill_origins.items()):
+                if source == doc.path:
+                    if job in self.keyword_holes:
+                        self.drop_keyword_job(job)
+                    elif task := self.fill_tasks.get(job):
+                        task.cancel()
+                        self._fill_push(client, job, status="canceled", candidates=[])
+            doc.prover = {}
+            self.theory_status.pop(doc.path, None)
+            for key in [k for k in self.running_since if k[0] == doc.path]:
+                del self.running_since[key]
+            self.host.broadcast_doc(self, doc, {"event": "doc_prover", "session": self.id, "path": doc.path,
+                                                "epoch": self.meta["epoch"], "prover": doc.prover})
+        self.persist()
+        self.push_activity()
+
     def backend_open(self, doc: Doc) -> None:
         # A project file (ROOT, a lakefile) is edited in the host's buffer but is no document of
         # the prover's
-        if not doc.path.endswith(tuple(self.driver_class.documents)):
+        if self.document_stopped(doc) or not doc.path.endswith(tuple(self.driver_class.documents)):
             return
         if self.driver and self.driver.ready:
             with contextlib.suppress(HostError):
@@ -1077,7 +1126,7 @@ class Session:
         nl = doc.text.find("\n", line_start)
         nl = len(doc.text) if nl < 0 else nl
         m = self.KEYWORD_LINE.match(doc.text[line_start:nl])
-        if not m or getattr(client, "settings", {}).get("keywords") is False:
+        if not m or self.document_stopped(doc) or getattr(client, "settings", {}).get("keywords") is False:
             return False
         start = line_start + len(m.group(1))
         # (asked once: a pause again on the same line does not ask again; a line changed since,
@@ -1868,15 +1917,29 @@ class Session:
             line = ot.lines_cols(doc.text, min(start, len(doc.text)))[0] if doc else 0
             running.append({"path": path, "line": line, "name": name, "seconds": round(t - since)})
         theories = []
-        for path, st in self.theory_status.items():
-            if not st:
+        statuses = dict(self.theory_status)
+        controls = {}
+        if self.driver_class.supports_document_stop:
+            for path, doc in self.docs.items():
+                if self.document_stopped(doc):
+                    controls[path] = "stopped"
+                elif getattr(doc, "_sent_open", False):
+                    controls[path] = "open"
+                if path in controls:
+                    statuses.setdefault(path, {})
+        for path, st in statuses.items():
+            if not st and path not in controls:
                 continue
             total = st.get("total") or 0
-            theories.append({"path": path, "theory": st.get("theory"), "percentage": st.get("percentage", 0),
+            theories.append({"path": path, "theory": st.get("theory") or Path(path).name,
+                             "checking_control": controls.get(path), "percentage": st.get("percentage", 0),
                              "running": st.get("running", 0), "failed": st.get("failed", 0),
                              "consolidated": st.get("consolidated", False), "total": total,
                              "header_errors": st.get("header_errors"), "imports": st.get("imports", [])})
+        active_queries = [{"id": q["id"], "operation": q["operation"], "path": q["path"]}
+                          for q in self.queries.values() if q["status"] in ("waiting", "running")]
         return {"lifecycle": self.lifecycle, "prover": self.prover_stats(), "running": running[:20],
+                "queries": active_queries[:20],
                 "theories": theories, "listeners": self.live_listeners(),
                 "route": self.meta.get("query_route") or "helper"}
 
@@ -2040,6 +2103,9 @@ class Session:
 
     def node_event(self, msg: Dict[str, Any]) -> None:
         path = msg.get("file", "")
+        doc = self.docs.get(path)
+        if doc is not None and self.document_stopped(doc):
+            return
         status = dict(msg.get("status") or {})
         if msg.get("header_errors"):
             status["header_errors"] = msg["header_errors"]
@@ -2047,7 +2113,6 @@ class Session:
             status["imports"] = msg["imports"]
         status["theory"] = msg.get("theory")
         self.theory_status[path] = status
-        doc = self.docs.get(path)
         if doc is not None and "commands" in msg:
             seq = int(msg.get("seq", doc.revision))
             commands = msg["commands"]
@@ -2101,8 +2166,10 @@ class Session:
         """
         backend = self.require_checking()
         doc = self.get_doc(path)
+        self.require_document_checking(doc)
         pos = doc.map_offset(offset, revision)
         captured_revision = doc.revision
+        checking_generation = getattr(doc, "_checking_generation", 0)
         epoch = self.meta["epoch"]
         # A definition can point into another open document. Its line/column is just as
         # stale if that target changes while the source document remains unchanged.
@@ -2114,6 +2181,7 @@ class Session:
             if (self.host.sessions.get(self.id) is not self or self.driver is not backend
                     or self.meta["epoch"] != epoch or self.docs.get(doc.path) is not doc
                     or doc.revision != captured_revision
+                    or getattr(doc, "_checking_generation", 0) != checking_generation
                     or self.lifecycle in ("Paused", "Stopped", "Stopping", "Failed")):
                 raise HostError("The document or prover changed while reading its state", "stale_snapshot",
                                 revision=captured_revision)
@@ -2167,6 +2235,7 @@ class Session:
                     operation: str, args: List[str]) -> Dict[str, Any]:
         backend = self.require_checking()
         doc = self.get_doc(path)
+        self.require_document_checking(doc)
         pos = doc.map_offset(offset, revision)
         qid = uuid.uuid4().hex[:10]
         self.queries[qid] = {"id": qid, "client": client.id, "path": doc.path, "operation": operation,
@@ -2454,6 +2523,7 @@ class Session:
                   model: Optional[str] = None, route: Optional[str] = None) -> Dict[str, Any]:
         self.require_checking()
         doc = self.get_doc(path)
+        self.require_document_checking(doc)
         pos = doc.map_offset(offset, revision)
         commands = doc.prover.get("commands") or []
         names = self.driver_class.placeholder_commands
@@ -2472,6 +2542,8 @@ class Session:
         task = asyncio.get_running_loop().create_task(
             self._fill(client, job, doc, hole, agent, hint, n, model, route))
         self.fill_tasks[job] = task
+        self.fill_origins[job] = (doc.path, client)
+        task.add_done_callback(lambda _: self.fill_origins.pop(job, None))
         # Its first event says what it fills, for an app that did not ask (a typed keyword)
         self._fill_push(client, job, status="asking", candidates=[], agent=agent, hint=hint, model=model,
                         replace={"start": hole[0], "end": hole[1]}, revision=doc.revision)
@@ -3316,6 +3388,12 @@ class Host:
             elif op == "resume" or op == "start":
                 s.resume() if s.lifecycle != "Stopped" or op == "resume" else s.start()
             return {"session": s.summary()}
+        if op == "document_checking":
+            self.check_lifecycle_rights(client, s)
+            if not isinstance(p.get("on"), bool):
+                raise HostError("Specify whether checking is on", "bad_request")
+            s.set_document_checking(p["path"], p["on"])
+            return {}
         if op == "discard":
             if client.kind == "agent":
                 self.check_lifecycle_rights(client, s)

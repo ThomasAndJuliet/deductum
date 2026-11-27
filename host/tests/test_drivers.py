@@ -361,6 +361,31 @@ class DriverTests(unittest.IsolatedAsyncioTestCase):
         s.close_unviewed()
         self.assertEqual([o["op"] for o in FakeDriver.sent][-1], "close")
 
+    async def test_stop_and_resume_one_document_without_reopening_it_on_read(self):
+        d = self.folder("FAKEROOT", "Main.fk", "Statements.fk")
+        s = self.host.create_session({"folder": str(d), "backend": "fake"})
+        await s.start_task
+        app = App()
+        main, statements = (str(d / filename) for filename in ("Main.fk", "Statements.fk"))
+        for path in (main, statements):
+            await self.host.handle(app, {"op": "read", "session": s.id, "path": path})
+        request = {"op": "document_checking", "session": s.id, "path": statements}
+        s.start_query(app, main, 0, 1, "quickcheck", [])
+        selected = s.start_query(app, statements, 0, 1, "quickcheck", [])["query"]
+        with unittest.mock.patch.object(FakeDriver, "supports_document_stop", True):
+            await self.host.handle(app, dict(request, on=False))
+            await self.host.handle(app, {"op": "read", "session": s.id, "path": statements})
+            with self.assertRaisesRegex(H.HostError, "Checking is stopped"):
+                s.start_query(app, statements, 0, 1, "quickcheck", [])
+            self.assertEqual([(msg["op"], msg.get("file")) for msg in FakeDriver.sent if msg["op"] in ("open", "close")],
+                             [("open", main), ("open", statements), ("close", statements)])
+            self.assertEqual([msg["query"] for msg in FakeDriver.sent if msg["op"] == "cancel_query"], [selected])
+            await self.host.handle(app, dict(request, on=True))
+            self.assertFalse(s.document_stopped(s.docs[statements]))
+            self.assertEqual(FakeDriver.sent[-1]["file"], statements)
+            self.assertEqual(FakeDriver.sent[-1]["op"], "open")
+            self.assertEqual(s.lifecycle, "Running")
+
     async def test_isabelle_requires_only_viewed_theories(self):
         # A theory looked at once and kept required would be checked again, with everything
         # importing it, at every keystroke in a theory it imports
