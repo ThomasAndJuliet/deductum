@@ -3794,20 +3794,23 @@ pub fn waiting_note(ws: &Workspace) -> Option<String> {
     }
     let tool = ws.caps.tools.iter().any(|tool| tool.typed == command.name || tool.name == command.name);
     let starts = if tool { format!("{} starts when the prover reaches this line. ", command.name) } else { String::new() };
-    let waiting = super::shell::pending_imports(ws, t);
-    if waiting.is_empty() {
+    let imports = super::shell::import_progress(ws, &t.path);
+    if imports.waiting == 0 {
         return Some(format!("{starts}Waiting for the prover to reach this line…"));
     }
-    let blocked: Vec<&str> = waiting.iter().filter(|w| w.2).map(|w| w.0.as_str()).collect();
-    if !blocked.is_empty() {
-        return Some(format!("{starts}An import cannot load: {}.", blocked.join(", ")));
+    let more = |total: usize, displayed: usize| {
+        if total > displayed { format!(" and {} more", total - displayed) } else { String::new() }
+    };
+    if imports.blocked > 0 {
+        return Some(format!("{starts}An import cannot load: {}{}.",
+            imports.errors.join(", "), more(imports.blocked, imports.errors.len())));
     }
-    let names: Vec<String> = waiting.iter().take(3).map(|(n, pct, _)| format!("{n} {pct}%")).collect();
-    let more = if waiting.len() > 3 { format!(" and {} more", waiting.len() - 3) } else { String::new() };
+    let names: Vec<String> = imports.next.iter().map(|(name, pct)| format!("{name} {pct}%")).collect();
+    let more = more(imports.waiting, names.len());
     Some(format!(
         "{starts}Waiting for the prover to check {} imported theor{} first: {}{more}.",
-        waiting.len(),
-        if waiting.len() == 1 { "y" } else { "ies" },
+        imports.waiting,
+        if imports.waiting == 1 { "y" } else { "ies" },
         names.join(", ")
     ))
 }

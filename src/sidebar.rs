@@ -11,7 +11,10 @@
 //!   Run button and the last output, when its capabilities offer actions.
 //! - **Outline**, **Theorems** and **Problems** of the open document (drawn by `view`).
 
+use std::cell::RefCell;
 use std::collections::BTreeMap;
+use std::hash::{DefaultHasher, Hash, Hasher};
+use std::sync::Arc;
 
 use cosmic::iced::{Alignment, Border, Color, Length, Padding};
 use cosmic::prelude::*;
@@ -105,7 +108,7 @@ pub fn sidebar(app: &App) -> Element<'_, Message> {
             .padding(Padding { top: s.space_xs as f32, bottom: s.space_xs as f32, left: s.space_xs as f32, right: s.space_xs as f32 })
             .push(bar)
             .push(widget::container(heading).padding(Padding { left: 6.0, right: 0.0, top: 2.0, bottom: 0.0 }))
-            .push(widget::scrollable(widget::container(content).padding(Padding { right: 14.0, ..Padding::ZERO })).height(Length::Fill)),
+            .push(widget::scrollable(widget::container(content).padding(Padding { right: 14.0, ..Padding::ZERO })).id(scroll_id()).height(Length::Fill)),
     )
     .width(Length::Fixed(app.left_width))
     .height(Length::Fill)
@@ -556,90 +559,145 @@ pub fn is_project_file(app: &App, ws: &Workspace, path: &str) -> bool {
     !documents.iter().any(|d| name.ends_with(d.as_str())) && project_files.iter().any(|p| p == name)
 }
 
-/// The open session's documents: its project files first, then the documents by folder
-fn documents<'a>(app: &'a App, ws: &'a Workspace) -> Element<'a, Message> {
-    let mut col = widget::column::with_capacity(64).spacing(1).padding(Padding { left: 26.0, right: 0.0, top: 2.0, bottom: 6.0 });
-    let Some(info) = &ws.info else { return widget::container(widget::text::caption("Loading…")).padding(Padding { left: 30.0, ..Padding::ZERO }).into() };
-    let folder = info["folder"].as_str().unwrap_or("");
-    let (documents, project_files) = document_kinds(app, ws);
-    let entries: Vec<&Value> = info["theories"].as_array().into_iter().flatten().collect();
-    let path_of = |t: &&Value| t["path"].as_str().unwrap_or("").to_string();
-    let is_doc = |p: &str| documents.iter().any(|d| p.ends_with(d.as_str()));
-    let projects: Vec<String> = entries.iter().map(path_of).filter(|p| !is_doc(p) && project_files.iter().any(|f| f == file_name(p))).collect();
-    let all: Vec<&Value> = entries.iter().filter(|t| is_doc(&path_of(t))).copied().collect();
-    // A header that collapses the whole list (the open document stays in sight) or expands it
-    let key = (ws.machine.clone(), ws.sid.clone());
-    let collapsed = app.shell.collapsed.contains(&key);
-    let header = widget::row::with_capacity(3)
-        .spacing(6)
-        .align_y(Alignment::Center)
-        .push(tinted_icon(if collapsed { "go-next-symbolic" } else { "go-down-symbolic" }, 14, shell::muted))
-        .push(widget::text::caption(format!("{} document{}", all.len(), if all.len() == 1 { "" } else { "s" })));
-    col = col.push(household_widgets::tooltip_with(
-        button::custom(header).width(Length::Fill).padding([2, 6]).class(nav_style(false)).on_press(Message::Shell(shell::Msg::ToggleDocuments)),
-        widget::text(if collapsed { "Show all the documents" } else { "Collapse the list (the open document stays)" }),
-        widget::tooltip::Position::Bottom,
-    ));
-    let open_path = ws.theory.as_ref().map(|t| t.path.as_str());
-    // A big folder gets a filter
-    if all.len() > 10 && !collapsed {
-        col = col.push(
-            widget::container(super::fields::text(&ws.theory_filter, super::fields::Field::Documents, format!("Filter {} documents", all.len()), |f| f))
-                .padding(Padding { bottom: 4.0, right: 4.0, ..Padding::ZERO }),
-        );
+pub fn scroll_id() -> widget::Id {
+    widget::Id::new("sessions-sidebar")
+}
+
+pub fn document_scope(ws: &Workspace) -> u64 {
+    let mut hash = DefaultHasher::new();
+    ws.machine.hash(&mut hash);
+    ws.sid.hash(&mut hash);
+    hash.finish()
+}
+
+#[derive(Default)]
+pub struct DocumentListCache(RefCell<Option<(ListKey, Arc<DocumentList>)>>);
+
+impl DocumentListCache {
+    pub fn invalidate(&self) {
+        self.0.borrow_mut().take();
     }
-    let open = ws.theory.as_ref().map(|t| t.path.as_str());
-    let machine = machine_name(app, &ws.machine);
-    for p in projects.iter().filter(|_| !collapsed) {
-        let rel = p.strip_prefix(folder).unwrap_or(p).trim_start_matches('/');
-        let is_open = open == Some(p.as_str());
-        let row = widget::row::with_capacity(2).spacing(6).align_y(Alignment::Start).push(file_icon(is_open)).push(name_text(rel, 13.0, is_open));
-        col = col.push(household_widgets::tooltip_with(
-            button::custom(row).width(Length::Fill).padding([2, 6]).class(nav_style(is_open)).on_press(Message::OpenTheory(p.clone())),
-            widget::text(format!("{rel}\n{machine}\nA project file: opens in the source view")),
-            widget::tooltip::Position::Right,
-        ));
+}
+
+#[derive(PartialEq, Eq)]
+struct ListKey {
+    scope: u64,
+    folder: String,
+    catalogue_address: usize,
+    catalogue_len: usize,
+    filter: String,
+    collapsed: bool,
+    open_if_collapsed: Option<String>,
+    extensions: Vec<String>,
+    project_files: Vec<String>,
+}
+
+struct DocumentList {
+    count: usize,
+    projects: Vec<usize>,
+    rows: Vec<DocumentRow>,
+    geometry: Arc<Vec<super::viewport::Row>>,
+}
+
+enum DocumentRow {
+    Folder { name: String, caption: String, collapsed: bool },
+    File { entry: usize, name: String, indent: f32 },
+}
+
+impl DocumentList {
+    fn new(app: &App, ws: &Workspace, key: &ListKey, entries: &[Value]) -> Self {
+        let mut count = 0;
+        let mut projects = Vec::new();
+        let mut groups = BTreeMap::<&str, Vec<(usize, &str)>>::new();
+        for (index, entry) in entries.iter().enumerate() {
+            let Some(path) = entry["path"].as_str() else { continue };
+            let Some(extension) = key.extensions.iter().find(|ext| path.ends_with(ext.as_str())) else {
+                if !key.collapsed && key.project_files.iter().any(|file| file == file_name(path)) {
+                    projects.push(index);
+                }
+                continue;
+            };
+            count += 1;
+            let relative = path.strip_prefix(&key.folder).unwrap_or(path).trim_start_matches('/');
+            if !key.filter.is_empty() && super::input::fuzzy(&key.filter, &relative.to_lowercase()).is_none() {
+                continue;
+            }
+            let (folder, name) = relative.rsplit_once('/').unwrap_or(("", relative));
+            groups.entry(folder).or_default().push((index, name.strip_suffix(extension).unwrap_or(name)));
+        }
+
+        let mut rows = Vec::new();
+        let mut geometry = Vec::new();
+        let mut push = |row: DocumentRow, identity: &str, label: &str| {
+            let mut hash = DefaultHasher::new();
+            matches!(row, DocumentRow::Folder { .. }).hash(&mut hash);
+            identity.hash(&mut hash);
+            geometry.push(super::viewport::Row {
+                key: hash.finish(), characters: label.chars().count(), lines: 1, kind: super::theory::Kind::Formal,
+            });
+            rows.push(row);
+        };
+        for (dir, items) in groups {
+            let indent = if dir.is_empty() || key.collapsed { 0.0 } else { 10.0 };
+            let collapsed = !dir.is_empty() && key.filter.is_empty()
+                && app.shell.collapsed_dirs.contains(&(ws.machine.clone(), ws.sid.clone(), dir.into()));
+            if !dir.is_empty() && !key.collapsed {
+                let caption = if collapsed { format!("{dir} ({})", items.len()) } else { dir.to_string() };
+                push(DocumentRow::Folder { name: dir.into(), caption: caption.clone(), collapsed }, dir, &caption);
+            }
+            for (index, name) in items {
+                let path = entries[index]["path"].as_str().unwrap_or("");
+                if (key.collapsed || collapsed) && key.open_if_collapsed.as_deref() != Some(path) {
+                    continue;
+                }
+                push(DocumentRow::File { entry: index, name: name.into(), indent }, path, name);
+            }
+        }
+        Self { count, projects, rows, geometry: Arc::new(geometry) }
     }
+}
+
+fn document_list(app: &App, ws: &Workspace, folder: &str, entries: &[Value]) -> Arc<DocumentList> {
+    let (extensions, project_files) = document_kinds(app, ws);
+    let collapsed = app.shell.collapsed.contains(&(ws.machine.clone(), ws.sid.clone()));
     let filter = ws.theory_filter.to_lowercase();
-    // By folder, then the name less what all names in the folder start with
-    let mut groups: BTreeMap<String, Vec<(String, &Value)>> = BTreeMap::new();
-    for t in &all {
-        let path = t["path"].as_str().unwrap_or("");
-        let rel = path.strip_prefix(folder).unwrap_or(path).trim_start_matches('/');
-        if !filter.is_empty() && super::input::fuzzy(&filter, &rel.to_lowercase()).is_none() {
-            continue;
-        }
-        let (dir, name) = rel.rsplit_once('/').unwrap_or(("", rel));
-        let shown = documents.iter().find_map(|d| name.strip_suffix(d.as_str())).unwrap_or(name);
-        groups.entry(dir.to_string()).or_default().push((shown.to_string(), *t));
+    let has_collapsed_folders = filter.is_empty() && app.shell.collapsed_dirs.iter()
+        .any(|(machine, sid, _)| machine == &ws.machine && sid == &ws.sid);
+    let open_if_collapsed = if collapsed || has_collapsed_folders {
+        ws.theory.as_ref().map(|theory| theory.path.clone())
+    } else {
+        None
+    };
+    let key = ListKey {
+        scope: document_scope(ws), folder: folder.into(), catalogue_address: entries.as_ptr() as usize,
+        catalogue_len: entries.len(), filter, collapsed, open_if_collapsed, extensions, project_files,
+    };
+    let mut cache = app.shell.documents.0.borrow_mut();
+    if let Some((previous, list)) = cache.as_ref() && previous == &key {
+        return Arc::clone(list);
     }
-    if groups.is_empty() {
-        if !collapsed {
-            col = col.push(widget::container(widget::text::caption(if all.is_empty() { "No documents here yet" } else { "No document matches" })).padding([2, 6]));
-        }
-    }
-    for (dir, items) in groups {
-        let indent = if dir.is_empty() || collapsed { 0.0 } else { 10.0 };
-        // A folder's heading collapses its documents (all but the open one); a filter shows them all
-        let dir_collapsed = !dir.is_empty() && filter.is_empty() && app.shell.collapsed_dirs.contains(&(ws.machine.clone(), ws.sid.clone(), dir.clone()));
-        if !dir.is_empty() && !collapsed {
+    let list = Arc::new(DocumentList::new(app, ws, &key, entries));
+    *cache = Some((key, Arc::clone(&list)));
+    list
+}
+
+fn document_row<'a>(row: &DocumentRow, entries: &'a [Value], open: Option<&str>, machine: &str) -> Element<'a, Message> {
+    match row {
+        DocumentRow::Folder { name, caption, collapsed } => {
             let heading = widget::row::with_capacity(2)
                 .spacing(4)
                 .align_y(Alignment::Center)
-                .push(tinted_icon(if dir_collapsed { "go-next-symbolic" } else { "go-down-symbolic" }, 12, shell::muted))
-                .push(widget::text::caption(format!("{dir}{}", if dir_collapsed { format!(" ({})", items.len()) } else { String::new() })));
-            col = col.push(
-                widget::container(button::custom(heading).width(Length::Fill).padding([1, 4]).class(nav_style(false)).on_press(Message::Shell(shell::Msg::ToggleDocFolder(dir.clone()))))
-                    .padding(Padding { top: 4.0, left: 2.0, ..Padding::ZERO }),
-            );
+                .push(tinted_icon(if *collapsed { "go-next-symbolic" } else { "go-down-symbolic" }, 12, shell::muted))
+                .push(widget::text::caption(caption.clone()));
+            widget::container(button::custom(heading).width(Length::Fill).padding([1, 4]).class(nav_style(false))
+                .on_press(Message::Shell(shell::Msg::ToggleDocFolder(name.clone()))))
+                .padding(Padding { top: 4.0, left: 2.0, ..Padding::ZERO }).into()
         }
-        for (name, t) in items {
-            if (collapsed || dir_collapsed) && t["path"].as_str() != open_path {
-                continue;
-            }
-            let path = t["path"].as_str().unwrap_or("").to_string();
-            let st = &t["status"];
-            let status = if t["conflict"].as_bool() == Some(true) || st["failed"].as_u64().unwrap_or(0) > 0 {
+        DocumentRow::File { entry, name, indent } => {
+            let item = &entries[*entry];
+            let path = item["path"].as_str().unwrap_or("");
+            let st = &item["status"];
+            let status = if item["conflict"].as_bool() == Some(true) || st["failed"].as_u64().unwrap_or(0) > 0 {
                 Some(Status::Failed)
             } else if st["consolidated"].as_bool() == Some(true) {
                 Some(Status::Finished)
@@ -650,38 +708,110 @@ fn documents<'a>(app: &'a App, ws: &'a Workspace) -> Element<'a, Message> {
             } else {
                 None
             };
-            let dirty = if t["dirty"].as_bool() == Some(true) { " •" } else { "" };
-            let is_open = open == Some(path.as_str());
-            let row = widget::row::with_capacity(2)
-                .spacing(6)
-                .align_y(Alignment::Start)
-                .push(
-                    widget::container(
-                        widget::container(widget::Space::new())
-                            .width(Length::Fixed(7.0))
-                            .height(Length::Fixed(7.0))
-                            .class(theme::Container::custom(move |theme| iced::widget::container::Style {
-                                background: status.map(|s| super::view::status_color(s, theme).into()),
-                                border: Border { radius: 4.0.into(), ..Default::default() },
-                                ..Default::default()
-                            })),
-                    )
-                    .height(Length::Fixed(18.0))
-                    .center_y(Length::Fixed(18.0)),
-                )
+            let dirty = if item["dirty"].as_bool() == Some(true) { " •" } else { "" };
+            let is_open = open == Some(path);
+            let row = widget::row::with_capacity(2).spacing(6).align_y(Alignment::Start)
+                .push(widget::container(widget::container(widget::Space::new())
+                    .width(Length::Fixed(7.0)).height(Length::Fixed(7.0))
+                    .class(theme::Container::custom(move |theme| iced::widget::container::Style {
+                        background: status.map(|s| super::view::status_color(s, theme).into()),
+                        border: Border { radius: 4.0.into(), ..Default::default() },
+                        ..Default::default()
+                    }))).height(Length::Fixed(18.0)).center_y(Length::Fixed(18.0)))
                 .push(name_text(&format!("{name}{dirty}"), 13.0, is_open));
-            col = col.push(household_widgets::tooltip_with(
-                button::custom(row)
-                    .width(Length::Fill)
+            household_widgets::tooltip_with(
+                button::custom(row).width(Length::Fill)
                     .padding(Padding { left: 6.0 + indent, right: 6.0, top: 2.0, bottom: 2.0 })
-                    .class(nav_style(is_open))
-                    .on_press(Message::OpenTheory(path.clone())),
-                widget::text(format!("{}\n{machine}", file_name(&path))),
+                    .class(nav_style(is_open)).on_press(Message::OpenTheory(path.into())),
+                widget::text(format!("{}\n{machine}", file_name(path))),
                 widget::tooltip::Position::Right,
-            ));
+            ).into()
         }
     }
+}
+
+/// The open session's documents: its project files first, then the documents by folder.
+fn documents<'a>(app: &'a App, ws: &'a Workspace) -> Element<'a, Message> {
+    let mut col = widget::column::with_capacity(64).spacing(1).padding(Padding { left: 26.0, right: 0.0, top: 2.0, bottom: 6.0 });
+    let Some(info) = &ws.info else { return widget::container(widget::text::caption("Loading…")).padding(Padding { left: 30.0, ..Padding::ZERO }).into() };
+    let folder = info["folder"].as_str().unwrap_or("");
+    let entries = info["theories"].as_array().map_or(&[][..], Vec::as_slice);
+    let list = document_list(app, ws, folder, entries);
+    let count = list.count;
+    let collapsed = app.shell.collapsed.contains(&(ws.machine.clone(), ws.sid.clone()));
+    let header = widget::row::with_capacity(3).spacing(6).align_y(Alignment::Center)
+        .push(tinted_icon(if collapsed { "go-next-symbolic" } else { "go-down-symbolic" }, 14, shell::muted))
+        .push(widget::text::caption(format!("{count} document{}", if count == 1 { "" } else { "s" })));
+    col = col.push(household_widgets::tooltip_with(
+        button::custom(header).width(Length::Fill).padding([2, 6]).class(nav_style(false)).on_press(Message::Shell(shell::Msg::ToggleDocuments)),
+        widget::text(if collapsed { "Show all the documents" } else { "Collapse the list (the open document stays)" }),
+        widget::tooltip::Position::Bottom,
+    ));
+    if count > 10 && !collapsed {
+        col = col.push(widget::container(super::fields::text(
+            &ws.theory_filter, super::fields::Field::Documents, format!("Filter {count} documents"), |f| f,
+        )).padding(Padding { bottom: 4.0, right: 4.0, ..Padding::ZERO }));
+    }
+    let open = ws.theory.as_ref().map(|t| t.path.as_str());
+    let machine = machine_name(app, &ws.machine);
+    for entry in &list.projects {
+        let path = entries[*entry]["path"].as_str().unwrap_or("");
+        let rel = path.strip_prefix(folder).unwrap_or(path).trim_start_matches('/');
+        let is_open = open == Some(path);
+        let row = widget::row::with_capacity(2).spacing(6).align_y(Alignment::Start)
+            .push(file_icon(is_open)).push(name_text(rel, 13.0, is_open));
+        col = col.push(household_widgets::tooltip_with(
+            button::custom(row).width(Length::Fill).padding([2, 6]).class(nav_style(is_open)).on_press(Message::OpenTheory(path.into())),
+            widget::text(format!("{rel}\n{machine}\nA project file: opens in the source view")),
+            widget::tooltip::Position::Right,
+        ));
+    }
+    if list.rows.is_empty() && !collapsed {
+        col = col.push(widget::container(widget::text::caption(if count == 0 { "No documents here yet" } else { "No document matches" })).padding([2, 6]));
+    } else if list.rows.len() <= 64 {
+        for row in &list.rows {
+            col = col.push(document_row(row, entries, open, machine));
+        }
+    } else {
+        let scope = document_scope(ws);
+        let geometry = Arc::clone(&list.geometry);
+        let estimate_rows = Arc::clone(&geometry);
+        let build = move |i| -> Element<'a, Message> {
+            let Some(row) = list.rows.get(i) else { return widget::Space::new().into() };
+            widget::container(document_row(row, entries, open, machine))
+                .padding(Padding { bottom: 1.0, ..Padding::ZERO }).into()
+        };
+        let estimate = move |i: usize, width: f32| estimate_rows.get(i).map_or(0.0, |row| {
+            let lines = (row.characters as f32 * 7.0 / (width - 40.0).max(20.0)).ceil().max(1.0);
+            23.0 + (lines - 1.0) * 16.0
+        });
+        col = col.push(super::viewport::Column::new(Default::default(), scope, geometry, 0, (0.0, 800.0),
+            build, estimate, move |delta| Message::SidebarAdjust(scope, delta)));
+    }
     col.into()
+}
+
+#[cfg(test)]
+#[test]
+fn large_document_catalogue_retains_rows_and_lays_out_the_viewport() {
+    use serde_json::json;
+    let mut app = super::snapshot_lean::lean_app_with(super::editor::Mode::Source, "theorem t : True := trivial");
+    app.show_sidebar = true;
+    let files: Vec<_> = (0..803).map(|i| json!({"path": format!("/project/F{:03}/Theory{i}.lean", i / 50)})).collect();
+    let ws = app.workspace.as_mut().unwrap();
+    ws.info = Some(json!({"folder": "/project", "theories": files}));
+    let catalogue = |app: &App| {
+        let ws = app.workspace.as_ref().unwrap();
+        document_list(app, ws, "/project", ws.info.as_ref().unwrap()["theories"].as_array().unwrap())
+    };
+    let first = catalogue(&app);
+    assert_eq!(first.count, 803);
+    app.workspace.as_mut().unwrap().info.as_mut().unwrap()["theories"][0]["status"] = json!({"running": 1});
+    assert!(Arc::ptr_eq(&first, &catalogue(&app)), "prover progress must reuse the same rows");
+    let mut harness = super::snapshot::Harness::new(cosmic::iced::Size::new(1400.0, 900.0));
+    harness.frame(&app);
+    let built = super::viewport::last_built_count();
+    assert!(built > 0 && built < 100, "built {built} widgets for an 803-file project");
 }
 
 // ----- the project
