@@ -293,11 +293,19 @@ pub struct Llm {
     pub codex_model: String,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Lean {
     /// Where Lean's Search looks names up (design C17e)
     pub loogle: Loogle,
+    /// Show top-level `/- … -/` comments with Markdown headings as prose when a file has no `/-! … -/` docs
+    pub literate_comments: bool,
+}
+
+impl Default for Lean {
+    fn default() -> Self {
+        Self { loogle: Loogle::default(), literate_comments: true }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -637,6 +645,12 @@ pub fn loogle() -> Loogle {
     read(|s| s.lean.loogle)
 }
 
+/// Whether top-level `/- … -/` comments with Markdown prose are shown as prose in Lean's literate
+/// view when a file has no `/-! … -/` module docs
+pub fn literate_comments() -> bool {
+    read(|s| s.lean.literate_comments)
+}
+
 /// The spaces Tab inserts and Shift+Tab takes away
 pub fn indent_width() -> usize {
     read(|s| usize::from(s.editing.indent_width.max(1)))
@@ -713,6 +727,7 @@ mod tests {
         assert!(!s.layout.show_right, "a null takes the default");
         // what the old file did not have takes its default
         assert_eq!(s.lean.loogle, Loogle::Public);
+        assert!(s.lean.literate_comments);
         assert_eq!(s.editing.keyword_pause_ms, 2500);
         assert!(s.editing.keywords && s.editing.complete_while_typing && s.proof_state.show_changes);
     }
@@ -722,9 +737,11 @@ mod tests {
         let mut s = Settings::default();
         s.appearance.theme = ThemeChoice::Light;
         s.lean.loogle = Loogle::Local;
+        s.lean.literate_comments = false;
         s.llm.claude_model = "opus".into();
         let v = serde_json::to_value(&s).unwrap();
         assert_eq!(v["lean"]["loogle"], "local");
+        assert_eq!(v["lean"]["literate_comments"], false);
         assert_eq!(v["appearance"]["theme"], "light");
         assert_eq!(Settings::from_json(&v), s);
         let mut broken = v.clone();

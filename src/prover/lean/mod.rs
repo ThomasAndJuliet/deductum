@@ -220,7 +220,7 @@ fn heading_title(chars: &[char], body: (usize, usize)) -> Option<(u8, (usize, us
 fn lean_blocks(text: &str, prover: &[Command]) -> Vec<Block> {
     let chars: Vec<char> = text.chars().collect();
     let mut out = Vec::new();
-    for b in blocks::blocks(text) {
+    for b in blocks::blocks_with(text, crate::settings::literate_comments()) {
         let prose = |kind: Kind, start: usize, end: usize, body: Option<(usize, usize)>| Block {
             kind,
             start,
@@ -233,9 +233,14 @@ fn lean_blocks(text: &str, prover: &[Command]) -> Vec<Block> {
         match b.kind {
             blocks::Kind::Heading(_) | blocks::Kind::Text => {
                 let body = b.body.unwrap_or((b.start, b.end));
-                // (a module doc of one heading: the title is its body, and the view adds the #s)
+                // (a module doc or promoted plain block comment of one heading: the title is its body, and the view adds the #s)
+                let heading_eligible = b.doc.is_none()
+                    && (chars.get(b.start + 2) == Some(&'!')
+                        || (chars.get(b.start) == Some(&'/')
+                            && chars.get(b.start + 1) == Some(&'-')
+                            && chars.get(b.start + 2) != Some(&'-')));
                 match (b.kind, heading_title(&chars, body)) {
-                    (blocks::Kind::Heading(_), Some((level, title))) if b.doc.is_none() && chars.get(b.start + 2) == Some(&'!') => {
+                    (blocks::Kind::Heading(_), Some((level, title))) if heading_eligible => {
                         out.push(prose(Kind::Heading(level.min(6)), b.start, b.end, Some(title)));
                     }
                     _ => out.push(prose(Kind::Text, b.start, b.end, Some(trimmed(&chars, body)))),
@@ -401,8 +406,8 @@ impl Profile for Lean {
     }
 
     fn prose(&self, body: &str, _codec: &dyn Codec) -> String {
-        // (the Markdown as written, without the common indentation)
-        docs::to_markdown(body).flowed().markdown
+        // (the Markdown as written, without the common indentation, with unindented ASCII art fenced)
+        docs::fence_ascii_art(&docs::to_markdown(body).flowed().markdown)
     }
 
     fn prose_map(&self, body: &str) -> Option<super::ProseMap> {
@@ -443,6 +448,9 @@ impl Profile for Lean {
                     }
                     out[at..at + n].fill(Some(Hl::Sem(Sem::Free)));
                     fence = None;
+                }
+                (false, None) if line.starts_with("    ") || line.starts_with('\t') || docs::is_ascii_art_line(line) => {
+                    out[at..at + n].fill(Some(Hl::Sem(Sem::Free)));
                 }
                 _ => {}
             }

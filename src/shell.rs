@@ -86,6 +86,7 @@ pub enum Msg {
     ClaudeModel(String),
     CodexModel(String),
     Loogle(Loogle),
+    LiterateComments(bool),
     /// Run one of the session's project actions, by name
     ProjectAction(String),
     /// The new-session flow: the backend card picked, the toolchain picked (index among the
@@ -300,6 +301,16 @@ impl App {
                 self.shell.settings.lean.loogle = l;
                 self.save_settings();
                 self.tell_hosts();
+            }
+            Msg::LiterateComments(on) => {
+                self.shell.settings.lean.literate_comments = on;
+                self.save_settings();
+                if let Some(machine) = self.workspace.as_ref().map(|w| w.machine.clone()) {
+                    let table = self.table(&machine);
+                    if let Some(t) = self.workspace.as_mut().and_then(|w| w.theory.as_mut()) {
+                        t.refresh(&*table);
+                    }
+                }
             }
             Msg::ToggleDocuments => {
                 if let Some(key) = self.workspace_ids() {

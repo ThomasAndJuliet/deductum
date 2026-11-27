@@ -29,6 +29,8 @@ pub enum Delimiter {
     Module,
     /// `/-- … -/`
     Doc,
+    /// `/- … -/` (plain block comment promoted to prose)
+    Block,
     /// No opener: the text is taken as the Markdown body as it stands
     Bare,
 }
@@ -63,6 +65,8 @@ fn split_comment(comment: &str) -> (Delimiter, usize, usize) {
         (Delimiter::Module, 3)
     } else if rest.starts_with("/--") && !rest.starts_with("/--/") {
         (Delimiter::Doc, 3)
+    } else if rest.starts_with("/-") {
+        (Delimiter::Block, 2)
     } else {
         return (Delimiter::Bare, 0, comment.len());
     };
@@ -242,10 +246,99 @@ impl Docs {
     }
 }
 
+/// Whether a line looks like ASCII/Unicode art (inference-rule bars, box-drawing diagrams,
+/// ASCII boxes or tree branches) that must keep its line breaks and monospace alignment
+pub fn is_ascii_art_line(line: &str) -> bool {
+    let t = line.trim();
+    if t.is_empty() {
+        return false;
+    }
+    // Unicode box drawing (U+2500..=U+257F) or vertical ellipsis
+    if t.chars().any(|c| ('\u{2500}'..='\u{257F}').contains(&c) || c == '⋮') {
+        return true;
+    }
+    // Horizontal inference-rule bars: runs of 3+ em-dashes (—) or en-dashes (–) or ===
+    if t.contains("———") || t.contains("–––") || t.contains("===") {
+        return true;
+    }
+    // ASCII box/tree edges: `+--`, `--+`, `| ... |`, `/ \`, `\ /`
+    if t.contains("+--") || t.contains("--+") || t.contains("/ \\") || t.contains("\\ /") {
+        return true;
+    }
+    if t.starts_with('|') && t.ends_with('|') && t.len() >= 3 && !t.contains(" | ") {
+        return true;
+    }
+    false
+}
+
+/// Wrap unindented multi-line ASCII-art paragraphs (such as box-drawing diagrams or inference
+/// rules without 4-space indentation) in fenced code blocks so Markdown renders them in monospace.
+/// Already-fenced and 4-space-indented code blocks are left untouched.
+pub fn fence_ascii_art(markdown: &str) -> String {
+    let lines: Vec<&str> = markdown.split('\n').collect();
+    let mut out = String::with_capacity(markdown.len() + 16);
+    let mut i = 0;
+    let mut fence = false;
+    while i < lines.len() {
+        let t = lines[i].trim_start();
+        if t.starts_with("```") || t.starts_with("~~~") {
+            fence = !fence;
+            if !out.is_empty() {
+                out.push('\n');
+            }
+            out.push_str(lines[i]);
+            i += 1;
+            continue;
+        }
+        if fence || lines[i].trim().is_empty() {
+            if !out.is_empty() {
+                out.push('\n');
+            }
+            out.push_str(lines[i]);
+            i += 1;
+            continue;
+        }
+        // Collect a contiguous non-blank paragraph outside fences
+        let start = i;
+        while i < lines.len() && !lines[i].trim().is_empty() {
+            let lt = lines[i].trim_start();
+            if lt.starts_with("```") || lt.starts_with("~~~") {
+                break;
+            }
+            i += 1;
+        }
+        let para = &lines[start..i];
+        let already_indented = para.iter().all(|l| l.starts_with("    ") || l.starts_with('\t'));
+        let has_art = para.len() >= 2 && para.iter().any(|l| is_ascii_art_line(l));
+        if has_art && !already_indented {
+            if !out.is_empty() {
+                out.push('\n');
+            }
+            out.push_str("```\n");
+            for (k, l) in para.iter().enumerate() {
+                if k > 0 {
+                    out.push('\n');
+                }
+                out.push_str(l);
+            }
+            out.push_str("\n```");
+        } else {
+            for l in para {
+                if !out.is_empty() {
+                    out.push('\n');
+                }
+                out.push_str(l);
+            }
+        }
+    }
+    out
+}
+
 /// The Markdown with each soft line break (a single newline inside a paragraph) a space, as
 /// Markdown reads it and as docstrings are written (wrapped at 80 columns). Hard breaks (two spaces
-/// or a backslash before the newline), code fences, display maths, headings, list items, quotes
-/// and tables keep their line breaks. Each newline becomes one space, so every offset is the same
+/// or a backslash before the newline), code fences, indented code blocks, ASCII art, display maths,
+/// headings, list items, quotes and tables keep their line breaks. Each newline becomes one space,
+/// so every offset is the same
 pub fn reflow(markdown: &str) -> String {
     let lines: Vec<&str> = markdown.split('\n').collect();
     let block_start = |l: &str| {
@@ -279,7 +372,12 @@ pub fn reflow(markdown: &str) -> String {
             && !t.trim_end().ends_with("$$")
             && !block_start(next)
             && !t.starts_with("```")
-            && !next.starts_with("    ");
+            && !line.starts_with("    ")
+            && !line.starts_with('\t')
+            && !next.starts_with("    ")
+            && !next.starts_with('\t')
+            && !is_ascii_art_line(line)
+            && !is_ascii_art_line(next);
         out.push(if soft { ' ' } else { '\n' });
     }
     out
@@ -333,7 +431,7 @@ pub fn snippets(text: &str) -> Vec<Snippet> {
             (Some(f), Some(m)) if f == m => fence = None,
             _ => {}
         }
-        if in_fence || marker.is_some() {
+        if in_fence || marker.is_some() || line.starts_with("    ") || line.starts_with('\t') || is_ascii_art_line(&line) {
             for b in &mut blocked[i..end] {
                 *b = true;
             }
@@ -653,5 +751,36 @@ mod tests {
         assert_eq!(snippet_at("```lean\ncode\n```\nthen `x`", 23).as_deref(), Some("`x`"));
         // code points, not bytes
         assert_eq!(snippet_at("α → $β$", 6).as_deref(), Some("$β$"));
+    }
+
+    #[test]
+    fn plain_block_comment_and_ascii_art_keep_alignment() {
+        let src = "/- ## Typing rules\n\nTyping rules:\n\n    C ⊢ t : σ → τ    C ⊢ u : σ\n    ——————————————————————————— App\n    C ⊢ t u : τ\n-/";
+        let d = to_markdown(src);
+        assert_eq!(d.delimiter, Delimiter::Block);
+        check_round_trip(src, &d);
+        let flowed = d.flowed();
+        assert!(flowed.markdown.contains("    C ⊢ t : σ → τ    C ⊢ u : σ\n    ——————————————————————————— App\n    C ⊢ t u : τ"), "{:?}", flowed.markdown);
+        // Already 4-space indented: fence_ascii_art leaves it as an indented code block
+        assert_eq!(fence_ascii_art(&flowed.markdown), flowed.markdown);
+
+        // Even if common-indent stripping removes the 4-space indent (opener-line heading + only
+        // an indented diagram), reflow keeps line breaks and fence_ascii_art rescues it into a fence
+        let only_art = "/- ## Rule\n\n    C ⊢ t : σ → τ    C ⊢ u : σ\n    ——————————————————————————— App\n    C ⊢ t u : τ\n-/";
+        let rescued = fence_ascii_art(&to_markdown(only_art).flowed().markdown);
+        assert!(rescued.contains("```\nC ⊢ t : σ → τ    C ⊢ u : σ\n——————————————————————————— App\nC ⊢ t u : τ\n```"), "{rescued:?}");
+
+        // Unindented ASCII art / inference rules keep newlines in reflow and get fenced for rendering
+        let unindented = "Rule:\n\nC ⊢ t : σ → τ\n————————————— App\nC ⊢ t u : τ\n\nAfter\nline.";
+        let r = reflow(unindented);
+        assert!(r.contains("C ⊢ t : σ → τ\n————————————— App\nC ⊢ t u : τ"), "{r:?}");
+        assert!(r.ends_with("After line."), "{r:?}");
+        let fenced = fence_ascii_art(&r);
+        assert!(fenced.contains("```\nC ⊢ t : σ → τ\n————————————— App\nC ⊢ t u : τ\n```"), "{fenced:?}");
+
+        // Box-drawing diagrams are also preserved
+        let box_art = "┌───┐\n│ A │\n└───┘";
+        assert_eq!(reflow(box_art), box_art);
+        assert_eq!(fence_ascii_art(box_art), format!("```\n{box_art}\n```"));
     }
 }
