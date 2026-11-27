@@ -32,6 +32,7 @@ pub enum State {
     Checked,
     /// Checked, with these cells failed and unfinished
     Problems { failed: usize, unfinished: usize },
+    TheoryStopped,
     Paused,
     Stopped,
     /// The prover stopped without being asked
@@ -48,6 +49,7 @@ impl State {
             State::Checking(p) => format!("Checking \u{b7} {p} %"),
             State::Checked => "Checked".into(),
             State::Problems { failed, unfinished } => attention::words(*failed, *unfinished),
+            State::TheoryStopped => "Checking stopped".into(),
             State::Paused => "Paused".into(),
             State::Stopped => "Stopped".into(),
             State::Crashed => "The prover stopped unexpectedly".into(),
@@ -63,7 +65,7 @@ impl State {
             State::Checked => Mark::Check,
             State::Problems { .. } => Mark::RedDot,
             State::Paused => Mark::Ring,
-            State::Stopped => Mark::Grey,
+            State::Stopped | State::TheoryStopped => Mark::Grey,
             State::Crashed => Mark::Error,
         }
     }
@@ -76,6 +78,7 @@ impl State {
             State::Checking(p) => format!("Checking the theory: {p} % done. Click for the prover's log."),
             State::Checked => "Everything is checked. Click for the prover's log.".into(),
             State::Problems { failed, unfinished } => format!("{}. Click to go to the next failure.", attention::words(*failed, *unfinished)),
+            State::TheoryStopped => "Checking is stopped for this theory. Click to resume it in Activity.".into(),
             State::Paused => "Paused: the prover is loaded but does not check. Resume with the \u{25b6} beside it.".into(),
             State::Stopped => "Stopped: the prover is not running and the buffers are kept. Start it again with the \u{25b6} beside it.".into(),
             State::Crashed => "The prover stopped without being asked. Restart it with the \u{21bb} beside it; the buffers are kept.".into(),
@@ -121,6 +124,11 @@ pub fn state_of(app: &App) -> State {
         _ => return State::Starting,
     }
     let (Some(t), Some(act)) = (&ws.theory, &ws.activity) else { return State::Starting };
+    if act["theories"].as_array().is_some_and(|theories| theories.iter().any(|theory| {
+        theory["path"].as_str() == Some(t.path.as_str()) && theory["checking_control"] == "stopped"
+    })) {
+        return State::TheoryStopped;
+    }
     let (finished, unprocessed, run_here, failed_cmds, consolidated) = t.status();
     let waiting = super::shell::pending_imports(ws, t);
     if !waiting.is_empty() && !waiting.iter().any(|w| w.2) {
