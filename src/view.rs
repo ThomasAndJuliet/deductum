@@ -900,8 +900,14 @@ fn activity_panel<'a>(app: &'a App, ws: &'a Workspace) -> Element<'a, Message> {
             col = col.push(widget::text::caption_heading("Proof queries"));
             for query in queries {
                 let (Some(id), Some(path)) = (query["id"].as_str(), query["path"].as_str()) else { continue };
-                let operation = query["operation"].as_str().unwrap_or("Query");
-                let label = format!("{operation} · {}", file_name(path));
+                let operation = match query["operation"].as_str() {
+                    Some("deductum_goals") => "Proof state",
+                    Some("deductum_command") => "Command",
+                    Some(other) => other,
+                    None => "Query",
+                };
+                let line = query["line"].as_u64().map(|line| format!(":{line}")).unwrap_or_default();
+                let label = format!("{operation} · {}{line}", file_name(path));
                 col = col.push(widget::row::with_capacity(2).spacing(sp.space_xxs).align_y(Alignment::Center)
                     .push(widget::text::body(label).width(Length::Fill))
                     .push(widget::button::text("Stop").on_press(

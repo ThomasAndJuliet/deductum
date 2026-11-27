@@ -1936,7 +1936,7 @@ class Session:
                              "running": st.get("running", 0), "failed": st.get("failed", 0),
                              "consolidated": st.get("consolidated", False), "total": total,
                              "header_errors": st.get("header_errors"), "imports": st.get("imports", [])})
-        active_queries = [{"id": q["id"], "operation": q["operation"], "path": q["path"]}
+        active_queries = [{"id": q["id"], "operation": q["operation"], "path": q["path"], "line": q.get("line")}
                           for q in self.queries.values() if q["status"] in ("waiting", "running")]
         return {"lifecycle": self.lifecycle, "prover": self.prover_stats(), "running": running[:20],
                 "queries": active_queries[:20],
@@ -2240,7 +2240,7 @@ class Session:
         qid = uuid.uuid4().hex[:10]
         self.queries[qid] = {"id": qid, "client": client.id, "path": doc.path, "operation": operation,
                              "args": args, "revision": doc.revision, "status": "waiting", "messages": [],
-                             "started": now()}
+                             "started": now(), "line": doc.text.count("\n", 0, pos) + 1}
         client.note_position(self, doc, pos)
         backend.send({"op": "query", "query": qid, "file": doc.path, "offset": pos,
                       "operation": operation, "args": args})
