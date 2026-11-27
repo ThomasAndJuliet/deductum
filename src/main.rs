@@ -385,6 +385,7 @@ pub enum Message {
     ProseHover(usize, prose_render::rich::Pos),
     LiterateScrolled(u64, f32, f32),
     LiterateAdjust(u64, f32),
+    SidebarAdjust(u64, f32),
     /// A click replayed in the block editor once it is laid out (opening prose where it was clicked)
     BlockClickAt(cosmic::iced::Point),
     /// Ctrl and Alt held or not, for Ctrl+click and Alt+click
@@ -714,6 +715,7 @@ pub struct Workspace {
     pub fill: FillState,
     pub cex_params: ShortTextBox,
     pub activity: Option<Value>,
+    pub import_progress: shell::ImportProgressCache,
     /// Messages shown as code, by the hash of the message
     pub views: HashMap<u64, editor::CodeView>,
     /// Proof tools' settings as the human set them, by `tool.setting` (see [`Tool::value`]), and
@@ -1792,6 +1794,7 @@ impl App {
             Pending::SessionInfo(sid) => {
                 if let Some(ws) = self.workspace.as_mut().filter(|w| w.machine == machine && w.sid == sid) {
                     ws.log = v["session"]["logs"].as_array().map(|l| l.iter().filter_map(|x| x.as_str().map(str::to_string)).collect()).unwrap_or_default();
+                    self.shell.documents.invalidate();
                     ws.info = Some(v["session"].clone());
                 }
                 if let Some(s) = v["session"].as_object() {
@@ -2434,6 +2437,7 @@ impl App {
                     editor::set_listeners(
                         v["activity"]["listeners"].as_array().into_iter().flatten().filter_map(|l| l["label"].as_str()).map(editor::at_name).collect(),
                     );
+                    ws.import_progress.invalidate();
                     ws.activity = Some(v["activity"].clone());
                 }
             }
@@ -3750,6 +3754,7 @@ impl App {
                     fill: FillState::default(),
                     cex_params: ShortTextBox::new(),
                     activity: None,
+                    import_progress: Default::default(),
                     views: HashMap::new(),
                     tool_settings: HashMap::new(),
                     tool_fields: fields::tool_fields(&caps.tools, &HashMap::new(), HashMap::new()),
@@ -4906,6 +4911,14 @@ impl App {
             }
             Message::LiterateScrolled(scope, top, height) => {
                 if let Some(t) = self.workspace.as_ref().and_then(|w| w.theory.as_ref()).filter(|t| t.page_scope == scope) { t.page_viewport.set((top, height)); }
+            }
+            Message::SidebarAdjust(scope, delta) => {
+                if self.left == LeftMode::Sessions && self.show_sidebar
+                    && self.workspace.as_ref().is_some_and(|ws| sidebar::document_scope(ws) == scope)
+                {
+                    return cosmic::iced::widget::scrollable::scroll_by(sidebar::scroll_id(),
+                        cosmic::iced::widget::scrollable::AbsoluteOffset { x: 0.0, y: delta });
+                }
             }
             Message::LiterateAdjust(scope, delta) => {
                 if self.workspace.as_ref().and_then(|w| w.theory.as_ref()).is_some_and(|t| t.page_scope == scope) {

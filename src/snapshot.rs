@@ -186,6 +186,7 @@ pub fn demo_app(mode: Mode) -> App {
             },
             cex_params: Default::default(),
             views: HashMap::new(),
+            import_progress: Default::default(),
             activity: Some(json!({"lifecycle": "Running", "prover": {"cpu": 385, "rss_mb": 3120},
                 "running": [{"path": "/home/me/Demo/Demo.thy", "line": 21, "name": "by", "seconds": 41}],
                 "theories": [{"path": "/home/me/Demo/Demo.thy", "theory": "Draft.Demo", "percentage": 80, "running": 1, "failed": 1, "consolidated": false, "total": 16, "imports": ["/home/me/Demo/Base.thy"]},

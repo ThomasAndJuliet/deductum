@@ -86,32 +86,6 @@ impl State {
     }
 }
 
-/// The theories this theory imports, transitively, as the prover reports them: how many have
-/// finished checking, of how many
-pub fn imports_progress(ws: &Workspace, t: &super::editor::Theory) -> (usize, usize) {
-    let Some(theories) = ws.activity.as_ref().and_then(|a| a["theories"].as_array()) else { return (0, 0) };
-    let find = |path: &str| theories.iter().find(|th| th["path"].as_str() == Some(path));
-    let mut seen = std::collections::HashSet::new();
-    let mut stack: Vec<String> = find(&t.path)
-        .and_then(|th| th["imports"].as_array())
-        .map(|i| i.iter().filter_map(|p| p.as_str().map(str::to_string)).collect())
-        .unwrap_or_default();
-    let (mut done, mut total) = (0, 0);
-    while let Some(p) = stack.pop() {
-        if !seen.insert(p.clone()) {
-            continue;
-        }
-        if let Some(th) = find(&p) {
-            total += 1;
-            if th["consolidated"].as_bool() == Some(true) {
-                done += 1;
-            }
-            stack.extend(th["imports"].as_array().into_iter().flatten().filter_map(|x| x.as_str().map(str::to_string)));
-        }
-    }
-    (done, total)
-}
-
 /// The state of the open session's prover
 pub fn state_of(app: &App) -> State {
     let Some(ws) = &app.workspace else { return State::NoSession };
@@ -130,10 +104,9 @@ pub fn state_of(app: &App) -> State {
         return State::TheoryStopped;
     }
     let (finished, unprocessed, run_here, failed_cmds, consolidated) = t.status();
-    let waiting = super::shell::pending_imports(ws, t);
-    if !waiting.is_empty() && !waiting.iter().any(|w| w.2) {
-        let (done, total) = imports_progress(ws, t);
-        return State::Loading { done, total: total.max(done + waiting.len()) };
+    let imports = super::shell::import_progress(ws, &t.path);
+    if imports.waiting > 0 && imports.blocked == 0 {
+        return State::Loading { done: imports.checked, total: imports.checked + imports.waiting };
     }
     let busy = act["running"].as_array().is_some_and(|r| !r.is_empty())
         || act["theories"].as_array().is_some_and(|ts| ts.iter().any(|th| th["running"].as_u64().unwrap_or(0) > 0));

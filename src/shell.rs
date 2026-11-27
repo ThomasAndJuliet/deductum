@@ -28,6 +28,7 @@ use super::{App, Message, Pending, Workspace, file_name, link};
 pub struct Shell {
     pub settings: Settings,
     pub file_picker: super::file_picker::Picker,
+    pub documents: super::sidebar::DocumentListCache,
     /// The settings page is shown instead of the document
     pub settings_open: bool,
     /// Project actions' runs, by session and action name: running, or how the last one ended
@@ -325,6 +326,7 @@ impl App {
                 }
             }
             Msg::ToggleDocFolder(dir) => {
+                self.shell.documents.invalidate();
                 if let Some((machine, sid)) = self.workspace_ids() {
                     let key = (machine, sid, dir);
                     if !self.shell.collapsed_dirs.remove(&key) {
@@ -716,33 +718,69 @@ pub fn header_center(app: &App) -> Vec<Element<'_, Message>> {
     items
 }
 
-/// The theory's imports, transitively, that the prover has not finished checking: each one's
-/// file name, how far it is, and whether it cannot load. The theory's own commands wait for
-/// these, so the header and the goal panel both say so
-pub fn pending_imports(ws: &Workspace, t: &super::editor::Theory) -> Vec<(String, u64, bool)> {
-    let Some(theories) = ws.activity.as_ref().and_then(|a| a["theories"].as_array()) else { return Vec::new() };
-    let find = |path: &str| theories.iter().find(|th| th["path"].as_str() == Some(path));
-    let mut waiting: Vec<(String, u64, bool)> = Vec::new();
-    let mut seen = std::collections::HashSet::new();
-    let mut stack: Vec<String> = find(&t.path)
-        .and_then(|th| th["imports"].as_array())
-        .map(|i| i.iter().filter_map(|p| p.as_str().map(str::to_string)).collect())
-        .unwrap_or_default();
-    while let Some(p) = stack.pop() {
-        if !seen.insert(p.clone()) {
-            continue;
-        }
-        if let Some(th) = find(&p) {
-            if th["consolidated"].as_bool() != Some(true) {
-                let failed = th["failed"].as_u64().unwrap_or(0) > 0 || th["header_errors"].as_array().is_some_and(|e| !e.is_empty());
-                waiting.push((file_name(&p).to_string(), th["percentage"].as_u64().unwrap_or(0), failed));
-            }
-            for i in th["imports"].as_array().into_iter().flatten().filter_map(|x| x.as_str()) {
-                stack.push(i.to_string());
-            }
-        }
+/// Import state already reported by the prover. Building this summary does not consult Lake.
+#[derive(Default)]
+pub struct ImportProgress {
+    pub checked: usize,
+    pub waiting: usize,
+    pub blocked: usize,
+    pub next: Vec<(String, u64)>,
+    pub errors: Vec<String>,
+}
+
+#[derive(Default)]
+pub struct ImportProgressCache(std::cell::RefCell<Option<(usize, usize, String, std::sync::Arc<ImportProgress>)>>);
+
+impl ImportProgressCache {
+    pub fn invalidate(&self) {
+        self.0.borrow_mut().take();
     }
-    waiting
+}
+
+pub fn import_progress(ws: &Workspace, path: &str) -> std::sync::Arc<ImportProgress> {
+    let entries = ws.activity.as_ref().and_then(|a| a["theories"].as_array());
+    let Some(entries) = entries.filter(|_| ws.opening.as_deref().is_none_or(|opening| opening == path)) else {
+        return std::sync::Arc::default();
+    };
+    let address = entries.as_ptr() as usize;
+    let mut cache = ws.import_progress.0.borrow_mut();
+    if let Some((previous, len, file, progress)) = cache.as_ref()
+        && *previous == address && *len == entries.len() && file == path
+    {
+        return progress.clone();
+    }
+
+    let mut progress = ImportProgress::default();
+    let by_path: HashMap<_, _> = entries.iter().filter_map(|entry| Some((entry["path"].as_str()?, entry))).collect();
+    fn imports(entry: &serde_json::Value) -> impl Iterator<Item = &str> {
+        entry["imports"].as_array().into_iter().flatten().filter_map(serde_json::Value::as_str)
+    }
+    let mut stack: Vec<_> = by_path.get(path).into_iter().flat_map(|entry| imports(entry)).collect();
+    let mut seen = std::collections::HashSet::from([path]);
+    while let Some(import) = stack.pop() {
+        if !seen.insert(import) { continue; }
+        let Some(entry) = by_path.get(import) else { continue };
+        if entry["consolidated"].as_bool() == Some(true) {
+            progress.checked += 1;
+        } else {
+            progress.waiting += 1;
+            let failed = entry["failed"].as_u64().unwrap_or(0) > 0
+                || entry["header_errors"].as_array().is_some_and(|errors| !errors.is_empty());
+            if failed {
+                progress.blocked += 1;
+                if progress.errors.len() < 3 {
+                    progress.errors.push(file_name(import).into());
+                }
+            }
+            if progress.next.len() < 3 {
+                progress.next.push((file_name(import).into(), entry["percentage"].as_u64().unwrap_or(0)));
+            }
+        }
+        stack.extend(imports(entry));
+    }
+    let progress = std::sync::Arc::new(progress);
+    *cache = Some((address, entries.len(), path.into(), progress.clone()));
+    progress
 }
 
 // ----- a machine's connection, as every part of the window says it

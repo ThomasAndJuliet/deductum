@@ -242,6 +242,19 @@ File switches show the destination while a large editor model is prepared on a
 worker. Repeated navigation keeps at most one preparation running and discards
 superseded results. Document events that arrived during preparation are applied
 after installation, with a fresh read if the bounded event buffer fills.
+The app opts individual navigation reads into concurrent dispatch while
+revision recovery reads retain request order. A bounded source-read lane is
+independent of project listings and import scans. It delivers and subscribes
+to the buffer first, and the app explicitly starts prover checking once the
+editor has installed the document. Session inventory and a slow source read
+cannot hold Stop on the same app connection. Older clients retain their current
+open-and-check protocol.
+
+The Sessions sidebar retains the document catalogue across prover updates and
+lays out the rows around the scroll viewport. The status chip and proof panel
+share a bounded summary of the imports the prover has already reported.
+Recent-file changes are immediately visible in memory and persisted through
+one background writer that coalesces pending updates.
 The host gives each real socket a bounded output queue. Replaceable prover
 snapshots can coalesce between lossless message fences; edits and replies are
 never dropped. Slow clients disconnect and resynchronise instead of blocking

@@ -10,11 +10,13 @@ use std::sync::{Arc, Mutex};
 pub type Indices = Arc<Mutex<Vec<usize>>>;
 
 #[cfg(test)]
-static LAST_BUILT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+thread_local! {
+    static LAST_BUILT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
 
 #[cfg(test)]
 pub fn last_built_count() -> usize {
-    LAST_BUILT.load(std::sync::atomic::Ordering::Relaxed)
+    LAST_BUILT.get()
 }
 
 use cosmic::iced::advanced::{Clipboard, Layout, Shell, Widget, layout, mouse, overlay, renderer};
@@ -208,7 +210,7 @@ impl<Message> Widget<Message, cosmic::Theme, cosmic::Renderer> for Column<'_, Me
         }
         state.built = wanted;
         #[cfg(test)]
-        LAST_BUILT.store(state.built.len(), std::sync::atomic::Ordering::Relaxed);
+        LAST_BUILT.set(state.built.len());
         *self.indices.lock().unwrap_or_else(|e| e.into_inner()) = state.built.clone();
         let children = laid.into_iter().zip(&state.built).map(|(node, i)| {
             node.move_to((self.padding.left, self.padding.top + state.heights.top(*i)))
