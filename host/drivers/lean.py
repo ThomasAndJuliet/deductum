@@ -1090,6 +1090,8 @@ class LeanDriver(Driver):
         self.client: Optional[LspClient] = None
         self.docs: Dict[str, LDoc] = {}
         self.by_uri: Dict[str, LDoc] = {}
+        self.opening: Optional[LDoc] = None
+        self.waiting_to_open: Dict[str, LDoc] = {}
         self.scratch: Dict[str, Scratch] = {}
         self.queries: Dict[str, asyncio.Task] = {}
         self.paused = False
@@ -1489,6 +1491,17 @@ class LeanDriver(Driver):
         self._schedule_node(doc)
 
     def _did_open(self, doc: LDoc) -> None:
+        # Each Lean file worker can launch its own Lake dependency build.
+        # Admit another worker once the first has finished setting up imports.
+        self.waiting_to_open[doc.path] = doc
+        self._open_next()
+
+    def _open_next(self) -> None:
+        if self.opening is not None or self.paused or self.stopping or not self.waiting_to_open:
+            return
+        path = next(iter(self.waiting_to_open))
+        doc = self.waiting_to_open.pop(path)
+        self.opening = doc
         self._reset_diagnostics(doc)
         doc.import_generation += 1
         doc.import_pending = False
@@ -1497,10 +1510,14 @@ class LeanDriver(Driver):
             "uri": doc.uri, "languageId": "lean4", "version": doc.version, "text": doc.text}})
 
     def _did_close(self, doc: LDoc) -> None:
+        self.waiting_to_open.pop(doc.path, None)
         if doc.server_open:
             doc.server_open = False
             self._notify("textDocument/didClose", {"textDocument": {"uri": doc.uri}})
         self._cancel_doc_tasks(doc)
+        if self.opening is doc:
+            self.opening = None
+            self._open_next()
 
     def _reopen(self, doc: LDoc) -> None:
         """Close and open the document again: the server starts over (and runs ``lake setup-file``)"""
@@ -1794,6 +1811,14 @@ class LeanDriver(Driver):
         index = doc.splitter(version).index
         ranges = [index.range_to_offsets(p["range"]) for p in params.get("processing", [])]
         doc.progress = (version, ranges)
+        # Lean initially reports the entire file as pending from offset zero.
+        # Later progress past the header, or a fatal header error, ends setup.
+        processing = params.get("processing", [])
+        if self.opening is doc and version == doc.version and (
+                not ranges or all(start > 0 for start, _ in ranges)
+                or any(task.get("kind") == 2 for task in processing)):
+            self.opening = None
+            self._open_next()
         if ranges:
             self._reset_diagnostics(doc)
         elif version == doc.version:
