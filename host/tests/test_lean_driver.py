@@ -68,6 +68,20 @@ class ImportInvalidation(unittest.IsolatedAsyncioTestCase):
         self.driver._on_progress({"textDocument": {"uri": doc.uri, "version": 1}, "processing": []})
         return doc
 
+    async def test_opening_a_second_file_does_not_start_a_second_cold_build(self):
+        main = self.source("Main", "import Tiny.Dep\n\ndef main := 1\n")
+        statements = self.source("Statements", "import Tiny.Dep\n\ndef statement := 1\n")
+        for path in (main, statements):
+            self.driver.send({"op": "open", "file": path, "text": Path(path).read_text(), "rev": 1})
+
+        def opened():
+            return [p["textDocument"]["uri"] for m, p in self.notifications if m == "textDocument/didOpen"]
+
+        doc = self.driver.docs[main]
+        self.assertEqual(opened(), [doc.uri])
+        self.driver._on_progress({"textDocument": {"uri": doc.uri, "version": 1}, "processing": []})
+        self.assertEqual(opened(), [doc.uri, self.driver.docs[statements].uri])
+
     async def stale(self, path):
         async def wait():
             while True:
