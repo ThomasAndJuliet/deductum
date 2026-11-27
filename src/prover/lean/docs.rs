@@ -208,6 +208,99 @@ impl Docs {
         Docs { markdown, segs, ..self.clone() }
     }
 
+    /// Wrap unindented multi-line ASCII-art paragraphs in fenced code blocks so Markdown renders
+    /// them in monospace, keeping every segment's Markdown byte offset in exact sync so click
+    /// mapping (`ProseMap::source_char`) never shifts or lands inside a UTF-8 character
+    pub fn fenced_ascii_art(&self) -> Docs {
+        // Compute line byte ranges in `self.markdown`
+        let md = &self.markdown;
+        let mut line_ranges: Vec<(usize, usize)> = Vec::new();
+        let mut at = 0;
+        for part in md.split('\n') {
+            let end = at + part.len();
+            line_ranges.push((at, end));
+            at = end + 1;
+        }
+        // Decide which line indices need a synthetic "```\n" before them or "\n```" after them
+        let mut open_before: Vec<bool> = vec![false; line_ranges.len()];
+        let mut close_after: Vec<bool> = vec![false; line_ranges.len()];
+        let mut i = 0;
+        let mut fence = false;
+        while i < line_ranges.len() {
+            let line = &md[line_ranges[i].0..line_ranges[i].1];
+            let t = line.trim_start();
+            if t.starts_with("```") || t.starts_with("~~~") {
+                fence = !fence;
+                i += 1;
+                continue;
+            }
+            if fence || line.trim().is_empty() {
+                i += 1;
+                continue;
+            }
+            let start = i;
+            while i < line_ranges.len() {
+                let l = &md[line_ranges[i].0..line_ranges[i].1];
+                let lt = l.trim_start();
+                if l.trim().is_empty() || lt.starts_with("```") || lt.starts_with("~~~") {
+                    break;
+                }
+                i += 1;
+            }
+            let para = &line_ranges[start..i];
+            let already_indented = para.iter().all(|&(s, e)| {
+                let l = &md[s..e];
+                l.starts_with("    ") || l.starts_with('\t')
+            });
+            let has_art = para.len() >= 2 && para.iter().any(|&(s, e)| is_ascii_art_line(&md[s..e]));
+            if has_art && !already_indented {
+                open_before[start] = true;
+                close_after[i - 1] = true;
+            }
+        }
+        if !open_before.iter().any(|&b| b) {
+            return self.clone();
+        }
+        // Build byte-offset shifts for each original byte position in `self.markdown`
+        // Each `open_before[li]` inserts "```\n" (4 bytes) before `line_ranges[li].0`;
+        // each `close_after[li]` inserts "\n```" (4 bytes) after `line_ranges[li].1`.
+        let mut markdown = String::with_capacity(md.len() + 16);
+        let mut line_shift: Vec<usize> = vec![0; line_ranges.len()];
+        let mut extra = 0usize;
+        for (li, &(s, e)) in line_ranges.iter().enumerate() {
+            if li > 0 {
+                markdown.push('\n');
+            }
+            if open_before[li] {
+                markdown.push_str("```\n");
+                extra += 4;
+            }
+            line_shift[li] = extra;
+            markdown.push_str(&md[s..e]);
+            if close_after[li] {
+                markdown.push_str("\n```");
+                extra += 4;
+            }
+        }
+        let shift_of = |orig_byte: usize| -> usize {
+            // Find the line containing `orig_byte` (or the newline immediately following it)
+            let li = line_ranges.partition_point(|&(_, e)| e < orig_byte).min(line_ranges.len().saturating_sub(1));
+            // If `orig_byte` is the `\n` right after line `li` (i.e. `orig_byte == line_ranges[li].1`),
+            // and `close_after[li]` inserted `\n``` ` after `line_ranges[li].1`, that `\n` comes after `\n``` `.
+            if orig_byte == line_ranges[li].1 && close_after[li] {
+                line_shift[li] + 4
+            } else {
+                line_shift[li]
+            }
+        };
+        let segs = self
+            .segs
+            .iter()
+            .map(|s| Seg { md: s.md + shift_of(s.md), len: s.len, byte: s.byte, ch: s.ch })
+            .collect();
+        Docs { markdown, segs, ..self.clone() }
+    }
+
     /// The source range of a Markdown byte range, in code points
     pub fn source_chars(&self, range: std::ops::Range<usize>) -> std::ops::Range<usize> {
         let start = self.source_char(range.start);
@@ -244,6 +337,24 @@ impl Docs {
             None => self.markdown.len(),
         }
     }
+}
+
+/// Whether a line is a GFM pipe-table row or separator (including rows without a leading `|`)
+pub fn is_gfm_table_line(line: &str) -> bool {
+    let t = line.trim();
+    if t.is_empty() || !t.contains('|') {
+        return false;
+    }
+    if t.starts_with('|') {
+        return true;
+    }
+    // GFM separator row such as `---|---` or `--- | :---: | ---`
+    let is_sep = t.contains("--") && t.chars().all(|c| matches!(c, '-' | ':' | '|' | ' ' | '\t'));
+    if is_sep {
+        return true;
+    }
+    // Pipe-delimited table row with cells separated by ` | ` or `|\t`
+    t.contains(" | ") || t.contains("|\t") || t.contains("\t|")
 }
 
 /// Whether a line looks like ASCII/Unicode art (inference-rule bars, box-drawing diagrams,
@@ -368,6 +479,8 @@ pub fn reflow(markdown: &str) -> String {
             && !line.ends_with("  ")
             && !line.ends_with('\\')
             && !t.starts_with(['#', '|'])
+            && !is_gfm_table_line(line)
+            && !is_gfm_table_line(next)
             && !t.starts_with("$$")
             && !t.trim_end().ends_with("$$")
             && !block_start(next)
@@ -782,5 +895,22 @@ mod tests {
         let box_art = "┌───┐\n│ A │\n└───┘";
         assert_eq!(reflow(box_art), box_art);
         assert_eq!(fence_ascii_art(box_art), format!("```\n{box_art}\n```"));
+
+        // Docs::fenced_ascii_art keeps Seg offsets in exact sync across UTF-8 characters (like `⊢`)
+        let utf8_art = "/-! Intro.\n\nC ⊢ t : σ\n———————— App\nC ⊢ u : σ\n\nAfter text. -/";
+        let mapped = to_markdown(utf8_art).flowed().fenced_ascii_art();
+        assert!(mapped.markdown.contains("```\nC ⊢ t : σ\n———————— App\nC ⊢ u : σ\n```"), "{:?}", mapped.markdown);
+        for (i, ch) in mapped.markdown.char_indices() {
+            let sc = mapped.source_char(i);
+            assert!(sc <= utf8_art.chars().count(), "out of bounds at {i} ({ch:?})");
+        }
+        // Check exact character correspondence for content after the generated fence
+        let after_md = mapped.markdown.find("After text.").unwrap();
+        let after_src = utf8_art.find("After text.").unwrap();
+        assert_eq!(mapped.source_byte(after_md), after_src);
+
+        // GFM tables without leading `|` keep their row breaks during reflow
+        let table = "Body (t) | | Argument (x) | Description\n---------|---|---|---\nA term | depending on | a term | Simply typed\nA type | depending on | a term | Dependent type";
+        assert_eq!(reflow(table), table);
     }
 }

@@ -302,6 +302,10 @@ pub enum Message {
     PopOut,
     PopIn,
     Complete(usize),
+    /// Move the selected completion forward (true) or backward (false)
+    PickCompletion(bool),
+    /// Accept the currently selected completion (Tab)
+    AcceptCompletion,
     /// Enter: a new line indented for the proof structure
     Newline,
     /// Tab: the selected lines in by an indent (a setting); with no selection, spaces to the next
@@ -1425,7 +1429,7 @@ impl App {
         matches!(message, Message::RawVim(..) | Message::Vim(..) | Message::NavOps(..) | Message::NavBinding(..)
             | Message::SourceAction(..) | Message::BlockAction(..) | Message::SourcePage(..) | Message::SourcePageRows(..)
             | Message::LineMove(..) | Message::Newline | Message::Indent | Message::Unindent | Message::Undo | Message::Redo
-            | Message::CopySelection(..) | Message::Complete(..) | Message::InsertSymbol(..) | Message::WindowKey(..)
+            | Message::CopySelection(..) | Message::Complete(..) | Message::PickCompletion(..) | Message::AcceptCompletion | Message::InsertSymbol(..) | Message::WindowKey(..)
             | Message::Escape | Message::DeleteBlock(..) | Message::InsertBlock(..) | Message::Wrap(..)
             | Message::InsertProof(..) | Message::InsertFill(..) | Message::InsertUsing | Message::InsertOutput(..)
             | Message::BlockClickAt(..))
@@ -3441,7 +3445,7 @@ impl App {
                 Message::RawVim(..) | Message::Vim(..) | Message::NavOps(..) | Message::NavBinding(..) | Message::SourceAction(..)
                 | Message::BlockAction(..) | Message::SourcePage(..) | Message::SourcePageRows(..)
                 | Message::LineMove(..) | Message::Newline | Message::Indent | Message::Unindent | Message::Undo | Message::Redo
-                | Message::Save | Message::CopySelection(..) | Message::Complete(..) | Message::InsertSymbol(..)
+                | Message::Save | Message::CopySelection(..) | Message::Complete(..) | Message::PickCompletion(..) | Message::AcceptCompletion | Message::InsertSymbol(..)
                 | Message::WindowKey(..) | Message::OpenSession(..) | Message::CloseWorkspace | Message::OpenTheory(..) | Message::FilePickerAccept(..)
                 | Message::SetMode(..) | Message::SetModeEntity(..) | Message::EditBlock(..) | Message::CloseBlock
                 | Message::ViewPress(..) | Message::BlockViewAction(..) | Message::PopOut | Message::PopIn
@@ -5047,6 +5051,20 @@ impl App {
                     return Task::batch([self.flush_edits(), self.schedule_state()]);
                 }
             }
+            Message::PickCompletion(next) => {
+                if let Some(t) = self.workspace.as_mut().and_then(|w| w.theory.as_mut()) {
+                    t.pick_completion(next);
+                }
+            }
+            Message::AcceptCompletion => {
+                let Some(machine) = self.workspace.as_ref().map(|w| w.machine.clone()) else { return Task::none() };
+                let table = self.table(&machine);
+                if let Some(t) = self.workspace.as_mut().and_then(|w| w.theory.as_mut()) {
+                    let i = t.completion_selected;
+                    t.accept_completion(i, &*table);
+                    return Task::batch([self.flush_edits(), self.schedule_state()]);
+                }
+            }
             Message::InsertOutput(proof) => {
                 // A proof from the output at the caret: it replaces a proof-search command
                 // (sledgehammer, try0, exact?) or the placeholder, else follows the command
@@ -5140,8 +5158,11 @@ impl App {
                 }
             }
             Message::Escape => {
-                // A tool running at the caret (or an LLM asked there) stops first; the block is
-                // finished with the next Esc
+                // An open completion bar dismisses first; then a tool running at the caret stops;
+                // the block is finished with the next Esc
+                if self.workspace.as_mut().and_then(|w| w.theory.as_mut()).is_some_and(|t| t.dismiss_completions()) {
+                    return Task::none();
+                }
                 if let Some(stop) = self.escape_stop() {
                     return stop;
                 }

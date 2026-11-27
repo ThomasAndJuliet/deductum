@@ -3111,7 +3111,12 @@ pub(super) fn resolve_key_binding(press: text_editor::KeyPress, completing: bool
     if m.command() && matches!(press.key.as_ref(), Key::Character("=" | "+" | "-" | "0")) {
         return None;
     }
-    if m.command() && !m.shift() && !m.alt() && matches!(press.key.as_ref(), Key::Character("p")) {
+    if !(completing && vim.is_none_or(|mode| mode == super::vim::Mode::Insert))
+        && m.command()
+        && !m.shift()
+        && !m.alt()
+        && matches!(press.key.as_ref(), Key::Character("p"))
+    {
         return None;
     }
     if m.command() && m.shift() && !m.alt() && matches!(press.key.as_ref(), Key::Character("o" | "O")) {
@@ -3160,13 +3165,25 @@ pub(super) fn resolve_key_binding(press: text_editor::KeyPress, completing: bool
             };
         }
         if let Key::Named(Named::Escape) = press.key.as_ref() {
+            if completing {
+                return Some(text_editor::Binding::Custom(Message::Escape));
+            }
             return custom("Escape", false);
+        }
+    }
+    if completing && m.alt() && !m.control() && !m.logo() {
+        match press.key.as_ref() {
+            Key::Named(Named::ArrowRight) => return Some(text_editor::Binding::Custom(Message::PickCompletion(true))),
+            Key::Named(Named::ArrowLeft) => return Some(text_editor::Binding::Custom(Message::PickCompletion(false))),
+            _ => {}
         }
     }
     match press.key.as_ref() {
         Key::Character("c") if m.control() && !m.shift() => Some(text_editor::Binding::Custom(Message::CopySelection(false))),
         Key::Character("x") if m.control() && !m.shift() => Some(text_editor::Binding::Custom(Message::CopySelection(true))),
-        Key::Named(Named::Tab) if completing && !m.shift() => Some(text_editor::Binding::Custom(Message::Complete(0))),
+        Key::Character("n" | "N") if completing && m.control() && !m.alt() && !m.logo() => Some(text_editor::Binding::Custom(Message::PickCompletion(true))),
+        Key::Character("p" | "P") if completing && m.control() && !m.alt() && !m.logo() => Some(text_editor::Binding::Custom(Message::PickCompletion(false))),
+        Key::Named(Named::Tab) if completing && !m.shift() => Some(text_editor::Binding::Custom(Message::AcceptCompletion)),
         // Tab indents, as in any code editor, instead of moving the focus
         Key::Named(Named::Tab) if m.shift() => Some(text_editor::Binding::Custom(Message::Unindent)),
         Key::Named(Named::Tab) => Some(text_editor::Binding::Custom(Message::Indent)),
@@ -3177,7 +3194,10 @@ pub(super) fn resolve_key_binding(press: text_editor::KeyPress, completing: bool
         // Zoom is the window's: decline it, so the window-wide shortcut sees it
         Key::Character("=" | "+" | "-" | "0") if m.command() => None,
         Key::Named(Named::Escape) => Some(text_editor::Binding::Custom(Message::Escape)),
-        // Up and down run on past a block's ends into its neighbours, as j and k do
+        // Up and down optionally choose completion while the completion bar is open; otherwise
+        // they run on past a block's ends into its neighbours, as j and k do
+        Key::Named(Named::ArrowUp) if completing && super::settings::completion_arrows() && !m.shift() && !m.control() && !m.alt() => Some(text_editor::Binding::Custom(Message::PickCompletion(false))),
+        Key::Named(Named::ArrowDown) if completing && super::settings::completion_arrows() && !m.shift() && !m.control() && !m.alt() => Some(text_editor::Binding::Custom(Message::PickCompletion(true))),
         Key::Named(Named::ArrowUp) if !m.shift() && !m.control() && !m.alt() => Some(text_editor::Binding::Custom(Message::LineMove(target, false))),
         Key::Named(Named::ArrowDown) if !m.shift() && !m.control() && !m.alt() => Some(text_editor::Binding::Custom(Message::LineMove(target, true))),
         Key::Named(Named::Enter) if !m.shift() && !m.command() && !m.alt() => Some(text_editor::Binding::Custom(Message::Newline)),
@@ -3208,17 +3228,50 @@ fn deferred_vim_keys_resolve_in_the_current_mode() {
     assert!(matches!(resolve_key_binding(right, false, Some(super::vim::Mode::Insert), super::EditorTarget::Block), Some(B::Move(_))));
 }
 
+#[cfg(test)]
+#[test]
+fn completion_keys_step_accept_and_dismiss() {
+    use cosmic::iced::keyboard::{Key, Modifiers, key::{Named, NativeCode, Physical}};
+    use text_editor::{Binding as B, KeyPress, Status};
+    let _turn = super::snapshot::ui_turn();
+    let press = |key: Key, modifiers: Modifiers| KeyPress {
+        key: key.clone(), modified_key: key, physical_key: Physical::Unidentified(NativeCode::Unidentified),
+        modifiers, text: None, status: Status::Focused { is_hovered: false },
+    };
+    let mut s = super::settings::Settings::default();
+    assert!(!s.editing.completion_arrows, "Up/Down completion selection is off by default");
+    super::settings::publish(&s);
+    // Ctrl+N/P, Alt+Right/Left, Tab, and Esc work while completing
+    assert!(matches!(resolve_key_binding(press(Key::Character("n".into()), Modifiers::CTRL), true, None, super::EditorTarget::Block), Some(B::Custom(Message::PickCompletion(true)))));
+    assert!(matches!(resolve_key_binding(press(Key::Character("p".into()), Modifiers::CTRL), true, None, super::EditorTarget::Block), Some(B::Custom(Message::PickCompletion(false)))));
+    assert!(matches!(resolve_key_binding(press(Key::Named(Named::ArrowRight), Modifiers::ALT), true, None, super::EditorTarget::Block), Some(B::Custom(Message::PickCompletion(true)))));
+    assert!(matches!(resolve_key_binding(press(Key::Named(Named::ArrowLeft), Modifiers::ALT), true, None, super::EditorTarget::Block), Some(B::Custom(Message::PickCompletion(false)))));
+    assert!(matches!(resolve_key_binding(press(Key::Named(Named::Tab), Modifiers::empty()), true, None, super::EditorTarget::Block), Some(B::Custom(Message::AcceptCompletion))));
+    assert!(matches!(resolve_key_binding(press(Key::Named(Named::Escape), Modifiers::empty()), true, Some(super::vim::Mode::Insert), super::EditorTarget::Block), Some(B::Custom(Message::Escape))));
+    // With completion_arrows = false (default), Down still moves lines
+    assert!(matches!(resolve_key_binding(press(Key::Named(Named::ArrowDown), Modifiers::empty()), true, None, super::EditorTarget::Block), Some(B::Custom(Message::LineMove(_, true)))));
+    // With completion_arrows = true, Up/Down step through completions
+    s.editing.completion_arrows = true;
+    super::settings::publish(&s);
+    assert!(matches!(resolve_key_binding(press(Key::Named(Named::ArrowDown), Modifiers::empty()), true, None, super::EditorTarget::Block), Some(B::Custom(Message::PickCompletion(true)))));
+    assert!(matches!(resolve_key_binding(press(Key::Named(Named::ArrowUp), Modifiers::empty()), true, None, super::EditorTarget::Block), Some(B::Custom(Message::PickCompletion(false)))));
+    // Restore default
+    s.editing.completion_arrows = false;
+    super::settings::publish(&s);
+}
+
 fn completion_bar(t: &Theory) -> Option<Element<'_, Message>> {
     if t.completions.is_empty() {
         return None;
     }
     let mut row = widget::row::with_capacity(t.completions.len() + 1).spacing(4).align_y(Alignment::Center);
     row = row.push(widget::text::caption("Complete:"));
+    let selected = t.completion_selected.min(t.completions.len().saturating_sub(1));
     for (i, c) in t.completions.iter().enumerate() {
-        let label = if i == 0 { format!("{}  ⇥", c.label) } else { c.label.clone() };
+        let label = if i == selected { format!("{}  ⇥", c.label) } else { c.label.clone() };
         row = row.push(
             widget::button::text(label)
-                .class(if i == 0 { theme::Button::Suggested } else { theme::Button::Text })
+                .class(if i == selected { theme::Button::Suggested } else { theme::Button::Text })
                 .on_press(Message::Complete(i)),
         );
     }

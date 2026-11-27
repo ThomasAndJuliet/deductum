@@ -70,6 +70,7 @@ pub enum Msg {
     Vim(bool),
     IndentWidth(u8),
     CompleteWhileTyping(bool),
+    CompletionArrows(bool),
     Keywords(bool),
     /// The pause before a keyword line asks, in milliseconds
     KeywordPause(u32),
@@ -248,6 +249,10 @@ impl App {
             }
             Msg::CompleteWhileTyping(on) => {
                 self.shell.settings.editing.complete_while_typing = on;
+                self.save_settings();
+            }
+            Msg::CompletionArrows(on) => {
+                self.shell.settings.editing.completion_arrows = on;
                 self.save_settings();
             }
             Msg::Keywords(on) => {

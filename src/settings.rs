@@ -265,6 +265,9 @@ pub struct Editing {
     /// Offer completions (words, steps from the goal) as you type; `\` symbols and `@names` are
     /// offered either way, since they are how those are typed
     pub complete_while_typing: bool,
+    /// Also let Up and Down step through the completion bar while it is open; Ctrl+N/P and
+    /// Alt+Left/Right always do
+    pub completion_arrows: bool,
     /// Lines reading `claude`, `codex` or `@name` ask for a proof
     pub keywords: bool,
     /// How long typing must pause on such a line before it asks (Enter asks at once)
@@ -426,7 +429,7 @@ impl Default for Layout {
 
 impl Default for Editing {
     fn default() -> Self {
-        Self { vim: false, indent_width: 2, complete_while_typing: true, keywords: true, keyword_pause_ms: 2500, spelling: true }
+        Self { vim: false, indent_width: 2, complete_while_typing: true, completion_arrows: false, keywords: true, keyword_pause_ms: 2500, spelling: true }
     }
 }
 
@@ -659,6 +662,11 @@ pub fn indent_width() -> usize {
 /// Whether completions other than `\` symbols and `@names` are offered as you type
 pub fn complete_while_typing() -> bool {
     read(|s| s.editing.complete_while_typing)
+}
+
+/// Whether Up and Down also step through the completion bar while it is open
+pub fn completion_arrows() -> bool {
+    read(|s| s.editing.completion_arrows)
 }
 
 /// Whether the goal panel says what the step at the caret changed

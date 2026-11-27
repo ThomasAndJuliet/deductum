@@ -447,6 +447,9 @@ pub fn rows(app: &App) -> Vec<Row> {
     add("completion", Editing, "Completion while typing", "Words and steps from the goal; \\ symbols and @names are always offered",
         switch(st.editing.complete_while_typing, Msg::CompleteWhileTyping),
         st.editing.complete_while_typing != def.editing.complete_while_typing, Some(Msg::CompleteWhileTyping(def.editing.complete_while_typing)));
+    add("completion_arrows", Editing, "Up and Down choose completion", "Also let Up and Down step through the completion bar while it is open; Ctrl+N/P and Alt+Left/Right always do",
+        switch(st.editing.completion_arrows, Msg::CompletionArrows),
+        st.editing.completion_arrows != def.editing.completion_arrows, Some(Msg::CompletionArrows(def.editing.completion_arrows)));
     add("keywords", Editing, "Keyword lines ask for proofs", "A line reading claude, codex or @name asks that LLM or agent for a proof",
         switch(st.editing.keywords, Msg::Keywords), st.editing.keywords != def.editing.keywords, Some(Msg::Keywords(def.editing.keywords)));
     add("keyword_pause", Editing, "Pause before asking", "How long typing pauses on a keyword line before it asks; Enter asks at once",
