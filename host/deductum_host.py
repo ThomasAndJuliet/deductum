@@ -745,7 +745,7 @@ class Session:
 
     # ----- documents
 
-    def get_doc(self, path: str) -> Doc:
+    def get_doc(self, path: str, *, check: bool = True) -> Doc:
         path = self.doc_path(path)
         doc = self.docs.get(path)
         if doc is None:
@@ -758,9 +758,8 @@ class Session:
         if not doc.opened:
             doc.opened = True
             self.persist(doc)
-        if self.driver and self.driver.ready:
-            if not getattr(doc, "_sent_open", False):
-                self.backend_open(doc)
+        if check and not getattr(doc, "_sent_open", False):
+            self.backend_open(doc)
         return doc
 
     def doc_path(self, path: str) -> str:
@@ -769,13 +768,13 @@ class Session:
         # on every caret movement/edit would touch a potentially stalled mount.
         return path if path in self.docs else os.path.realpath(path)
 
-    async def load_doc(self, path: str) -> Doc:
+    async def load_doc(self, path: str, *, navigation: bool = False, recovery_read: bool = False) -> Doc:
         expanded = os.path.abspath(os.path.expanduser(path))
         if expanded not in self.docs and self.host.project_io is not None:
             def read():
                 canonical = os.path.realpath(expanded)
                 return canonical, read_file(canonical), stat_sig(canonical)
-            canonical, got, sig = await self.host.project_read(expanded, read)
+            canonical, got, sig = await self.host.project_read(expanded, read, navigation=navigation or recovery_read)
             if self.host.sessions.get(self.id) is not self:
                 raise HostError("The session was removed while reading", "not_found")
             if canonical not in self.docs:
@@ -787,7 +786,7 @@ class Session:
                 self.docs[canonical] = doc
                 self.persist(doc)
             path = canonical
-        return self.get_doc(path)
+        return self.get_doc(path, check=not navigation)
 
     def note_agent_query(self, path: str) -> None:
         """An agent asked about a document: with the "viewed" open policy it stays open in the
@@ -799,10 +798,14 @@ class Session:
     def wanted_in_prover(self, doc: Doc) -> bool:
         """Whether the prover should have the document open: always with the "all" policy; with
         "viewed" only while a client subscribes or an agent queried it lately"""
-        if self.driver_class.open_policy != "viewed":
-            return True
-        if any((self.id, doc.path) in c.open_docs for c in self.host.clients):
+        key = (self.id, doc.path)
+        viewers = [c for c in self.host.clients if key in c.open_docs]
+        if any(key not in getattr(c, "pending_checks", ()) for c in viewers):
             doc.viewed = now()  # type: ignore[attr-defined]
+            return True
+        if viewers:
+            return False  # Text delivered, but the app has not installed the editor yet.
+        if self.driver_class.open_policy != "viewed":
             return True
         if now() - getattr(doc, "viewed", 0.0) < self.driver_class.VIEW_GRACE_SECONDS:
             return True
@@ -875,7 +878,8 @@ class Session:
     def backend_open(self, doc: Doc) -> None:
         # A project file (ROOT, a lakefile) is edited in the host's buffer but is no document of
         # the prover's
-        if self.document_stopped(doc) or not doc.path.endswith(tuple(self.driver_class.documents)):
+        if (self.lifecycle in ("Stopping", "Stopped") or self.document_stopped(doc)
+                or not doc.path.endswith(tuple(self.driver_class.documents))):
             return
         if self.driver and self.driver.ready:
             with contextlib.suppress(HostError):
@@ -2700,6 +2704,7 @@ class Client:
         self.location: Dict[str, Any] = {}
         self.sessions: set = set()
         self.open_docs: set = set()
+        self.pending_checks: set = set()
         self.positions: Dict[str, Dict[str, Any]] = {}
         # Where the human is, by session, as the app last said (design: collaboration)
         self.views: Dict[str, Dict[str, Any]] = {}
@@ -2850,6 +2855,7 @@ class Host:
         self.resume_after_load: List[str] = []
         self.state_io: Optional[OrderedIO] = None
         self.project_io: Optional[OrderedIO] = None
+        self.navigation_io: Optional[OrderedIO] = None
         self.sample_io: Optional[OrderedIO] = None
         self.sample_job: Optional[asyncio.Task] = None
         self.resource_policy: Dict[str, Any] = {}
@@ -2858,6 +2864,7 @@ class Host:
     def enable_background_io(self) -> None:
         self.state_io = OrderedIO("state", workers=2)
         self.project_io = OrderedIO("project", workers=4)
+        self.navigation_io = OrderedIO("open document", workers=2, pending=16)
         self.sample_io = OrderedIO("process", workers=1, pending=1)
         self.resource_policy = drivers.read_config()
         try:
@@ -2874,13 +2881,14 @@ class Host:
             return os.path.splitdrive(path)[0].casefold() or Path(path).anchor
         return next((p for p in self._mounts if p == "/" or path == p or path.startswith(p + "/")), "/")
 
-    async def project_read(self, path: str, operation: Callable[[], Any]):
-        if self.project_io is None:
+    async def project_read(self, path: str, operation: Callable[[], Any], *, navigation: bool = False):
+        lane = self.navigation_io if navigation else self.project_io
+        if lane is None:
             return operation()
         group = self.project_group(path)
         try:
-            work = self.project_io.submit(group, operation)
-            return await self.project_io.wait(work, group, PROJECT_IO_TIMEOUT)
+            work = lane.submit(group, operation)
+            return await lane.wait(work, group, PROJECT_IO_TIMEOUT)
         except IOBusy as exn:
             raise HostError(str(exn), "busy")
         except asyncio.TimeoutError:
@@ -3232,6 +3240,10 @@ class Host:
     async def handle(self, client: Client, req: Dict[str, Any]) -> Dict[str, Any]:
         op = req.get("op")
         p = req
+        navigation = (op == "read" and p.get("navigation") is True
+                      and client.kind == "app" and client.concurrent_reads)
+        recovery_read = (op == "read" and p.get("recovery_read") is True
+                         and client.kind == "app" and client.concurrent_reads)
         if self.stopping.is_set() and op != "ping":
             raise HostError("The host is shutting down", "stopping")
         if op in ("state", "info"):
@@ -3263,7 +3275,7 @@ class Host:
                 if key == "path" and known and p[key] in known.docs:
                     continue
                 path, machine = p[key], client.location.get("machine")
-                p[key] = await self.project_read(path, lambda: translate_path(path, machine))
+                p[key] = await self.project_read(path, lambda: translate_path(path, machine), navigation=navigation or recovery_read)
         if op == "runtimes":
             return {"runtimes": find_runtimes()}
         if op == "toolchains":
@@ -3353,6 +3365,8 @@ class Host:
             client.attach(s)
             folder, cls = s.meta["folder"], s.driver_class
             listed = await self.project_read(folder, lambda: list_documents(folder, classes=[cls]))
+            if self.sessions.get(s.id) is not s:
+                raise HostError("The session was removed while listing its documents", "not_found")
             info = s.summary()
             info["theories"] = [{"path": t, "status": s.theory_status.get(t),
                                  "dirty": s.docs[t].dirty if t in s.docs else False,
@@ -3376,6 +3390,7 @@ class Host:
         if op == "detach":
             client.sessions.discard(s.id)
             client.open_docs = {k for k in client.open_docs if k[0] != s.id}
+            client.pending_checks = {k for k in client.pending_checks if k[0] != s.id}
             s.save_all()
             self.broadcast_session(s)
             return {}
@@ -3419,7 +3434,7 @@ class Host:
                     if not s.driver_class.is_document(path) or not path_inside(path, folder) or not os.path.isfile(path):
                         raise HostError(f"Cannot open project file {source}", "not_found")
                     return path
-                p["path"] = await self.project_read(source, check_project_file)
+                p["path"] = await self.project_read(source, check_project_file, navigation=navigation)
             if p.get("peek"):
                 # A theory to look at (a reference window): one outside the session's folder, such
                 # as a library theory, is read from disk and not opened as a document of the session
@@ -3435,11 +3450,20 @@ class Host:
                 doc = await s.load_doc(path)
                 client.attach(s)
                 return {"doc": s.doc_view(doc)}
-            doc = await s.load_doc(p["path"])
+            doc = await s.load_doc(p["path"], navigation=navigation, recovery_read=recovery_read)
             client.attach(s)
+            key = (s.id, doc.path)
+            if navigation:
+                abandoned = {item for item in client.pending_checks if item[0] == s.id and item != key}
+                client.pending_checks.difference_update(abandoned)
+                client.open_docs.difference_update(abandoned)
             if p.get("subscribe", client.kind == "app"):
-                client.open_docs.add((s.id, doc.path))
+                client.open_docs.add(key)
             result = {"doc": s.doc_view(doc, with_conflict_texts=bool(p.get("conflict_texts")))}
+            if navigation and key in client.open_docs:
+                if not getattr(doc, "_sent_open", False):
+                    client.pending_checks.add(key)
+                result["check_document"] = True
             if "since_revision" in p:
                 try:
                     base = int(p["since_revision"])
@@ -3472,8 +3496,17 @@ class Host:
                         receipts.append(identity)
                 result["edit_receipts"] = receipts
             return result
+        if op == "check_document":
+            key = (s.id, s.doc_path(p["path"]))
+            if key in client.pending_checks:
+                client.pending_checks.remove(key)
+                if key in client.open_docs and not getattr(s.docs[key[1]], "_sent_open", False):
+                    s.backend_open(s.docs[key[1]])
+            return {}
         if op == "close":
-            client.open_docs.discard((s.id, s.doc_path(p["path"])))
+            key = (s.id, s.doc_path(p["path"]))
+            client.open_docs.discard(key)
+            client.pending_checks.discard(key)
             return {}
         if op == "edit":
             return s.client_edit(client, p["path"], int(p.get("revision", 0)), p.get("edits", []),
@@ -3752,9 +3785,19 @@ class Host:
                 except ValueError:
                     client.push({"error": "bad json", "code": "bad_request"})
                     continue
-                if client.concurrent_reads and req.get("op") in ("state", "info", "project_files"):
-                    project_files = req.get("op") == "project_files"
-                    slot = (req.get("op"), req.get("session")) if client.kind == "app" and not project_files else None
+                op = req.get("op")
+                app_reads = client.concurrent_reads and client.kind == "app"
+                if app_reads and op == "detach":
+                    # Neither a late navigation nor a late inventory may reattach this client.
+                    for kind in ("read", "session_info"):
+                        slot = (kind, req.get("session"))
+                        if (task := slots.get(slot)) and not task.done():
+                            error_reply(slot_requests[slot], HostError("The session was closed", "stale_snapshot"))
+                            task.cancel()
+                background = op == "project_files" or (
+                    app_reads and op in ("read", "session_info") and req.get("navigation") is True)
+                if client.concurrent_reads and (background or op in ("state", "info")):
+                    slot = (op, req.get("session")) if app_reads and op != "project_files" else None
                     previous = slots.get(slot) if slot else None
                     # Refuse saturation immediately: waiting for a semaphore here would put
                     # the next edit or Stop back behind the very reads we are separating.
@@ -3762,13 +3805,13 @@ class Host:
                         error_reply(req, HostError("Too many pending document reads; try again", "busy"))
                         continue
                     try:
-                        work = (lambda request=req: self.handle(client, request)) if project_files else self.prepare_snapshot(client, req)
+                        work = (lambda request=req: self.handle(client, request)) if background else self.prepare_snapshot(client, req)
                     except Exception as exn:
                         error_reply(req, exn)
                         continue
                     if previous is not None:
                         if not previous.done():
-                            error_reply(slot_requests[slot], HostError("A newer cursor read replaced this request",
+                            error_reply(slot_requests[slot], HostError("A newer read replaced this request",
                                                                       "stale_snapshot"))
                         previous.cancel()
                         snapshots.discard(previous)
@@ -3910,6 +3953,8 @@ class Host:
             client._close_output()
         self.state_io.close()
         self.project_io.close()
+        if self.navigation_io is not None:
+            self.navigation_io.close()
         if self.sample_io is not None:
             self.sample_io.close()
         platform.cleanup_endpoint(STATE_DIR, SOCKET_PATH)

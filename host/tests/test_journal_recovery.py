@@ -50,7 +50,7 @@ class JournalRecovery(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self):
         self.host.stopping.set()
         self.cancel_timers(self.session)
-        for broker in (self.host.state_io, self.host.project_io, self.host.sample_io):
+        for broker in (self.host.state_io, self.host.project_io, self.host.sample_io, self.host.navigation_io):
             try:
                 await broker.flush()
             finally:

@@ -1581,12 +1581,12 @@ impl App {
                     && ws.machine == key
                 {
                     let (sid, theory) = (ws.sid.clone(), ws.theory.as_ref().map(|t| (t.path.clone(), t.inflight_edit.as_ref().map(|_| t.confirmed_rev), t.durability_pending.iter().filter(|id| t.inflight_edit.as_ref().is_none_or(|e| &e.identity != *id)).cloned().collect::<Vec<_>>())));
-                    self.send(&key, "session_info", json!({"session": sid}), Pending::SessionInfo(sid.clone()));
+                    self.send(&key, "session_info", json!({"session": sid, "navigation": true}), Pending::SessionInfo(sid.clone()));
                     if let Some((path, since, receipts)) = theory {
-                        let mut params = json!({"session": sid, "path": path});
+                        let mut params = json!({"session": sid, "path": path, "recovery_read": true});
                         if let Some(revision) = since { params["since_revision"] = json!(revision); }
                         if !receipts.is_empty() { params["receipt_ids"] = json!(receipts); }
-                        self.send(&key, "read", params, Pending::Read(sid, path, None));
+                        self.send(&key, "read", params, Pending::Read(sid.clone(), path, None));
                     }
                 }
             }
@@ -1647,8 +1647,12 @@ impl App {
             pending => (pending, None),
         };
         if let Pending::Read(sid, _, _) = &pending
-            && !self.workspace.as_ref().is_some_and(|ws| ws.machine == machine && ws.sid == *sid)
+            && (v["code"] == "stale_snapshot"
+                || !self.workspace.as_ref().is_some_and(|ws| ws.machine == machine && ws.sid == *sid))
         {
+            return Task::none();
+        }
+        if matches!(pending, Pending::SessionInfo(_)) && v["code"] == "stale_snapshot" {
             return Task::none();
         }
         if let Pending::ListDir(generation, path) | Pending::Suggest(generation, path) = &pending {
@@ -1793,9 +1797,6 @@ impl App {
                     self.sessions.insert((machine.clone(), sid.clone()), summary);
                     self.sync_backend();
                 }
-                if let Some(want) = self.want_theory.take() {
-                    return self.update(Message::OpenTheory(want));
-                }
                 // Open the first theory if none is open
                 if self.shell.file_picker.open.is_none()
                     && let Some(ws) = self.workspace.as_ref().filter(|w| w.machine == machine && w.sid == sid && w.theory.is_none() && w.opening.is_none())
@@ -1809,6 +1810,16 @@ impl App {
             }
             Pending::Read(sid, path, nav) => {
                 if !self.workspace.as_ref().is_some_and(|ws| ws.machine == machine && ws.sid == sid) { return Task::none(); }
+                if v["check_document"] == json!(true) {
+                    let ws = self.workspace.as_ref().unwrap();
+                    if ws.opening.as_deref() != Some(&path) {
+                        let actual = v["doc"]["path"].as_str().unwrap_or(&path);
+                        if ws.theory.as_ref().is_none_or(|theory| theory.path != actual) {
+                            self.send(&machine, "close", json!({"session": sid, "path": actual}), Pending::Plain);
+                        }
+                        return Task::none();
+                    }
+                }
                 if let Some(t) = self.workspace.as_mut().and_then(|ws| ws.theory.as_mut()).filter(|t| t.path == path) {
                     let required: Vec<_> = t.durability_pending.iter().filter(|id| t.inflight_edit.as_ref().is_none_or(|e| &e.identity != *id)).cloned().collect();
                     if !required.is_empty() {
@@ -1916,6 +1927,10 @@ impl App {
                     ws.output = None;
                     ws.notes.clear();
                     let sid = ws.sid.clone();
+                    if v["check_document"] == json!(true) {
+                        let actual = v["doc"]["path"].as_str().unwrap_or(&path);
+                        self.send(&machine, "check_document", json!({"session": sid, "path": actual}), Pending::Plain);
+                    }
                     self.send(&machine, "history", json!({"session": sid, "path": path, "limit": 60}), Pending::History(sid.clone()));
                     self.send(&machine, "notes", json!({"session": sid, "path": path}), Pending::Notes);
                     if let Some(at) = goto {
@@ -2363,7 +2378,7 @@ impl App {
             "theories_changed" => {
                 // A theory was added or deleted on disk: the list again
                 if let Some(sid) = self.workspace.as_ref().filter(|w| Some(w.sid.as_str()) == v["session"].as_str()).map(|w| w.sid.clone()) {
-                    self.send(&machine, "session_info", json!({"session": sid}), Pending::SessionInfo(sid.clone()));
+                    self.send(&machine, "session_info", json!({"session": sid, "navigation": true}), Pending::SessionInfo(sid.clone()));
                 }
             }
             "fill" => {
@@ -3116,9 +3131,9 @@ impl App {
             ws.pending_goto = goto;
         }
         let id = if let Some(generation) = picked {
-            self.send(&machine, "read", json!({"session": sid, "path": path, "project_file": true}), Pending::PickFile(sid, path, generation))
+            self.send(&machine, "read", json!({"session": sid, "path": path, "project_file": true, "navigation": true}), Pending::PickFile(sid, path, generation))
         } else {
-            self.send(&machine, "read", json!({"session": sid, "path": path}), Pending::Read(sid, path, nav))
+            self.send(&machine, "read", json!({"session": sid, "path": path, "navigation": true}), Pending::Read(sid, path, nav))
         };
         if picked.is_some() && !self.pending.contains_key(&id) {
             return self.file_picker_failed("The project host is disconnected".into());
@@ -3680,6 +3695,9 @@ impl App {
                 if self.workspace.as_ref().is_some_and(|w| w.machine == machine && w.sid == sid) {
                     self.deferred_leave = None;
                     if self.status.as_deref() == Some("Waiting for edits to reach the host before switching documents") { self.status = None; }
+                    if let Some(path) = self.want_theory.take() {
+                        return self.update(Message::OpenTheory(path));
+                    }
                     return Task::none();
                 }
                 if self.defer_leave(DeferredLeave::Session { machine: machine.clone(), sid: sid.clone() }) {
@@ -3738,8 +3756,9 @@ impl App {
                     log: Vec::new(),
                     merge: None,
                 });
-                self.send(&machine, "session_info", json!({"session": sid}), Pending::SessionInfo(sid));
-                return self.retitle();
+                let open = self.want_theory.take().map(|path| self.update(Message::OpenTheory(path))).unwrap_or_else(Task::none);
+                self.send(&machine, "session_info", json!({"session": sid, "navigation": true}), Pending::SessionInfo(sid));
+                return Task::batch([open, self.retitle()]);
             }
             Message::CloseWorkspace => {
                 self.dismiss_file_picker();
@@ -3769,6 +3788,14 @@ impl App {
                     ws.machine == open.machine && ws.sid == open.sid
                         && ws.opening.as_ref() == Some(requested)
                 }) {
+                    if open.reply["check_document"] == json!(true)
+                        && self.workspace.as_ref().is_some_and(|ws| {
+                            ws.machine == open.machine && ws.sid == open.sid
+                                && ws.theory.as_ref().is_none_or(|theory| theory.path != open.path)
+                        })
+                    {
+                        self.send(&open.machine, "close", json!({"session": open.sid, "path": open.path}), Pending::Plain);
+                    }
                     return Task::none();
                 }
                 let theory = match theory.0.lock().expect("prepared theory").take() {
@@ -3778,8 +3805,8 @@ impl App {
                 };
                 if open.resync {
                     let (op, args) = match &open.pending {
-                        Pending::PickFile(..) => ("read", json!({"session": open.sid, "path": requested, "project_file": true})),
-                        _ => ("read", json!({"session": open.sid, "path": requested})),
+                        Pending::PickFile(..) => ("read", json!({"session": open.sid, "path": requested, "project_file": true, "navigation": true})),
+                        _ => ("read", json!({"session": open.sid, "path": requested, "navigation": true})),
                     };
                     self.send(&open.machine, op, args, open.pending);
                     return Task::none();
@@ -4038,7 +4065,7 @@ impl App {
                     if panel == Panel::Agents
                         && let Some((m, sid)) = self.workspace_ids()
                     {
-                        self.send(&m, "session_info", json!({"session": sid}), Pending::SessionInfo(sid));
+                        self.send(&m, "session_info", json!({"session": sid, "navigation": true}), Pending::SessionInfo(sid));
                     }
                 }
             }
@@ -4194,18 +4221,18 @@ impl App {
                     params["offset"] = json!(Self::host_offset(t, t.cursor.saturating_sub(1)));
                 }
                 self.send(&machine, "grant", params, Pending::Plain);
-                self.send(&machine, "session_info", json!({"session": sid}), Pending::SessionInfo(sid.clone()));
+                self.send(&machine, "session_info", json!({"session": sid, "navigation": true}), Pending::SessionInfo(sid.clone()));
             }
             Message::AnswerRequest(request, allow) => {
                 if let Some((machine, sid)) = self.workspace_ids() {
                     self.send(&machine, "answer_request", json!({"session": sid, "request": request, "allow": allow}), Pending::Plain);
-                    self.send(&machine, "session_info", json!({"session": sid}), Pending::SessionInfo(sid.clone()));
+                    self.send(&machine, "session_info", json!({"session": sid, "navigation": true}), Pending::SessionInfo(sid.clone()));
                 }
             }
             Message::Revoke(grant) => {
                 if let Some((machine, sid)) = self.workspace_ids() {
                     self.send(&machine, "revoke", json!({"session": sid, "grant": grant}), Pending::Plain);
-                    self.send(&machine, "session_info", json!({"session": sid}), Pending::SessionInfo(sid.clone()));
+                    self.send(&machine, "session_info", json!({"session": sid, "navigation": true}), Pending::SessionInfo(sid.clone()));
                 }
             }
             Message::Revert(entry) => {
