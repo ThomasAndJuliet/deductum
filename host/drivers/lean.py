@@ -1081,6 +1081,7 @@ class LeanDriver(Driver):
     facts_separator = ", "
     fork_links = (".lake/packages",)
     open_policy = "viewed"
+    supports_document_stop = True
 
     NODE_DEBOUNCE = 0.1
     KEEPALIVE = 5.0

@@ -274,6 +274,9 @@ pub enum Message {
     EditBlock(usize),
     CloseBlock,
     Lifecycle(&'static str),
+    DocumentChecking(String, String, String, bool),
+    StopProver(String, String),
+    StopActivityQuery(String, String, String),
     Undo,
     Redo,
     Save,
@@ -3987,6 +3990,15 @@ impl App {
                     t.block_editor = None;
                 }
                 return Task::batch([removed, Self::unfocus_all()]);
+            }
+            Message::DocumentChecking(machine, sid, path, on) => {
+                self.send(&machine, "document_checking", json!({"session": sid, "path": path, "on": on}), Pending::Plain);
+            }
+            Message::StopProver(machine, sid) => {
+                self.send(&machine, "stop", json!({"session": sid}), Pending::Plain);
+            }
+            Message::StopActivityQuery(machine, sid, query) => {
+                self.send(&machine, "cancel_query", json!({"session": sid, "query": query}), Pending::Plain);
             }
             Message::Lifecycle(op) => {
                 if let Some((machine, sid)) = self.workspace_ids() {

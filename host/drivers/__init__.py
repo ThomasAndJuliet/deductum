@@ -160,6 +160,7 @@ class Driver:
     #: File extensions of this backend's documents, and its project files
     documents: tuple = ()
     project_files: tuple = ()
+    supports_document_stop = False
     #: "all": every document the host has open is open in the prover. "viewed": a document is
     #: open in the prover only while some client subscribes to it or an agent queried it within
     #: ``VIEWED_SECONDS`` (each open file costs a worker process); the host keeps buffer and log

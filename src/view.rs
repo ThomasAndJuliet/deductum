@@ -865,19 +865,49 @@ fn alternative_banner<'a>(alt: &'a Value) -> Element<'a, Message> {
     widget::container(row).padding(sp.space_xs).class(theme::Container::Card).width(Length::Fill).into()
 }
 
-fn activity_panel(ws: &Workspace) -> Element<'_, Message> {
+fn activity_panel<'a>(app: &'a App, ws: &'a Workspace) -> Element<'a, Message> {
     let sp = spacing();
     let mut col = widget::column::with_capacity(64).spacing(sp.space_xs);
+    let lifecycle = app.sessions.get(&(ws.machine.clone(), ws.sid.clone()))
+        .and_then(|session| session["lifecycle"].as_str())
+        .or_else(|| ws.activity.as_ref().and_then(|activity| activity["lifecycle"].as_str()))
+        .unwrap_or("");
+    if matches!(lifecycle, "Starting" | "Running" | "Paused") {
+        col = col.push(widget::button::standard("Stop prover").on_press(
+            Message::StopProver(ws.machine.clone(), ws.sid.clone()),
+        ));
+    }
     if let Some(act) = &ws.activity {
         let prover = &act["prover"];
+        let working = matches!(lifecycle, "Starting" | "Running" | "Paused" | "Stopping");
+        let cpu = working.then(|| prover["cpu"].as_u64()).flatten();
+        let memory = working.then(|| prover["rss_mb"].as_u64()).flatten();
         col = col.push(widget::text::heading(format!(
-            "Prover {}{}{}",
-            act["lifecycle"].as_str().unwrap_or(""),
-            prover["cpu"].as_u64().map(|c| format!(" · CPU {c}%")).unwrap_or_default(),
-            prover["rss_mb"].as_u64().map(|m| format!(" · {:.1} GB", m as f64 / 1000.0)).unwrap_or_default()
+            "Prover {lifecycle}{}",
+            cpu.map(|c| format!(" · CPU {c}%")).unwrap_or_default(),
         )));
-        if ws.caps.interrupt {
+        if let Some(mb) = memory {
+            let usage = widget::text::caption(format!("{:.1} GB resident memory", mb as f64 / 1000.0));
+            col = col.push(household_widgets::tooltip_with(
+                usage, widget::text("Sum of resident memory for the prover and its workers. Shared pages can appear in more than one process."),
+                widget::tooltip::Position::Bottom,
+            ));
+        }
+        if lifecycle == "Running" && ws.caps.interrupt {
             col = col.push(widget::button::standard("Interrupt running proofs").on_press(Message::Lifecycle("cancel")));
+        }
+        if lifecycle == "Running" && let Some(queries) = act["queries"].as_array().filter(|queries| !queries.is_empty()) {
+            col = col.push(widget::text::caption_heading("Proof queries"));
+            for query in queries {
+                let (Some(id), Some(path)) = (query["id"].as_str(), query["path"].as_str()) else { continue };
+                let operation = query["operation"].as_str().unwrap_or("Query");
+                let label = format!("{operation} · {}", file_name(path));
+                col = col.push(widget::row::with_capacity(2).spacing(sp.space_xxs).align_y(Alignment::Center)
+                    .push(widget::text::body(label).width(Length::Fill))
+                    .push(widget::button::text("Stop").on_press(
+                        Message::StopActivityQuery(ws.machine.clone(), ws.sid.clone(), id.into()),
+                    )));
+            }
         }
         let running = act["running"].as_array().cloned().unwrap_or_default();
         if !running.is_empty() {
@@ -895,20 +925,36 @@ fn activity_panel(ws: &Workspace) -> Element<'_, Message> {
         }
         col = col.push(widget::text::caption_heading("Theories"));
         let mut theories = act["theories"].as_array().cloned().unwrap_or_default();
-        theories.sort_by_key(|th| (th["consolidated"].as_bool() == Some(true), th["percentage"].as_u64().unwrap_or(0)));
+        theories.sort_by_key(|th| (th["checking_control"].is_null(), th["consolidated"].as_bool() == Some(true), th["percentage"].as_u64().unwrap_or(0)));
         for th in theories.iter().take(80) {
             let name = th["theory"].as_str().unwrap_or("").to_string();
             let pct = th["percentage"].as_u64().unwrap_or(0);
             let failed = th["failed"].as_u64().unwrap_or(0) > 0 || th["header_errors"].as_array().is_some_and(|e| !e.is_empty());
-            let label = if th["consolidated"].as_bool() == Some(true) && !failed {
+            let stopped = th["checking_control"] == "stopped";
+            let label = if stopped {
+                format!("{name} · checking stopped")
+            } else if th["consolidated"].as_bool() == Some(true) && !failed {
                 format!("{name} ✓")
             } else if failed {
                 format!("{name} ✗ {pct}%")
             } else {
                 format!("{name} {pct}%{}", if th["running"].as_u64().unwrap_or(0) > 0 { " · running" } else { "" })
             };
-            col = col.push(widget::text::body(label));
-            col = col.push(widget::progress_bar::linear::Linear::new().progress(pct as f32 / 100.0).width(Length::Fill).girth(4.0));
+            let mut row = widget::row::with_capacity(2).spacing(sp.space_xxs).align_y(Alignment::Center)
+                .push(widget::text::body(label).width(Length::Fill));
+            if lifecycle == "Running"
+                && th["checking_control"].is_string()
+                && let Some(path) = th["path"].as_str()
+            {
+                let label = if stopped { "Resume checking" } else { "Stop checking" };
+                row = row.push(widget::button::text(label).on_press(
+                    Message::DocumentChecking(ws.machine.clone(), ws.sid.clone(), path.into(), stopped),
+                ));
+            }
+            col = col.push(row);
+            if !stopped {
+                col = col.push(widget::progress_bar::linear::Linear::new().progress(pct as f32 / 100.0).width(Length::Fill).girth(4.0));
+            }
         }
     } else {
         col = col.push(widget::text::caption("No prover activity yet."));
@@ -3568,7 +3614,7 @@ fn side_panel<'a>(app: &'a App, ws: &'a Workspace) -> Element<'a, Message> {
         Panel::Symbols => symbols_panel(ws, &*table),
         Panel::Agents => agents_panel(app, ws),
         Panel::History => history_panel(ws),
-        Panel::Log => activity_panel(ws),
+        Panel::Log => activity_panel(app, ws),
         Panel::Counterexamples => counterexamples_panel(ws, &*table),
     };
     let card = widget::container(widget::column::with_capacity(2).spacing(sp.space_xs).push(bar).push(content))
