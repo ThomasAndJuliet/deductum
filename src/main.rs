@@ -250,6 +250,8 @@ pub enum Message {
     OpenSession(String, String),
     CloseWorkspace,
     OpenTheory(String),
+    /// The initial editor model for a large document is ready.
+    TheoryPrepared(u64, PreparedTheory),
     FilePickerShortcut(cosmic::iced::window::Id),
     /// Ctrl+Shift+O (`g s` in vim): the header's search, for the document's symbols
     SymbolPickerShortcut(cosmic::iced::window::Id),
@@ -719,6 +721,27 @@ pub struct Workspace {
     pub merge: Option<Vec<Value>>,
 }
 
+#[derive(Clone)]
+pub struct PreparedTheory(Arc<std::sync::Mutex<Option<Result<Theory, String>>>>);
+
+impl std::fmt::Debug for PreparedTheory {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("PreparedTheory")
+    }
+}
+
+struct OpeningTheory {
+    id: u64,
+    machine: String,
+    sid: String,
+    path: String,
+    pending: Pending,
+    reply: Value,
+    events: Vec<Value>,
+    resync: bool,
+    _cancel: cosmic::iced::task::Handle,
+}
+
 pub struct App {
     deferred_leave: Option<DeferredLeave>,
     nav_waiting: Option<(u64, u64)>,
@@ -765,6 +788,8 @@ pub struct App {
     /// The goal's columns (in parts, as text) the prover was last asked to break its lines at
     goal_columns_asked: (usize, usize),
     nav_serial: u64,
+    preparation_serial: u64,
+    preparing_theory: Option<OpeningTheory>,
     nav_latest: HashMap<Option<cosmic::iced::window::Id>, u64>,
     request: Option<cli::OpenRequest>,
     kinds: Arc<HashMap<String, String>>,
@@ -1563,6 +1588,9 @@ impl App {
                 }
             }
             link::Event::Disconnected(reason) => {
+                if self.preparing_theory.as_ref().is_some_and(|open| open.machine == key) {
+                    self.preparing_theory = None;
+                }
                 if let Some(l) = self.link_mut(&key) {
                     l.sender = None;
                     l.status = format!("disconnected: {}", reason.lines().last().unwrap_or(""));
@@ -1590,6 +1618,10 @@ impl App {
     }
 
     fn on_reply(&mut self, machine: String, pending: Pending, v: Value) -> Task<Message> {
+        self.on_prepared_reply(machine, pending, v, None)
+    }
+
+    fn on_prepared_reply(&mut self, machine: String, pending: Pending, v: Value, mut prepared: Option<Theory>) -> Task<Message> {
         let (pending, picked) = match pending {
             Pending::ProjectFiles(sid) => return self.project_files_reply(machine, sid, &v),
             Pending::PickFile(sid, path, generation) => {
@@ -1800,6 +1832,18 @@ impl App {
                         return self.flush_edits();
                     }
                 }
+                if prepared.is_none()
+                    && current.as_deref() != Some(path.as_str())
+                    && self.workspace.as_ref().is_some_and(|ws| ws.opening.as_deref() == Some(path.as_str()))
+                    && v["doc"]["text"].as_str().is_some_and(|text| text.len() >= 16 * 1024)
+                {
+                    let pending = if let Some(generation) = picked {
+                        Pending::PickFile(sid, path, generation)
+                    } else {
+                        Pending::Read(sid, path, nav)
+                    };
+                    return self.prepare_theory(machine, pending, v);
+                }
                 if (picked.is_some() || nav.as_ref().is_some_and(|n| n.record_back))
                     && let Some(t) = self.workspace.as_ref().and_then(|w| w.theory.as_ref())
                 {
@@ -1851,7 +1895,8 @@ impl App {
                         .as_ref()
                         .filter(|t| t.path == real && t.local != t.confirmed)
                         .map(|t| (t.confirmed.clone(), ot::diff(&t.confirmed, &t.local), t.cursor));
-                    let mut theory = Theory::new(real, doc, &*table, kinds, mode, ws_profile);
+                    let mut theory = prepared.take().unwrap_or_else(|| Theory::new(real, doc, &*table, kinds, mode, ws_profile));
+                    theory.mode = mode;
                     theory.typed_tools = ws.caps.typed_tools();
                     if let Some((old_confirmed, delta, cursor)) = pending {
                         let remote = ot::diff(&old_confirmed, &theory.confirmed);
@@ -2092,7 +2137,62 @@ impl App {
         Task::none()
     }
 
+    fn prepare_theory(&mut self, machine: String, pending: Pending, reply: Value) -> Task<Message> {
+        let (Pending::Read(sid, requested, _) | Pending::PickFile(sid, requested, _)) = &pending else {
+            return Task::none();
+        };
+        let Some(ws) = &self.workspace else { return Task::none() };
+        let profile = ws.profile;
+        let table = self.table(&machine);
+        let kinds = self.kinds.clone();
+        let path = reply["doc"]["path"].as_str().unwrap_or(requested).to_string();
+        let doc = reply["doc"].clone();
+        self.preparation_serial += 1;
+        let id = self.preparation_serial;
+        let worker_path = path.clone();
+        let task = Task::perform(
+            async move {
+                // Keep one worker running even when users navigate repeatedly. Dropping the
+                // task cancels a waiter and can leave at most one already-started job.
+                static SLOT: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(1);
+                let slot = SLOT.acquire().await.expect("document preparation slot");
+                tokio::task::spawn_blocking(move || {
+                    let _slot = slot;
+                    Theory::new(worker_path, &doc, &*table, kinds, Mode::Literate, profile)
+                }).await
+            },
+            move |result| cosmic::Action::App(Message::TheoryPrepared(
+                id, PreparedTheory(Arc::new(std::sync::Mutex::new(Some(result.map_err(|error| error.to_string()))))),
+            )),
+        );
+        let (task, cancel) = task.abortable();
+        self.preparing_theory = Some(OpeningTheory {
+            id, machine, sid: sid.clone(), path, pending, reply, events: Vec::new(), resync: false,
+            _cancel: cancel.abort_on_drop(),
+        });
+        task
+    }
+
     fn on_event(&mut self, machine: String, v: Value) -> Task<Message> {
+        if let Some(opening) = &mut self.preparing_theory
+            && opening.machine == machine
+            && v["session"].as_str() == Some(opening.sid.as_str())
+            && v["path"].as_str() == Some(opening.path.as_str())
+            && v["event"].as_str().is_some_and(|event| event.starts_with("doc_"))
+        {
+            // One recent prover snapshot is enough, but preserve the order of edits and saves.
+            if v["event"] == "doc_prover" && opening.events.last().is_some_and(|last| last["event"] == "doc_prover") {
+                opening.events.pop();
+            }
+            if opening.events.len() == 32 {
+                opening.events.clear();
+                opening.resync = true;
+            }
+            if !opening.resync {
+                opening.events.push(v);
+            }
+            return Task::none();
+        }
         let ev = v["event"].as_str().unwrap_or("");
         let table = self.table(&machine);
         let client_id = self.link(&machine).and_then(|l| l.client_id.clone());
@@ -3000,6 +3100,7 @@ impl App {
         }) {
             return self.flush_edits();
         }
+        self.preparing_theory = None;
         if nav.is_none() {
             self.nav_serial += 1;
             self.nav_latest.insert(None, self.nav_serial);
@@ -3276,6 +3377,8 @@ impl cosmic::Application for App {
             state_gen: 0,
             goal_columns_asked: (0, 0),
             nav_serial: 0,
+            preparation_serial: 0,
+            preparing_theory: None,
             nav_latest: HashMap::new(),
             request: flags.request,
             kinds: Arc::new(HashMap::new()),
@@ -3579,6 +3682,7 @@ impl App {
                 if self.defer_leave(DeferredLeave::Session { machine: machine.clone(), sid: sid.clone() }) {
                     return self.flush_edits();
                 }
+                self.preparing_theory = None;
                 self.shell.settings_open = false;
                 if let Some((m, old)) = self.workspace_ids() {
                     self.send(&m, "detach", json!({"session": old}), Pending::Plain);
@@ -3639,6 +3743,7 @@ impl App {
                 if self.defer_leave(DeferredLeave::Close) {
                     return self.flush_edits();
                 }
+                self.preparing_theory = None;
                 if let Some((m, sid)) = self.workspace_ids() {
                     self.send(&m, "detach", json!({"session": sid}), Pending::Plain);
                 }
@@ -3647,6 +3752,42 @@ impl App {
             }
             Message::OpenTheory(path) => {
                 return self.open_theory(path, None, None);
+            }
+            Message::TheoryPrepared(id, theory) => {
+                if !self.preparing_theory.as_ref().is_some_and(|open| open.id == id) {
+                    return Task::none();
+                }
+                let open = self.preparing_theory.take().unwrap();
+                let requested = match &open.pending {
+                    Pending::Read(_, requested, _) | Pending::PickFile(_, requested, _) => requested,
+                    _ => unreachable!(),
+                };
+                if !self.workspace.as_ref().is_some_and(|ws| {
+                    ws.machine == open.machine && ws.sid == open.sid
+                        && ws.opening.as_ref() == Some(requested)
+                }) {
+                    return Task::none();
+                }
+                let theory = match theory.0.lock().expect("prepared theory").take() {
+                    Some(Ok(theory)) => theory,
+                    Some(Err(error)) => return self.on_reply(open.machine, open.pending, json!({"ok": false, "error": error})),
+                    None => return Task::none(),
+                };
+                if open.resync {
+                    let (op, args) = match &open.pending {
+                        Pending::PickFile(..) => ("read", json!({"session": open.sid, "path": requested, "project_file": true})),
+                        _ => ("read", json!({"session": open.sid, "path": requested})),
+                    };
+                    self.send(&open.machine, op, args, open.pending);
+                    return Task::none();
+                }
+                let mut tasks = vec![self.on_prepared_reply(open.machine.clone(), open.pending, open.reply, Some(theory))];
+                if self.workspace.as_ref().and_then(|ws| ws.theory.as_ref()).is_some_and(|t| t.path == open.path) {
+                    for event in open.events {
+                        tasks.push(self.on_event(open.machine.clone(), event));
+                    }
+                }
+                return Task::batch(tasks);
             }
             Message::SetMode(mode) => {
                 self.mode_model.activate(self.mode_entities[if mode == Mode::Source { 1 } else { 0 }]);

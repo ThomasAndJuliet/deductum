@@ -5,9 +5,40 @@
 use super::editor::Mode;
 use super::snapshot::{Harness, scroll_to_open_block};
 use super::{App, Message};
+use cosmic::Application;
 use cosmic::iced::keyboard::{Key, Modifiers};
 use cosmic::iced::{Event, Point, Size, mouse};
 use serde_json::json;
+
+#[test]
+fn large_file_reply_defers_editor_construction_and_keeps_the_latest_opening() {
+    use cosmic::iced::futures::StreamExt;
+    let mut app = super::snapshot_lean::lean_app_with(Mode::Literate, "theorem one : True := trivial");
+    let (machine, sid) = app.workspace_ids().unwrap();
+    let text = long_lean().repeat(3);
+    let open = |app: &mut App, path: &str| {
+        let _ = app.update(Message::OpenTheory(path.into()));
+        app.on_reply(machine.clone(), super::Pending::Read(sid.clone(), path.into(), None),
+            json!({"ok": true, "doc": {"path": path, "revision": 1, "text": text}}))
+    };
+    let old = app.workspace.as_ref().unwrap().theory.as_ref().unwrap().path.clone();
+    let first = open(&mut app, "/tmp/First.lean");
+    assert_eq!(app.workspace.as_ref().unwrap().theory.as_ref().unwrap().path, old);
+    let second = open(&mut app, "/tmp/Second.lean");
+    let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+    let complete = |task| runtime.block_on(async {
+        let mut stream = cosmic::iced::runtime::task::into_stream(task).unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(10), stream.next()).await.unwrap()
+    });
+    assert!(complete(first).is_none(), "a newer opening cancels the old work");
+    let Some(cosmic::iced::runtime::Action::Output(cosmic::Action::App(ready))) = complete(second) else {
+        panic!("expected the prepared document");
+    };
+    let _ = app.update(ready);
+    let theory = app.workspace.as_ref().unwrap().theory.as_ref().unwrap();
+    assert_eq!(theory.path, "/tmp/Second.lean");
+    assert_eq!(theory.local, text);
+}
 
 fn apply(app: &mut App, h: &mut Harness, messages: Vec<Message>) {
     for message in messages {

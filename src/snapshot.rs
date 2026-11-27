@@ -125,6 +125,8 @@ pub fn demo_app(mode: Mode) -> App {
         next_id: 0,
         pending: HashMap::new(),
         nav_serial: 0,
+        preparation_serial: 0,
+        preparing_theory: None,
         nav_latest: HashMap::new(),
         workspace: Some(Workspace {
             machine: "local".into(),

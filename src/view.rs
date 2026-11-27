@@ -519,6 +519,10 @@ fn workspace<'a>(app: &'a App, ws: &'a Workspace, right: bool, main_width: f32) 
     // (the theory's page outside the padded column: its scroll view, and so its scroll bar, at the
     // window's edges)
     let mut page_body: Option<Element<'a, Message>> = None;
+    if let Some(path) = ws.opening.as_deref().filter(|path| ws.theory.as_ref().is_some_and(|theory| theory.path != *path)) {
+        said = true;
+        center = center.push(banner(format!("Opening {}…", file_name(path)), None));
+    }
     if let Some(s) = summary {
         let lc = s["lifecycle"].as_str().unwrap_or("");
         if let Some(msg) = s["message"].as_str() {
