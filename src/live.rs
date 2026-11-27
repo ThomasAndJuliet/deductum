@@ -58,6 +58,8 @@ pub(super) fn app(target: link::Target) -> App {
         state_gen: 0,
         goal_columns_asked: (0, 0),
         nav_serial: 0,
+        preparation_serial: 0,
+        preparing_theory: None,
         nav_latest: HashMap::new(),
         request: None,
         kinds: Arc::new(HashMap::new()),
