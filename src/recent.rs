@@ -7,7 +7,8 @@
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
-use std::sync::{LazyLock, Mutex};
+use std::sync::{Condvar, LazyLock, Mutex, mpsc};
+use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
@@ -26,10 +27,54 @@ fn path() -> PathBuf {
     super::settings::path().with_file_name("recent.json")
 }
 
-static STORE: LazyLock<Mutex<BTreeMap<String, Seen>>> = LazyLock::new(|| {
+#[derive(Default)]
+struct Store {
+    entries: BTreeMap<String, Seen>,
+    changed: u64,
+    written: u64,
+}
+
+static STORE: LazyLock<Mutex<Store>> = LazyLock::new(|| {
     let read = std::fs::read_to_string(path()).ok().and_then(|t| serde_json::from_str(&t).ok());
-    Mutex::new(read.unwrap_or_default())
+    Mutex::new(Store { entries: read.unwrap_or_default(), ..Store::default() })
 });
+static WRITTEN: Condvar = Condvar::new();
+
+static WRITER: LazyLock<mpsc::SyncSender<()>> = LazyLock::new(|| {
+    let (send, ready) = mpsc::sync_channel(1);
+    std::thread::Builder::new().name("recent-files".into()).spawn(move || {
+        while ready.recv().is_ok() {
+            let (entries, revision) = {
+                let store = STORE.lock().unwrap();
+                if store.changed == store.written { continue; }
+                (store.entries.clone(), store.changed)
+            };
+            write(&entries);
+            STORE.lock().unwrap().written = revision;
+            WRITTEN.notify_all();
+        }
+    }).expect("start recent files writer");
+    send
+});
+
+/// Load the initial cache before creating the window.
+pub fn initialize() {
+    LazyLock::force(&STORE);
+}
+
+/// Give normal window shutdown a bounded chance to record the last file.
+pub fn flush() {
+    let store = STORE.lock().unwrap();
+    drop(WRITTEN.wait_timeout_while(store, Duration::from_millis(250),
+        |store| store.written != store.changed));
+}
+
+fn changed(mut store: std::sync::MutexGuard<'_, Store>) {
+    store.changed += 1;
+    drop(store);
+    // One pending wakeup is enough: it will take the latest complete snapshot.
+    let _ = WRITER.try_send(());
+}
 
 fn key(machine: &str, sid: &str) -> String {
     format!("{machine}/{sid}")
@@ -47,29 +92,29 @@ pub fn note(machine: &str, sid: &str, document_path: &str) {
 pub(crate) fn set(machine: &str, sid: &str, document_path: &str, at: u64) {
     let file = document_path.rsplit(['/', '\\']).next().unwrap_or(document_path).to_string();
     let mut store = STORE.lock().unwrap();
-    let seen = store.entry(key(machine, sid)).or_default();
+    let seen = store.entries.entry(key(machine, sid)).or_default();
     seen.file = file;
     seen.at = at;
     seen.paths.retain(|path| path != document_path);
     seen.paths.insert(0, document_path.to_string());
     seen.paths.truncate(100);
-    write(&store);
+    changed(store);
 }
 
 pub fn paths(machine: &str, sid: &str) -> Vec<String> {
-    STORE.lock().unwrap().get(&key(machine, sid)).map(|seen| seen.paths.clone()).unwrap_or_default()
+    STORE.lock().unwrap().entries.get(&key(machine, sid)).map(|seen| seen.paths.clone()).unwrap_or_default()
 }
 
 /// This session is gone from the start page
 pub fn forget(machine: &str, sid: &str) {
     let mut store = STORE.lock().unwrap();
-    if store.remove(&key(machine, sid)).is_some() {
-        write(&store);
+    if store.entries.remove(&key(machine, sid)).is_some() {
+        changed(store);
     }
 }
 
 pub fn get(machine: &str, sid: &str) -> Option<Seen> {
-    STORE.lock().unwrap().get(&key(machine, sid)).cloned()
+    STORE.lock().unwrap().entries.get(&key(machine, sid)).cloned()
 }
 
 fn write(store: &BTreeMap<String, Seen>) {

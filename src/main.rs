@@ -188,7 +188,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     {
         settings = settings.default_mmap_threshold(None);
     }
-    cosmic::app::run::<App>(settings, Flags { request })?;
+    recent::initialize();
+    let result = cosmic::app::run::<App>(settings, Flags { request });
+    recent::flush();
+    result?;
     Ok(())
 }
 
